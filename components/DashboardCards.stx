@@ -1,0 +1,73 @@
+<!-- Health score + stat cards -->
+<div class="card-row">
+  <div class="card" style="grid-column: span 2;">
+    <div class="card-label">System Health</div>
+    <div style="display: flex; align-items: center; gap: 20px;">
+      <div class="health-ring">
+        <svg viewBox="0 0 100 100">
+          <circle class="ring-bg" cx="50" cy="50" r="40" />
+          <circle class="ring-fill" cx="50" cy="50" r="40"
+            stroke="{{ healthColor }}"
+            stroke-dasharray="{{ 2 * Math.PI * 40 }}"
+            stroke-dashoffset="{{ 2 * Math.PI * 40 * (1 - healthScore / 100) }}" />
+        </svg>
+        <div class="ring-text">
+          <span class="ring-score" style="color: {{ healthColor }}">{{ healthScore }}</span>
+          <span class="ring-label">{{ healthLabel }}</span>
+        </div>
+      </div>
+      <div style="flex: 1;">
+        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px;">
+          <span class="statusbar-dot" style="background: {{ memPercent > 80 ? '#ff453a' : memPercent > 60 ? '#ff9f0a' : '#30d158' }}"></span>
+          Memory: {{ usedMemGB }} / {{ totalMemGB }} GB ({{ memPercent }}%)
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px;">
+          <span class="statusbar-dot" style="background: {{ diskPercent > 85 ? '#ff453a' : diskPercent > 70 ? '#ff9f0a' : '#30d158' }}"></span>
+          Disk: {{ diskUsed }} / {{ diskTotal }} ({{ diskPercent }}%)
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px;">
+          <span class="statusbar-dot" style="background: {{ enabledStartup.length > 30 ? '#ff453a' : enabledStartup.length > 15 ? '#ff9f0a' : '#30d158' }}"></span>
+          {{ enabledStartup.length }} startup items active
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 12px;">
+          <span class="statusbar-dot" style="background: #30d158"></span>
+          Uptime: {{ uptimeStr }}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-label">CPU</div>
+    <div class="card-value" style="font-size: 16px;">{{ cpuModel.split(' ').slice(0, 3).join(' ') }}</div>
+    <div class="card-detail">{{ cpuCores }} cores · {{ totalCPU.toFixed(0) }}% usage</div>
+  </div>
+</div>
+
+<div class="card-row">
+  <div class="card">
+    <div class="card-label">Memory</div>
+    <div class="card-value">{{ usedMemGB }} <span style="font-size: 14px; color: #6c6c70;">/ {{ totalMemGB }} GB</span></div>
+    <div class="progress">
+      <div class="progress-fill" style="width: {{ memPercent }}%; background: {{ memPercent > 80 ? '#ff453a' : memPercent > 60 ? '#ff9f0a' : '#30d158' }};"></div>
+    </div>
+    <div class="card-detail">{{ freeMemGB }} GB available</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Disk</div>
+    <div class="card-value">{{ diskUsed }} <span style="font-size: 14px; color: #6c6c70;">/ {{ diskTotal }}</span></div>
+    <div class="progress">
+      <div class="progress-fill" style="width: {{ diskPercent }}%; background: {{ diskPercent > 85 ? '#ff453a' : diskPercent > 70 ? '#ff9f0a' : '#30d158' }};"></div>
+    </div>
+    <div class="card-detail">{{ diskAvail }} available</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Startup Items</div>
+    <div class="card-value" style="color: #ff9f0a;">{{ enabledStartup.length }}</div>
+    <div class="card-detail">{{ disabledStartup.length }} disabled · {{ startupItems.length }} total</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Extensions</div>
+    <div class="card-value" style="color: #bf5af2;">{{ browserExtensions.length }}</div>
+    <div class="card-detail">{{ formatBytes(totalExtSize) }} total size</div>
+  </div>
+</div>
