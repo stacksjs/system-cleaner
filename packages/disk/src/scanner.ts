@@ -166,13 +166,16 @@ export function scanDirectory(rootPath: string, options: ScanOptions = {}): Scan
     // Sort children by size descending
     children.sort((a, b) => b.sizeBytes - a.sizeBytes)
 
+    // Count files in this directory's direct children only
+    const directFileCount = children.filter(c => !c.isDirectory).length
+
     return {
       name: baseName,
       path: dirPath,
       sizeBytes: totalSize,
       isDirectory: true,
       children,
-      fileCount: totalFiles,
+      fileCount: directFileCount,
     }
   }
 

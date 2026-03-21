@@ -82,7 +82,9 @@ async function getSwapInfo(): Promise<{ used: number, total: number }> {
     if (!match)
       return 0
     const val = Number.parseFloat(match[1])
-    const unit = match[2]
+    if (Number.isNaN(val))
+      return 0
+    const unit = match[2].toUpperCase()
     if (unit === 'G')
       return val * 1e9
     if (unit === 'M')

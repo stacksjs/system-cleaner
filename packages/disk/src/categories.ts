@@ -98,7 +98,10 @@ for (const cat of FILE_CATEGORIES) {
  * Categorize a file by its extension
  */
 export function categorizeFile(filename: string): FileCategory {
-  const ext = filename.substring(filename.lastIndexOf('.')).toLowerCase()
+  const dotIdx = filename.lastIndexOf('.')
+  if (dotIdx === -1 || dotIdx === 0)
+    return 'other'
+  const ext = filename.substring(dotIdx).toLowerCase()
   return extensionMap.get(ext) || 'other'
 }
 

@@ -24,7 +24,7 @@ export function registerTouchIdCommand(app: CLI): void {
       // Check current status
       const sudoLocalExists = fs.existsSync('/etc/pam.d/sudo_local')
       const sudoLocalHasTid = sudoLocalExists && fs.readFileSync('/etc/pam.d/sudo_local', 'utf8').includes('pam_tid.so')
-      const sudoHasTid = fs.readFileSync('/etc/pam.d/sudo', 'utf8').includes('pam_tid.so')
+      const sudoHasTid = fs.existsSync('/etc/pam.d/sudo') && fs.readFileSync('/etc/pam.d/sudo', 'utf8').includes('pam_tid.so')
       const isEnabled = sudoLocalHasTid || sudoHasTid
 
       if (!action) {

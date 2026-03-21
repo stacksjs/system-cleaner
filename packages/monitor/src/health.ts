@@ -136,7 +136,7 @@ export function calculateHealthScore(
 
   if (score >= 90) {
     label = 'Excellent'
-    color = '#30d158'
+    color = '#34c759'
   }
   else if (score >= 75) {
     label = 'Good'

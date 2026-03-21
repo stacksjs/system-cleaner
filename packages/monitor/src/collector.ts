@@ -1,3 +1,4 @@
+import * as os from 'node:os'
 import type { SystemSnapshot } from '@system-cleaner/core'
 import type { CollectorState, MonitorOptions } from './types'
 import { getCpuMetrics } from './cpu'
@@ -62,7 +63,9 @@ export function createCollectorState(): CollectorState {
 }
 
 /**
- * Start continuous monitoring with a callback on each snapshot
+ * Start continuous monitoring with a callback on each snapshot.
+ * Guards against tick overlap — if a collection is still running when the
+ * next interval fires, the new tick is skipped.
  */
 export function startMonitoring(
   options: MonitorOptions & { onSnapshot: (snapshot: SystemSnapshot) => void },
@@ -70,17 +73,22 @@ export function startMonitoring(
   const state = createCollectorState()
   const intervalMs = options.intervalMs ?? 2000
   let running = true
+  let collecting = false
 
   const tick = async () => {
-    if (!running)
+    if (!running || collecting)
       return
+    collecting = true
     try {
       const snapshot = await collectSnapshot(state, options)
       if (running)
         options.onSnapshot(snapshot)
     }
     catch {
-      // Skip failed collections silently
+      // Skip failed collections
+    }
+    finally {
+      collecting = false
     }
   }
 
@@ -97,17 +105,17 @@ export function startMonitoring(
   }
 }
 
-// Default metrics for when collection is disabled
+// Default metrics when collection is disabled (no dynamic requires)
 function defaultCpuMetrics() {
-  const os = require('node:os')
+  const cpus = os.cpus()
   return {
-    modelName: os.cpus()[0]?.model || 'Unknown',
-    logicalCores: os.cpus().length,
-    physicalCores: os.cpus().length,
+    modelName: cpus[0]?.model || 'Unknown',
+    logicalCores: cpus.length,
+    physicalCores: cpus.length,
     performanceCores: 0,
     efficiencyCores: 0,
     usagePercent: 0,
-    perCoreUsage: [],
+    perCoreUsage: [] as number[],
     loadAvg1: 0,
     loadAvg5: 0,
     loadAvg15: 0,
@@ -115,7 +123,6 @@ function defaultCpuMetrics() {
 }
 
 function defaultMemoryMetrics() {
-  const os = require('node:os')
   return {
     totalBytes: os.totalmem(),
     usedBytes: os.totalmem() - os.freemem(),

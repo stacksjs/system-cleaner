@@ -1,5 +1,5 @@
 import * as path from 'node:path'
-import { HOME, exec, formatBytes, macPaths, pathExists, safeReadDir, safeStat, shellEscape } from '@system-cleaner/core'
+import { HOME, exec, macPaths, pathExists, safeReadDir, safeStat, shellEscape, readAppInfoPlist } from '@system-cleaner/core'
 
 export interface OrphanedItem {
   path: string
@@ -106,7 +106,6 @@ async function getInstalledBundleIds(): Promise<Set<string>> {
   if (result.ok) {
     const appPaths = result.stdout.split('\n').filter(Boolean).slice(0, 500) // Cap at 500 apps
     // Read bundle IDs directly via plist parsing (no shell piping)
-    const { readAppInfoPlist } = await import('@system-cleaner/core')
     for (const appPath of appPaths) {
       try {
         const info = readAppInfoPlist(appPath)

@@ -115,9 +115,13 @@ export function summarizeProcesses(procs: ProcessInfo[]): {
   const totalCpuPercent = procs.reduce((sum, p) => sum + p.cpuPercent, 0)
   const totalMemoryMB = procs.reduce((sum, p) => sum + p.memoryMB, 0)
 
-  const sorted = [...procs]
-  const topCpu = sorted.sort((a, b) => b.cpuPercent - a.cpuPercent)[0] || null
-  const topMemory = sorted.sort((a, b) => b.memoryMB - a.memoryMB)[0] || null
+  // Find max by each metric without mutating (avoids double-sort confusion)
+  let topCpu: ProcessInfo | null = null
+  let topMemory: ProcessInfo | null = null
+  for (const p of procs) {
+    if (!topCpu || p.cpuPercent > topCpu.cpuPercent) topCpu = p
+    if (!topMemory || p.memoryMB > topMemory.memoryMB) topMemory = p
+  }
 
   return {
     totalCpuPercent,
