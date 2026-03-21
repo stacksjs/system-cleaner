@@ -3,20 +3,19 @@ import type { DiskIoMetrics, DiskPartitionMetrics } from '@system-cleaner/core'
 import type { CollectorState } from './types'
 
 /**
- * Collect disk I/O metrics with APFS-corrected disk sizes.
- * Uses a 3-tier correction strategy matching Mole:
- *   1. Finder via osascript (startup disk "/" only — most accurate)
- *   2. diskutil APFS container free space (corrects APFS snapshots)
- *   3. Raw df values (fallback)
+ * Collect disk I/O metrics using RAW df values (honest reporting).
+ *
+ * Unlike Mole which replaces raw values with Finder osascript (which counts
+ * purgeable space as "free" and misleads users with full disks), we:
+ *   1. Use raw df values as truth (matches what the user experiences)
+ *   2. Collect purgeable space separately as supplementary info
+ *   3. Feed raw values to health score (so "disk full" warnings fire correctly)
  */
 export async function getDiskIoMetrics(state: CollectorState): Promise<DiskIoMetrics> {
   const diskInfo = await getDiskInfo()
   const ioRates = await getIoRates()
 
-  // Apply APFS correction to the boot volume
-  const corrected = await apfsCorrectBootVolume(diskInfo)
-
-  const partitions: DiskPartitionMetrics[] = corrected.map(disk => ({
+  const partitions: DiskPartitionMetrics[] = diskInfo.map(disk => ({
     name: disk.filesystem,
     mountPoint: disk.mountPoint,
     totalBytes: disk.totalBytes,
@@ -31,63 +30,37 @@ export async function getDiskIoMetrics(state: CollectorState): Promise<DiskIoMet
 }
 
 /**
- * Correct APFS-reported disk usage using Finder (most accurate for "/").
- * APFS purgeable space inflates raw `df` usage numbers.
+ * Get APFS purgeable space for the boot volume.
+ * This is space macOS CAN free (caches, snapshots) but hasn't yet.
+ * Useful as supplementary info but NOT a replacement for actual free space.
  */
-async function apfsCorrectBootVolume(
-  disks: { mountPoint: string, filesystem: string, totalBytes: number, usedBytes: number, freeBytes: number, usedPercent: number }[],
-) {
-  const result = [...disks]
+export async function getPurgeableSpace(): Promise<{ purgeableBytes: number, finderFreeBytes: number } | null> {
+  const result = await exec(
+    `osascript -e 'tell application "Finder" to return {free space of startup disk, capacity of startup disk}' 2>/dev/null`,
+    { timeout: 5000 },
+  )
 
-  for (let i = 0; i < result.length; i++) {
-    if (result[i].mountPoint !== '/')
-      continue
+  if (!result.ok)
+    return null
 
-    // Tier 1: Finder (most accurate — includes purgeable space)
-    const finderResult = await exec(
-      `osascript -e 'tell application "Finder" to return {free space of startup disk, capacity of startup disk}' 2>/dev/null`,
-      { timeout: 5000 },
-    )
+  const parts = result.stdout.split(',').map(s => Number.parseInt(s.trim()))
+  if (parts.length !== 2 || parts[0] <= 0 || parts[1] <= 0)
+    return null
 
-    if (finderResult.ok) {
-      const parts = finderResult.stdout.split(',').map(s => Number.parseInt(s.trim()))
-      if (parts.length === 2 && parts[0] > 0 && parts[1] > 0) {
-        const [freeBytes, totalBytes] = parts
-        const usedBytes = totalBytes - freeBytes
-        result[i] = {
-          ...result[i],
-          totalBytes,
-          usedBytes,
-          freeBytes,
-          usedPercent: Math.round((usedBytes / totalBytes) * 100),
-        }
-        break
-      }
-    }
+  const finderFreeBytes = parts[0]
 
-    // Tier 2: diskutil APFS container free space
-    const diskutilResult = await exec(
-      `diskutil info -plist / 2>/dev/null | grep -A1 APFSContainerFree | grep integer | sed 's/[^0-9]//g'`,
-      { timeout: 5000 },
-    )
+  // Get actual free space from df
+  const dfResult = await exec('df -k / 2>/dev/null | tail -1', { timeout: 3000 })
+  if (!dfResult.ok)
+    return null
 
-    if (diskutilResult.ok && diskutilResult.stdout) {
-      const containerFree = Number.parseInt(diskutilResult.stdout)
-      if (containerFree > 0 && containerFree > result[i].freeBytes) {
-        const usedBytes = result[i].totalBytes - containerFree
-        result[i] = {
-          ...result[i],
-          freeBytes: containerFree,
-          usedBytes,
-          usedPercent: Math.round((usedBytes / result[i].totalBytes) * 100),
-        }
-      }
-    }
+  const dfParts = dfResult.stdout.split(/\s+/)
+  const rawFreeBytes = (Number.parseInt(dfParts[3]) || 0) * 1024
 
-    break
-  }
+  // Purgeable = Finder's "free" minus actual free
+  const purgeableBytes = Math.max(0, finderFreeBytes - rawFreeBytes)
 
-  return result
+  return { purgeableBytes, finderFreeBytes }
 }
 
 async function getIoRates(): Promise<{ readBytesPerSec: number, writeBytesPerSec: number }> {

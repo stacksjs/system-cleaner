@@ -5,6 +5,10 @@ import { registerDiskCommand } from './commands/disk'
 import { registerMonitorCommand } from './commands/monitor'
 import { registerScanCommand } from './commands/scan'
 import { registerOptimizeCommand } from './commands/optimize'
+import { registerPurgeCommand } from './commands/purge'
+import { registerInstallerCommand } from './commands/installer'
+import { registerCheckCommand } from './commands/check'
+import { registerTouchIdCommand } from './commands/touchid'
 
 export function createCLI() {
   const app = cli('system-cleaner')
@@ -18,6 +22,10 @@ export function createCLI() {
   registerMonitorCommand(app)
   registerScanCommand(app)
   registerOptimizeCommand(app)
+  registerPurgeCommand(app)
+  registerInstallerCommand(app)
+  registerCheckCommand(app)
+  registerTouchIdCommand(app)
 
   return app
 }
@@ -29,4 +37,8 @@ export {
   registerMonitorCommand,
   registerScanCommand,
   registerOptimizeCommand,
+  registerPurgeCommand,
+  registerInstallerCommand,
+  registerCheckCommand,
+  registerTouchIdCommand,
 }

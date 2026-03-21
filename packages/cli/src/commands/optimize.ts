@@ -80,6 +80,41 @@ const OPTIMIZE_TASKS: OptimizeTask[] = [
     command: 'find ~/Library/Preferences -name "*.plist" -exec plutil -lint {} \\; 2>&1 | grep -v "OK"',
     requiresSudo: false,
   },
+  {
+    id: 'network-stack',
+    name: 'Reset Network Stack',
+    description: 'Flush routing table and ARP cache to fix network issues',
+    command: 'sudo route -n flush 2>/dev/null && sudo arp -a -d 2>/dev/null',
+    requiresSudo: true,
+  },
+  {
+    id: 'disk-permissions',
+    name: 'Repair Disk Permissions',
+    description: 'Reset user directory permissions to defaults',
+    command: 'diskutil resetUserPermissions / $(id -u)',
+    requiresSudo: false,
+  },
+  {
+    id: 'bluetooth-reset',
+    name: 'Reset Bluetooth',
+    description: 'Restart the Bluetooth daemon to fix connectivity issues',
+    command: 'sudo pkill bluetoothd 2>/dev/null',
+    requiresSudo: true,
+  },
+  {
+    id: 'sqlite-vacuum',
+    name: 'Optimize Databases',
+    description: 'Vacuum SQLite databases (Mail, Safari) to reclaim space and improve speed',
+    command: 'find ~/Library -name "*.db" -path "*/Mail/*" -exec sqlite3 {} "VACUUM;" \\; 2>/dev/null; find ~/Library -name "*.db" -path "*/Safari/*" -exec sqlite3 {} "VACUUM;" \\; 2>/dev/null',
+    requiresSudo: false,
+  },
+  {
+    id: 'saved-state',
+    name: 'Clear Saved App State',
+    description: 'Remove saved application state to fix window restore issues',
+    command: 'find ~/Library/Saved\\ Application\\ State -name "*.savedState" -mtime +30 -exec rm -rf {} + 2>/dev/null',
+    requiresSudo: false,
+  },
 ]
 
 export function registerOptimizeCommand(app: CLI): void {

@@ -1,5 +1,5 @@
 import * as path from 'node:path'
-import { HOME, getDirSize, macPaths, pathExists, safeReadDir, safeStat } from '@system-cleaner/core'
+import { HOME, getDirSize, macPaths, pathExists, safeReadDir, safeStat, parsePlist, exec, shellEscape } from '@system-cleaner/core'
 import { readBundleInfo } from './bundle'
 import type { AppInfo, StartupItem } from './types'
 
@@ -98,21 +98,17 @@ const AGENT_DIRS = [
 ]
 
 const VENDOR_MAP: Record<string, { vendor: string, category: StartupItem['category'], icon: string }> = {
-  apple: { vendor: 'Apple', category: 'system', icon: '' },
   'com.apple': { vendor: 'Apple', category: 'system', icon: '' },
-  google: { vendor: 'Google', category: 'vendor', icon: '🔍' },
-  microsoft: { vendor: 'Microsoft', category: 'vendor', icon: '🪟' },
   'com.microsoft': { vendor: 'Microsoft', category: 'vendor', icon: '🪟' },
+  google: { vendor: 'Google', category: 'vendor', icon: '🔍' },
   adobe: { vendor: 'Adobe', category: 'vendor', icon: '🎨' },
   spotify: { vendor: 'Spotify', category: 'vendor', icon: '🎵' },
   dropbox: { vendor: 'Dropbox', category: 'vendor', icon: '📦' },
   docker: { vendor: 'Docker', category: 'dev', icon: '🐳' },
   homebrew: { vendor: 'Homebrew', category: 'dev', icon: '🍺' },
-  brew: { vendor: 'Homebrew', category: 'dev', icon: '🍺' },
   slack: { vendor: 'Slack', category: 'vendor', icon: '💬' },
   zoom: { vendor: 'Zoom', category: 'vendor', icon: '📹' },
   '1password': { vendor: '1Password', category: 'vendor', icon: '🔐' },
-  onepassword: { vendor: '1Password', category: 'vendor', icon: '🔐' },
   raycast: { vendor: 'Raycast', category: 'vendor', icon: '🚀' },
   steam: { vendor: 'Steam', category: 'vendor', icon: '🎮' },
   jetbrains: { vendor: 'JetBrains', category: 'dev', icon: '🧠' },
@@ -124,7 +120,8 @@ const VENDOR_MAP: Record<string, { vendor: string, category: StartupItem['catego
 
 function categorizeAgent(label: string): { vendor: string, category: StartupItem['category'], icon: string } {
   const lower = label.toLowerCase()
-  for (const [key, value] of Object.entries(VENDOR_MAP)) {
+  // Check longer keys first to avoid false positives (e.g., "com.apple" before "apple")
+  for (const [key, value] of Object.entries(VENDOR_MAP).sort((a, b) => b[0].length - a[0].length)) {
     if (lower.includes(key))
       return value
   }
@@ -135,7 +132,6 @@ function categorizeAgent(label: string): { vendor: string, category: StartupItem
  * Discover all startup items (launch agents and daemons)
  */
 export function discoverStartupItems(): StartupItem[] {
-  const { parsePlist } = require('@system-cleaner/core')
   const items: StartupItem[] = []
 
   for (const dir of AGENT_DIRS) {
@@ -162,7 +158,6 @@ export function discoverStartupItems(): StartupItem[] {
     }
   }
 
-  // Sort: enabled first, then alphabetical
   items.sort((a, b) => {
     if (a.disabled !== b.disabled)
       return a.disabled ? 1 : -1
@@ -173,21 +168,18 @@ export function discoverStartupItems(): StartupItem[] {
 }
 
 /**
- * Toggle a launch agent on or off
+ * Toggle a launch agent on or off.
+ * Uses shellEscape to prevent command injection from filepath.
  */
 export async function toggleStartupItem(filepath: string, action: 'enable' | 'disable'): Promise<{ success: boolean, error?: string }> {
-  const { exec } = require('@system-cleaner/core')
-
-  // Safety: only allow toggling user launch agents
   if (!filepath.startsWith(path.join(HOME, 'Library/LaunchAgents'))) {
     return { success: false, error: 'Can only toggle user launch agents' }
   }
 
   const cmd = action === 'disable'
-    ? `launchctl unload -w "${filepath}" 2>/dev/null`
-    : `launchctl load -w "${filepath}" 2>/dev/null`
+    ? `launchctl unload -w ${shellEscape(filepath)} 2>/dev/null`
+    : `launchctl load -w ${shellEscape(filepath)} 2>/dev/null`
 
-  // launchctl often exits non-zero even on success
   await exec(cmd, { timeout: 5000 })
   return { success: true }
 }

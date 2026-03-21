@@ -95,7 +95,7 @@ export const CLEAN_TARGETS: CleanTarget[] = [
   t('jupyter-runtime', 'Jupyter Runtime', `${HOME}/.jupyter/runtime`, '📓', 'developer', 'Jupyter notebook runtime cache', true),
   t('huggingface-cache', 'Hugging Face Cache', `${HOME}/.cache/huggingface`, '🤗', 'developer', 'Hugging Face model cache (can be very large)', true),
   t('torch-cache', 'PyTorch Cache', `${HOME}/.cache/torch`, '🔥', 'developer', 'PyTorch model and hub cache', true),
-  t('tensorflow-cache', 'TensorFlow Cache', `${HOME}/.cache/tensorflow', '🧠', 'developer', 'TensorFlow model cache', true),
+  t('tensorflow-cache', 'TensorFlow Cache', `${HOME}/.cache/tensorflow`, '🧠', 'developer', 'TensorFlow model cache', true),
   t('conda-cache', 'Conda Cache', `${HOME}/.conda/pkgs`, '🐍', 'developer', 'Conda package cache', true),
   t('wandb-cache', 'Weights & Biases', `${HOME}/.cache/wandb`, '📊', 'developer', 'Weights & Biases experiment cache', true),
 

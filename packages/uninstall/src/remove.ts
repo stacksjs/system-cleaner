@@ -1,5 +1,6 @@
 import * as fs from 'node:fs'
-import { formatBytes, getDirSize, isPathSafe } from '@system-cleaner/core'
+import * as os from 'node:os'
+import { exec, formatBytes, getDirSize, isPathSafe } from '@system-cleaner/core'
 import type { AppInfo, AppRemnant, UninstallOptions, UninstallResult } from './types'
 import { findRemnants } from './remnants'
 
@@ -19,14 +20,14 @@ export async function uninstallApp(app: AppInfo, options: UninstallOptions = {})
   options.onProgress?.('Scanning for remnants...')
   const remnants = options.deep !== false ? await findRemnants(app) : []
 
-  // Build removal list: app bundle first, then remnants sorted deepest path first
+  // Build removal list: deeper paths first to avoid parent/child conflicts
   const removalPaths = [app.path, ...remnants.map(r => r.path)]
     .sort((a, b) => b.split('/').length - a.split('/').length)
 
   for (const targetPath of removalPaths) {
     const safety = isPathSafe(targetPath)
 
-    // For app bundles in /Applications, we allow deletion even though they're outside HOME
+    // For app bundles in /Applications, allow deletion even outside HOME
     const isAppBundle = targetPath === app.path
     if (!safety.safe && !isAppBundle) {
       result.errors.push(`Skipped ${targetPath}: ${safety.reason}`)
@@ -34,7 +35,7 @@ export async function uninstallApp(app: AppInfo, options: UninstallOptions = {})
     }
 
     if (options.dryRun) {
-      const size = await getDirSize(targetPath).catch(() => 0)
+      const size = await getSafeDirSize(targetPath)
       result.totalFreed += size
       result.removedPaths.push(targetPath)
       continue
@@ -42,14 +43,7 @@ export async function uninstallApp(app: AppInfo, options: UninstallOptions = {})
 
     try {
       options.onProgress?.(`Removing ${targetPath}`)
-      const sizeBefore = await getDirSize(targetPath).catch(() => {
-        try {
-          return fs.statSync(targetPath).size
-        }
-        catch {
-          return 0
-        }
-      })
+      const sizeBefore = await getSafeDirSize(targetPath)
 
       fs.rmSync(targetPath, { recursive: true, force: true })
       result.totalFreed += sizeBefore
@@ -94,7 +88,6 @@ export async function removeRemnants(
   const errors: string[] = []
   let totalFreed = 0
 
-  // Sort deepest first to avoid parent/child conflicts
   const sorted = [...remnants].sort((a, b) => b.path.split('/').length - a.path.split('/').length)
 
   for (const remnant of sorted) {
@@ -124,14 +117,15 @@ export async function removeRemnants(
 }
 
 /**
- * Kill a running process by PID (only user-owned processes)
+ * Kill a running process by PID (only user-owned processes).
+ * PID is validated as a number — no injection possible.
  */
 export async function killProcess(pid: number): Promise<{ success: boolean, error?: string }> {
-  const { exec } = require('@system-cleaner/core')
-  const os = require('node:os')
+  if (!Number.isInteger(pid) || pid <= 0)
+    return { success: false, error: 'Invalid PID' }
+
   const uid = os.userInfo().uid
 
-  // Verify the process belongs to the current user
   const result = await exec(`ps -p ${pid} -o uid=`, { timeout: 3000 })
   if (!result.ok)
     return { success: false, error: 'Process not found' }
@@ -145,5 +139,20 @@ export async function killProcess(pid: number): Promise<{ success: boolean, erro
   }
   catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+/** Get directory size with safe fallback to stat */
+async function getSafeDirSize(targetPath: string): Promise<number> {
+  try {
+    return await getDirSize(targetPath)
+  }
+  catch {
+    try {
+      return fs.statSync(targetPath).size
+    }
+    catch {
+      return 0
+    }
   }
 }

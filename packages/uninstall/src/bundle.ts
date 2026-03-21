@@ -1,5 +1,6 @@
+import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { readAppInfoPlist, pathExists, safeReadFile } from '@system-cleaner/core'
+import { readAppInfoPlist, pathExists, execSync, shellEscape } from '@system-cleaner/core'
 
 export interface BundleInfo {
   name: string
@@ -33,8 +34,8 @@ export function readBundleInfo(appPath: string): BundleInfo {
   let iconPath = ''
   const iconFile = (info.CFBundleIconFile as string) || ''
   if (iconFile) {
-    // Try .icns extension
-    const icnsPath = path.join(appPath, 'Contents/Resources', iconFile.endsWith('.icns') ? iconFile : `${iconFile}.icns`)
+    const icnsName = iconFile.endsWith('.icns') ? iconFile : `${iconFile}.icns`
+    const icnsPath = path.join(appPath, 'Contents/Resources', icnsName)
     if (pathExists(icnsPath))
       iconPath = icnsPath
   }
@@ -63,7 +64,7 @@ export function getBundleId(appPath: string): string {
  */
 export function isHomebrewCask(appPath: string): boolean {
   try {
-    const realPath = require('node:fs').realpathSync(appPath)
+    const realPath = fs.realpathSync(appPath)
     return realPath.includes('/Cellar/') || realPath.includes('/Caskroom/')
   }
   catch {
@@ -72,10 +73,11 @@ export function isHomebrewCask(appPath: string): boolean {
 }
 
 /**
- * Get the Homebrew cask name for an app, if applicable
+ * Get the Homebrew cask name for an app, if applicable.
+ * Uses shellEscape to prevent command injection from app names.
  */
 export function getHomebrewCaskName(appName: string): string | null {
-  const { execSync } = require('@system-cleaner/core')
-  const output = execSync(`brew list --cask 2>/dev/null | grep -i "${appName.replace('.app', '')}"`)
+  const safeName = appName.replace('.app', '').replace(/[^a-zA-Z0-9 \-_.]/g, '')
+  const output = execSync(`brew list --cask 2>/dev/null | grep -i ${shellEscape(safeName)}`)
   return output || null
 }

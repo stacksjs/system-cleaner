@@ -1,12 +1,15 @@
+import { execSync as nodeExecSync } from 'node:child_process'
 import type { ExecOptions, ExecResult } from './types'
 
 const DEFAULT_TIMEOUT = 10_000
 
 /**
- * Execute a shell command asynchronously using Bun.spawn
+ * Execute a shell command asynchronously using Bun.spawn.
+ * Timer is always cleared via try/finally to prevent leaks.
  */
 export async function exec(command: string, options: ExecOptions = {}): Promise<ExecResult> {
   const timeout = options.timeout ?? DEFAULT_TIMEOUT
+  let timer: ReturnType<typeof setTimeout> | undefined
 
   try {
     const proc = Bun.spawn(['sh', '-c', command], {
@@ -16,15 +19,13 @@ export async function exec(command: string, options: ExecOptions = {}): Promise<
       env: options.env ? { ...process.env, ...options.env } : undefined,
     })
 
-    const timer = setTimeout(() => proc.kill(), timeout)
+    timer = setTimeout(() => proc.kill(), timeout)
 
     const [stdout, stderr] = await Promise.all([
       new Response(proc.stdout).text(),
       new Response(proc.stderr).text(),
     ])
     const exitCode = await proc.exited
-
-    clearTimeout(timer)
 
     return {
       stdout: stdout.trim(),
@@ -41,13 +42,16 @@ export async function exec(command: string, options: ExecOptions = {}): Promise<
       ok: false,
     }
   }
+  finally {
+    if (timer)
+      clearTimeout(timer)
+  }
 }
 
 /**
  * Execute a shell command synchronously
  */
 export function execSync(command: string, options: ExecOptions = {}): string {
-  const { execSync: nodeExecSync } = require('node:child_process')
   try {
     return nodeExecSync(command, {
       encoding: (options.encoding ?? 'utf8') as BufferEncoding,
@@ -87,17 +91,17 @@ export async function execOr<T>(command: string, fallback: T, parse: (stdout: st
 }
 
 /**
- * Execute a command that requires elevated privileges
- * Returns the command string prefixed with sudo for user to run
+ * Sanitize a string for safe use in shell commands (prevents injection).
+ * Wraps in single quotes and escapes any embedded single quotes.
  */
-export function sudoCommand(command: string): string {
-  return `sudo ${command}`
+export function shellEscape(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`
 }
 
 /**
  * Check if a command exists on the system
  */
 export async function commandExists(name: string): Promise<boolean> {
-  const result = await exec(`command -v ${name}`)
+  const result = await exec(`command -v ${shellEscape(name)}`)
   return result.ok
 }

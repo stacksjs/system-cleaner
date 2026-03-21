@@ -47,9 +47,11 @@ export async function cleanTarget(target: CleanTarget, options: CleanOptions = {
     // Clean contents only — keep the directory itself
     try {
       const entries = fs.readdirSync(target.path)
+      // Pre-compile skip patterns once (not per-entry)
+      const skipRegexes = target.skipPatterns?.map(p => new RegExp(p)) ?? []
+
       for (const entry of entries) {
-        // Check skip patterns
-        if (target.skipPatterns?.some(p => new RegExp(p).test(entry))) {
+        if (skipRegexes.some(r => r.test(entry))) {
           result.skipped.push(entry)
           continue
         }
