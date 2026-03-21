@@ -19,26 +19,10 @@
 
     /* ── macOS Tahoe chrome ─────────────────────────────────── */
     .app-chrome {
-      width: calc(100vw - 24px); height: calc(100vh - 24px); margin: 12px;
-      background: #1c1c1e; border-radius: 12px;
-      border: 0.5px solid rgba(255,255,255,0.08);
-      box-shadow: 0 0 0 0.5px rgba(0,0,0,0.8), 0 25px 60px rgba(0,0,0,0.55);
+      width: 100vw; height: 100vh;
+      background: #1c1c1e;
       display: flex; flex-direction: column; overflow: hidden;
     }
-    .titlebar {
-      height: 52px; min-height: 52px; background: #2c2c2e;
-      border-bottom: 0.5px solid rgba(255,255,255,0.06);
-      display: flex; align-items: center; padding: 0 16px; position: relative;
-      -webkit-app-region: drag;
-    }
-    .traffic-lights { display: flex; gap: 8px; -webkit-app-region: no-drag; }
-    .tl { width: 12px; height: 12px; border-radius: 50%; border: none; cursor: default; }
-    .tl-close { background: #ff5f56; } .tl-min { background: #ffbd2e; } .tl-max { background: #27c93f; }
-    .titlebar-text {
-      position: absolute; left: 50%; transform: translateX(-50%);
-      font-size: 13px; font-weight: 500; color: #98989d;
-    }
-    .titlebar-text strong { color: #d1d1d6; font-weight: 600; }
 
     .app-body { flex: 1; display: flex; overflow: hidden; }
 

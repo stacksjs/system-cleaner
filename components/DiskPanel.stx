@@ -1,4 +1,4 @@
-<!-- DiskScope — sunburst disk usage analyzer -->
+<!-- DiskScope — sunburst disk usage analyzer (lazy-loaded) -->
 <div class="disk-layout">
 
   <!-- Disk sidebar -->
@@ -22,42 +22,29 @@
       </div>
     </div>
 
-    <div class="disk-sidebar-section">
+    <div class="disk-sidebar-section" id="disk-scan-info">
       <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: #6c6c70; margin-bottom: 8px;">Scanned: {{ scanBasename }}</div>
-      <div style="font-size: 18px; font-weight: 700; margin-bottom: 2px;">{{ scanTotalFormatted }}</div>
-      <div style="font-size: 10px; color: #6c6c70;">{{ folderCount }} folders &middot; {{ fileCount }} files &middot; {{ scanTimeFormatted }}</div>
+      <div style="font-size: 18px; font-weight: 700; margin-bottom: 2px;" id="disk-scan-total">{{ scanTotalFormatted }}</div>
+      <div style="font-size: 10px; color: #6c6c70;" id="disk-scan-meta">Scanning...</div>
     </div>
 
     <div class="disk-sidebar-section" style="padding-bottom: 4px;">
       <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: #6c6c70;">Largest Items</div>
     </div>
-    <div class="folder-list" id="folder-list">
-      @foreach(topFolders as folder)
-        <div class="folder-item" data-seg="{{ folder.idx }}">
-          <span class="folder-dot" style="background: {{ folder.color }}"></span>
-          <span class="folder-name">{{ folder.name }}</span>
-          <span class="folder-size">{{ folder.formattedSize }}</span>
-          <div class="folder-bar-track">
-            <div class="folder-bar-fill" style="width: {{ folder.barWidth }}%; background: {{ folder.color }}"></div>
-          </div>
-        </div>
-      @endforeach
-    </div>
+    <div class="folder-list" id="folder-list"></div>
   </div>
 
   <!-- Sunburst chart -->
   <div class="disk-chart">
-    <svg class="sunburst-svg" id="sunburst" viewBox="-320 -320 640 640">
+    <div id="disk-loading" style="position: relative; z-index: 1; text-align: center; color: #6c6c70; font-size: 13px;">
+      <div style="margin-bottom: 8px; font-size: 24px; animation: pulse 1.5s ease-in-out infinite;">💾</div>
+      Scanning disk...
+    </div>
+    <svg class="sunburst-svg" id="sunburst" viewBox="-320 -320 640 640" style="display:none">
       <circle cx="0" cy="0" r="115" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="0.5" />
       <circle cx="0" cy="0" r="170" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="0.5" />
       <circle cx="0" cy="0" r="225" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="0.5" />
-      <g id="segments-group">
-        @foreach(segments as seg)
-          <path class="segment" d="{{ seg.d }}" fill="{{ seg.color }}" data-idx="{{ seg.idx }}">
-            <title>{{ seg.name }} — {{ seg.formattedSize }} ({{ seg.percent }}%)</title>
-          </path>
-        @endforeach
-      </g>
+      <g id="segments-group"></g>
       <circle cx="0" cy="0" r="57" class="center-bg" id="center-circle" />
       <circle cx="0" cy="0" r="57" class="center-ring" />
       <text id="center-size" x="0" y="-5" class="center-text-size">{{ scanTotalFormatted }}</text>
@@ -79,14 +66,19 @@
 
 </div>
 
-<script client>
+<style>
+@keyframes pulse { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+</style>
+
+<script client lang="js">
   (function() {
-    var segs = {!! segmentsJson !!};
-    var tree = {!! treeJson !!};
-    var PAL = {!! JSON.stringify(PALETTE) !!};
-    var CFG = {!! JSON.stringify({ centerR: CENTER_R, maxR: MAX_R, maxDepth: MAX_DEPTH, padAngle: PAD_ANGLE, minAngle: MIN_ANGLE, maxSegs: MAX_SEGMENTS }) !!};
-    var defaultSize = {!! JSON.stringify(scanTotalFormatted) !!};
-    var defaultName = {!! JSON.stringify(scanBasename) !!};
+    var PAL = ['#FF6B6B','#4ECDC4','#45B7D1','#96CEB4','#F7DC6F','#DDA0DD','#98D8C8','#F8C471','#BB8FCE','#85C1E9','#82E0AA','#F1948A','#AED6F1','#D7BDE2','#F5B7B1','#73C6B6','#F0B27A','#A9CCE3','#D2B4DE','#A3E4D7'];
+    var CFG = { centerR: 60, maxR: 280, maxDepth: 4, padAngle: 0.004, minAngle: 0.005, maxSegs: 400 };
+
+    var segs = [];
+    var tree = null;
+    var defaultSize = '';
+    var defaultName = '';
 
     var centerSize = document.getElementById('center-size');
     var centerName = document.getElementById('center-name');
@@ -97,6 +89,9 @@
     var svgEl = document.getElementById('sunburst');
     var segGroup = document.getElementById('segments-group');
     var folderListEl = document.getElementById('folder-list');
+    var loadingEl = document.getElementById('disk-loading');
+    var scanTotalEl = document.getElementById('disk-scan-total');
+    var scanMetaEl = document.getElementById('disk-scan-meta');
 
     function fmtBytes(b) {
       if (b >= 1e12) return (b/1e12).toFixed(1)+' TB';
@@ -127,7 +122,7 @@
     }
 
     var viewStack = [];
-    var currentRoot = tree;
+    var currentRoot = null;
 
     function flatten(node,arr,ci){
       if(node._d===undefined||arr.length>=CFG.maxSegs)return;
@@ -165,6 +160,7 @@
       card.innerHTML='<div class="info-icon-row"><div class="info-type-icon" style="background:'+s.color+'20;color:'+s.color+'">'+(s.isDir?'Dir':'File')+'</div><div><div class="info-type-name">'+s.name+'</div><div class="info-type-kind">'+(s.isDir?'Folder':'File')+' · Level '+s.depth+'</div></div></div><div class="info-row"><span class="info-label">Size</span><span class="info-value">'+s.formattedSize+'</span></div><div class="info-row"><span class="info-label">% of View</span><span class="info-value">'+s.percent+'%</span></div>'+(s.isDir?'<div class="info-row"><span class="info-label">Items</span><span class="info-value">'+s.childCount+'</span></div>':'')+'<div class="info-row" style="border-bottom:none"><span class="info-label">Depth</span><span class="info-value">Ring '+s.depth+'</span></div><div class="info-path">'+s.fullPath+'</div><div class="info-bar"><div class="info-bar-label">Proportion</div><div class="info-bar-track"><div class="info-bar-fill" style="width:'+s.percent+'%;background:'+s.color+'"></div></div><div class="info-bar-text">'+s.formattedSize+' of '+defaultSize+'</div></div>'+(s.isDir&&s.childCount>0?'<div class="info-drill">Click to drill down</div>':'');
     }
 
+    // Bind events
     if(svgEl){
       svgEl.addEventListener('mouseover',function(e){var p=e.target.closest('.segment');if(p){var idx=parseInt(p.getAttribute('data-idx'));if(segs[idx])showInfo(segs[idx]);}});
       svgEl.addEventListener('mouseout',function(e){var p=e.target.closest('.segment');if(p&&(!e.relatedTarget||!e.relatedTarget.closest||!e.relatedTarget.closest('.segment')))showInfo(null);});
@@ -172,5 +168,18 @@
     }
     if(centerCircle){centerCircle.addEventListener('click',function(){if(viewStack.length>0)renderView(viewStack.pop());});}
     if(folderListEl){folderListEl.addEventListener('mouseover',function(e){var item=e.target.closest('.folder-item');if(item){var idx=parseInt(item.getAttribute('data-seg'));if(segs[idx])showInfo(segs[idx]);}});folderListEl.addEventListener('mouseout',function(e){var item=e.target.closest('.folder-item');if(item)showInfo(null);});}
+
+    // Lazy-load disk scan data from API
+    fetch('/api/disk-scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data.success) return;
+        tree = data.tree;
+        loadingEl.style.display = 'none';
+        svgEl.style.display = '';
+        scanTotalEl.textContent = fmtBytes(tree.s);
+        scanMetaEl.textContent = data.folderCount + ' folders \u00b7 ' + data.fileCount + ' files \u00b7 ' + data.scanTime;
+        renderView(tree);
+      });
   })();
 </script>

@@ -80,9 +80,9 @@
           </td>
           <td>
             @if(!item.disabled && item.scope === 'user')
-              <button class="btn btn-danger btn-sm" @click="toast('{{ item.name }} would be disabled (demo)', 'warning')">Disable</button>
+              <button class="btn btn-danger btn-sm" @click="doToggleStartup('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', 'disable', '{{ esc(item.name) }}')">Disable</button>
             @elseif(item.disabled && item.scope === 'user')
-              <button class="btn btn-sm" @click="toast('{{ item.name }} would be enabled (demo)', 'success')">Enable</button>
+              <button class="btn btn-sm" @click="doToggleStartup('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', 'enable', '{{ esc(item.name) }}')">Enable</button>
             @else
               <span class="dim" style="font-size: 10px;">System</span>
             @endif
