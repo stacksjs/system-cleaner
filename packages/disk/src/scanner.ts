@@ -247,19 +247,19 @@ export function flattenTree(tree: DiskEntry): DiskEntry[] {
  */
 function getDirSizeSync(dirPath: string): number {
   try {
-    const { execSync } = require('node:child_process')
-    const out = execSync(`du -sk "${dirPath}" 2>/dev/null | cut -f1`, {
+    const { execSync: nodeExecSync } = require('node:child_process') as typeof import('node:child_process')
+    const out = nodeExecSync(`du -sk "${dirPath}" 2>/dev/null | cut -f1`, {
       encoding: 'utf8',
       timeout: 5_000,
     }).trim()
     return (Number.parseInt(out) || 0) * 1024
   }
   catch {
-    // Fallback: stat-based estimate
+    // Fallback: stat-based estimate (samples up to 500 entries)
     try {
       let total = 0
       const entries = fs.readdirSync(dirPath, { withFileTypes: true })
-      for (const entry of entries.slice(0, 100)) { // Limit to avoid hanging
+      for (const entry of entries.slice(0, 500)) {
         try {
           const stat = fs.statSync(path.join(dirPath, entry.name))
           total += stat.size

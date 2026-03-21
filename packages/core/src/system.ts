@@ -1,6 +1,6 @@
 import * as os from 'node:os'
 import type { DiskInfo, SystemInfo } from './types'
-import { exec, execSync } from './exec'
+import { exec, execSync, shellEscape } from './exec'
 import { HOME } from './paths'
 
 /**
@@ -9,12 +9,15 @@ import { HOME } from './paths'
 export async function getSystemInfo(): Promise<SystemInfo> {
   const cpus = os.cpus()
 
-  const [macosVersion, serialNumber, modelName, physicalCores] = await Promise.all([
+  // Single system_profiler call for both serial and model (was two separate calls)
+  const [macosVersion, hwInfo, physicalCores] = await Promise.all([
     exec('sw_vers -productVersion').then(r => r.ok ? r.stdout : 'Unknown'),
-    exec('system_profiler SPHardwareDataType 2>/dev/null | grep "Serial Number" | awk -F": " \'{print $2}\'').then(r => r.ok ? r.stdout : ''),
-    exec('system_profiler SPHardwareDataType 2>/dev/null | grep "Model Name" | awk -F": " \'{print $2}\'').then(r => r.ok ? r.stdout : ''),
+    exec('system_profiler SPHardwareDataType 2>/dev/null').then(r => r.ok ? r.stdout : ''),
     exec('sysctl -n hw.physicalcpu').then(r => r.ok ? Number.parseInt(r.stdout) || cpus.length : cpus.length),
   ])
+
+  const serialNumber = hwInfo.match(/Serial Number.*?:\s*(.+)/)?.[1]?.trim() || ''
+  const modelName = hwInfo.match(/Model Name:\s*(.+)/)?.[1]?.trim() || ''
 
   return {
     hostname: os.hostname(),
@@ -112,7 +115,7 @@ export async function getPrimaryDiskInfo(): Promise<DiskInfo | null> {
  * Get the size of a directory using `du`
  */
 export async function getDirSize(dirPath: string): Promise<number> {
-  const result = await exec(`du -sk "${dirPath}" 2>/dev/null | cut -f1`, { timeout: 15_000 })
+  const result = await exec(`du -sk ${shellEscape(dirPath)} 2>/dev/null | cut -f1`, { timeout: 15_000 })
   if (!result.ok)
     return 0
   return (Number.parseInt(result.stdout) || 0) * 1024
@@ -122,7 +125,7 @@ export async function getDirSize(dirPath: string): Promise<number> {
  * Get the size of a directory synchronously
  */
 export function getDirSizeSync(dirPath: string): number {
-  const out = execSync(`du -sk "${dirPath}" 2>/dev/null | cut -f1`, { timeout: 15_000 })
+  const out = execSync(`du -sk ${shellEscape(dirPath)} 2>/dev/null | cut -f1`, { timeout: 15_000 })
   return (Number.parseInt(out) || 0) * 1024
 }
 

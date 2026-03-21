@@ -36,8 +36,8 @@ const PROTECTED_PATHS = new Set([
   '/tmp',
 ])
 
-// Patterns in paths that indicate sensitive data
-const SENSITIVE_PATTERNS = [
+// Path components that indicate sensitive data (matched as whole path segments)
+const SENSITIVE_SEGMENTS = new Set([
   '.ssh',
   '.gnupg',
   '.gpg',
@@ -45,13 +45,17 @@ const SENSITIVE_PATTERNS = [
   'secrets',
   '.aws',
   '.kube',
-  'keychain',
+  'Keychains',
+])
+
+// Filenames that are sensitive (matched exactly against basename)
+const SENSITIVE_FILES = new Set([
   '.env',
   'id_rsa',
   'id_ed25519',
   'known_hosts',
   'authorized_keys',
-]
+])
 
 /**
  * Check if a path is safe to delete
@@ -71,12 +75,17 @@ export function isPathSafe(targetPath: string): PathSafetyCheck {
     return { safe: false, reason: `${path.basename(resolved)} is a protected directory` }
   }
 
-  // Check for sensitive data patterns
-  const lowerPath = resolved.toLowerCase()
-  for (const pattern of SENSITIVE_PATTERNS) {
-    if (lowerPath.includes(pattern)) {
-      return { safe: false, reason: `Path contains sensitive data pattern: ${pattern}` }
+  // Check for sensitive data — match whole path segments to avoid false positives
+  // (e.g., ".ssh" should block ~/.ssh/keys but NOT ~/Library/Caches/com.ssh-agent-cache)
+  const segments = resolved.split('/')
+  for (const segment of segments) {
+    if (SENSITIVE_SEGMENTS.has(segment)) {
+      return { safe: false, reason: `Path contains sensitive directory: ${segment}` }
     }
+  }
+  const basename = segments[segments.length - 1]
+  if (SENSITIVE_FILES.has(basename)) {
+    return { safe: false, reason: `Path contains sensitive file: ${basename}` }
   }
 
   try {
@@ -98,7 +107,14 @@ export function isPathSafe(targetPath: string): PathSafetyCheck {
 export function isCleanable(targetPath: string): PathSafetyCheck {
   const resolved = path.resolve(targetPath)
 
-  if (!resolved.startsWith(HOME) && !resolved.startsWith('/private/tmp') && !resolved.startsWith('/private/var/tmp')) {
+  if (
+    !resolved.startsWith(HOME)
+    && !resolved.startsWith('/private/tmp')
+    && !resolved.startsWith('/private/var/tmp')
+    && !resolved.startsWith('/Library/')
+    && !resolved.startsWith('/private/var/log')
+    && !resolved.startsWith('/private/var/db')
+  ) {
     return { safe: false, reason: 'Path is outside allowed directories' }
   }
 

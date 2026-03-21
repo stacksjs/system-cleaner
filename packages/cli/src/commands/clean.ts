@@ -1,5 +1,5 @@
 import type { CLI } from '@stacksjs/clapp'
-import { CLEAN_TARGETS, cleanAll, cleanTargets, getCleanTargets, scanExistingTargets } from '@system-cleaner/clean'
+import { cleanTargets, getCleanTargets, scanExistingTargets } from '@system-cleaner/clean'
 import { formatBytes } from '@system-cleaner/core'
 
 export function registerCleanCommand(app: CLI): void {

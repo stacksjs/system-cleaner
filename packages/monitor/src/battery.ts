@@ -17,7 +17,8 @@ export async function getBatteryMetrics(): Promise<BatteryMetrics | null> {
   const chargePercent = chargeMatch ? Number.parseInt(chargeMatch[1]) : 0
 
   // Parse charging state
-  const isCharging = output.includes('charging') && !output.includes('not charging')
+  // "discharging" contains "charging" as substring — must exclude it explicitly
+  const isCharging = output.includes('charging') && !output.includes('not charging') && !output.includes('discharging')
   const isPowerConnected = output.includes('AC Power')
 
   // Parse time remaining

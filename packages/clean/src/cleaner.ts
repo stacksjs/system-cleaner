@@ -26,11 +26,6 @@ export async function cleanTarget(target: CleanTarget, options: CleanOptions = {
     return result
   }
 
-  if (target.requiresSudo && !options.dryRun) {
-    result.errors.push('This target requires elevated privileges. Run with sudo.')
-    return result
-  }
-
   // Measure size before cleaning
   const sizeBefore = await getDirSize(target.path)
 
@@ -38,6 +33,11 @@ export async function cleanTarget(target: CleanTarget, options: CleanOptions = {
     result.freedBytes = sizeBefore
     result.freedFormatted = formatBytes(sizeBefore)
     result.success = true
+    return result
+  }
+
+  if (target.requiresSudo) {
+    result.errors.push('This target requires elevated privileges. Run with sudo.')
     return result
   }
 
@@ -129,7 +129,7 @@ export async function cleanAll(options: CleanOptions = {}): Promise<{
   if (options.skipTargets && options.skipTargets.length > 0)
     targets = targets.filter(t => !options.skipTargets!.includes(t.id))
 
-  // Filter to only sudo targets or non-sudo based on current user
+  // Skip sudo targets — they require elevated privileges
   targets = targets.filter(t => !t.requiresSudo)
 
   // First scan to find existing targets with data
@@ -143,7 +143,10 @@ export async function cleanAll(options: CleanOptions = {}): Promise<{
  * Empty the user's Trash
  */
 export async function emptyTrash(): Promise<CleanResult> {
-  const trashTarget = CLEAN_TARGETS.find(t => t.id === 'trash')!
+  const trashTarget = CLEAN_TARGETS.find(t => t.id === 'trash')
+  if (!trashTarget) {
+    return { targetId: 'trash', targetName: 'Trash', freedBytes: 0, freedFormatted: '0 B', errors: ['Trash target not found'], skipped: [], success: false }
+  }
   return cleanTarget(trashTarget)
 }
 

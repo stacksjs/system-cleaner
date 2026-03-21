@@ -1,6 +1,6 @@
+import * as fs from 'node:fs'
 import { formatBytes, getDirSize, pathExists, safeStat } from '@system-cleaner/core'
-import type { CleanTarget } from './types'
-import type { CleanScanResult } from './types'
+import type { CleanTarget, CleanScanResult } from './types'
 
 /**
  * Scan a single clean target to determine if it exists and its size
@@ -32,8 +32,7 @@ export async function scanTarget(target: CleanTarget): Promise<CleanScanResult> 
   let itemCount = 0
 
   try {
-    const { readdirSync } = require('node:fs')
-    itemCount = readdirSync(target.path).length
+    itemCount = fs.readdirSync(target.path).length
   }
   catch {
     // Can't read directory contents

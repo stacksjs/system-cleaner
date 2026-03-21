@@ -35,8 +35,8 @@ export async function getBluetoothDevices(): Promise<BluetoothDevice[]> {
   for (const line of lines) {
     const trimmed = line.trim()
 
-    // Device name: indented with spaces, ends with colon, not a known key
-    if (/^\s{8}\S/.test(line) && trimmed.endsWith(':') && !trimmed.startsWith('Connected:') && !trimmed.startsWith('Battery')) {
+    // Device name: indented with 6+ spaces, ends with colon, not a known key
+    if (/^\s{6,}\S/.test(line) && trimmed.endsWith(':') && !trimmed.startsWith('Connected:') && !trimmed.startsWith('Battery') && !trimmed.startsWith('Address:') && !trimmed.startsWith('Major Type:') && !trimmed.startsWith('Minor Type:') && !trimmed.startsWith('Services:') && !trimmed.startsWith('Firmware')) {
       // Save previous device
       if (currentName) {
         devices.push({ name: currentName, connected: currentConnected, batteryPercent: currentBattery })

@@ -18,7 +18,8 @@ export function parsePlist(filepath: string): PlistEntry {
     if (keyIdx === -1)
       return false
     const after = content.substring(keyIdx + `<key>${key}</key>`.length, keyIdx + `<key>${key}</key>`.length + 50)
-    return /\s*<true\s*\/>/.test(after)
+    // Match <true/>, <true />, or <true></true>
+    return /\s*<true[\s/>]/.test(after)
   }
 
   const getArrayField = (key: string): string[] => {
@@ -66,6 +67,11 @@ export function parsePlistToObject(filepath: string): Record<string, string | bo
       const valMatch = afterKey.match(/<string>([^<]*)<\/string>/)
       if (valMatch)
         result[key] = valMatch[1]
+    }
+    else if (afterKey.startsWith('<integer>')) {
+      const intMatch = afterKey.match(/<integer>(\d+)<\/integer>/)
+      if (intMatch)
+        result[key] = intMatch[1]
     }
     else if (afterKey.startsWith('<true')) {
       result[key] = true

@@ -7,7 +7,6 @@ import { formatBytes, formatPercent, getSystemInfo } from '@system-cleaner/core'
 export function registerScanCommand(app: CLI): void {
   app.command('scan', 'Quick system health scan and cleanup recommendations')
     .option('--json', 'Output as JSON')
-    .option('--full', 'Perform a thorough scan (slower)')
     .action(async (options: any) => {
       const { spinner, log, intro, outro } = await import('@stacksjs/clapp')
 

@@ -21,7 +21,7 @@ export async function getNetworkMetrics(state: CollectorState): Promise<NetworkM
 
   for (const line of lines) {
     const parts = line.trim().split(/\s+/)
-    if (parts.length < 7)
+    if (parts.length < 10)
       continue
 
     const name = parts[0]
