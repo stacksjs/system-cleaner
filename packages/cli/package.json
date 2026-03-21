@@ -1,0 +1,23 @@
+{
+  "name": "@system-cleaner/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "system-cleaner": "./bin/system-cleaner.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@system-cleaner/core": "workspace:*",
+    "@system-cleaner/clean": "workspace:*",
+    "@system-cleaner/uninstall": "workspace:*",
+    "@system-cleaner/disk": "workspace:*",
+    "@system-cleaner/monitor": "workspace:*",
+    "@stacksjs/clapp": "file:../../../../Tools/clapp/packages/ts"
+  },
+  "scripts": {
+    "typecheck": "bun --bun tsc --noEmit"
+  }
+}

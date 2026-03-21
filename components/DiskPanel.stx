@@ -70,7 +70,7 @@
 @keyframes pulse { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
 </style>
 
-<script client lang="js">
+<script client>
   (function() {
     var PAL = ['#FF6B6B','#4ECDC4','#45B7D1','#96CEB4','#F7DC6F','#DDA0DD','#98D8C8','#F8C471','#BB8FCE','#85C1E9','#82E0AA','#F1948A','#AED6F1','#D7BDE2','#F5B7B1','#73C6B6','#F0B27A','#A9CCE3','#D2B4DE','#A3E4D7'];
     var CFG = { centerR: 60, maxR: 280, maxDepth: 4, padAngle: 0.004, minAngle: 0.005, maxSegs: 400 };

@@ -22,8 +22,8 @@
           Memory: {{ usedMemGB }} / {{ totalMemGB }} GB ({{ memPercent }}%)
         </div>
         <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px;">
-          <span class="statusbar-dot" style="background: {{ diskPercent > 85 ? '#ff453a' : diskPercent > 70 ? '#ff9f0a' : '#30d158' }}"></span>
-          Disk: {{ diskUsed }} / {{ diskTotal }} ({{ diskPercent }}%)
+          <span class="statusbar-dot" style="background: {{ dUsedPct > 90 ? '#ff453a' : dUsedPct > 75 ? '#ff9f0a' : '#30d158' }}"></span>
+          Disk: {{ diskUsed }} / {{ diskTotal }} ({{ diskAvail }} free)
         </div>
         <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px;">
           <span class="statusbar-dot" style="background: {{ enabledStartup.length > 30 ? '#ff453a' : enabledStartup.length > 15 ? '#ff9f0a' : '#30d158' }}"></span>
@@ -39,7 +39,7 @@
   <div class="card">
     <div class="card-label">CPU</div>
     <div class="card-value" style="font-size: 16px;">{{ cpuModel.split(' ').slice(0, 3).join(' ') }}</div>
-    <div class="card-detail">{{ cpuCores }} cores · {{ totalCPU.toFixed(0) }}% usage</div>
+    <div class="card-detail">{{ cpuCores }} cores · {{ Math.round(totalCPU / cpuCores) }}% avg load</div>
   </div>
 </div>
 
@@ -56,7 +56,7 @@
     <div class="card-label">Disk</div>
     <div class="card-value">{{ diskUsed }} <span style="font-size: 14px; color: #6c6c70;">/ {{ diskTotal }}</span></div>
     <div class="progress">
-      <div class="progress-fill" style="width: {{ diskPercent }}%; background: {{ diskPercent > 85 ? '#ff453a' : diskPercent > 70 ? '#ff9f0a' : '#30d158' }};"></div>
+      <div class="progress-fill" style="width: {{ dUsedPct }}%; background: {{ dUsedPct > 90 ? '#ff453a' : dUsedPct > 75 ? '#ff9f0a' : '#30d158' }};"></div>
     </div>
     <div class="card-detail">{{ diskAvail }} available</div>
   </div>

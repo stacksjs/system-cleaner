@@ -1,47 +1,22 @@
 <script server>
 // SystemSweep — unified system performance manager
-// Combines startup item management, browser extension auditing,
-// background process monitoring, and disk space analysis.
+// Powered by @system-cleaner workspace packages
 
-const fs = require('node:fs')
-const nodePath = require('node:path')
 const os = require('node:os')
 const cp = require('node:child_process')
+const nodePath = require('node:path')
 
-const HOME = os.homedir()
-
-// ── Helpers ──────────────────────────────────────────────────────────────
-
-function formatBytes(bytes) {
-  if (bytes >= 1e12) return (bytes / 1e12).toFixed(1) + ' TB'
-  if (bytes >= 1e9) return (bytes / 1e9).toFixed(1) + ' GB'
-  if (bytes >= 1e6) return (bytes / 1e6).toFixed(1) + ' MB'
-  if (bytes >= 1e3) return (bytes / 1e3).toFixed(1) + ' KB'
-  return bytes + ' B'
-}
-
-function safeExec(cmd, fallback) {
-  try { return cp.execSync(cmd, { encoding: 'utf8', timeout: 5000 }).trim() }
-  catch { return fallback || '' }
-}
-function safeReadDir(dir) {
-  try { return fs.readdirSync(dir) } catch { return [] }
-}
-function safeReadFile(fp) {
-  try { return fs.readFileSync(fp, 'utf8') } catch { return '' }
-}
-function safeStat(fp) {
-  try { return fs.statSync(fp) } catch { return null }
-}
-function esc(str) {
-  return (str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;')
-}
+const { formatBytes, getSystemInfoSync, HOME, safeReadDir, safeStat, safeReadFile, execSync: coreExecSync } = require('@system-cleaner/core')
+const { getAllExtensions } = require('@system-cleaner/clean')
+const { discoverStartupItems } = require('@system-cleaner/uninstall')
+const { CLEAN_TARGETS } = require('@system-cleaner/clean')
 
 // ── System overview ─────────────────────────────────────────────────────
 
-const cpuModel = os.cpus()[0]?.model || 'Unknown CPU'
-const cpuCores = os.cpus().length
-const totalMemGB = (os.totalmem() / 1e9).toFixed(0)
+const sysInfo = getSystemInfoSync()
+const cpuModel = sysInfo.cpuModel
+const cpuCores = sysInfo.cpuCores
+const totalMemGB = sysInfo.totalMemoryGB
 const freeMemGB = (os.freemem() / 1e9).toFixed(1)
 const usedMemGB = ((os.totalmem() - os.freemem()) / 1e9).toFixed(1)
 const memPercent = Math.round(((os.totalmem() - os.freemem()) / os.totalmem()) * 100)
@@ -49,9 +24,14 @@ const uptimeHours = Math.round(os.uptime() / 3600)
 const uptimeDays = Math.floor(uptimeHours / 24)
 const uptimeRemHours = uptimeHours % 24
 const uptimeStr = uptimeDays > 0 ? `${uptimeDays}d ${uptimeRemHours}h` : `${uptimeHours}h`
-const hostname = os.hostname()
-const username = os.userInfo().username
-const macosVersion = safeExec('sw_vers -productVersion', '—')
+const hostname = sysInfo.hostname
+const username = sysInfo.username
+const macosVersion = sysInfo.macosVersion
+
+function safeExec(cmd, fallback) {
+  try { return cp.execSync(cmd, { encoding: 'utf8', timeout: 5000 }).trim() }
+  catch { return fallback || '' }
+}
 
 // Disk
 const diskLine = safeExec("df -h / | tail -1")
@@ -61,106 +41,18 @@ const diskUsed = diskParts[2] || '—'
 const diskAvail = diskParts[3] || '—'
 const diskPercent = parseInt(diskParts[4]) || 0
 
-// ── Startup items ───────────────────────────────────────────────────────
+// ── Startup items (from @system-cleaner/uninstall) ──────────────────────
 
-function parsePlist(filepath) {
-  const content = safeReadFile(filepath)
-  const getField = (key) => {
-    const match = content.match(new RegExp(`<key>${key}</key>\\s*<([^>]+)>([^<]*)<`))
-    return match ? match[2] : ''
-  }
-  const label = getField('Label') || nodePath.basename(filepath, '.plist')
-  const program = getField('Program') || getField('ProgramArguments')
-  const runAtLoad = content.includes('<key>RunAtLoad</key>') &&
-    content.substring(content.indexOf('<key>RunAtLoad</key>')).includes('<true/>')
-  const keepAlive = content.includes('<key>KeepAlive</key>') &&
-    content.substring(content.indexOf('<key>KeepAlive</key>')).includes('<true/>')
-  const disabled = content.includes('<key>Disabled</key>') &&
-    content.substring(content.indexOf('<key>Disabled</key>')).includes('<true/>')
-  return { label, program, runAtLoad, keepAlive, disabled, filepath }
-}
-
-function categorizeAgent(label) {
-  const l = label.toLowerCase()
-  if (l.includes('apple') || l.includes('com.apple')) return { vendor: 'Apple', category: 'system', icon: '' }
-  if (l.includes('google')) return { vendor: 'Google', category: 'vendor', icon: '🔍' }
-  if (l.includes('microsoft') || l.includes('com.microsoft')) return { vendor: 'Microsoft', category: 'vendor', icon: '🪟' }
-  if (l.includes('adobe')) return { vendor: 'Adobe', category: 'vendor', icon: '🎨' }
-  if (l.includes('spotify')) return { vendor: 'Spotify', category: 'vendor', icon: '🎵' }
-  if (l.includes('dropbox')) return { vendor: 'Dropbox', category: 'vendor', icon: '📦' }
-  if (l.includes('docker')) return { vendor: 'Docker', category: 'dev', icon: '🐳' }
-  if (l.includes('homebrew') || l.includes('brew')) return { vendor: 'Homebrew', category: 'dev', icon: '🍺' }
-  if (l.includes('slack')) return { vendor: 'Slack', category: 'vendor', icon: '💬' }
-  if (l.includes('zoom')) return { vendor: 'Zoom', category: 'vendor', icon: '📹' }
-  if (l.includes('1password') || l.includes('onepassword')) return { vendor: '1Password', category: 'vendor', icon: '🔐' }
-  if (l.includes('raycast')) return { vendor: 'Raycast', category: 'vendor', icon: '🚀' }
-  if (l.includes('steam')) return { vendor: 'Steam', category: 'vendor', icon: '🎮' }
-  return { vendor: 'Third-party', category: 'other', icon: '⚙️' }
-}
-
-const startupItems = []
-const agentDirs = [
-  { path: `${HOME}/Library/LaunchAgents`, scope: 'user', type: 'agent' },
-  { path: '/Library/LaunchAgents', scope: 'system', type: 'agent' },
-  { path: '/Library/LaunchDaemons', scope: 'system', type: 'daemon' },
-]
-for (const dir of agentDirs) {
-  for (const file of safeReadDir(dir.path).filter(f => f.endsWith('.plist'))) {
-    const info = parsePlist(nodePath.join(dir.path, file))
-    const cat = categorizeAgent(info.label)
-    startupItems.push({
-      id: `startup-${startupItems.length}`, name: info.label,
-      vendor: cat.vendor, icon: cat.icon, category: cat.category,
-      scope: dir.scope, type: dir.type,
-      runAtLoad: info.runAtLoad, keepAlive: info.keepAlive,
-      disabled: info.disabled, filepath: info.filepath, program: info.program,
-    })
-  }
-}
-startupItems.sort((a, b) => { if (a.disabled !== b.disabled) return a.disabled ? 1 : -1; return a.name.localeCompare(b.name) })
+const startupItems = discoverStartupItems()
 const enabledStartup = startupItems.filter(i => !i.disabled)
 const disabledStartup = startupItems.filter(i => i.disabled)
 
-// ── Browser extensions ──────────────────────────────────────────────────
+// ── Browser extensions (from @system-cleaner/clean) ─────────────────────
 
-function scanChromeExtensions() {
-  const extDir = `${HOME}/Library/Application Support/Google/Chrome/Default/Extensions`
-  const extensions = []
-  for (const extId of safeReadDir(extDir)) {
-    const extPath = nodePath.join(extDir, extId)
-    const stat = safeStat(extPath)
-    if (!stat || !stat.isDirectory()) continue
-    const versions = safeReadDir(extPath).filter(v => !v.startsWith('.'))
-    if (versions.length === 0) continue
-    const latestVer = versions.sort().pop()
-    const raw = safeReadFile(nodePath.join(extPath, latestVer, 'manifest.json'))
-    if (!raw) continue
-    try {
-      const m = JSON.parse(raw)
-      extensions.push({ id: `chrome-${extId}`, name: m.name || extId, version: m.version || latestVer, description: (m.description || '').slice(0, 80), size: 0, sizeStr: '—', browser: 'Chrome', browserIcon: '🌐', extId, permissions: (m.permissions || []).length, hostPermissions: (m.host_permissions || []).length })
-    } catch {}
-  }
-  return extensions
-}
-
-function scanFirefoxExtensions() {
-  const profilesDir = `${HOME}/Library/Application Support/Firefox/Profiles`
-  const extensions = []
-  for (const profile of safeReadDir(profilesDir).filter(d => d.endsWith('.default-release') || d.endsWith('.default'))) {
-    const raw = safeReadFile(nodePath.join(profilesDir, profile, 'extensions.json'))
-    if (!raw) continue
-    try {
-      for (const addon of (JSON.parse(raw).addons || [])) {
-        if (addon.type !== 'extension') continue
-        extensions.push({ id: `firefox-${addon.id}`, name: addon.defaultLocale?.name || addon.id, version: addon.version || '—', description: (addon.defaultLocale?.description || '').slice(0, 80), size: 0, sizeStr: '—', browser: 'Firefox', browserIcon: '🦊', extId: addon.id, permissions: 0, hostPermissions: 0 })
-      }
-    } catch {}
-  }
-  return extensions
-}
-
-const browserExtensions = [...scanChromeExtensions(), ...scanFirefoxExtensions()].sort((a, b) => b.size - a.size)
-const totalExtSize = browserExtensions.reduce((sum, e) => sum + e.size, 0)
+const browserExtensions = getAllExtensions().map(e => ({
+  ...e, size: 0, sizeStr: '—',
+}))
+const totalExtSize = 0
 
 // ── Background processes ────────────────────────────────────────────────
 
@@ -200,35 +92,24 @@ const scanBasename = nodePath.basename(HOME)
 
 // ── Health score ────────────────────────────────────────────────────────
 
-const healthScore = Math.max(0, 100 - Math.max(0, memPercent - 70) - Math.max(0, diskPercent - 80) * 2 - Math.min(20, Math.floor(enabledStartup.length / 5)) - Math.min(10, topCPU.filter(p => p.cpu > 10).length * 3))
-const healthLabel = healthScore >= 80 ? 'Good' : healthScore >= 60 ? 'Fair' : 'Needs Attention'
-const healthColor = healthScore >= 80 ? '#30d158' : healthScore >= 60 ? '#ff9f0a' : '#ff453a'
+const cpuAvgPercent = cpuCores > 0 ? Math.round(totalCPU / cpuCores) : 0
+const healthScore = Math.max(0, Math.round(
+  100
+  - Math.max(0, memPercent - 85) * 1.5
+  - Math.max(0, diskPercent - 90) * 2
+  - Math.min(10, Math.floor(enabledStartup.length / 8))
+  - Math.min(15, cpuAvgPercent > 50 ? (cpuAvgPercent - 50) * 0.3 : 0)
+))
+const healthLabel = healthScore >= 80 ? 'Good' : healthScore >= 50 ? 'Fair' : 'Poor'
+const healthColor = healthScore >= 80 ? '#30d158' : healthScore >= 50 ? '#ff9f0a' : '#ff453a'
 
-// ── Cleanable categories ────────────────────────────────────────────────
+// ── Cleanable categories (from @system-cleaner/clean) ───────────────────
 
 const cleanCategories = []
-const cleanDirs = [
-  { name: 'System Caches', path: `${HOME}/Library/Caches`, icon: '🗑️', desc: 'App caches (safe to remove)' },
-  { name: 'Application Logs', path: `${HOME}/Library/Logs`, icon: '📝', desc: 'System and app log files' },
-  { name: 'Xcode DerivedData', path: `${HOME}/Library/Developer/Xcode/DerivedData`, icon: '🔨', desc: 'Xcode build artifacts' },
-  { name: 'Xcode Simulators', path: `${HOME}/Library/Developer/CoreSimulator/Devices`, icon: '📱', desc: 'iOS simulator data' },
-  { name: 'Homebrew Cache', path: `${HOME}/Library/Caches/Homebrew`, icon: '🍺', desc: 'Downloaded package archives' },
-  { name: 'CocoaPods Cache', path: `${HOME}/Library/Caches/CocoaPods`, icon: '📦', desc: 'CocoaPods dependency cache' },
-  { name: 'Trash', path: `${HOME}/.Trash`, icon: '🗑️', desc: 'Files in your Trash' },
-  { name: 'npm Cache', path: `${HOME}/.npm`, icon: '📦', desc: 'npm package cache' },
-  { name: 'Bun Cache', path: `${HOME}/.bun/install/cache`, icon: '🥟', desc: 'Bun package cache' },
-  { name: 'Docker Data', path: `${HOME}/Library/Containers/com.docker.docker`, icon: '🐳', desc: 'Docker images and volumes' },
-  { name: 'Spotify Cache', path: `${HOME}/Library/Application Support/Spotify/PersistentCache`, icon: '🎵', desc: 'Spotify offline cache' },
-  { name: 'iOS Backups', path: `${HOME}/Library/Application Support/MobileSync/Backup`, icon: '📱', desc: 'iOS device backup files' },
-  { name: 'Yarn Cache', path: `${HOME}/Library/Caches/Yarn`, icon: '🧶', desc: 'Yarn package cache' },
-  { name: 'Gradle Cache', path: `${HOME}/.gradle/caches`, icon: '🐘', desc: 'Gradle build cache' },
-  { name: 'pip Cache', path: `${HOME}/Library/Caches/pip`, icon: '🐍', desc: 'Python pip cache' },
-]
-
-for (const cat of cleanDirs) {
-  const st = safeStat(cat.path)
+for (const target of CLEAN_TARGETS) {
+  const st = safeStat(target.path)
   if (st && st.isDirectory()) {
-    cleanCategories.push({ id: `clean-${cleanCategories.length}`, ...cat, size: 0, sizeStr: '...' })
+    cleanCategories.push({ id: target.id, name: target.name, path: target.path, icon: target.icon, desc: target.description, size: 0, sizeStr: '...' })
   }
 }
 const totalCleanable = 0
@@ -380,7 +261,7 @@ const totalCleanable = 0
 
 <div id="clean-data" style="display:none" data-home="{{ HOME }}" data-map='{{ JSON.stringify(Object.fromEntries(cleanCategories.map(c => [c.id, { path: c.path, name: c.name }]))).replace(/'/g, "&#39;") }}'></div>
 
-<script client>
+<script data-stx-scoped>
   function fmtBytes(b) {
     if (b >= 1e12) return (b/1e12).toFixed(1)+' TB';
     if (b >= 1e9) return (b/1e9).toFixed(1)+' GB';

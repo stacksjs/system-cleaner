@@ -1,0 +1,15 @@
+{
+  "name": "@system-cleaner/clean",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@system-cleaner/core": "workspace:*"
+  },
+  "scripts": {
+    "typecheck": "bun --bun tsc --noEmit"
+  }
+}

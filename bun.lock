@@ -5,10 +5,62 @@
     "": {
       "name": "system-cleaner",
       "dependencies": {
+        "@system-cleaner/clean": "workspace:*",
+        "@system-cleaner/core": "workspace:*",
+        "@system-cleaner/disk": "workspace:*",
+        "@system-cleaner/monitor": "workspace:*",
+        "@system-cleaner/uninstall": "workspace:*",
         "bun-plugin-stx": "latest",
       },
       "devDependencies": {
         "better-dx": "latest",
+      },
+    },
+    "packages/clean": {
+      "name": "@system-cleaner/clean",
+      "version": "0.1.0",
+      "dependencies": {
+        "@system-cleaner/core": "workspace:*",
+      },
+    },
+    "packages/cli": {
+      "name": "@system-cleaner/cli",
+      "version": "0.1.0",
+      "bin": {
+        "system-cleaner": "./bin/system-cleaner.ts",
+      },
+      "dependencies": {
+        "@stacksjs/clapp": "file:../../../../Tools/clapp/packages/ts",
+        "@system-cleaner/clean": "workspace:*",
+        "@system-cleaner/core": "workspace:*",
+        "@system-cleaner/disk": "workspace:*",
+        "@system-cleaner/monitor": "workspace:*",
+        "@system-cleaner/uninstall": "workspace:*",
+      },
+    },
+    "packages/core": {
+      "name": "@system-cleaner/core",
+      "version": "0.1.0",
+    },
+    "packages/disk": {
+      "name": "@system-cleaner/disk",
+      "version": "0.1.0",
+      "dependencies": {
+        "@system-cleaner/core": "workspace:*",
+      },
+    },
+    "packages/monitor": {
+      "name": "@system-cleaner/monitor",
+      "version": "0.1.0",
+      "dependencies": {
+        "@system-cleaner/core": "workspace:*",
+      },
+    },
+    "packages/uninstall": {
+      "name": "@system-cleaner/uninstall",
+      "version": "0.1.0",
+      "dependencies": {
+        "@system-cleaner/core": "workspace:*",
       },
     },
   },
@@ -46,6 +98,18 @@
     "@stacksjs/ts-md": ["@stacksjs/ts-md@0.1.1", "", { "bin": { "md": "./bin/cli.ts" } }, "sha512-kvsSg7S3vHq65fnHIRggTLudN4n1sjkos86xLB62V6PVRa8iosYAmFKVDTGaJk+0MdsIoRwQbJ2vLWVcNQsgGw=="],
 
     "@stacksjs/ts-xml": ["@stacksjs/ts-xml@0.1.0", "", { "bin": { "bin-name": "./dist/bin/cli.js" } }, "sha512-YB7FSlFcPqopUOmjK1Qqr5E6QaarerIFJzWfUXOO/EuR1qX+IRRKxOKbWRmCvN72Mnchz8EfXhlvxEK+Zz/mQQ=="],
+
+    "@system-cleaner/clean": ["@system-cleaner/clean@workspace:packages/clean"],
+
+    "@system-cleaner/cli": ["@system-cleaner/cli@workspace:packages/cli"],
+
+    "@system-cleaner/core": ["@system-cleaner/core@workspace:packages/core"],
+
+    "@system-cleaner/disk": ["@system-cleaner/disk@workspace:packages/disk"],
+
+    "@system-cleaner/monitor": ["@system-cleaner/monitor@workspace:packages/monitor"],
+
+    "@system-cleaner/uninstall": ["@system-cleaner/uninstall@workspace:packages/uninstall"],
 
     "@ts-cloud/aws-types": ["@ts-cloud/aws-types@0.2.3", "", {}, "sha512-f12OpxUfRCh3Yf1+yJUPIor5FL8JtlI7/YCHYi715nx6OqH7G4A2LQu/fQbmyiAiKH0vRfKLU03RBDyUsLd9OQ=="],
 
@@ -252,6 +316,8 @@
     "@isaacs/cliui/string-width": ["string-width@5.1.2", "", { "dependencies": { "eastasianwidth": "^0.2.0", "emoji-regex": "^9.2.2", "strip-ansi": "^7.0.1" } }, "sha512-HnLOCR3vjcY8beoNLtcjZ5/nxn2afmME6lhrDrebokqMap+XbeW8n9TXpPDOqdGK5qcI3oT0GKTW6wC7EMiVqA=="],
 
     "@isaacs/cliui/wrap-ansi": ["wrap-ansi@8.1.0", "", { "dependencies": { "ansi-styles": "^6.1.0", "string-width": "^5.0.1", "strip-ansi": "^7.0.1" } }, "sha512-si7QWI6zUMq56bESFvagtmzMdGOtoxfR+Sez11Mobfc7tm+VkUckk9bW2UeffTGVUbOksxmSw0AA2gs8g71NCQ=="],
+
+    "@system-cleaner/cli/@stacksjs/clapp": ["@stacksjs/clapp@file:../../Tools/clapp/packages/ts", {}],
 
     "glob/minimatch": ["minimatch@9.0.9", "", { "dependencies": { "brace-expansion": "^2.0.2" } }, "sha512-OBwBN9AL4dqmETlpS2zasx+vTeWclWzkblfZk7KTA5j3jeOONz/tRCnZomUyvNg83wL5Zv9Ss6HMJXAgL8R2Yg=="],
 

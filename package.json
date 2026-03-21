@@ -2,18 +2,28 @@
   "name": "system-cleaner",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "rm -rf .stx && stx dev pages/index.stx --port 3456",
     "build": "stx build pages/",
     "native": "stx dev pages/index.stx --native",
+    "cli": "bun run packages/cli/bin/system-cleaner.ts",
     "dev:docs": "bunpress dev docs",
     "build:docs": "bunpress build docs",
     "preview:docs": "bunpress preview docs",
     "lint": "bunx --bun pickier .",
-    "lint:fix": "bunx --bun pickier . --fix"
+    "lint:fix": "bunx --bun pickier . --fix",
+    "typecheck": "bun run --filter '*' typecheck"
   },
   "dependencies": {
-    "bun-plugin-stx": "latest"
+    "bun-plugin-stx": "latest",
+    "@system-cleaner/core": "workspace:*",
+    "@system-cleaner/clean": "workspace:*",
+    "@system-cleaner/uninstall": "workspace:*",
+    "@system-cleaner/disk": "workspace:*",
+    "@system-cleaner/monitor": "workspace:*"
   },
   "devDependencies": {
     "better-dx": "latest"
