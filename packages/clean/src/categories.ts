@@ -13,7 +13,7 @@ export const CLEAN_TARGETS: CleanTarget[] = [
   t('user-caches', 'User Caches', `${HOME}/Library/Caches`, '🗑️', 'cache', 'Application caches (safe to remove, apps rebuild them)', true),
   t('font-cache', 'Font Caches', `${HOME}/Library/Caches/com.apple.FontRegistry`, '🔤', 'cache', 'System font registry cache', true),
   t('quicklook-cache', 'QuickLook Thumbnails', `${HOME}/Library/Caches/com.apple.QuickLook.thumbnailcache`, '👁️', 'cache', 'Finder thumbnail preview cache', true),
-  t('icon-services', 'Icon Services Cache', `${HOME}/Library/Caches/com.apple.iconservices.store`, '🖼️', 'cache', 'Application icon cache'),
+  t('icon-services', 'Icon Services Cache', `${HOME}/Library/Caches/com.apple.iconservices.store`, '🖼️', 'cache', 'Application icon cache', false),
 
   // ═══════════════════════════════════════════════════════════════
   // LOGS & CRASH REPORTS
@@ -23,7 +23,7 @@ export const CLEAN_TARGETS: CleanTarget[] = [
   t('system-crash-reports', 'System Crash Reports', macPaths.systemCrashReports, '💥', 'log', 'System-level crash reports', true, true),
   t('system-logs', 'System Logs', '/private/var/log', '📝', 'log', 'System daemon and service logs', true, true),
   t('adobe-logs', 'Adobe Logs', '/Library/Logs/Adobe', '🎨', 'log', 'Adobe Creative Cloud logs', true, true),
-  t('adobe-gc-log', 'Adobe GC Log', '/Library/Logs/adobegc.log', '🎨', 'log', 'Adobe garbage collection log'),
+  t('adobe-gc-log', 'Adobe GC Log', '/Library/Logs/adobegc.log', '🎨', 'log', 'Adobe garbage collection log', false, true),
 
   // ═══════════════════════════════════════════════════════════════
   // BROWSERS — cache, service workers, GPU cache
@@ -251,9 +251,9 @@ export const CLEAN_TARGETS: CleanTarget[] = [
   // ═══════════════════════════════════════════════════════════════
   // SYSTEM — Shell & Terminal
   // ═══════════════════════════════════════════════════════════════
-  t('zsh-compdump', 'Zsh Completion Cache', `${HOME}/.zcompdump`, '🐚', 'system', 'Zsh completion dump (rebuilt on next shell start)'),
-  t('less-history', 'less History', `${HOME}/.lesshst`, '🐚', 'system', 'less pager history file'),
-  t('wget-hsts', 'wget HSTS Cache', `${HOME}/.wget-hsts`, '🐚', 'system', 'wget HTTP Strict Transport Security cache'),
+  t('zsh-compdump', 'Zsh Completion Cache', `${HOME}/.zcompdump`, '🐚', 'system', 'Zsh completion dump (rebuilt on next shell start)', false),
+  t('less-history', 'less History', `${HOME}/.lesshst`, '🐚', 'system', 'less pager history file', false),
+  t('wget-hsts', 'wget HSTS Cache', `${HOME}/.wget-hsts`, '🐚', 'system', 'wget HTTP Strict Transport Security cache', false),
 
   // ═══════════════════════════════════════════════════════════════
   // TRASH
@@ -270,7 +270,7 @@ function t(
   icon: string,
   category: CleanTarget['category'],
   description: string,
-  contentsOnly = false,
+  contentsOnly = true,
   requiresSudo = false,
   skipPatterns?: string[],
 ): CleanTarget {

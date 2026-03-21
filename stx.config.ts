@@ -51,9 +51,9 @@ const config: StxOptions = {
         if (!target) return errorJson('No path provided', 400)
         const check = isPathSafe(target)
         if (!check.safe) return errorJson(check.reason || 'Path not safe', 403)
+        // isPathSafe already verified the path exists — reuse that knowledge
         const resolved = path.resolve(target)
-        const stat = fs.statSync(resolved)
-        const size = stat.isDirectory() ? await getDirSize(resolved) : stat.size
+        const size = await getDirSize(resolved)
         fs.rmSync(resolved, { recursive: true, force: true })
         return json({ success: true, freedBytes: size })
       }

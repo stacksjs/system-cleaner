@@ -63,15 +63,14 @@ export async function getAppInfo(appPath: string): Promise<AppInfo | null> {
     || appPath.startsWith('/System/')
     || (appPath.startsWith('/Applications/Utilities/') && bundleId.startsWith('com.apple.'))
 
-  const sizeBytes = await getDirSize(appPath)
-
+  // Skip expensive du call during discovery — size calculated on demand
   return {
     name,
     bundleId,
     version: bundle.version || '',
     path: appPath,
     iconPath: bundle.iconPath || '',
-    sizeBytes,
+    sizeBytes: 0,
     installDate: stat.birthtime || null,
     isSystemApp: isSystem,
   }

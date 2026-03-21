@@ -58,9 +58,16 @@ export function registerTouchIdCommand(app: CLI): void {
           return
         }
 
-        // Modern approach: /etc/pam.d/sudo_local (macOS Sonoma+)
         const pamLine = 'auth       sufficient     pam_tid.so'
 
+        // Check if already present (avoid duplicate lines)
+        if (sudoLocalExists && fs.readFileSync('/etc/pam.d/sudo_local', 'utf8').includes('pam_tid.so')) {
+          log.info('Touch ID for sudo is already enabled')
+          outro('Done')
+          return
+        }
+
+        // Modern approach: /etc/pam.d/sudo_local (macOS Sonoma+)
         if (sudoLocalExists) {
           const result = await exec(`echo '${pamLine}' | sudo tee -a /etc/pam.d/sudo_local > /dev/null`, { timeout: 30_000 })
           if (result.ok) {

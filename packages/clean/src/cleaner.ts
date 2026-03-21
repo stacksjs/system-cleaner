@@ -129,14 +129,32 @@ export async function cleanAll(options: CleanOptions = {}): Promise<{
   if (options.skipTargets && options.skipTargets.length > 0)
     targets = targets.filter(t => !options.skipTargets!.includes(t.id))
 
-  // Skip sudo targets — they require elevated privileges
+  // Separate sudo targets (can't run without elevation)
+  const sudoTargets = targets.filter(t => t.requiresSudo)
   targets = targets.filter(t => !t.requiresSudo)
 
   // First scan to find existing targets with data
   const scanResults = await scanExistingTargets(targets)
   const existingTargets = scanResults.map(r => r.target)
 
-  return cleanTargets(existingTargets, options)
+  const result = await cleanTargets(existingTargets, options)
+
+  // Report skipped sudo targets so callers know they were excluded
+  if (sudoTargets.length > 0) {
+    for (const t of sudoTargets) {
+      result.results.push({
+        targetId: t.id,
+        targetName: t.name,
+        freedBytes: 0,
+        freedFormatted: '0 B',
+        errors: ['Requires elevated privileges (sudo)'],
+        skipped: [],
+        success: false,
+      })
+    }
+  }
+
+  return result
 }
 
 /**

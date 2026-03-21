@@ -97,6 +97,8 @@ export function formatRelativeTime(date: Date): string {
   const now = Date.now()
   const diff = now - date.getTime()
 
+  if (diff < 0)
+    return 'in the future'
   if (diff < 60_000)
     return 'just now'
   if (diff < 3_600_000)

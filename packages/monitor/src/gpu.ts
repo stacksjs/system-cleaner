@@ -88,7 +88,16 @@ async function getGpuUsage(): Promise<{ percent: number, temperature?: number }>
 }
 
 async function getAppleSiliconGpuUsage(): Promise<{ percent: number, temperature?: number }> {
-  // powermetrics requires sudo — try but don't fail
+  // Try ioreg first — doesn't require sudo, fast
+  const ioResult = await exec('ioreg -r -d 1 -c IOAccelerator 2>/dev/null | grep "PerformanceStatistics" -A 20', { timeout: 3000 })
+  if (ioResult.ok) {
+    const utilizationMatch = ioResult.stdout.match(/"Device Utilization %"\s*=\s*(\d+)/)
+    if (utilizationMatch) {
+      return { percent: Number.parseInt(utilizationMatch[1]) }
+    }
+  }
+
+  // Fallback: powermetrics requires sudo — will fail silently for non-root
   const result = await exec(
     'sudo powermetrics --samplers gpu_power -i1000 -n1 2>/dev/null | grep "GPU active residency"',
     { timeout: 5000 },
@@ -98,15 +107,6 @@ async function getAppleSiliconGpuUsage(): Promise<{ percent: number, temperature
     const match = result.stdout.match(/([\d.]+)%/)
     if (match) {
       return { percent: Math.round(Number.parseFloat(match[1])) }
-    }
-  }
-
-  // Fallback: estimate from ioreg
-  const ioResult = await exec('ioreg -r -d 1 -c IOAccelerator 2>/dev/null | grep "PerformanceStatistics" -A 20', { timeout: 3000 })
-  if (ioResult.ok) {
-    const utilizationMatch = ioResult.stdout.match(/"Device Utilization %"\s*=\s*(\d+)/)
-    if (utilizationMatch) {
-      return { percent: Number.parseInt(utilizationMatch[1]) }
     }
   }
 

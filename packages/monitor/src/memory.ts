@@ -16,13 +16,25 @@ export async function getMemoryMetrics(): Promise<MemoryMetrics> {
   // Get swap info
   const swap = await getSwapInfo()
 
-  // Determine memory pressure level
-  let pressure: 'nominal' | 'warning' | 'critical' = 'nominal'
   const usagePercent = Math.round((usedBytes / totalBytes) * 100)
-  if (usagePercent > 90)
-    pressure = 'critical'
-  else if (usagePercent > 75)
-    pressure = 'warning'
+
+  // Use macOS memory_pressure command for accurate pressure detection
+  let pressure: 'nominal' | 'warning' | 'critical' = 'nominal'
+  const pressureResult = await exec('memory_pressure 2>/dev/null | head -1', { timeout: 2000 })
+  if (pressureResult.ok) {
+    const output = pressureResult.stdout.toLowerCase()
+    if (output.includes('critical'))
+      pressure = 'critical'
+    else if (output.includes('warn'))
+      pressure = 'warning'
+  }
+  else {
+    // Fallback to percentage-based estimation
+    if (usagePercent > 90)
+      pressure = 'critical'
+    else if (usagePercent > 75)
+      pressure = 'warning'
+  }
 
   return {
     totalBytes,

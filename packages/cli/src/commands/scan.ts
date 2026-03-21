@@ -100,7 +100,7 @@ export function registerScanCommand(app: CLI): void {
 
       if (snapshot.health.factors.length > 0) {
         for (const f of snapshot.health.factors) {
-          log.info(`  ${f.description}`)
+          log.warn(`  -${f.impact} ${f.name}: ${f.description}`)
         }
       }
 

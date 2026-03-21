@@ -98,8 +98,8 @@ async function checkFileVault(): Promise<CheckResult> {
 }
 
 async function checkFirewall(): Promise<CheckResult> {
-  // Check for third-party firewalls first
-  const thirdParty = await exec('pgrep -x "LuLu\\|Little Snitch Agent\\|Radio Silence" 2>/dev/null', { timeout: 2000 })
+  // Check for third-party firewalls first (ERE alternation uses | not \|)
+  const thirdParty = await exec('pgrep -x "LuLu|Little Snitch Agent|Radio Silence" 2>/dev/null', { timeout: 2000 })
   if (thirdParty.ok)
     return { name: 'Firewall', status: 'pass', message: 'Third-party firewall detected' }
 

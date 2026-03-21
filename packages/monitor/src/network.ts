@@ -2,9 +2,9 @@ import { exec } from '@system-cleaner/core'
 import type { NetworkInterfaceMetrics, NetworkMetrics } from '@system-cleaner/core'
 import type { CollectorState } from './types'
 
-// Interfaces to monitor (skip loopback, virtual)
-const MONITORED_PREFIXES = ['en', 'bridge', 'awdl']
-const SKIP_PREFIXES = ['lo', 'gif', 'stf', 'ap', 'llw', 'anpi']
+// Interfaces to monitor (skip loopback, virtual, and Apple-internal)
+const MONITORED_PREFIXES = ['en']
+const SKIP_PREFIXES = ['lo', 'gif', 'stf', 'ap', 'llw', 'anpi', 'awdl', 'bridge', 'utun']
 
 /**
  * Collect network metrics with rate calculation
