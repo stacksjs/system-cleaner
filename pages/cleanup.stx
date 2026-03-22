@@ -1,0 +1,114 @@
+<script server>
+const { formatBytes, getSystemInfoSync, safeStat, HOME, escapeHtml } = require('@system-cleaner/core')
+const { CLEAN_TARGETS } = require('@system-cleaner/clean')
+
+const sysInfo = getSystemInfoSync()
+const username = sysInfo.username
+const macosVersion = sysInfo.macosVersion
+
+const cleanCategories = []
+for (const target of CLEAN_TARGETS) {
+  if (target.requiresSudo) continue
+  const st = safeStat(target.path)
+  if (!st) continue
+  if (st.isDirectory() || !target.contentsOnly) {
+    cleanCategories.push({ id: target.id, name: target.name, path: target.path, icon: target.icon, desc: target.description, size: 0, sizeStr: '...' })
+  }
+}
+
+function esc(str) { return escapeHtml(str || '') }
+</script>
+
+@layout('app')
+
+@section('username'){{ username }}@endsection
+@section('macos')macOS {{ macosVersion }}@endsection
+
+@section('body')
+<div x-data="{
+  selected: [],
+  cleaning: {},
+  toasts: [],
+  toastId: 0,
+
+  toggle(id) { const i = this.selected.indexOf(id); if (i === -1) this.selected.push(id); else this.selected.splice(i, 1); },
+  isOn(id) { return this.selected.includes(id); },
+  allOn(ids) { if (ids.every(id => this.selected.includes(id))) this.selected = this.selected.filter(id => !ids.includes(id)); else ids.forEach(id => { if (!this.selected.includes(id)) this.selected.push(id); }); },
+
+  toast(msg, type) {
+    const id = ++this.toastId;
+    this.toasts = [...this.toasts, { id, msg, type: type || 'info' }];
+    setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 4000);
+  },
+
+  fmtBytes(b) { if (b >= 1e12) return (b/1e12).toFixed(1)+' TB'; if (b >= 1e9) return (b/1e9).toFixed(1)+' GB'; if (b >= 1e6) return (b/1e6).toFixed(1)+' MB'; if (b >= 1e3) return (b/1e3).toFixed(1)+' KB'; return b+' B'; },
+
+  async apiCall(endpoint, data) {
+    const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data || {}) });
+    return res.json();
+  },
+
+  async doCleanDir(p, name, id) {
+    if (!confirm('Clean ' + name + '? This cannot be undone.')) return;
+    this.cleaning[id] = true;
+    const r = await this.apiCall('/api/clean-dir', { path: p });
+    delete this.cleaning[id];
+    if (r.success) this.toast('Cleaned ' + name + ' — freed ' + this.fmtBytes(r.freedBytes), 'success');
+    else this.toast('Clean failed: ' + (r.error || 'Unknown'), 'error');
+  },
+
+  async doEmptyTrash() {
+    if (!confirm('Empty Trash? This cannot be undone.')) return;
+    const r = await this.apiCall('/api/empty-trash', {});
+    if (r.success) this.toast('Trash emptied — freed ' + this.fmtBytes(r.freedBytes), 'success');
+    else this.toast('Failed: ' + (r.error || 'Unknown'), 'error');
+  },
+
+  async doCleanSelected() {
+    if (this.selected.length === 0) return;
+    if (!confirm('Clean ' + this.selected.length + ' categories? This cannot be undone.')) return;
+    let total = 0;
+    for (const id of [...this.selected]) {
+      const row = document.querySelector('[data-clean-id=\"' + id + '\"]');
+      const path = row ? row.getAttribute('data-clean-path') : null;
+      if (!path) continue;
+      this.cleaning[id] = true;
+      const r = await this.apiCall('/api/clean-dir', { path });
+      delete this.cleaning[id];
+      if (r.success) total += r.freedBytes || 0;
+    }
+    this.toast('Cleaned ' + this.selected.length + ' items — freed ' + this.fmtBytes(total), 'success');
+    this.selected = [];
+  },
+
+  async scanSizes() {
+    const rows = document.querySelectorAll('[data-clean-path]');
+    const paths = []; rows.forEach(r => paths.push(r.getAttribute('data-clean-path')));
+    if (paths.length === 0) return;
+    const r = await this.apiCall('/api/dir-sizes', { paths });
+    if (!r.success || !r.sizes) return;
+    rows.forEach(row => {
+      const p = row.getAttribute('data-clean-path');
+      const bytes = r.sizes[p] || 0;
+      const cell = row.querySelector('.clean-size');
+      if (cell) cell.textContent = bytes > 0 ? this.fmtBytes(bytes) : '< 1 MB';
+    });
+  }
+}">
+
+<!-- Reactive toast container -->
+<div class="toast-area">
+  @for(let i = 0; i < 5; i++)
+    <div class="toast" x-show="toasts[{{ i }}]" x-text="toasts[{{ i }}] ? (toasts[{{ i }}].type === 'success' ? '✓' : toasts[{{ i }}].type === 'error' ? '✕' : '⚠') + ' ' + toasts[{{ i }}].msg : ''"></div>
+  @endfor
+</div>
+
+<div class="main-header">
+  <div class="main-title">Quick Clean</div>
+  <div class="main-subtitle">Remove caches, logs, and temporary files to free up disk space</div>
+</div>
+<div class="main-content">
+  @include('CleanupPanel')
+</div>
+</div>
+@endsection

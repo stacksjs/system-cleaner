@@ -1,16 +1,9 @@
 <script server>
-// SystemSweep — unified system performance manager
-// Powered by @system-cleaner workspace packages
-
 const os = require('node:os')
 const nodePath = require('node:path')
-
-const { formatBytes, getSystemInfoSync, HOME, safeReadDir, safeStat, safeReadFile, execSync } = require('@system-cleaner/core')
-const { getAllExtensions } = require('@system-cleaner/clean')
+const { formatBytes, getSystemInfoSync, HOME, execSync, escapeHtml } = require('@system-cleaner/core')
 const { discoverStartupItems } = require('@system-cleaner/uninstall')
-const { CLEAN_TARGETS } = require('@system-cleaner/clean')
-
-// ── System overview ─────────────────────────────────────────────────────
+const { getAllExtensions } = require('@system-cleaner/clean')
 
 const sysInfo = getSystemInfoSync()
 const cpuModel = sysInfo.cpuModel
@@ -32,28 +25,23 @@ function safeExec(cmd, fallback) {
   catch { return fallback || '' }
 }
 
-// Disk
 const diskLine = safeExec("df -h / | tail -1")
 const diskParts = diskLine.split(/\s+/)
 const diskTotal = diskParts[1] || '—'
 const diskUsed = diskParts[2] || '—'
 const diskAvail = diskParts[3] || '—'
-const diskPercent = parseInt(diskParts[4]) || 0 // used by DashboardCards component
+const diskPercent = parseInt(diskParts[4]) || 0
 
-// ── Startup items (from @system-cleaner/uninstall) ──────────────────────
+let dTotal = 0, dFree = 0, dUsedPct = 0
+try {
+  const dfOut = execSync('df -k / 2>/dev/null')
+  const dfLines = dfOut.split('\n')
+  if (dfLines.length >= 2) { const p = dfLines[1].split(/\s+/); dTotal = parseInt(p[1]) * 1024; dFree = parseInt(p[3]) * 1024; dUsedPct = Math.round((1 - dFree / dTotal) * 100) }
+} catch {}
 
-const startupItems = discoverStartupItems()
-const enabledStartup = startupItems.filter(i => !i.disabled)
-const disabledStartup = startupItems.filter(i => i.disabled)
-
-// ── Browser extensions (from @system-cleaner/clean) ─────────────────────
-
-const browserExtensions = getAllExtensions().map(e => ({
-  ...e, size: 0, sizeStr: '—',
-}))
+const enabledStartup = discoverStartupItems().filter(i => !i.disabled)
+const browserExtensions = getAllExtensions()
 const totalExtSize = 0
-
-// ── Background processes (sync for SSR — mirrors @system-cleaner/monitor) ──
 
 function getRunningProcesses() {
   const raw = safeExec('ps aux', '')
@@ -77,347 +65,33 @@ function getRunningProcesses() {
 
 const topCPU = getRunningProcesses().slice(0, 20)
 const totalCPU = topCPU.reduce((s, p) => s + p.cpu, 0)
-const totalMemUsed = topCPU.reduce((s, p) => s + p.memMB, 0)
 
-// ── Disk info (instant — no scanning) ───────────────────────────────────
-
-let dTotal = 0, dFree = 0, dUsedPct = 0
-try {
-  const dfOut = execSync('df -k / 2>/dev/null')
-  const dfLines = dfOut.split('\n')
-  if (dfLines.length >= 2) { const p = dfLines[1].split(/\s+/); dTotal = parseInt(p[1]) * 1024; dFree = parseInt(p[3]) * 1024; dUsedPct = dTotal > 0 ? Math.round((1 - dFree / dTotal) * 100) : 0 }
-} catch {}
-
-const scanTotalFormatted = formatBytes(dTotal - dFree)
-const scanBasename = nodePath.basename(HOME)
-
-// ── Health score ────────────────────────────────────────────────────────
-
-// Health score — matches @system-cleaner/monitor's calculateHealthScore weights
 const cpuAvgPercent = cpuCores > 0 ? Math.round(totalCPU / cpuCores) : 0
 let healthDeductions = 0
-
-// CPU (weight 30): threshold 30% normal, 70% high
 if (cpuAvgPercent > 70) healthDeductions += Math.min(30, Math.round(((cpuAvgPercent - 70) / 30) * 30))
 else if (cpuAvgPercent > 30) healthDeductions += Math.min(15, Math.round(((cpuAvgPercent - 30) / 40) * 15))
-
-// Memory (weight 25): threshold 80% high + pressure
 if (memPercent > 80) healthDeductions += Math.min(25, Math.round(((memPercent - 80) / 20) * 25))
 else if (memPercent > 50) healthDeductions += Math.min(12, Math.round(((memPercent - 50) / 30) * 12))
-
-// Disk (weight 20): threshold 90% critical
 if (dUsedPct > 90) healthDeductions += Math.min(20, Math.round(((dUsedPct - 90) / 10) * 20))
 else if (dUsedPct > 70) healthDeductions += Math.min(10, Math.round(((dUsedPct - 70) / 20) * 10))
-
-// Startup (weight 5)
 if (enabledStartup.length > 20) healthDeductions += Math.min(5, Math.floor((enabledStartup.length - 20) / 10))
-
 const healthScore = Math.max(0, Math.min(100, 100 - healthDeductions))
 const healthLabel = healthScore >= 90 ? 'Excellent' : healthScore >= 75 ? 'Good' : healthScore >= 60 ? 'Fair' : healthScore >= 40 ? 'Poor' : 'Critical'
 const healthColor = healthScore >= 90 ? '#34c759' : healthScore >= 75 ? '#30d158' : healthScore >= 60 ? '#ff9f0a' : '#ff453a'
-
-// ── Cleanable categories (from @system-cleaner/clean) ───────────────────
-
-const cleanCategories = []
-for (const target of CLEAN_TARGETS) {
-  if (target.requiresSudo) continue
-  const st = safeStat(target.path)
-  if (!st) continue
-  // Include both directories (contentsOnly) and files (single-file targets)
-  if (st.isDirectory() || !target.contentsOnly) {
-    cleanCategories.push({ id: target.id, name: target.name, path: target.path, icon: target.icon, desc: target.description, size: 0, sizeStr: '...' })
-  }
-}
-const totalCleanable = 0
 </script>
 
 @layout('app')
 
+@section('username'){{ username }}@endsection
+@section('macos')macOS {{ macosVersion }}@endsection
+
 @section('body')
-<div class="app-chrome" ref="app" x-data="{
-  panel: 'dashboard',
-  selected: [],
-  startupFilter: 'all',
-  cleaning: {},
-
-  go(p) { this.panel = p; this.selected = []; },
-  toggle(id) { const i = this.selected.indexOf(id); if (i === -1) this.selected.push(id); else this.selected.splice(i, 1); },
-  isOn(id) { return this.selected.includes(id); },
-  allOn(ids) { if (ids.every(id => this.selected.includes(id))) this.selected = this.selected.filter(id => !ids.includes(id)); else ids.forEach(id => { if (!this.selected.includes(id)) this.selected.push(id); }); },
-  setFilter(f) { this.startupFilter = f; },
-  rowVisible(cat, dis) { if (this.startupFilter==='all') return true; if (this.startupFilter==='enabled') return dis!=='true'; if (this.startupFilter==='vendor') return cat==='vendor'||cat==='other'||cat==='dev'; if (this.startupFilter==='system') return cat==='system'; return true; },
-  toast(msg, type) { const t = STX.useRef('toasts'); if (!t) return; const d = t.ownerDocument.createElement('div'); d.className='toast'; const icons={success:'✓',warning:'⚠',error:'✕'}; d.innerHTML='<span>'+(icons[type]||'●')+'</span> '+msg; t.appendChild(d); setTimeout(()=>d.remove(),4000); }
-}">
-
-  <div class="app-body">
-    <!-- Sidebar -->
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <div class="sidebar-app-name">SystemSweep</div>
-      </div>
-      <nav class="sidebar-nav">
-        <div class="sidebar-section-title">Overview</div>
-        <a class="nav-item" :class="{ active: panel === 'dashboard' }" @click="go('dashboard')">
-          <span class="nav-icon">📊</span> Dashboard
-        </a>
-
-        <div class="sidebar-section-title">Manage</div>
-        <a class="nav-item" :class="{ active: panel === 'startup' }" @click="go('startup')">
-          <span class="nav-icon">⚡</span> Startup Items
-          <span class="nav-badge">{{ enabledStartup.length }}</span>
-        </a>
-        <a class="nav-item" :class="{ active: panel === 'extensions' }" @click="go('extensions')">
-          <span class="nav-icon">🧩</span> Extensions
-          <span class="nav-badge">{{ browserExtensions.length }}</span>
-        </a>
-        <a class="nav-item" :class="{ active: panel === 'processes' }" @click="go('processes')">
-          <span class="nav-icon">🔄</span> Processes
-          <span class="nav-badge">{{ topCPU.length }}</span>
-        </a>
-
-        <div class="sidebar-section-title">Analyze</div>
-        <a class="nav-item" :class="{ active: panel === 'disk' }" @click="go('disk')">
-          <span class="nav-icon">💾</span> Disk Usage
-          <span class="nav-badge">{{ scanTotalFormatted }}</span>
-        </a>
-
-        <div class="sidebar-section-title">Clean</div>
-        <a class="nav-item" :class="{ active: panel === 'cleanup' }" @click="go('cleanup')">
-          <span class="nav-icon">🧹</span> Quick Clean
-          <span class="nav-badge">{{ cleanCategories.length }}</span>
-        </a>
-      </nav>
-      <div class="sidebar-footer">
-        <div class="sidebar-user">{{ username }}</div>
-        <div>macOS {{ macosVersion }}</div>
-      </div>
-    </aside>
-
-    <!-- Toast container -->
-    <div class="toast-area" ref="toasts"></div>
-
-    <!-- Main content -->
-    <main class="main">
-
-      <!-- ── Dashboard ──────────────────────────────────────── -->
-      <div class="panel" :class="{ active: panel === 'dashboard' }">
-        <div class="main-header">
-          <div class="main-title">Dashboard</div>
-          <div class="main-subtitle">System overview for {{ hostname }}</div>
-        </div>
-        <div class="main-content">
-          @include('DashboardCards')
-          @include('TopProcesses')
-        </div>
-      </div>
-
-      <!-- ── Startup Items ──────────────────────────────────── -->
-      <div class="panel" :class="{ active: panel === 'startup' }">
-        <div class="main-header">
-          <div class="main-title">Startup Items</div>
-          <div class="main-subtitle">Launch Agents & Daemons that run when your Mac starts</div>
-        </div>
-        <div class="main-content">
-          @include('StartupPanel')
-        </div>
-      </div>
-
-      <!-- ── Browser Extensions ─────────────────────────────── -->
-      <div class="panel" :class="{ active: panel === 'extensions' }">
-        <div class="main-header">
-          <div class="main-title">Browser Extensions</div>
-          <div class="main-subtitle">Installed extensions across all browsers</div>
-        </div>
-        <div class="main-content">
-          @include('ExtensionsPanel')
-        </div>
-      </div>
-
-      <!-- ── Background Processes ───────────────────────────── -->
-      <div class="panel" :class="{ active: panel === 'processes' }">
-        <div class="main-header">
-          <div class="main-title">Background Processes</div>
-          <div class="main-subtitle">Active processes using notable CPU or memory</div>
-        </div>
-        <div class="main-content">
-          @include('ProcessesPanel')
-        </div>
-      </div>
-
-      <!-- ── Disk Usage (DiskScope) ─────────────────────────── -->
-      <div class="panel" :class="{ active: panel === 'disk' }" style="overflow: hidden;">
-        <div class="main-content" style="padding: 0; height: 100%;">
-          @include('DiskPanel')
-        </div>
-      </div>
-
-      <!-- ── Quick Clean ──────────────────────────────────────── -->
-      <div class="panel" :class="{ active: panel === 'cleanup' }">
-        <div class="main-header">
-          <div class="main-title">Quick Clean</div>
-          <div class="main-subtitle">Remove caches, logs, and temporary files to free up disk space</div>
-        </div>
-        <div class="main-content">
-          @include('CleanupPanel')
-        </div>
-      </div>
-
-    </main>
-  </div>
-
-  <!-- Status bar -->
-  <div class="statusbar">
-    <span><span class="statusbar-dot" style="background: {{ healthColor }}"></span>Health: {{ healthScore }}</span>
-    <span>{{ enabledStartup.length }} startup items</span>
-    <span>{{ topCPU.length }} active processes</span>
-    <span class="statusbar-spacer"></span>
-    <span>{{ username }}@@{{ hostname }}</span>
-  </div>
+<div class="main-header">
+  <div class="main-title">Dashboard</div>
+  <div class="main-subtitle">System overview for {{ hostname }}</div>
 </div>
-
-<div id="clean-data" style="display:none" data-home="{{ HOME }}" data-map='{{ JSON.stringify(Object.fromEntries(cleanCategories.map(c => [c.id, { path: c.path, name: c.name }]))).replace(/'/g, "&#39;") }}'></div>
-
-<script data-stx-scoped>
-  function fmtBytes(b) {
-    if (b >= 1e12) return (b/1e12).toFixed(1)+' TB';
-    if (b >= 1e9) return (b/1e9).toFixed(1)+' GB';
-    if (b >= 1e6) return (b/1e6).toFixed(1)+' MB';
-    if (b >= 1e3) return (b/1e3).toFixed(1)+' KB';
-    return b+' B';
-  }
-  async function apiCall(endpoint, data) {
-    try {
-      var res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data || {}),
-      });
-      return await res.json();
-    } catch (err) {
-      return { success: false, error: err.message || 'Network error' };
-    }
-  }
-
-  var appEl = STX.useRef('app');
-  function _scope() { return appEl && appEl.__stx_scope; }
-  function _toast(msg, type) { var s = _scope(); if (s) s.toast(msg, type); }
-
-  function doDeletePath(p, name) {
-    if (!confirm('Delete ' + name + '? This cannot be undone.')) return;
-    apiCall('/api/delete-path', { path: p }).then(function(r) {
-      if (r.success) _toast('Deleted ' + name + ' — freed ' + fmtBytes(r.freedBytes), 'success');
-      else _toast('Delete failed: ' + (r.error || 'Unknown'), 'error');
-    });
-  }
-  function doCleanDir(p, name, id) {
-    if (!confirm('Clean ' + name + '? This cannot be undone.')) return;
-    var s = _scope(); if (s) s.cleaning[id] = true;
-    apiCall('/api/clean-dir', { path: p }).then(function(r) {
-      if (s) delete s.cleaning[id];
-      if (r.success) _toast('Cleaned ' + name + ' — freed ' + fmtBytes(r.freedBytes), 'success');
-      else _toast('Clean failed: ' + (r.error || 'Unknown'), 'error');
-    });
-  }
-  function doCleanSelected() {
-    var s = _scope(); if (!s) return;
-    var items = s.selected.filter(function(id) { return window.cleanMap && window.cleanMap[id]; });
-    if (items.length === 0) return;
-    if (!confirm('Clean ' + items.length + ' categories? This cannot be undone.')) return;
-    var totalFreed = 0; var remaining = items.length;
-    items.forEach(function(id) {
-      var item = window.cleanMap[id]; s.cleaning[id] = true;
-      apiCall('/api/clean-dir', { path: item.path }).then(function(r) {
-        delete s.cleaning[id];
-        if (r.success) totalFreed += r.freedBytes || 0;
-        remaining--;
-        if (remaining === 0) { _toast('Cleaned ' + items.length + ' items — freed ' + fmtBytes(totalFreed), 'success'); s.selected = []; }
-      });
-    });
-  }
-  function doKillProc(pid, name) {
-    if (!confirm('Kill ' + name + ' (PID ' + pid + ')?')) return;
-    apiCall('/api/kill-process', { pid: pid }).then(function(r) {
-      if (r.success) _toast('Killed ' + name + ' (PID ' + pid + ')', 'success');
-      else _toast('Kill failed: ' + (r.error || 'Unknown'), 'error');
-    });
-  }
-  function doToggleStartup(fp, label, action, name) {
-    var verb = action === 'disable' ? 'Disable' : 'Enable';
-    if (!confirm(verb + ' ' + name + '?')) return;
-    apiCall('/api/toggle-startup', { filepath: fp, label: label, action: action }).then(function(r) {
-      if (r.success) _toast(name + ' ' + action + 'd. Refresh to update.', 'success');
-      else _toast('Failed: ' + (r.error || 'Unknown'), 'error');
-    });
-  }
-  function doEmptyTrash() {
-    if (!confirm('Empty Trash? This cannot be undone.')) return;
-    apiCall('/api/empty-trash', {}).then(function(r) {
-      if (r.success) _toast('Trash emptied — freed ' + fmtBytes(r.freedBytes), 'success');
-      else _toast('Failed: ' + (r.error || 'Unknown'), 'error');
-    });
-  }
-
-  var cleanDataEl = document.getElementById('clean-data');
-  window.cleanMap = cleanDataEl ? JSON.parse(cleanDataEl.getAttribute('data-map')) : {};
-  function scanCleanupSizes() {
-    var paths = [];
-    var rows = document.querySelectorAll('#cleanup-tbody tr[data-clean-path]');
-    rows.forEach(function(row) { paths.push(row.getAttribute('data-clean-path')); });
-    if (paths.length === 0) return;
-    var totalEl = document.getElementById('total-cleanable');
-    var labelEl = document.getElementById('cleanup-sort-label');
-    if (totalEl) totalEl.textContent = 'Scanning...';
-    if (labelEl) labelEl.textContent = 'scanning sizes...';
-    apiCall('/api/dir-sizes', { paths: paths }).then(function(r) {
-      if (!r.success || !r.sizes) return;
-      var total = 0; var rowData = [];
-      rows.forEach(function(row) {
-        var p = row.getAttribute('data-clean-path');
-        var bytes = r.sizes[p] || 0; total += bytes;
-        var sizeCell = row.querySelector('.clean-size');
-        if (sizeCell) { sizeCell.textContent = bytes > 0 ? fmtBytes(bytes) : '< 1 MB'; sizeCell.style.color = bytes > 1e9 ? '#ff453a' : bytes > 100e6 ? '#ff9f0a' : '#d1d1d6'; }
-        rowData.push({ row: row, bytes: bytes });
-      });
-      rowData.sort(function(a, b) { return b.bytes - a.bytes; });
-      var tbody = document.getElementById('cleanup-tbody');
-      if (tbody) rowData.forEach(function(d) { tbody.appendChild(d.row); });
-      if (totalEl) totalEl.textContent = fmtBytes(total);
-      if (labelEl) labelEl.textContent = 'sorted by size';
-    });
-  }
-  window.scanCleanupSizes = scanCleanupSizes;
-  window.addEventListener('load', scanCleanupSizes);
-
-  STX.onKey('cmd+1', function() { if (appEl && appEl.__stx_scope) appEl.__stx_scope.panel = 'dashboard'; });
-  STX.onKey('cmd+2', function() { if (appEl && appEl.__stx_scope) appEl.__stx_scope.panel = 'startup'; });
-  STX.onKey('cmd+3', function() { if (appEl && appEl.__stx_scope) appEl.__stx_scope.panel = 'extensions'; });
-  STX.onKey('cmd+4', function() { if (appEl && appEl.__stx_scope) appEl.__stx_scope.panel = 'processes'; });
-  STX.onKey('cmd+5', function() { if (appEl && appEl.__stx_scope) appEl.__stx_scope.panel = 'disk'; });
-  STX.onKey('cmd+6', function() { if (appEl && appEl.__stx_scope) appEl.__stx_scope.panel = 'cleanup'; });
-
-  // Polyfill: STX reactive runtime doesn't handle type:"event" bindings.
-  // Walk the compiled bindings and register addEventListener for each one.
-  document.addEventListener('DOMContentLoaded', function() {
-    var scopeEl = document.querySelector('[data-stx-scope]');
-    if (!scopeEl || !scopeEl.__stx_execute) return;
-    var scripts = document.querySelectorAll('script[data-stx-scoped]');
-    scripts.forEach(function(s) {
-      var m = s.textContent.match(/var bindings = (\[[\s\S]*?\]);/);
-      if (!m) return;
-      try {
-        var el2 = document.createElement('div');
-        el2.innerHTML = m[1];
-        var bindings = JSON.parse(el2.textContent);
-        bindings.forEach(function(b) {
-          if (b.type !== 'event') return;
-          var el = document.getElementById(b.elementId);
-          if (!el) return;
-          el.addEventListener(b.attribute, function($event) {
-            scopeEl.__stx_execute(b.expression, $event, el);
-          });
-        });
-      } catch(e) { console.warn('[event-polyfill]', e); }
-    });
-  });
-</script>
+<div class="main-content">
+  @include('DashboardCards')
+  @include('TopProcesses')
+</div>
 @endsection

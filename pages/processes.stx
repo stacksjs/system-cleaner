@@ -1,0 +1,96 @@
+<script server>
+const os = require('node:os')
+const nodePath = require('node:path')
+const { getSystemInfoSync, execSync, escapeHtml } = require('@system-cleaner/core')
+
+const sysInfo = getSystemInfoSync()
+const username = sysInfo.username
+const macosVersion = sysInfo.macosVersion
+
+function safeExec(cmd, fallback) {
+  try { return execSync(cmd, { timeout: 5000 }) }
+  catch { return fallback || '' }
+}
+
+function getRunningProcesses() {
+  const raw = safeExec('ps aux', '')
+  if (!raw) return []
+  const totalMem = os.totalmem()
+  const procs = []
+  for (const line of raw.split('\n').slice(1)) {
+    const p = line.trim().split(/\s+/)
+    if (p.length < 11) continue
+    const user = p[0], pid = p[1], cpu = parseFloat(p[2]) || 0, mem = parseFloat(p[3]) || 0
+    const command = p.slice(10).join(' ')
+    if (user === 'root' && cpu < 0.1 && mem < 0.1) continue
+    if (command.startsWith('/usr/libexec/') && cpu < 0.1) continue
+    if (command.startsWith('/System/') && cpu < 0.1 && mem < 0.1) continue
+    if (cpu < 0.1 && mem < 0.3) continue
+    const cmdPath = command.split(' ')[0]
+    procs.push({ id: `proc-${pid}`, pid: parseInt(pid), name: cmdPath ? nodePath.basename(cmdPath) : `pid-${pid}`, fullCommand: command.slice(0, 120), user, cpu, mem, memMB: Math.round(mem * totalMem / 100 / 1e6), isSystem: user === 'root' || user.startsWith('_') })
+  }
+  return procs.sort((a, b) => b.cpu - a.cpu)
+}
+
+const topCPU = getRunningProcesses().slice(0, 20)
+const totalCPU = topCPU.reduce((s, p) => s + p.cpu, 0)
+const totalMemUsed = topCPU.reduce((s, p) => s + p.memMB, 0)
+
+function esc(str) { return escapeHtml(str || '') }
+</script>
+
+@layout('app')
+
+@section('username'){{ username }}@endsection
+@section('macos')macOS {{ macosVersion }}@endsection
+
+@section('body')
+<div x-data="{
+  selected: [],
+  killedPids: [],
+  toasts: [],
+  toastId: 0,
+
+  toggle(id) { const i = this.selected.indexOf(id); if (i === -1) this.selected.push(id); else this.selected.splice(i, 1); },
+  isOn(id) { return this.selected.includes(id); },
+  isKilled(pid) { return this.killedPids.includes(pid); },
+
+  toast(msg, type) {
+    const id = ++this.toastId;
+    this.toasts = [...this.toasts, { id, msg, type: type || 'info' }];
+    setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 4000);
+  },
+
+  async apiCall(endpoint, data) {
+    const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data || {}) });
+    return res.json();
+  },
+
+  async doKill(pid, name) {
+    if (!confirm('Kill ' + name + ' (PID ' + pid + ')?')) return;
+    const r = await this.apiCall('/api/kill-process', { pid: pid });
+    if (r.success) {
+      this.killedPids = [...this.killedPids, pid];
+      this.toast(name + ' killed (PID ' + pid + ')', 'success');
+    } else {
+      this.toast('Failed: ' + (r.error || 'Unknown'), 'error');
+    }
+  }
+}">
+
+<!-- Reactive toast container -->
+<div class="toast-area">
+  @for(let i = 0; i < 5; i++)
+    <div class="toast" x-show="toasts[{{ i }}]" x-text="toasts[{{ i }}] ? (toasts[{{ i }}].type === 'success' ? '✓' : toasts[{{ i }}].type === 'error' ? '✕' : '⚠') + ' ' + toasts[{{ i }}].msg : ''"></div>
+  @endfor
+</div>
+
+<div class="main-header">
+  <div class="main-title">Background Processes</div>
+  <div class="main-subtitle">Active processes using notable CPU or memory</div>
+</div>
+<div class="main-content">
+  @include('ProcessesPanel')
+</div>
+</div>
+@endsection

@@ -1,0 +1,37 @@
+<script server>
+const { formatBytes, getSystemInfoSync, escapeHtml } = require('@system-cleaner/core')
+const { getAllExtensions } = require('@system-cleaner/clean')
+
+const sysInfo = getSystemInfoSync()
+const username = sysInfo.username
+const macosVersion = sysInfo.macosVersion
+
+const browserExtensions = getAllExtensions().map(e => ({ ...e, size: 0, sizeStr: '—' }))
+const totalExtSize = 0
+
+function esc(str) { return escapeHtml(str || '') }
+</script>
+
+@layout('app')
+
+@section('username'){{ username }}@endsection
+@section('macos')macOS {{ macosVersion }}@endsection
+
+@section('body')
+<div x-data="{
+  selected: [],
+  toggle(id) { const i = this.selected.indexOf(id); if (i === -1) this.selected.push(id); else this.selected.splice(i, 1); },
+  isOn(id) { return this.selected.includes(id); },
+  allOn(ids) { if (ids.every(id => this.selected.includes(id))) this.selected = this.selected.filter(id => !ids.includes(id)); else ids.forEach(id => { if (!this.selected.includes(id)) this.selected.push(id); }); },
+  toast(msg, type) { var d = document.createElement('div'); d.className='toast'; d.innerHTML='<span>'+(type==='success'?'✓':type==='error'?'✕':'⚠')+'</span> '+msg; var area = document.querySelector('.toast-area'); if(!area){area=document.createElement('div');area.className='toast-area';document.body.appendChild(area);} area.appendChild(d); setTimeout(function(){d.remove()},4000); }
+}">
+<div class="toast-area"></div>
+<div class="main-header">
+  <div class="main-title">Browser Extensions</div>
+  <div class="main-subtitle">Installed extensions across all browsers</div>
+</div>
+<div class="main-content">
+  @include('ExtensionsPanel')
+</div>
+</div>
+@endsection

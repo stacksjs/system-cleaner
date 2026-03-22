@@ -69,7 +69,7 @@
           </td>
           <td>
             @if(!proc.isSystem)
-              <button class="btn btn-danger btn-sm" @click="doKillProc({{ proc.pid }}, '{{ esc(proc.name) }}')">Kill</button>
+              <button class="btn btn-danger btn-sm" @click="doKill({{ proc.pid }}, '{{ esc(proc.name) }}')">Kill</button>
             @else
               <span class="dim" style="font-size: 10px;">Protected</span>
             @endif

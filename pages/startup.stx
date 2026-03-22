@@ -1,0 +1,88 @@
+<script server>
+const { getSystemInfoSync, escapeHtml } = require('@system-cleaner/core')
+const { discoverStartupItems } = require('@system-cleaner/uninstall')
+
+const sysInfo = getSystemInfoSync()
+const username = sysInfo.username
+const macosVersion = sysInfo.macosVersion
+
+const startupItems = discoverStartupItems()
+const enabledStartup = startupItems.filter(i => !i.disabled)
+const disabledStartup = startupItems.filter(i => i.disabled)
+
+function esc(str) { return escapeHtml(str || '') }
+</script>
+
+@layout('app')
+
+@section('username'){{ username }}@endsection
+@section('macos')macOS {{ macosVersion }}@endsection
+
+@section('body')
+<div x-data="{
+  selected: [],
+  startupFilter: 'all',
+  disabledItems: {{ JSON.stringify(disabledStartup.map(i => i.id)) }},
+  removedItems: [],
+  toasts: [],
+  toastId: 0,
+
+  toggle(id) { const i = this.selected.indexOf(id); if (i === -1) this.selected.push(id); else this.selected.splice(i, 1); },
+  isOn(id) { return this.selected.includes(id); },
+  isDisabled(id) { return this.disabledItems.includes(id); },
+  isRemoved(id) { return this.removedItems.includes(id); },
+  allOn(ids) { if (ids.every(id => this.selected.includes(id))) this.selected = this.selected.filter(id => !ids.includes(id)); else ids.forEach(id => { if (!this.selected.includes(id)) this.selected.push(id); }); },
+  setFilter(f) { this.startupFilter = f; },
+  rowVisible(cat, dis) { if (this.startupFilter==='all') return true; if (this.startupFilter==='enabled') return dis!=='true'; if (this.startupFilter==='vendor') return cat==='vendor'||cat==='other'||cat==='dev'; if (this.startupFilter==='system') return cat==='system'; return true; },
+
+  toast(msg, type) {
+    const id = ++this.toastId;
+    this.toasts = [...this.toasts, { id, msg, type: type || 'info' }];
+    setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 4000);
+  },
+
+  async apiCall(endpoint, data) {
+    const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data || {}) });
+    return res.json();
+  },
+
+  async doToggle(fp, name, action, itemId) {
+    if (!confirm((action === 'disable' ? 'Disable' : 'Enable') + ' ' + name + '?')) return;
+    const r = await this.apiCall('/api/toggle-startup', { filepath: fp, label: name, action });
+    if (r.success) {
+      if (action === 'disable') { if (!this.disabledItems.includes(itemId)) this.disabledItems = [...this.disabledItems, itemId]; }
+      else { this.disabledItems = this.disabledItems.filter(x => x !== itemId); }
+      this.toast(name + ' ' + action + 'd', 'success');
+    } else {
+      this.toast('Failed: ' + (r.error || 'Unknown'), 'error');
+    }
+  },
+
+  async doRemove(fp, name, itemId) {
+    if (!confirm('Permanently delete ' + name + '?\\nThis will unload and remove the launch agent/daemon.')) return;
+    const r = await this.apiCall('/api/remove-startup', { filepath: fp });
+    if (r.success) {
+      this.removedItems = [...this.removedItems, itemId];
+      this.toast(name + ' removed', 'success');
+    } else {
+      this.toast('Failed: ' + (r.error || 'Unknown'), 'error');
+    }
+  }
+}">
+
+<!-- Reactive toast container -->
+<div class="toast-area">
+  @for(let i = 0; i < 5; i++)
+    <div class="toast" x-show="toasts[{{ i }}]" x-text="toasts[{{ i }}] ? (toasts[{{ i }}].type === 'success' ? '✓' : toasts[{{ i }}].type === 'error' ? '✕' : '⚠') + ' ' + toasts[{{ i }}].msg : ''"></div>
+  @endfor
+</div>
+
+<div class="main-header">
+  <div class="main-title">Startup Items</div>
+  <div class="main-subtitle">Launch Agents & Daemons that run when your Mac starts</div>
+</div>
+<div class="main-content">
+  @include('StartupPanel')
+</div>
+</div>
+@endsection

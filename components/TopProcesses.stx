@@ -5,7 +5,7 @@
       <span class="tbl-title">Top Processes</span>
       <span class="tbl-count">by CPU usage</span>
     </div>
-    <button class="btn btn-sm" @click="go('processes')">View All</button>
+    <a class="btn btn-sm" href="/processes" data-stx-link style="text-decoration:none;">View All</a>
   </div>
   <table>
     <thead>

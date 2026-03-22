@@ -3,7 +3,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { isPathSafe, getDirSize, HOME } from '@system-cleaner/core'
 import { cleanDirectory, emptyTrash } from '@system-cleaner/clean'
-import { killProcess, toggleStartupItem } from '@system-cleaner/uninstall'
+import { killProcess, toggleStartupItem, removeStartupItem } from '@system-cleaner/uninstall'
 import { scanDirectory } from '@system-cleaner/disk'
 
 function json(data: unknown, status = 200) {
@@ -95,6 +95,18 @@ const config: StxOptions = {
       }
       catch (err) {
         return errorJson(err instanceof Error ? err.message : 'Toggle failed')
+      }
+    },
+
+    '/api/remove-startup': async (req) => {
+      try {
+        const { filepath } = (await req.json()) as { filepath: string }
+        if (!filepath) return errorJson('No filepath provided', 400)
+        const result = await removeStartupItem(filepath)
+        return json(result)
+      }
+      catch (err) {
+        return errorJson(err instanceof Error ? err.message : 'Remove failed')
       }
     },
 

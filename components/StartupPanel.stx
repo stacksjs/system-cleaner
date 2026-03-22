@@ -51,7 +51,7 @@
     </thead>
     <tbody>
       @foreach(startupItems as item)
-        <tr x-show="rowVisible('{{ item.category }}', '{{ item.disabled }}')">
+        <tr x-show="rowVisible('{{ item.category }}', isDisabled('{{ item.id }}') ? 'true' : 'false')" data-item-id="{{ item.id }}">
           <td><input type="checkbox" class="check" :checked="isOn('{{ item.id }}')" @click="toggle('{{ item.id }}')" /></td>
           <td>
             <div><span style="margin-right: 4px;">{{ item.icon }}</span><span class="item-name">{{ item.name }}</span></div>
@@ -65,11 +65,8 @@
             @endif
           </td>
           <td>
-            @if(item.disabled)
-              <span class="badge badge-gray">Disabled</span>
-            @else
-              <span class="badge badge-green">Active</span>
-            @endif
+            <span x-show="!isDisabled('{{ item.id }}')" class="badge badge-green">Active</span>
+            <span x-show="isDisabled('{{ item.id }}')" class="badge badge-gray">Disabled</span>
           </td>
           <td>
             @if(item.runAtLoad)
@@ -79,12 +76,15 @@
             @endif
           </td>
           <td>
-            @if(!item.disabled && item.scope === 'user')
-              <button class="btn btn-danger btn-sm" @click="doToggleStartup('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', 'disable', '{{ esc(item.name) }}')">Disable</button>
-            @elseif(item.disabled && item.scope === 'user')
-              <button class="btn btn-sm" @click="doToggleStartup('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', 'enable', '{{ esc(item.name) }}')">Enable</button>
+            @if(item.category === 'system')
+              <span class="dim" style="font-size: 10px;">Apple</span>
             @else
-              <span class="dim" style="font-size: 10px;">System</span>
+              <div style="display: flex; gap: 4px;" x-show="!isRemoved('{{ item.id }}')">
+                <button x-show="!isDisabled('{{ item.id }}')" class="btn btn-sm" @click="doToggle('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', 'disable', '{{ item.id }}')">Disable</button>
+                <button x-show="isDisabled('{{ item.id }}')" class="btn btn-sm" @click="doToggle('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', 'enable', '{{ item.id }}')">Enable</button>
+                <button class="btn btn-danger btn-sm" @click="doRemove('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', '{{ item.id }}')">Delete</button>
+              </div>
+              <span x-show="isRemoved('{{ item.id }}')" class="badge badge-gray">Removed</span>
             @endif
           </td>
         </tr>

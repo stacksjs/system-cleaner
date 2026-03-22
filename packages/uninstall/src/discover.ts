@@ -171,14 +171,77 @@ export function discoverStartupItems(): StartupItem[] {
  * Uses shellEscape to prevent command injection from filepath.
  */
 export async function toggleStartupItem(filepath: string, action: 'enable' | 'disable'): Promise<{ success: boolean, error?: string }> {
-  if (!filepath.startsWith(path.join(HOME, 'Library/LaunchAgents'))) {
-    return { success: false, error: 'Can only toggle user launch agents' }
+  const userAgentsDir = path.join(HOME, 'Library/LaunchAgents')
+  const isUserAgent = filepath.startsWith(userAgentsDir)
+  const isSystemAgent = filepath.startsWith('/Library/LaunchAgents/') || filepath.startsWith('/Library/LaunchDaemons/')
+
+  if (!isUserAgent && !isSystemAgent) {
+    return { success: false, error: 'Invalid launch agent path' }
   }
 
-  const cmd = action === 'disable'
-    ? `launchctl unload -w ${shellEscape(filepath)} 2>/dev/null`
-    : `launchctl load -w ${shellEscape(filepath)} 2>/dev/null`
+  const escaped = shellEscape(filepath)
+  const launchctlCmd = action === 'disable'
+    ? `launchctl unload -w ${escaped}`
+    : `launchctl load -w ${escaped}`
 
-  await exec(cmd, { timeout: 5000 })
-  return { success: true }
+  try {
+    if (isUserAgent) {
+      await exec(`${launchctlCmd} 2>/dev/null`, { timeout: 5000 })
+    }
+    else {
+      const osaCmd = `osascript -e 'do shell script "${launchctlCmd}" with administrator privileges'`
+      await exec(osaCmd, { timeout: 30000 })
+    }
+    return { success: true }
+  }
+  catch (e: any) {
+    return formatOsaError(e)
+  }
+}
+
+/**
+ * Remove a launch agent/daemon permanently.
+ * Unloads the agent first, then deletes the plist file.
+ */
+export async function removeStartupItem(filepath: string): Promise<{ success: boolean, error?: string }> {
+  const userAgentsDir = path.join(HOME, 'Library/LaunchAgents')
+  const isUserAgent = filepath.startsWith(userAgentsDir)
+  const isSystemAgent = filepath.startsWith('/Library/LaunchAgents/') || filepath.startsWith('/Library/LaunchDaemons/')
+
+  if (!isUserAgent && !isSystemAgent) {
+    return { success: false, error: 'Invalid launch agent path' }
+  }
+
+  const escaped = shellEscape(filepath)
+
+  try {
+    if (isUserAgent) {
+      // Unload first (ignore errors — might already be unloaded)
+      await exec(`launchctl unload -w ${escaped} 2>/dev/null`, { timeout: 5000 }).catch(() => {})
+      // Delete the plist
+      const fs = await import('node:fs')
+      fs.unlinkSync(filepath)
+    }
+    else {
+      // System: unload + delete via osascript (single auth prompt)
+      const cmd = `launchctl unload -w ${escaped} 2>/dev/null; rm -f ${escaped}`
+      const osaCmd = `osascript -e 'do shell script "${cmd}" with administrator privileges'`
+      await exec(osaCmd, { timeout: 30000 })
+    }
+    return { success: true }
+  }
+  catch (e: any) {
+    return formatOsaError(e)
+  }
+}
+
+function formatOsaError(e: any): { success: false, error: string } {
+  const msg = e.message || String(e)
+  if (msg.includes('User canceled') || msg.includes('-128')) {
+    return { success: false, error: 'Cancelled' }
+  }
+  if (msg.includes('authorization')) {
+    return { success: false, error: 'Authorization failed' }
+  }
+  return { success: false, error: msg.slice(0, 100) || 'Operation failed' }
 }

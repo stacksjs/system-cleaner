@@ -1,0 +1,29 @@
+<script server>
+const nodePath = require('node:path')
+const { formatBytes, getSystemInfoSync, HOME, execSync } = require('@system-cleaner/core')
+
+const sysInfo = getSystemInfoSync()
+const username = sysInfo.username
+const macosVersion = sysInfo.macosVersion
+
+let dTotal = 0, dFree = 0, dUsedPct = 0
+try {
+  const dfOut = execSync('df -k / 2>/dev/null')
+  const dfLines = dfOut.split('\n')
+  if (dfLines.length >= 2) { const p = dfLines[1].split(/\s+/); dTotal = parseInt(p[1]) * 1024; dFree = parseInt(p[3]) * 1024; dUsedPct = Math.round((1 - dFree / dTotal) * 100) }
+} catch {}
+
+const scanTotalFormatted = formatBytes(dTotal - dFree)
+const scanBasename = nodePath.basename(HOME)
+</script>
+
+@layout('app')
+
+@section('username'){{ username }}@endsection
+@section('macos')macOS {{ macosVersion }}@endsection
+
+@section('body')
+<div class="main-content" style="padding: 0; height: 100%;">
+  @include('DiskPanel')
+</div>
+@endsection

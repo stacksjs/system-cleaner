@@ -6,7 +6,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "rm -rf .stx && stx dev pages/index.stx --port 3456",
+    "dev": "rm -rf .stx && stx dev --port 3456",
     "build": "stx build pages/",
     "native": "stx dev pages/index.stx --native",
     "cli": "bun run packages/cli/bin/system-cleaner.ts",

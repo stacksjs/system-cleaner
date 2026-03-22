@@ -243,6 +243,45 @@
   </style>
 </head>
 <body>
-  @yield('body')
+<div class="app-chrome">
+  <div class="app-body">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-app-name">SystemSweep</div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="sidebar-section-title">Overview</div>
+        <a class="nav-item" href="/" data-stx-link>
+          <span class="nav-icon">📊</span> Dashboard
+        </a>
+        <div class="sidebar-section-title">Manage</div>
+        <a class="nav-item" href="/startup" data-stx-link>
+          <span class="nav-icon">⚡</span> Startup Items
+        </a>
+        <a class="nav-item" href="/extensions" data-stx-link>
+          <span class="nav-icon">🧩</span> Extensions
+        </a>
+        <a class="nav-item" href="/processes" data-stx-link>
+          <span class="nav-icon">🔄</span> Processes
+        </a>
+        <div class="sidebar-section-title">Analyze</div>
+        <a class="nav-item" href="/disk" data-stx-link>
+          <span class="nav-icon">💾</span> Disk Usage
+        </a>
+        <div class="sidebar-section-title">Clean</div>
+        <a class="nav-item" href="/cleanup" data-stx-link>
+          <span class="nav-icon">🧹</span> Quick Clean
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="sidebar-user">@yield('username')</div>
+        <div>@yield('macos')</div>
+      </div>
+    </aside>
+    <main class="main" data-stx-content>
+      @yield('body')
+    </main>
+  </div>
+</div>
 </body>
 </html>
