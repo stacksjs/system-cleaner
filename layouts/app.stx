@@ -272,7 +272,10 @@
         <a class="nav-item" href="/disk" data-stx-link>
           <span class="nav-icon">💾</span> Disk Usage
         </a>
-        <div class="sidebar-section-title">Clean</div>
+        <div class="sidebar-section-title">Maintain</div>
+        <a class="nav-item" href="/updates" data-stx-link>
+          <span class="nav-icon">📦</span> Updates
+        </a>
         <a class="nav-item" href="/cleanup" data-stx-link>
           <span class="nav-icon">🧹</span> Quick Clean
         </a>

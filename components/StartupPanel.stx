@@ -80,9 +80,9 @@
               <span class="dim" style="font-size: 10px;">Apple</span>
             @else
               <div style="display: flex; gap: 4px;" x-show="!isRemoved('{{ item.id }}')">
-                <button x-show="!isDisabled('{{ item.id }}')" class="btn btn-sm" @click="doToggle('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', 'disable', '{{ item.id }}')">Disable</button>
-                <button x-show="isDisabled('{{ item.id }}')" class="btn btn-sm" @click="doToggle('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', 'enable', '{{ item.id }}')">Enable</button>
-                <button class="btn btn-danger btn-sm" @click="doRemove('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', '{{ item.id }}')">Delete</button>
+                <button x-show="!isDisabled('{{ item.id }}')" class="btn btn-sm" onclick="doToggle('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', 'disable', '{{ item.id }}')">Disable</button>
+                <button x-show="isDisabled('{{ item.id }}')" class="btn btn-sm" onclick="doToggle('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', 'enable', '{{ item.id }}')">Enable</button>
+                <button class="btn btn-danger btn-sm" onclick="doRemove('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', '{{ item.id }}')">Delete</button>
               </div>
               <span x-show="isRemoved('{{ item.id }}')" class="badge badge-gray">Removed</span>
             @endif

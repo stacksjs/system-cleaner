@@ -39,34 +39,6 @@ function esc(str) { return escapeHtml(str || '') }
     const id = ++this.toastId;
     this.toasts = [...this.toasts, { id, msg, type: type || 'info' }];
     setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 4000);
-  },
-
-  async apiCall(endpoint, data) {
-    const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data || {}) });
-    return res.json();
-  },
-
-  async doToggle(fp, name, action, itemId) {
-    if (!confirm((action === 'disable' ? 'Disable' : 'Enable') + ' ' + name + '?')) return;
-    const r = await this.apiCall('/api/toggle-startup', { filepath: fp, label: name, action });
-    if (r.success) {
-      if (action === 'disable') { if (!this.disabledItems.includes(itemId)) this.disabledItems = [...this.disabledItems, itemId]; }
-      else { this.disabledItems = this.disabledItems.filter(x => x !== itemId); }
-      this.toast(name + ' ' + action + 'd', 'success');
-    } else {
-      this.toast('Failed: ' + (r.error || 'Unknown'), 'error');
-    }
-  },
-
-  async doRemove(fp, name, itemId) {
-    if (!confirm('Permanently delete ' + name + '?\\nThis will unload and remove the launch agent/daemon.')) return;
-    const r = await this.apiCall('/api/remove-startup', { filepath: fp });
-    if (r.success) {
-      this.removedItems = [...this.removedItems, itemId];
-      this.toast(name + ' removed', 'success');
-    } else {
-      this.toast('Failed: ' + (r.error || 'Unknown'), 'error');
-    }
   }
 }">
 
@@ -85,4 +57,41 @@ function esc(str) { return escapeHtml(str || '') }
   @include('StartupPanel')
 </div>
 </div>
+
+<script data-stx-scoped>
+function _api(endpoint, data) {
+  return fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data || {}) }).then(function(r) { return r.json(); });
+}
+
+function _exec(stmt) {
+  var el = document.querySelector('[data-stx-scope]');
+  if (el && el.__stx_execute) el.__stx_execute(stmt);
+}
+
+function doToggle(fp, name, action, itemId) {
+  var verb = action === 'disable' ? 'Disable' : 'Enable';
+  if (!confirm(verb + ' ' + name + '?')) return;
+  _api('/api/toggle-startup', { filepath: fp, label: name, action: action }).then(function(r) {
+    if (r.success) {
+      var method = action === 'disable' ? 'disabledItems = [...disabledItems, \'' + itemId + '\']' : 'disabledItems = disabledItems.filter(function(x){ return x !== \'' + itemId + '\' })';
+      _exec(method);
+      _exec("toast('" + name.replace(/'/g, "\\'") + " " + action + "d', 'success')");
+    } else {
+      _exec("toast('Failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");
+    }
+  });
+}
+
+function doRemove(fp, name, itemId) {
+  if (!confirm('Permanently delete ' + name + '?\nThis will unload and remove the launch agent/daemon.')) return;
+  _api('/api/remove-startup', { filepath: fp }).then(function(r) {
+    if (r.success) {
+      _exec("removedItems = [...removedItems, '" + itemId + "']");
+      _exec("toast('" + name.replace(/'/g, "\\'") + " removed', 'success')");
+    } else {
+      _exec("toast('Failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");
+    }
+  });
+}
+</script>
 @endsection

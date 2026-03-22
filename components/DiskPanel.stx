@@ -85,18 +85,9 @@
     var defaultSize = '';
     var defaultName = '';
 
-    var centerSize = document.getElementById('center-size');
-    var centerName = document.getElementById('center-name');
-    var centerBack = document.getElementById('center-back');
-    var centerCircle = document.getElementById('center-circle');
-    var card = document.getElementById('inspector-card');
-    var placeholder = document.getElementById('inspector-placeholder');
-    var svgEl = document.getElementById('sunburst');
+    // DOM refs re-queried as needed (SPA navigation replaces elements)
     var segGroup = document.getElementById('segments-group');
     var folderListEl = document.getElementById('folder-list');
-    var loadingEl = document.getElementById('disk-loading');
-    var scanTotalEl = document.getElementById('disk-scan-total');
-    var scanMetaEl = document.getElementById('disk-scan-meta');
 
     function fmtBytes(b) {
       if (b >= 1e12) return (b/1e12).toFixed(1)+' TB';
@@ -143,15 +134,23 @@
       currentRoot=root;computeLayout(root,CFG.maxDepth);
       var ns=[];flatten(root,ns,0);var rs=root.s;
       for(var i=0;i<ns.length;i++)ns[i].percent=rs>0?((ns[i].size/rs)*100).toFixed(1):'0';
-      segs=ns;segGroup.innerHTML='';
+      segs=ns;
+      // Re-query DOM refs (SPA nav replaces elements)
+      segGroup = document.getElementById('segments-group');
+      folderListEl = document.getElementById('folder-list');
+      var _cs = document.getElementById('center-size');
+      var _cn = document.getElementById('center-name');
+      var _cb = document.getElementById('center-back');
+      if(segGroup){segGroup.innerHTML='';
       var svgns='http://www.w3.org/2000/svg';
       for(var k=0;k<segs.length;k++){
         var p=document.createElementNS(svgns,'path');p.setAttribute('class','segment');p.setAttribute('d',segs[k].d);p.setAttribute('fill',segs[k].color);p.setAttribute('data-idx',segs[k].idx);
         var t=document.createElementNS(svgns,'title');t.textContent=segs[k].name+' — '+segs[k].formattedSize+' ('+segs[k].percent+'%)';p.appendChild(t);segGroup.appendChild(p);
-      }
-      centerSize.textContent=fmtBytes(root.s);centerName.textContent=root.n;
+      }}
       defaultSize=fmtBytes(root.s);defaultName=root.n;
-      centerBack.style.opacity=viewStack.length>0?'0.6':'0';
+      if(_cs)_cs.textContent=defaultSize;
+      if(_cn)_cn.textContent=defaultName;
+      if(_cb)_cb.style.opacity=viewStack.length>0?'0.6':'0';
       var top=segs.filter(function(s){return s.depth===1}).sort(function(a,b){return b.size-a.size}).slice(0,20);
       var maxS=top.length>0?top[0].size:1;var fhtml='';
       for(var f=0;f<top.length;f++){var bw=Math.max(3,Math.round((top[f].size/maxS)*100));fhtml+='<div class="folder-item" data-seg="'+top[f].idx+'"><span class="folder-dot" style="background:'+top[f].color+'"></span><span class="folder-name">'+top[f].name+'</span><span class="folder-size">'+top[f].formattedSize+'</span><div class="folder-bar-track"><div class="folder-bar-fill" style="width:'+bw+'%;background:'+top[f].color+'"></div></div></div>';}
@@ -160,19 +159,38 @@
     }
 
     function showInfo(s){
-      if(!s){centerSize.textContent=defaultSize;centerName.textContent=defaultName;card.style.display='none';placeholder.style.display='';return;}
-      centerSize.textContent=s.formattedSize;centerName.textContent=s.name;placeholder.style.display='none';card.style.display='';
-      card.innerHTML='<div class="info-icon-row"><div class="info-type-icon" style="background:'+s.color+'20;color:'+s.color+'">'+(s.isDir?'Dir':'File')+'</div><div><div class="info-type-name">'+s.name+'</div><div class="info-type-kind">'+(s.isDir?'Folder':'File')+' · Level '+s.depth+'</div></div></div><div class="info-row"><span class="info-label">Size</span><span class="info-value">'+s.formattedSize+'</span></div><div class="info-row"><span class="info-label">% of View</span><span class="info-value">'+s.percent+'%</span></div>'+(s.isDir?'<div class="info-row"><span class="info-label">Items</span><span class="info-value">'+s.childCount+'</span></div>':'')+'<div class="info-row" style="border-bottom:none"><span class="info-label">Depth</span><span class="info-value">Ring '+s.depth+'</span></div><div class="info-path">'+s.fullPath+'</div><div class="info-bar"><div class="info-bar-label">Proportion</div><div class="info-bar-track"><div class="info-bar-fill" style="width:'+s.percent+'%;background:'+s.color+'"></div></div><div class="info-bar-text">'+s.formattedSize+' of '+defaultSize+'</div></div>'+(s.isDir&&s.childCount>0?'<div class="info-drill">Click to drill down</div>':'');
+      // Re-query DOM elements each call (SPA navigation replaces them)
+      var _cs = document.getElementById('center-size');
+      var _cn = document.getElementById('center-name');
+      var _card = document.getElementById('inspector-card');
+      var _ph = document.getElementById('inspector-placeholder');
+      if(!s){if(_cs)_cs.textContent=defaultSize;if(_cn)_cn.textContent=defaultName;if(_card)_card.style.display='none';if(_ph)_ph.style.display='';return;}
+      if(_cs)_cs.textContent=s.formattedSize;if(_cn)_cn.textContent=s.name;if(_ph)_ph.style.display='none';if(_card){_card.style.display='';
+      _card.innerHTML='<div class="info-icon-row"><div class="info-type-icon" style="background:'+s.color+'20;color:'+s.color+'">'+(s.isDir?'Dir':'File')+'</div><div><div class="info-type-name">'+s.name+'</div><div class="info-type-kind">'+(s.isDir?'Folder':'File')+' · Level '+s.depth+'</div></div></div><div class="info-row"><span class="info-label">Size</span><span class="info-value">'+s.formattedSize+'</span></div><div class="info-row"><span class="info-label">% of View</span><span class="info-value">'+s.percent+'%</span></div>'+(s.isDir?'<div class="info-row"><span class="info-label">Items</span><span class="info-value">'+s.childCount+'</span></div>':'')+'<div class="info-row" style="border-bottom:none"><span class="info-label">Depth</span><span class="info-value">Ring '+s.depth+'</span></div><div class="info-path">'+s.fullPath+'</div><div class="info-bar"><div class="info-bar-label">Proportion</div><div class="info-bar-track"><div class="info-bar-fill" style="width:'+s.percent+'%;background:'+s.color+'"></div></div><div class="info-bar-text">'+s.formattedSize+' of '+defaultSize+'</div></div>'+(s.isDir&&s.childCount>0?'<div class="info-drill">Click to drill down</div>':'');}
     }
 
-    // Bind events
-    if(svgEl){
-      svgEl.addEventListener('mouseover',function(e){var p=e.target.closest('.segment');if(p){var idx=parseInt(p.getAttribute('data-idx'));if(segs[idx])showInfo(segs[idx]);}});
-      svgEl.addEventListener('mouseout',function(e){var p=e.target.closest('.segment');if(p&&(!e.relatedTarget||!e.relatedTarget.closest||!e.relatedTarget.closest('.segment')))showInfo(null);});
-      svgEl.addEventListener('click',function(e){var p=e.target.closest('.segment');if(p){var idx=parseInt(p.getAttribute('data-idx'));var seg=segs[idx];if(seg&&seg.isDir&&seg._node&&seg._node.c&&seg._node.c.length>0){viewStack.push(currentRoot);renderView(seg._node);}}});
+    // Event delegation on the disk-layout container — survives SPA DOM replacement
+    // since we bind to the freshly-queried container each time
+    var diskLayout = document.querySelector('.disk-layout');
+    if (diskLayout) {
+      diskLayout.addEventListener('mouseover', function(e) {
+        var seg = e.target.closest('.segment');
+        if (seg) { var idx = parseInt(seg.getAttribute('data-idx')); if (segs[idx]) showInfo(segs[idx]); }
+        var folder = e.target.closest('.folder-item');
+        if (folder) { var idx = parseInt(folder.getAttribute('data-seg')); if (segs[idx]) showInfo(segs[idx]); }
+      });
+      diskLayout.addEventListener('mouseout', function(e) {
+        var seg = e.target.closest('.segment');
+        if (seg && (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest('.segment'))) showInfo(null);
+        var folder = e.target.closest('.folder-item');
+        if (folder) showInfo(null);
+      });
+      diskLayout.addEventListener('click', function(e) {
+        var seg = e.target.closest('.segment');
+        if (seg) { var idx = parseInt(seg.getAttribute('data-idx')); var s = segs[idx]; if (s && s.isDir && s._node && s._node.c && s._node.c.length > 0) { viewStack.push(currentRoot); renderView(s._node); } }
+        if (e.target.closest('.center-bg')) { if (viewStack.length > 0) renderView(viewStack.pop()); }
+      });
     }
-    if(centerCircle){centerCircle.addEventListener('click',function(){if(viewStack.length>0)renderView(viewStack.pop());});}
-    if(folderListEl){folderListEl.addEventListener('mouseover',function(e){var item=e.target.closest('.folder-item');if(item){var idx=parseInt(item.getAttribute('data-seg'));if(segs[idx])showInfo(segs[idx]);}});folderListEl.addEventListener('mouseout',function(e){var item=e.target.closest('.folder-item');if(item)showInfo(null);});}
 
     var DISK_CACHE_KEY = 'systemcleaner:disk-scan';
     var DISK_SCANNING_KEY = 'systemcleaner:disk-scanning';
@@ -184,12 +202,21 @@
       return result;
     }
 
+    // These functions re-query DOM elements each time they're called
+    // so they work correctly after SPA navigation replaces the DOM
     function showScanResult(data, label) {
       tree = data.tree.n ? data.tree : normalize(data.tree);
-      loadingEl.style.display = 'none';
-      svgEl.style.display = '';
-      scanTotalEl.textContent = fmtBytes(tree.s);
-      scanMetaEl.textContent = data.folderCount + ' folders \u00b7 ' + data.fileCount + ' files \u00b7 ' + data.scanTime + (label || '');
+      var _loading = document.getElementById('disk-loading');
+      var _svg = document.getElementById('sunburst');
+      var _total = document.getElementById('disk-scan-total');
+      var _meta = document.getElementById('disk-scan-meta');
+      if (_loading) _loading.style.display = 'none';
+      if (_svg) _svg.style.display = '';
+      if (_total) _total.textContent = fmtBytes(tree.s);
+      if (_meta) _meta.textContent = data.folderCount + ' folders \u00b7 ' + data.fileCount + ' files \u00b7 ' + data.scanTime + (label || '');
+      // Re-acquire segGroup since DOM may have been replaced
+      segGroup = document.getElementById('segments-group');
+      folderListEl = document.getElementById('folder-list');
       renderView(tree);
     }
 
@@ -197,55 +224,51 @@
       var prompt = document.getElementById('disk-prompt');
       var scanning = document.getElementById('disk-scanning');
       var icon = document.getElementById('disk-icon');
+      var _svg = document.getElementById('sunburst');
+      var _loading = document.getElementById('disk-loading');
       if (prompt) prompt.style.display = 'none';
       if (scanning) scanning.style.display = '';
       if (icon) icon.style.animation = 'pulse 1.5s ease-in-out infinite';
-      svgEl.style.display = 'none';
-      loadingEl.style.display = '';
+      if (_svg) _svg.style.display = 'none';
+      if (_loading) _loading.style.display = '';
     }
 
-    // Global scan manager — survives SPA navigation
-    // The fetch runs detached and writes to localStorage when done.
-    // When the user returns to the disk page, it picks up the result.
-    if (!window._diskScanManager) {
-      window._diskScanManager = {
+    // Global scan manager — persists across SPA navigations on window.
+    // Only manages the fetch lifecycle and localStorage. Never holds DOM refs.
+    if (!window._diskScan) {
+      window._diskScan = {
         scanning: false,
-        runScan: function() {
+        run: function() {
           this.scanning = true;
           localStorage.setItem(DISK_SCANNING_KEY, 'true');
           fetch('/api/disk-scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
             .then(function(r) { return r.json(); })
             .then(function(data) {
-              window._diskScanManager.scanning = false;
+              window._diskScan.scanning = false;
               localStorage.removeItem(DISK_SCANNING_KEY);
               if (!data.success) return;
               data.tree = normalize(data.tree);
               try { localStorage.setItem(DISK_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data })); } catch {}
-              // If the disk page is currently visible, update it
-              if (typeof window._diskScanOnComplete === 'function') {
-                window._diskScanOnComplete(data);
-              }
+              // Notify the disk page if it's currently mounted
+              if (typeof window._diskScan.onComplete === 'function') window._diskScan.onComplete(data);
             })
             .catch(function() {
-              window._diskScanManager.scanning = false;
+              window._diskScan.scanning = false;
               localStorage.removeItem(DISK_SCANNING_KEY);
             });
-        }
+        },
+        onComplete: null
       };
     }
 
-    // Callback for when scan completes while on this page
-    window._diskScanOnComplete = function(data) {
-      showScanResult(data);
-    };
+    // Register fresh callback — uses current DOM (re-queried inside showScanResult)
+    window._diskScan.onComplete = function(data) { showScanResult(data); };
 
-    // Restore state on page load:
-    // 1. If scan is in progress (started before navigating away), show scanning UI
-    // 2. If cached result exists, show it
-    // 3. Otherwise show the scan button
-    var isScanning = window._diskScanManager.scanning || localStorage.getItem(DISK_SCANNING_KEY) === 'true';
-
-    if (isScanning) {
+    // Restore state:
+    // 1. Scan in progress → show scanning UI and wait for callback
+    // 2. Cached result → render immediately
+    // 3. Neither → show scan button
+    if (window._diskScan.scanning || localStorage.getItem(DISK_SCANNING_KEY) === 'true') {
       showScanningUI();
     } else {
       try {
@@ -254,16 +277,15 @@
           var cached = JSON.parse(raw);
           if (Date.now() - cached.ts < DISK_CACHE_TTL) {
             showScanResult(cached.data, ' (cached)');
-            var prompt = document.getElementById('disk-prompt');
-            if (prompt) prompt.style.display = 'none';
+            document.getElementById('disk-prompt').style.display = 'none';
           }
         }
-      } catch { /* no cache */ }
+      } catch {}
     }
 
     window.startDiskScan = function() {
       showScanningUI();
-      window._diskScanManager.runScan();
+      window._diskScan.run();
     };
   })();
 </script>

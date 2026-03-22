@@ -59,22 +59,6 @@ function esc(str) { return escapeHtml(str || '') }
     const id = ++this.toastId;
     this.toasts = [...this.toasts, { id, msg, type: type || 'info' }];
     setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 4000);
-  },
-
-  async apiCall(endpoint, data) {
-    const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data || {}) });
-    return res.json();
-  },
-
-  async doKill(pid, name) {
-    if (!confirm('Kill ' + name + ' (PID ' + pid + ')?')) return;
-    const r = await this.apiCall('/api/kill-process', { pid: pid });
-    if (r.success) {
-      this.killedPids = [...this.killedPids, pid];
-      this.toast(name + ' killed (PID ' + pid + ')', 'success');
-    } else {
-      this.toast('Failed: ' + (r.error || 'Unknown'), 'error');
-    }
   }
 }">
 
@@ -93,4 +77,27 @@ function esc(str) { return escapeHtml(str || '') }
   @include('ProcessesPanel')
 </div>
 </div>
+
+<script data-stx-scoped>
+function _api(endpoint, data) {
+  return fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data || {}) }).then(function(r) { return r.json(); });
+}
+
+function _exec(stmt) {
+  var el = document.querySelector('[data-stx-scope]');
+  if (el && el.__stx_execute) el.__stx_execute(stmt);
+}
+
+function doKill(pid, name) {
+  if (!confirm('Kill ' + name + ' (PID ' + pid + ')?')) return;
+  _api('/api/kill-process', { pid: pid }).then(function(r) {
+    if (r.success) {
+      _exec("killedPids = [...killedPids, " + pid + "]");
+      _exec("toast('" + name.replace(/'/g, "\\'") + " killed (PID " + pid + ")', 'success')");
+    } else {
+      _exec("toast('Kill failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");
+    }
+  });
+}
+</script>
 @endsection

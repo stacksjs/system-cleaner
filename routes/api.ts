@@ -149,4 +149,66 @@ export default async function (router: Router) {
       freedBytes: result.freedBytes,
     });
   });
+
+  // ── Brew update endpoints ──────────────────────────────────
+
+  await router.post("/brew-update", async (req) => {
+    const { name, type } = (await req.json()) as {
+      name: string;
+      type: "formula" | "cask";
+    };
+    if (!name) return Response.json({ success: false, error: "No package name" }, { status: 400 });
+
+    try {
+      const cmd = type === "cask"
+        ? `brew upgrade --cask ${name} 2>&1`
+        : `brew upgrade ${name} 2>&1`;
+      const proc = Bun.spawn(["bash", "-c", cmd], { stdout: "pipe", stderr: "pipe" });
+      const output = await new Response(proc.stdout).text();
+      const exitCode = await proc.exited;
+
+      if (exitCode !== 0) {
+        return Response.json({ success: false, error: output.trim().split("\n").pop() || "Upgrade failed" });
+      }
+
+      // Get the new version
+      const verCmd = type === "cask"
+        ? `brew info --cask --json=v2 ${name} 2>/dev/null`
+        : `brew info --json=v2 ${name} 2>/dev/null`;
+      const verProc = Bun.spawn(["bash", "-c", verCmd], { stdout: "pipe", stderr: "pipe" });
+      const verOutput = await new Response(verProc.stdout).text();
+      let version = "latest";
+      try {
+        const info = JSON.parse(verOutput);
+        if (type === "cask") {
+          version = info.casks?.[0]?.version?.split(",")?.[0] || "latest";
+        } else {
+          version = info.formulae?.[0]?.versions?.stable || "latest";
+        }
+      } catch {}
+
+      return Response.json({ success: true, version });
+    } catch (err: any) {
+      return Response.json({ success: false, error: err.message || "Upgrade failed" });
+    }
+  });
+
+  await router.post("/brew-update-all", async () => {
+    try {
+      const proc = Bun.spawn(["bash", "-c", "brew upgrade 2>&1"], {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const output = await new Response(proc.stdout).text();
+      const exitCode = await proc.exited;
+
+      return Response.json({
+        success: exitCode === 0,
+        output: output.trim().split("\n").slice(-5).join("\n"),
+        error: exitCode !== 0 ? "Some packages failed to update" : undefined,
+      });
+    } catch (err: any) {
+      return Response.json({ success: false, error: err.message || "Upgrade failed" });
+    }
+  });
 }

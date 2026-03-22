@@ -17,10 +17,10 @@
     <button class="btn" @click="selected.length === {{ cleanCategories.length }} ? (selected = []) : (selected = {{ JSON.stringify(cleanCategories.map(c => c.id)) }})">
       <span x-text="selected.length === {{ cleanCategories.length }} ? 'Deselect All' : 'Select All'">Select All</span>
     </button>
-    <button class="btn btn-danger" x-show="selected.length > 0" @click="doCleanSelected()">
+    <button class="btn btn-danger" x-show="selected.length > 0" onclick="doCleanSelected()">
       Clean Selected (<span x-text="selected.length">0</span>)
     </button>
-    <button class="btn" @click="doEmptyTrash()">
+    <button class="btn" onclick="doEmptyTrash()">
       🗑️ Empty Trash
     </button>
     <button class="btn btn-sm" style="margin-left: auto;" onclick="scanCleanupSizes(true)">
@@ -58,7 +58,7 @@
             <td>
               <button class="btn btn-danger btn-sm"
                 :disabled="cleaning['{{ cat.id }}']"
-                @click="doCleanDir('{{ esc(cat.path) }}', '{{ esc(cat.name) }}', '{{ cat.id }}')">
+                onclick="doCleanDir('{{ esc(cat.path) }}', '{{ esc(cat.name) }}', '{{ cat.id }}')">
                 <span x-show="!cleaning['{{ cat.id }}']">Clean</span>
                 <span x-show="cleaning['{{ cat.id }}']">...</span>
               </button>

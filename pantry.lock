@@ -1,0 +1,126 @@
+{
+  "version": "1.0.0",
+  "lockfileVersion": 2,
+  "workspaces": {
+    "": {
+      "name": "system-cleaner",
+      "dependencies": {
+        "@stacksjs/bun-router": "link:@stacksjs/bun-router",
+        "@system-cleaner/clean": "workspace:*",
+        "@system-cleaner/core": "workspace:*",
+        "@system-cleaner/disk": "workspace:*",
+        "@system-cleaner/monitor": "workspace:*",
+        "@system-cleaner/uninstall": "workspace:*",
+        "bun-plugin-stx": "latest"
+      },
+      "devDependencies": {
+        "better-dx": "latest"
+      }
+    },
+    "packages/clean": {
+      "name": "@system-cleaner/clean",
+      "version": "0.1.0",
+      "dependencies": {
+        "@system-cleaner/core": "workspace:*"
+      }
+    },
+    "packages/cli": {
+      "name": "@system-cleaner/cli",
+      "version": "0.1.0",
+      "dependencies": {
+        "@stacksjs/clapp": "file:../../../../Tools/clapp/packages/ts",
+        "@system-cleaner/clean": "workspace:*",
+        "@system-cleaner/core": "workspace:*",
+        "@system-cleaner/disk": "workspace:*",
+        "@system-cleaner/monitor": "workspace:*",
+        "@system-cleaner/uninstall": "workspace:*"
+      }
+    },
+    "packages/core": {
+      "name": "@system-cleaner/core",
+      "version": "0.1.0"
+    },
+    "packages/disk": {
+      "name": "@system-cleaner/disk",
+      "version": "0.1.0",
+      "dependencies": {
+        "@system-cleaner/core": "workspace:*"
+      }
+    },
+    "packages/monitor": {
+      "name": "@system-cleaner/monitor",
+      "version": "0.1.0",
+      "dependencies": {
+        "@system-cleaner/core": "workspace:*"
+      }
+    },
+    "packages/uninstall": {
+      "name": "@system-cleaner/uninstall",
+      "version": "0.1.0",
+      "dependencies": {
+        "@system-cleaner/core": "workspace:*"
+      }
+    }
+  },
+  "packages": {
+    "@stacksjs/bun-router@link:@stacksjs/bun-router": {
+      "name": "@stacksjs/bun-router",
+      "version": "link:@stacksjs/bun-router",
+      "source": "npm"
+    },
+    "@stacksjs/clapp@file:../../../../Tools/clapp/packages/ts": {
+      "name": "@stacksjs/clapp",
+      "version": "file:../../../../Tools/clapp/packages/ts",
+      "source": "npm",
+      "resolved": "https://registry.npmjs.org/@stacksjs/clapp/-/clapp-file:../../../../Tools/clapp/packages/ts.tgz",
+      "dependencies": {
+        "mri": "^1.2.0",
+        "wrap-ansi": "^9.0.0"
+      },
+      "bin": {
+        "@stacksjs/clapp": "./dist/bin/cli.js",
+        "clapp": "./dist/bin/cli.js"
+      }
+    },
+    "better-dx@0.2.7": {
+      "name": "better-dx",
+      "version": "0.2.7",
+      "source": "npm",
+      "resolved": "https://registry.npmjs.org/better-dx/-/better-dx-0.2.7.tgz",
+      "integrity": "sha512-J5Msp8jYKl4/YrTt/IWE32ZZg36/+M5klkAhSZb6Av5LGuFd7tylTerKq/8AwZxAYl9h8ZXV79Paygc+YjmCyw==",
+      "peerDependencies": {
+        "@stacksjs/bumpx": "^0.2.4",
+        "@stacksjs/bunpress": "^0.1.1",
+        "@stacksjs/clarity": "^0.3.24",
+        "@stacksjs/gitlint": "^0.1.5",
+        "@stacksjs/logsmith": "^0.2.1",
+        "@types/bun": "^1.3.10",
+        "buddy-bot": "^0.9.17",
+        "bun-git-hooks": "^0.3.1",
+        "bun-plugin-dtsx": "^0.9.13",
+        "bunfig": "^0.15.6",
+        "pickier": "^0.1.20",
+        "ts-error-handling": "^0.1.1",
+        "typescript": "^5.9.3"
+      },
+      "bin": {
+        "better-dx": "./dist/bin/cli.js",
+        "dx": "./dist/bin/cli.js"
+      }
+    },
+    "bun-plugin-stx@0.2.10": {
+      "name": "bun-plugin-stx",
+      "version": "0.2.10",
+      "source": "npm",
+      "resolved": "https://registry.npmjs.org/bun-plugin-stx/-/bun-plugin-stx-0.2.10.tgz",
+      "integrity": "sha512-JlPzquwyGdFDkKU078XThaWFnpN7BzCdxK+COaRloEVwdF4t896nbK0hE48ffUmsJ8KzgnukxIaogG8U0xSevQ==",
+      "dependencies": {
+        "@stacksjs/stx": "0.2.10"
+      },
+      "bin": {
+        "serve": "./dist/serve.js",
+        "stx-serve": "./dist/serve.js"
+      }
+    }
+  }
+}
