@@ -37,8 +37,15 @@
   <!-- Sunburst chart -->
   <div class="disk-chart">
     <div id="disk-loading" style="position: relative; z-index: 1; text-align: center; color: #6c6c70; font-size: 13px;">
-      <div style="margin-bottom: 8px; font-size: 24px; animation: pulse 1.5s ease-in-out infinite;">💾</div>
-      Scanning disk...
+      <div style="margin-bottom: 12px; font-size: 24px;">💾</div>
+      <div id="disk-prompt">
+        <div style="margin-bottom: 12px;">Analyze disk usage with an interactive sunburst chart</div>
+        <button class="btn" id="disk-scan-btn" onclick="startDiskScan()" style="padding: 8px 20px; font-size: 13px;">Scan Disk</button>
+      </div>
+      <div id="disk-scanning" style="display:none">
+        <div style="margin-bottom: 8px; font-size: 24px; animation: pulse 1.5s ease-in-out infinite;">💾</div>
+        Scanning disk...
+      </div>
     </div>
     <svg class="sunburst-svg" id="sunburst" viewBox="-320 -320 640 640" style="display:none">
       <circle cx="0" cy="0" r="115" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="0.5" />
@@ -169,17 +176,24 @@
     if(centerCircle){centerCircle.addEventListener('click',function(){if(viewStack.length>0)renderView(viewStack.pop());});}
     if(folderListEl){folderListEl.addEventListener('mouseover',function(e){var item=e.target.closest('.folder-item');if(item){var idx=parseInt(item.getAttribute('data-seg'));if(segs[idx])showInfo(segs[idx]);}});folderListEl.addEventListener('mouseout',function(e){var item=e.target.closest('.folder-item');if(item)showInfo(null);});}
 
-    // Lazy-load disk scan data from API
-    fetch('/api/disk-scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        if (!data.success) return;
-        tree = data.tree;
-        loadingEl.style.display = 'none';
-        svgEl.style.display = '';
-        scanTotalEl.textContent = fmtBytes(tree.s);
-        scanMetaEl.textContent = data.folderCount + ' folders \u00b7 ' + data.fileCount + ' files \u00b7 ' + data.scanTime;
-        renderView(tree);
-      });
+    // Scan on demand — triggered by button click
+    window.startDiskScan = function() {
+      var prompt = document.getElementById('disk-prompt');
+      var scanning = document.getElementById('disk-scanning');
+      if (prompt) prompt.style.display = 'none';
+      if (scanning) scanning.style.display = '';
+
+      fetch('/api/disk-scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (!data.success) return;
+          tree = data.tree;
+          loadingEl.style.display = 'none';
+          svgEl.style.display = '';
+          scanTotalEl.textContent = fmtBytes(tree.s);
+          scanMetaEl.textContent = data.folderCount + ' folders \u00b7 ' + data.fileCount + ' files \u00b7 ' + data.scanTime;
+          renderView(tree);
+        });
+    };
   })();
 </script>

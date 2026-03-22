@@ -51,7 +51,7 @@
     </thead>
     <tbody>
       @foreach(startupItems as item)
-        <tr x-show="rowVisible('{{ item.category }}', isDisabled('{{ item.id }}') ? 'true' : 'false')" data-item-id="{{ item.id }}">
+        <tr x-show="!isRemoved('{{ item.id }}') && rowVisible('{{ item.category }}', isDisabled('{{ item.id }}') ? 'true' : 'false')" data-item-id="{{ item.id }}">
           <td><input type="checkbox" class="check" :checked="isOn('{{ item.id }}')" @click="toggle('{{ item.id }}')" /></td>
           <td>
             <div><span style="margin-right: 4px;">{{ item.icon }}</span><span class="item-name">{{ item.name }}</span></div>

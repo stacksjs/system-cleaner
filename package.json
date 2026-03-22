@@ -18,6 +18,7 @@
     "typecheck": "bun run --filter '*' typecheck"
   },
   "dependencies": {
+    "@stacksjs/bun-router": "link:@stacksjs/bun-router",
     "bun-plugin-stx": "latest",
     "@system-cleaner/core": "workspace:*",
     "@system-cleaner/clean": "workspace:*",
