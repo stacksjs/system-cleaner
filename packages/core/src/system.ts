@@ -134,12 +134,16 @@ export function getDirSizeSync(dirPath: string): number {
  */
 export async function getDirSizes(paths: string[]): Promise<Record<string, number>> {
   const results: Record<string, number> = {}
+  const BATCH = 8
 
-  await Promise.all(
-    paths.map(async (p) => {
-      results[p] = await getDirSize(p)
-    }),
-  )
+  for (let i = 0; i < paths.length; i += BATCH) {
+    const batch = paths.slice(i, i + BATCH)
+    await Promise.all(
+      batch.map(async (p) => {
+        results[p] = await getDirSize(p)
+      }),
+    )
+  }
 
   return results
 }

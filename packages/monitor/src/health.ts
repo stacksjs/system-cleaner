@@ -72,21 +72,28 @@ export function calculateHealthScore(
     factors.push({ name: 'Swap', impact: penalty, description: `${swapGB.toFixed(1)} GB swap used` })
   }
 
-  // ── Disk (weight: 20) ──────────────────────────────────────
+  // ── Disk (weight: 20) — worst partition determines penalty ──
+  let worstDiskPenalty = 0
+  let worstDiskDesc = ''
   for (const partition of disk.partitions) {
-    if (partition.mountPoint !== '/')
-      continue
+    let penalty = 0
+    let desc = ''
     if (partition.usedPercent > 90) {
-      const penalty = Math.min(20, Math.round(((partition.usedPercent - 90) / 10) * 20))
-      score -= penalty
-      factors.push({ name: 'Disk', impact: penalty, description: `Disk at ${partition.usedPercent}% — ${formatGB(partition.freeBytes)} free` })
+      penalty = Math.min(20, Math.round(((partition.usedPercent - 90) / 10) * 20))
+      desc = `${partition.mountPoint} at ${partition.usedPercent}% — ${formatGB(partition.freeBytes)} free`
     }
     else if (partition.usedPercent > 70) {
-      const penalty = Math.min(10, Math.round(((partition.usedPercent - 70) / 20) * 10))
-      score -= penalty
-      if (penalty >= 3)
-        factors.push({ name: 'Disk', impact: penalty, description: `Disk at ${partition.usedPercent}%` })
+      penalty = Math.min(10, Math.round(((partition.usedPercent - 70) / 20) * 10))
+      desc = `${partition.mountPoint} at ${partition.usedPercent}%`
     }
+    if (penalty > worstDiskPenalty) {
+      worstDiskPenalty = penalty
+      worstDiskDesc = desc
+    }
+  }
+  if (worstDiskPenalty > 0) {
+    score -= worstDiskPenalty
+    factors.push({ name: 'Disk', impact: worstDiskPenalty, description: worstDiskDesc })
   }
 
   // ── Thermal (weight: 15) — via CPU temperature ─────────────

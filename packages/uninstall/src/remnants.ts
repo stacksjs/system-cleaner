@@ -238,7 +238,8 @@ function findMatches(location: RemnantSearchLocation, terms: SearchTerms): strin
       for (const variant of terms.nameVariantsLower) {
         if (variant.length < 3)
           continue
-        if (entryLower === variant || entryLower === `${variant}.plist` || entryLower === `${variant}.savedstate` || entryLower === `${variant}.workflow` || entryLower === `${variant}.qlgenerator` || entryLower === `${variant}.plugin` || entryLower === `${variant}.framework` || entryLower === `${variant}.prefpane` || entryLower === `${variant}.saver` || entryLower === `${variant}.app` || entryLower === `${variant}.component` || entryLower === `${variant}.vst` || entryLower === `${variant}.vst3` || entryLower === `${variant}.mdimporter` || entryLower === `${variant}.colorpicker`) {
+        const REMNANT_EXTENSIONS = ['.plist', '.savedstate', '.workflow', '.qlgenerator', '.plugin', '.framework', '.prefpane', '.saver', '.app', '.component', '.vst', '.vst3', '.mdimporter', '.colorpicker']
+        if (entryLower === variant || REMNANT_EXTENSIONS.some(ext => entryLower === `${variant}${ext}`)) {
           isMatch = true
           break
         }

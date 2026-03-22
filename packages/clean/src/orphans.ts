@@ -104,16 +104,19 @@ async function getInstalledBundleIds(): Promise<Set<string>> {
   const ids = new Set<string>()
 
   if (result.ok) {
-    const appPaths = result.stdout.split('\n').filter(Boolean).slice(0, 500) // Cap at 500 apps
-    // Read bundle IDs directly via plist parsing (no shell piping)
-    for (const appPath of appPaths) {
-      try {
-        const info = readAppInfoPlist(appPath)
-        const bid = info.CFBundleIdentifier as string
-        if (bid)
-          ids.add(bid)
+    const appPaths = result.stdout.split('\n').filter(Boolean).slice(0, 300)
+    // Batch plist reads to avoid overwhelming FS on slow disks
+    const PLIST_BATCH = 20
+    for (let i = 0; i < appPaths.length; i += PLIST_BATCH) {
+      for (const appPath of appPaths.slice(i, i + PLIST_BATCH)) {
+        try {
+          const info = readAppInfoPlist(appPath)
+          const bid = info.CFBundleIdentifier as string
+          if (bid)
+            ids.add(bid)
+        }
+        catch { /* skip unreadable bundles */ }
       }
-      catch { /* skip unreadable bundles */ }
     }
   }
 

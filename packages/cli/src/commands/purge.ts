@@ -22,7 +22,6 @@ export function registerPurgeCommand(app: CLI): void {
             path.join(HOME, 'Projects'),
             path.join(HOME, 'Developer'),
             path.join(HOME, 'Work'),
-            path.join(HOME, 'Documents'),
           ]
 
       const s = spinner()

@@ -26,10 +26,7 @@ export async function uninstallApp(app: AppInfo, options: UninstallOptions = {})
 
   for (const targetPath of removalPaths) {
     const safety = isPathSafe(targetPath)
-
-    // For app bundles in /Applications, allow deletion even outside HOME
-    const isAppBundle = targetPath === app.path
-    if (!safety.safe && !isAppBundle) {
+    if (!safety.safe) {
       result.errors.push(`Skipped ${targetPath}: ${safety.reason}`)
       continue
     }

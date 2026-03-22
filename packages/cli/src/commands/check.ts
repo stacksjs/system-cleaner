@@ -162,7 +162,7 @@ async function checkSwap(): Promise<CheckResult> {
 }
 
 async function checkHomebrewUpdates(): Promise<CheckResult> {
-  const r = await exec('brew outdated 2>/dev/null | wc -l', { timeout: 30_000 })
+  const r = await exec('brew outdated 2>/dev/null | wc -l', { timeout: 60_000 })
   if (!r.ok)
     return { name: 'Homebrew Updates', status: 'info', message: 'Homebrew not installed or unavailable' }
   const count = Number.parseInt(r.stdout.trim()) || 0
@@ -174,9 +174,10 @@ async function checkHomebrewUpdates(): Promise<CheckResult> {
 }
 
 async function checkMacosUpdates(): Promise<CheckResult> {
+  // --no-scan uses cached results (fast but may be stale)
   const r = await exec('softwareupdate -l --no-scan 2>&1', { timeout: 15_000 })
   if (!r.ok || r.stdout.includes('No new software available'))
-    return { name: 'macOS Updates', status: 'pass', message: 'System up to date' }
+    return { name: 'macOS Updates', status: 'pass', message: 'System up to date (cached check)' }
   const count = (r.stdout.match(/\*/g) || []).length
   if (count > 0)
     return { name: 'macOS Updates', status: 'warn', message: `${count} update(s) available` }

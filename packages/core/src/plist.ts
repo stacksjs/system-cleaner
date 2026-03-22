@@ -14,11 +14,11 @@ export function parsePlist(filepath: string): PlistEntry {
   }
 
   const getBoolField = (key: string): boolean => {
-    const keyIdx = content.indexOf(`<key>${key}</key>`)
+    const keyTag = `<key>${key}</key>`
+    const keyIdx = content.indexOf(keyTag)
     if (keyIdx === -1)
       return false
-    const after = content.substring(keyIdx + `<key>${key}</key>`.length, keyIdx + `<key>${key}</key>`.length + 50)
-    // Match <true/>, <true />, or <true></true>
+    const after = content.substring(keyIdx + keyTag.length, keyIdx + keyTag.length + 50)
     return /\s*<true[\s/>]/.test(after)
   }
 

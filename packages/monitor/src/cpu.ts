@@ -5,6 +5,7 @@ import type { CpuMetrics } from './types'
 let lastCpuTimes: { idle: number, total: number }[] | null = null
 let cachedTopology: { pCores: number, eCores: number } | null = null
 let topologyCacheTime = 0
+let cachedPhysicalCores: number | null = null
 const TOPOLOGY_CACHE_TTL = 600_000 // 10 minutes
 
 /**
@@ -69,7 +70,7 @@ export async function getCpuMetrics(): Promise<CpuMetrics> {
   return {
     modelName: cpus[0]?.model || 'Unknown',
     logicalCores: cpus.length,
-    physicalCores: Number.parseInt(execSync('sysctl -n hw.physicalcpu') || '0') || cpus.length,
+    physicalCores: getPhysicalCores(cpus.length),
     performanceCores: pCores,
     efficiencyCores: eCores,
     usagePercent: Math.max(0, Math.min(100, usagePercent)),
@@ -79,6 +80,13 @@ export async function getCpuMetrics(): Promise<CpuMetrics> {
     loadAvg15: loadAvg[2],
     temperature,
   }
+}
+
+function getPhysicalCores(fallback: number): number {
+  if (cachedPhysicalCores !== null)
+    return cachedPhysicalCores
+  cachedPhysicalCores = Number.parseInt(execSync('sysctl -n hw.physicalcpu') || '0') || fallback
+  return cachedPhysicalCores
 }
 
 async function detectCoreTopology(): Promise<{ pCores: number, eCores: number }> {

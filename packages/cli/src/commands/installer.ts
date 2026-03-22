@@ -1,5 +1,5 @@
 import type { CLI } from '@stacksjs/clapp'
-import { formatBytes, HOME, exec } from '@system-cleaner/core'
+import { formatBytes, HOME, exec, shellEscape } from '@system-cleaner/core'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 
@@ -44,7 +44,7 @@ export function registerInstallerCommand(app: CLI): void {
 
         try {
           const result = await exec(
-            `find "${location.path}" -maxdepth 2 -type f \\( -name "*.dmg" -o -name "*.pkg" -o -name "*.mpkg" -o -name "*.iso" -o -name "*.xip" \\) 2>/dev/null`,
+            `find ${shellEscape(location.path)} -maxdepth 2 -type f \\( -name "*.dmg" -o -name "*.pkg" -o -name "*.mpkg" -o -name "*.iso" -o -name "*.xip" \\) 2>/dev/null`,
             { timeout: 10_000 },
           )
 
@@ -132,7 +132,8 @@ export function registerInstallerCommand(app: CLI): void {
         try {
           if (!options.dryRun) {
             // Use Finder to move to Trash (recoverable)
-            await exec(`osascript -e 'tell application "Finder" to delete POSIX file "${file.path.replace(/"/g, '\\"')}"'`, { timeout: 10_000 })
+            const escapedPath = file.path.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+            await exec(`osascript -e 'tell application "Finder" to delete POSIX file "${escapedPath}"'`, { timeout: 10_000 })
           }
           freed += file.sizeBytes
         }

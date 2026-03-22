@@ -37,10 +37,12 @@ export async function collectSnapshot(
     includeProcesses ? getTopProcesses(processCount) : [],
   ])
 
+  // Timestamp set after all metrics collected (not before)
   const health = calculateHealthScore(cpu, memory, diskIo, battery)
+  const timestamp = new Date()
 
   return {
-    timestamp: new Date(),
+    timestamp,
     cpu,
     memory,
     diskIo,

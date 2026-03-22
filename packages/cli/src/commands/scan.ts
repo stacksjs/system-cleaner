@@ -48,6 +48,7 @@ export function registerScanCommand(app: CLI): void {
             disk: snapshot.diskIo.partitions[0]?.usedPercent || 0,
           },
           reclaimableBytes: totalCleanable,
+          reclaimableFormatted: formatBytes(totalCleanable),
           startupItems: startupItems.length,
           enabledStartupItems: enabledStartup.length,
           cleanableItems: cleanResults.map(r => ({

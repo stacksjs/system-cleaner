@@ -54,9 +54,9 @@ const OPTIMIZE_TASKS: OptimizeTask[] = [
   },
   {
     id: 'kext-cache',
-    name: 'Rebuild Kernel Extension Cache',
-    description: 'Rebuild kext cache (useful after driver updates)',
-    command: 'sudo kextcache -system-prelinked-kernel && sudo kextcache -system-caches',
+    name: 'Rebuild System Cache',
+    description: 'Rebuild boot and system caches (useful after updates)',
+    command: 'sudo kmutil configure-boot 2>/dev/null || sudo kextcache -system-prelinked-kernel 2>/dev/null && sudo kextcache -system-caches 2>/dev/null',
     requiresSudo: true,
   },
   {
@@ -104,8 +104,8 @@ const OPTIMIZE_TASKS: OptimizeTask[] = [
   {
     id: 'sqlite-vacuum',
     name: 'Optimize Databases',
-    description: 'Vacuum SQLite databases (Mail, Safari) to reclaim space and improve speed',
-    command: 'find ~/Library -name "*.db" -path "*/Mail/*" -exec sqlite3 {} "VACUUM;" \\; 2>/dev/null; find ~/Library -name "*.db" -path "*/Safari/*" -exec sqlite3 {} "VACUUM;" \\; 2>/dev/null',
+    description: 'Vacuum SQLite databases (Mail, Safari must not be running)',
+    command: 'pgrep -x Mail >/dev/null && echo "SKIP: Mail is running" || find ~/Library -name "*.db" -path "*/Mail/*" -exec sqlite3 {} "VACUUM;" \\; 2>/dev/null; pgrep -x Safari >/dev/null && echo "SKIP: Safari is running" || find ~/Library -name "*.db" -path "*/Safari/*" -exec sqlite3 {} "VACUUM;" \\; 2>/dev/null',
     requiresSudo: false,
   },
   {

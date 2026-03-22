@@ -22,6 +22,7 @@ const PROTECTED_PATHS = new Set([
   path.join(HOME, '.aws'),
   path.join(HOME, '.kube'),
   path.join(HOME, '.config'),
+  path.join(HOME, 'Library'),
   '/',
   '/System',
   '/Library',
@@ -63,12 +64,18 @@ const SENSITIVE_FILES = new Set([
 export function isPathSafe(targetPath: string): PathSafetyCheck {
   const resolved = path.resolve(targetPath)
 
-  if (!resolved.startsWith(HOME)) {
+  // Allow /Applications (for app uninstall) but reject other system paths
+  if (!resolved.startsWith(HOME) && !resolved.startsWith('/Applications/')) {
     return { safe: false, reason: 'Path is outside home directory' }
   }
 
   if (resolved === HOME) {
     return { safe: false, reason: 'Cannot delete home directory' }
+  }
+
+  // /Applications itself is protected, but /Applications/SomeApp.app is allowed
+  if (resolved === '/Applications') {
+    return { safe: false, reason: 'Cannot delete /Applications directory' }
   }
 
   if (PROTECTED_PATHS.has(resolved)) {
@@ -123,8 +130,8 @@ export function isCleanable(targetPath: string): PathSafetyCheck {
     if (stat.isSymbolicLink()) {
       return { safe: false, reason: 'Will not clean symbolic links' }
     }
-    if (!stat.isDirectory()) {
-      return { safe: false, reason: 'Path is not a directory' }
+    if (!stat.isDirectory() && !stat.isFile()) {
+      return { safe: false, reason: 'Path is not a regular file or directory' }
     }
   }
   catch {

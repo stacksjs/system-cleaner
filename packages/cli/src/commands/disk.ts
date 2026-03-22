@@ -68,7 +68,7 @@ export function registerDiskCommand(app: CLI): void {
         ? `${result.scanTimeMs}ms`
         : `${(result.scanTimeMs / 1000).toFixed(1)}s`
 
-      s.stop(`Scanned ${result.totalFiles} files, ${result.totalFolders} folders in ${timeStr}${result.aborted ? ' (aborted — timeout)' : ''}`)
+      s.stop(`Scanned ${result.totalFiles} files, ${result.totalFolders} folders in ${timeStr}${result.aborted ? ` (timeout after ${timeStr} — increase with --depth)` : ''}`)
 
       if (options.json) {
         console.log(JSON.stringify({

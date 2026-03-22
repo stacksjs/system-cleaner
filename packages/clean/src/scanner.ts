@@ -56,15 +56,22 @@ export async function scanTargets(
 ): Promise<CleanScanResult[]> {
   const total = targets.length
   let completed = 0
+  const results: CleanScanResult[] = []
 
-  const results = await Promise.all(
-    targets.map(async (target) => {
-      const result = await scanTarget(target)
-      completed++
-      onProgress?.(completed, total, target.name)
-      return result
-    }),
-  )
+  // Batch in groups of 8 to avoid spawning 150+ concurrent du processes
+  const BATCH_SIZE = 8
+  for (let i = 0; i < targets.length; i += BATCH_SIZE) {
+    const batch = targets.slice(i, i + BATCH_SIZE)
+    const batchResults = await Promise.all(
+      batch.map(async (target) => {
+        const result = await scanTarget(target)
+        completed++
+        onProgress?.(completed, total, target.name)
+        return result
+      }),
+    )
+    results.push(...batchResults)
+  }
 
   // Sort by size descending
   return results.sort((a, b) => b.sizeBytes - a.sizeBytes)

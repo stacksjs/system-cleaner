@@ -93,7 +93,7 @@ export function findLargestFiles(tree: DiskEntry, count = 50): LargeFile[] {
  * Scan for project build artifacts that can be cleaned up
  */
 export async function findProjectArtifacts(
-  searchPaths: string[] = [path.join(HOME, 'Code'), path.join(HOME, 'Projects'), path.join(HOME, 'Developer')],
+  searchPaths: string[] = [path.join(HOME, 'Code'), path.join(HOME, 'Projects'), path.join(HOME, 'Developer'), path.join(HOME, 'Work')],
   maxDepth = 4,
 ): Promise<ProjectArtifact[]> {
   const artifacts: ProjectArtifact[] = []

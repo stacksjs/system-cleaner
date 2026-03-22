@@ -154,6 +154,10 @@ export async function cleanAll(options: CleanOptions = {}): Promise<{
     }
   }
 
+  // Recalculate totals to include all results
+  result.totalFreed = result.results.reduce((sum, r) => sum + r.freedBytes, 0)
+  result.totalFreedFormatted = formatBytes(result.totalFreed)
+
   return result
 }
 

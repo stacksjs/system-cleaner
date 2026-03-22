@@ -242,6 +242,10 @@ export function scanFirefoxExtensions(): ExtensionInfo[] {
 /**
  * Get all browser extensions across all browsers
  */
+/**
+ * Get all browser extensions across all browsers.
+ * Note: scanChromeExtensions covers Chrome, Edge, Brave, and Arc (all Chromium-based).
+ */
 export function getAllExtensions(): ExtensionInfo[] {
   return [...scanChromeExtensions(), ...scanFirefoxExtensions()]
 }
