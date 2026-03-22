@@ -176,11 +176,30 @@ export function scanChromeExtensions(): ExtensionInfo[] {
           if (!manifestRaw)
             continue
           const manifest = JSON.parse(manifestRaw)
+          // Resolve __MSG_*__ i18n placeholders from _locales
+          let name = manifest.name || extId
+          let description = (manifest.description || '').slice(0, 120)
+          if (name.startsWith('__MSG_') || description.startsWith('__MSG_')) {
+            const localesPath = path.join(extPath, latestVer, '_locales', 'en', 'messages.json')
+            const localesRaw = safeReadFile(localesPath)
+            if (localesRaw) {
+              try {
+                const messages = JSON.parse(localesRaw)
+                const resolve = (s: string) => s.replace(/__MSG_(\w+)__/g, (_, key) => messages[key]?.message || messages[key.toLowerCase()]?.message || s)
+                name = resolve(name)
+                description = resolve(description)
+              }
+              catch { /* skip broken locales */ }
+            }
+            // Still unresolved? Use extension ID as name
+            if (name.startsWith('__MSG_')) name = extId
+            if (description.startsWith('__MSG_')) description = ''
+          }
           extensions.push({
             id: `${browser.toLowerCase()}-${extId}`,
-            name: manifest.name || extId,
+            name,
             version: manifest.version || latestVer,
-            description: (manifest.description || '').slice(0, 120),
+            description: description.slice(0, 120),
             browser,
             browserIcon: icon,
             extId,

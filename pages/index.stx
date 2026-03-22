@@ -39,7 +39,9 @@ try {
   if (dfLines.length >= 2) { const p = dfLines[1].split(/\s+/); dTotal = parseInt(p[1]) * 1024; dFree = parseInt(p[3]) * 1024; dUsedPct = Math.round((1 - dFree / dTotal) * 100) }
 } catch {}
 
-const enabledStartup = discoverStartupItems().filter(i => !i.disabled)
+const startupItems = discoverStartupItems()
+const enabledStartup = startupItems.filter(i => !i.disabled)
+const disabledStartup = startupItems.filter(i => i.disabled)
 const browserExtensions = getAllExtensions()
 const totalExtSize = 0
 

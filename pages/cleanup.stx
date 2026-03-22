@@ -1,10 +1,17 @@
 <script server>
-const { formatBytes, getSystemInfoSync, safeStat, HOME, escapeHtml } = require('@system-cleaner/core')
+const { formatBytes, getSystemInfoSync, safeStat, HOME, escapeHtml, execSync } = require('@system-cleaner/core')
 const { CLEAN_TARGETS } = require('@system-cleaner/clean')
 
 const sysInfo = getSystemInfoSync()
 const username = sysInfo.username
 const macosVersion = sysInfo.macosVersion
+
+// Disk info for the cleanup summary card
+function safeExec(cmd, fallback) { try { return execSync(cmd, { timeout: 5000 }) } catch { return fallback || '' } }
+const diskLine = safeExec('df -h / | tail -1')
+const diskParts = diskLine.split(/\s+/)
+const diskAvail = diskParts[3] || '—'
+const diskPercent = parseInt(diskParts[4]) || 0
 
 const cleanCategories = []
 for (const target of CLEAN_TARGETS) {
@@ -41,59 +48,7 @@ function esc(str) { return escapeHtml(str || '') }
     setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 4000);
   },
 
-  fmtBytes(b) { if (b >= 1e12) return (b/1e12).toFixed(1)+' TB'; if (b >= 1e9) return (b/1e9).toFixed(1)+' GB'; if (b >= 1e6) return (b/1e6).toFixed(1)+' MB'; if (b >= 1e3) return (b/1e3).toFixed(1)+' KB'; return b+' B'; },
-
-  async apiCall(endpoint, data) {
-    const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data || {}) });
-    return res.json();
-  },
-
-  async doCleanDir(p, name, id) {
-    if (!confirm('Clean ' + name + '? This cannot be undone.')) return;
-    this.cleaning[id] = true;
-    const r = await this.apiCall('/api/clean-dir', { path: p });
-    delete this.cleaning[id];
-    if (r.success) this.toast('Cleaned ' + name + ' — freed ' + this.fmtBytes(r.freedBytes), 'success');
-    else this.toast('Clean failed: ' + (r.error || 'Unknown'), 'error');
-  },
-
-  async doEmptyTrash() {
-    if (!confirm('Empty Trash? This cannot be undone.')) return;
-    const r = await this.apiCall('/api/empty-trash', {});
-    if (r.success) this.toast('Trash emptied — freed ' + this.fmtBytes(r.freedBytes), 'success');
-    else this.toast('Failed: ' + (r.error || 'Unknown'), 'error');
-  },
-
-  async doCleanSelected() {
-    if (this.selected.length === 0) return;
-    if (!confirm('Clean ' + this.selected.length + ' categories? This cannot be undone.')) return;
-    let total = 0;
-    for (const id of [...this.selected]) {
-      const row = document.querySelector('[data-clean-id=\"' + id + '\"]');
-      const path = row ? row.getAttribute('data-clean-path') : null;
-      if (!path) continue;
-      this.cleaning[id] = true;
-      const r = await this.apiCall('/api/clean-dir', { path });
-      delete this.cleaning[id];
-      if (r.success) total += r.freedBytes || 0;
-    }
-    this.toast('Cleaned ' + this.selected.length + ' items — freed ' + this.fmtBytes(total), 'success');
-    this.selected = [];
-  },
-
-  async scanSizes() {
-    const rows = document.querySelectorAll('[data-clean-path]');
-    const paths = []; rows.forEach(r => paths.push(r.getAttribute('data-clean-path')));
-    if (paths.length === 0) return;
-    const r = await this.apiCall('/api/dir-sizes', { paths });
-    if (!r.success || !r.sizes) return;
-    rows.forEach(row => {
-      const p = row.getAttribute('data-clean-path');
-      const bytes = r.sizes[p] || 0;
-      const cell = row.querySelector('.clean-size');
-      if (cell) cell.textContent = bytes > 0 ? this.fmtBytes(bytes) : '< 1 MB';
-    });
-  }
+  fmtBytes(b) { if (b >= 1e12) return (b/1e12).toFixed(1)+' TB'; if (b >= 1e9) return (b/1e9).toFixed(1)+' GB'; if (b >= 1e6) return (b/1e6).toFixed(1)+' MB'; if (b >= 1e3) return (b/1e3).toFixed(1)+' KB'; return b+' B'; }
 }">
 
 <!-- Reactive toast container -->
@@ -111,4 +66,143 @@ function esc(str) { return escapeHtml(str || '') }
   @include('CleanupPanel')
 </div>
 </div>
+
+<script data-stx-scoped>
+// Action functions that need DOM access live outside x-data to avoid
+// double-quote conflicts in HTML attribute values
+function _api(endpoint, data) {
+  return fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data || {}) }).then(function(r) { return r.json(); });
+}
+
+function _scope() {
+  var el = document.querySelector('[data-stx-scope]');
+  return el && el.__stx_state ? el : null;
+}
+
+function _exec(stmt) {
+  var el = _scope();
+  if (el && el.__stx_execute) el.__stx_execute(stmt);
+}
+
+function _fmtBytes(b) {
+  if (b >= 1e12) return (b/1e12).toFixed(1)+' TB';
+  if (b >= 1e9) return (b/1e9).toFixed(1)+' GB';
+  if (b >= 1e6) return (b/1e6).toFixed(1)+' MB';
+  if (b >= 1e3) return (b/1e3).toFixed(1)+' KB';
+  return b+' B';
+}
+
+function doCleanDir(p, name, id) {
+  if (!confirm('Clean ' + name + '? This cannot be undone.')) return;
+  _exec("cleaning['" + id + "'] = true");
+  _api('/api/clean-dir', { path: p }).then(function(r) {
+    _exec("delete cleaning['" + id + "']");
+    if (r.success) {
+      localStorage.removeItem(CACHE_KEY); // invalidate cache
+      _exec("toast('Cleaned " + name.replace(/'/g, "\\'") + " — freed " + _fmtBytes(r.freedBytes) + "', 'success')");
+    }
+    else _exec("toast('Clean failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");
+  });
+}
+
+function doEmptyTrash() {
+  if (!confirm('Empty Trash? This cannot be undone.')) return;
+  _api('/api/empty-trash', {}).then(function(r) {
+    if (r.success) _exec("toast('Trash emptied — freed " + _fmtBytes(r.freedBytes) + "', 'success')");
+    else _exec("toast('Failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");
+  });
+}
+
+function doCleanSelected() {
+  var scope = _scope();
+  if (!scope || !scope.__stx_state) return;
+  var items = scope.__stx_state.selected || [];
+  if (items.length === 0) return;
+  if (!confirm('Clean ' + items.length + ' categories? This cannot be undone.')) return;
+  var total = 0, remaining = items.length;
+  items.forEach(function(id) {
+    var row = document.querySelector('[data-clean-id="' + id + '"]');
+    var path = row ? row.getAttribute('data-clean-path') : null;
+    if (!path) { remaining--; return; }
+    _exec("cleaning['" + id + "'] = true");
+    _api('/api/clean-dir', { path: path }).then(function(r) {
+      _exec("delete cleaning['" + id + "']");
+      if (r.success) total += r.freedBytes || 0;
+      remaining--;
+      if (remaining === 0) {
+        _exec("toast('Cleaned " + items.length + " items — freed " + _fmtBytes(total) + "', 'success'); selected = []");
+      }
+    });
+  });
+}
+
+var CACHE_KEY = 'systemcleaner:dir-sizes';
+var CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function getCachedSizes() {
+  try {
+    var raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    var cached = JSON.parse(raw);
+    if (Date.now() - cached.ts > CACHE_TTL) return null;
+    return cached.sizes;
+  } catch { return null; }
+}
+
+function setCachedSizes(sizes) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), sizes: sizes })); }
+  catch { /* storage full or unavailable */ }
+}
+
+function applySizes(sizes) {
+  var rows = document.querySelectorAll('[data-clean-path]');
+  var total = 0;
+  rows.forEach(function(row) {
+    var p = row.getAttribute('data-clean-path');
+    var bytes = sizes[p] || 0;
+    total += bytes;
+    var cell = row.querySelector('.clean-size');
+    if (cell) cell.textContent = bytes > 0 ? _fmtBytes(bytes) : '< 1 MB';
+  });
+  var totalEl = document.getElementById('total-cleanable');
+  if (totalEl) totalEl.textContent = total > 0 ? _fmtBytes(total) : '< 1 MB';
+  var labelEl = document.getElementById('cleanup-sort-label');
+  if (labelEl) labelEl.textContent = 'sorted by size';
+  // Sort rows by size (largest first)
+  var tbody = document.getElementById('cleanup-tbody');
+  if (tbody) {
+    var rowArr = Array.from(rows);
+    rowArr.sort(function(a, b) { return (sizes[b.getAttribute('data-clean-path')] || 0) - (sizes[a.getAttribute('data-clean-path')] || 0); });
+    rowArr.forEach(function(r) { tbody.appendChild(r); });
+  }
+}
+
+function scanCleanupSizes(force) {
+  // Try cache first for instant display
+  if (!force) {
+    var cached = getCachedSizes();
+    if (cached) {
+      applySizes(cached);
+      return;
+    }
+  }
+
+  var rows = document.querySelectorAll('[data-clean-path]');
+  var paths = [];
+  rows.forEach(function(r) { paths.push(r.getAttribute('data-clean-path')); });
+  if (paths.length === 0) return;
+
+  var totalEl = document.getElementById('total-cleanable');
+  if (totalEl) totalEl.textContent = 'Scanning...';
+
+  _api('/api/dir-sizes', { paths: paths }).then(function(r) {
+    if (!r.success || !r.sizes) return;
+    setCachedSizes(r.sizes);
+    applySizes(r.sizes);
+  });
+}
+
+// Load instantly from cache, then show. Rescan button forces fresh scan.
+scanCleanupSizes();
+</script>
 @endsection

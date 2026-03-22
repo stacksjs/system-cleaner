@@ -23,7 +23,7 @@
     <button class="btn" @click="doEmptyTrash()">
       🗑️ Empty Trash
     </button>
-    <button class="btn btn-sm" style="margin-left: auto;" @click="scanSizes()">
+    <button class="btn btn-sm" style="margin-left: auto;" onclick="scanCleanupSizes(true)">
       ↻ Rescan
     </button>
   </div>
