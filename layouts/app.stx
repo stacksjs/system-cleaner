@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" style="background:#0d0d0d;color-scheme:dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,10 +9,14 @@
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
-      height: 100%; background: #0d0d0d; color: #f5f5f7;
+      height: 100%; background: #0d0d0d; color: #f5f5f7; color-scheme: dark;
       font-family: 'Inter', -apple-system, 'SF Pro Display', BlinkMacSystemFont, system-ui, sans-serif;
       -webkit-font-smoothing: antialiased; overflow: hidden;
     }
+    /* Prevent white flash during SPA view transitions */
+    ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0.1s; }
+    ::view-transition-group(root) { background: #0d0d0d; }
+    [data-stx-content] { background: #1a1a1c; min-height: 100%; }
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }

@@ -175,66 +175,95 @@
     if(folderListEl){folderListEl.addEventListener('mouseover',function(e){var item=e.target.closest('.folder-item');if(item){var idx=parseInt(item.getAttribute('data-seg'));if(segs[idx])showInfo(segs[idx]);}});folderListEl.addEventListener('mouseout',function(e){var item=e.target.closest('.folder-item');if(item)showInfo(null);});}
 
     var DISK_CACHE_KEY = 'systemcleaner:disk-scan';
+    var DISK_SCANNING_KEY = 'systemcleaner:disk-scanning';
     var DISK_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
-    // Normalize tree from scanner format (name/sizeBytes/children/isDirectory/path)
-    // to short format (n/s/c/d/p) used by the sunburst renderer
     function normalize(node) {
       var result = { n: node.name || node.n, s: node.sizeBytes || node.s || 0, p: node.path || node.p || '', d: node.isDirectory !== undefined ? node.isDirectory : (node.d !== false) };
-      if (node.children || node.c) {
-        result.c = (node.children || node.c || []).map(normalize);
-      } else {
-        result.c = [];
-      }
+      result.c = (node.children || node.c || []).map(normalize);
       return result;
     }
 
-    function showScanResult(data) {
+    function showScanResult(data, label) {
       tree = data.tree.n ? data.tree : normalize(data.tree);
       loadingEl.style.display = 'none';
       svgEl.style.display = '';
       scanTotalEl.textContent = fmtBytes(tree.s);
-      scanMetaEl.textContent = data.folderCount + ' folders \u00b7 ' + data.fileCount + ' files \u00b7 ' + data.scanTime;
+      scanMetaEl.textContent = data.folderCount + ' folders \u00b7 ' + data.fileCount + ' files \u00b7 ' + data.scanTime + (label || '');
       renderView(tree);
     }
 
-    // Check localStorage cache first
-    try {
-      var raw = localStorage.getItem(DISK_CACHE_KEY);
-      if (raw) {
-        var cached = JSON.parse(raw);
-        if (Date.now() - cached.ts < DISK_CACHE_TTL) {
-          showScanResult(cached.data);
-          // Update button text to show it's cached
-          var prompt = document.getElementById('disk-prompt');
-          if (prompt) prompt.style.display = 'none';
-          scanMetaEl.textContent += ' (cached)';
-        }
-      }
-    } catch { /* no cache */ }
-
-    // Scan on demand — triggered by button click
-    window.startDiskScan = function() {
+    function showScanningUI() {
       var prompt = document.getElementById('disk-prompt');
       var scanning = document.getElementById('disk-scanning');
       var icon = document.getElementById('disk-icon');
       if (prompt) prompt.style.display = 'none';
       if (scanning) scanning.style.display = '';
       if (icon) icon.style.animation = 'pulse 1.5s ease-in-out infinite';
-
-      // Hide sunburst if showing cached data (rescan)
       svgEl.style.display = 'none';
       loadingEl.style.display = '';
+    }
 
-      fetch('/api/disk-scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (!data.success) return;
-          // Normalize and cache
-          data.tree = normalize(data.tree);
-          try { localStorage.setItem(DISK_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data })); } catch {}
-          showScanResult(data);
-        });
+    // Global scan manager — survives SPA navigation
+    // The fetch runs detached and writes to localStorage when done.
+    // When the user returns to the disk page, it picks up the result.
+    if (!window._diskScanManager) {
+      window._diskScanManager = {
+        scanning: false,
+        runScan: function() {
+          this.scanning = true;
+          localStorage.setItem(DISK_SCANNING_KEY, 'true');
+          fetch('/api/disk-scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+              window._diskScanManager.scanning = false;
+              localStorage.removeItem(DISK_SCANNING_KEY);
+              if (!data.success) return;
+              data.tree = normalize(data.tree);
+              try { localStorage.setItem(DISK_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data })); } catch {}
+              // If the disk page is currently visible, update it
+              if (typeof window._diskScanOnComplete === 'function') {
+                window._diskScanOnComplete(data);
+              }
+            })
+            .catch(function() {
+              window._diskScanManager.scanning = false;
+              localStorage.removeItem(DISK_SCANNING_KEY);
+            });
+        }
+      };
+    }
+
+    // Callback for when scan completes while on this page
+    window._diskScanOnComplete = function(data) {
+      showScanResult(data);
+    };
+
+    // Restore state on page load:
+    // 1. If scan is in progress (started before navigating away), show scanning UI
+    // 2. If cached result exists, show it
+    // 3. Otherwise show the scan button
+    var isScanning = window._diskScanManager.scanning || localStorage.getItem(DISK_SCANNING_KEY) === 'true';
+
+    if (isScanning) {
+      showScanningUI();
+    } else {
+      try {
+        var raw = localStorage.getItem(DISK_CACHE_KEY);
+        if (raw) {
+          var cached = JSON.parse(raw);
+          if (Date.now() - cached.ts < DISK_CACHE_TTL) {
+            showScanResult(cached.data, ' (cached)');
+            var prompt = document.getElementById('disk-prompt');
+            if (prompt) prompt.style.display = 'none';
+          }
+        }
+      } catch { /* no cache */ }
+    }
+
+    window.startDiskScan = function() {
+      showScanningUI();
+      window._diskScanManager.runScan();
     };
   })();
 </script>

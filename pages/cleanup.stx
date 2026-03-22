@@ -195,11 +195,18 @@ function scanCleanupSizes(force) {
   var totalEl = document.getElementById('total-cleanable');
   if (totalEl) totalEl.textContent = 'Scanning...';
 
-  _api('/api/dir-sizes', { paths: paths }).then(function(r) {
-    if (!r.success || !r.sizes) return;
-    setCachedSizes(r.sizes);
-    applySizes(r.sizes);
-  });
+  // Run scan detached so navigation doesn't kill it
+  if (!window._cleanupScanPromise) {
+    window._cleanupScanPromise = _api('/api/dir-sizes', { paths: paths }).then(function(r) {
+      window._cleanupScanPromise = null;
+      if (!r.success || !r.sizes) return;
+      setCachedSizes(r.sizes);
+      // Only apply if cleanup page is still visible
+      if (document.getElementById('total-cleanable')) {
+        applySizes(r.sizes);
+      }
+    });
+  }
 }
 
 // Load instantly from cache, then show. Rescan button forces fresh scan.
