@@ -108,11 +108,7 @@ const config: StxOptions = {
           const resolved = path.resolve(p)
           if (!resolved.startsWith(HOME)) return
           try {
-            const proc = Bun.spawn(['du', '-sk', resolved], { stdout: 'pipe', stderr: 'ignore' })
-            const timeout = setTimeout(() => proc.kill(), 5000)
-            const out = await new Response(proc.stdout).text()
-            clearTimeout(timeout)
-            results[p] = (Number.parseInt(out.trim().split('\t')[0]) || 0) * 1024
+            results[p] = await getDirSize(resolved)
           }
           catch { results[p] = 0 }
         }))

@@ -1,3 +1,4 @@
+import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { exec } from '@system-cleaner/core'
 
@@ -29,7 +30,14 @@ export async function moveToTrash(targetPath: string): Promise<{ success: boolea
     return { success: true }
   }
 
-  return { success: false, error: result.stderr || 'Failed to move to Trash' }
+  // Fallback: direct rm for headless/SSH environments where Finder is unavailable
+  try {
+    fs.rmSync(absPath, { recursive: true, force: true })
+    return { success: true }
+  }
+  catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to delete' }
+  }
 }
 
 /**

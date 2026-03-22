@@ -156,6 +156,7 @@ export function scanChromeExtensions(): ExtensionInfo[] {
     { base: path.join(HOME, 'Library/Application Support/Google/Chrome'), browser: 'Chrome', icon: '🌐' },
     { base: path.join(HOME, 'Library/Application Support/Microsoft Edge'), browser: 'Edge', icon: '🔷' },
     { base: path.join(HOME, 'Library/Application Support/BraveSoftware/Brave-Browser'), browser: 'Brave', icon: '🦁' },
+    { base: path.join(HOME, 'Library/Application Support/Arc/User Data'), browser: 'Arc', icon: '🌈' },
   ]
 
   for (const { base, browser, icon } of chromeBases) {
@@ -204,10 +205,12 @@ export function scanFirefoxExtensions(): ExtensionInfo[] {
   const profilesDir = path.join(HOME, 'Library/Application Support/Firefox/Profiles')
 
   for (const profile of safeReadDir(profilesDir)) {
-    if (!profile.endsWith('.default-release') && !profile.endsWith('.default'))
+    // Check all profile directories that contain extensions.json, not just .default
+    const extFile = path.join(profilesDir, profile, 'extensions.json')
+    if (!pathExists(extFile))
       continue
 
-    const raw = safeReadFile(path.join(profilesDir, profile, 'extensions.json'))
+    const raw = safeReadFile(extFile)
     if (!raw)
       continue
 

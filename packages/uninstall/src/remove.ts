@@ -55,7 +55,8 @@ export async function uninstallApp(app: AppInfo, options: UninstallOptions = {})
   }
 
   result.totalFreedFormatted = formatBytes(result.totalFreed)
-  result.success = result.errors.length === 0 || result.removedPaths.length > 0
+  // Success only if all paths were removed without errors
+  result.success = result.errors.length === 0
   return result
 }
 

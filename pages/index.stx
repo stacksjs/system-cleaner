@@ -3,10 +3,9 @@
 // Powered by @system-cleaner workspace packages
 
 const os = require('node:os')
-const cp = require('node:child_process')
 const nodePath = require('node:path')
 
-const { formatBytes, getSystemInfoSync, HOME, safeReadDir, safeStat, safeReadFile, execSync: coreExecSync } = require('@system-cleaner/core')
+const { formatBytes, getSystemInfoSync, HOME, safeReadDir, safeStat, safeReadFile, execSync } = require('@system-cleaner/core')
 const { getAllExtensions } = require('@system-cleaner/clean')
 const { discoverStartupItems } = require('@system-cleaner/uninstall')
 const { CLEAN_TARGETS } = require('@system-cleaner/clean')
@@ -29,7 +28,7 @@ const username = sysInfo.username
 const macosVersion = sysInfo.macosVersion
 
 function safeExec(cmd, fallback) {
-  try { return cp.execSync(cmd, { encoding: 'utf8', timeout: 5000 }).trim() }
+  try { return execSync(cmd, { timeout: 5000 }) }
   catch { return fallback || '' }
 }
 
@@ -54,11 +53,12 @@ const browserExtensions = getAllExtensions().map(e => ({
 }))
 const totalExtSize = 0
 
-// ── Background processes ────────────────────────────────────────────────
+// ── Background processes (sync for SSR — mirrors @system-cleaner/monitor) ──
 
 function getRunningProcesses() {
   const raw = safeExec('ps aux', '')
   if (!raw) return []
+  const totalMem = os.totalmem()
   const procs = []
   for (const line of raw.split('\n').slice(1)) {
     const p = line.trim().split(/\s+/)
@@ -68,9 +68,9 @@ function getRunningProcesses() {
     if (user === 'root' && cpu < 0.1 && mem < 0.1) continue
     if (command.startsWith('/usr/libexec/') && cpu < 0.1) continue
     if (command.startsWith('/System/') && cpu < 0.1 && mem < 0.1) continue
-    if (cpu >= 0.1 || mem >= 0.3) {
-      procs.push({ id: `proc-${pid}`, pid: parseInt(pid), name: nodePath.basename(command.split(' ')[0]), fullCommand: command.slice(0, 120), user, cpu, mem, memMB: Math.round(mem * os.totalmem() / 100 / 1e6), isSystem: user === 'root' || user.startsWith('_') })
-    }
+    if (cpu < 0.1 && mem < 0.3) continue
+    const cmdPath = command.split(' ')[0]
+    procs.push({ id: `proc-${pid}`, pid: parseInt(pid), name: cmdPath ? nodePath.basename(cmdPath) : `pid-${pid}`, fullCommand: command.slice(0, 120), user, cpu, mem, memMB: Math.round(mem * totalMem / 100 / 1e6), isSystem: user === 'root' || user.startsWith('_') })
   }
   return procs.sort((a, b) => b.cpu - a.cpu)
 }
@@ -83,7 +83,8 @@ const totalMemUsed = topCPU.reduce((s, p) => s + p.memMB, 0)
 
 let dTotal = 0, dFree = 0, dUsedPct = 0
 try {
-  const dfLines = cp.execSync('df -k / 2>/dev/null').toString().trim().split('\n')
+  const dfOut = execSync('df -k / 2>/dev/null')
+  const dfLines = dfOut.split('\n')
   if (dfLines.length >= 2) { const p = dfLines[1].split(/\s+/); dTotal = parseInt(p[1]) * 1024; dFree = parseInt(p[3]) * 1024; dUsedPct = Math.round((1 - dFree / dTotal) * 100) }
 } catch {}
 
@@ -107,8 +108,11 @@ const healthColor = healthScore >= 80 ? '#30d158' : healthScore >= 50 ? '#ff9f0a
 
 const cleanCategories = []
 for (const target of CLEAN_TARGETS) {
+  if (target.requiresSudo) continue
   const st = safeStat(target.path)
-  if (st && st.isDirectory()) {
+  if (!st) continue
+  // Include both directories (contentsOnly) and files (single-file targets)
+  if (st.isDirectory() || !target.contentsOnly) {
     cleanCategories.push({ id: target.id, name: target.name, path: target.path, icon: target.icon, desc: target.description, size: 0, sizeStr: '...' })
   }
 }
@@ -255,7 +259,7 @@ const totalCleanable = 0
     <span>{{ enabledStartup.length }} startup items</span>
     <span>{{ topCPU.length }} active processes</span>
     <span class="statusbar-spacer"></span>
-    <span>{{ username }}@{{ hostname }}</span>
+    <span>{{ username }}@@{{ hostname }}</span>
   </div>
 </div>
 
