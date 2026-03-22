@@ -4,7 +4,7 @@ title: Startup Items
 
 # Startup Items
 
-SystemSweep scans three directories for Launch Agents and Daemons:
+SystemCleaner scans three directories for Launch Agents and Daemons:
 
 | Directory | Scope | Type |
 |-----------|-------|------|

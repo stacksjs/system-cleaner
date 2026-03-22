@@ -4,7 +4,7 @@ title: Introduction
 
 # Introduction
 
-SystemSweep is a single-page stx application that scans your macOS system at render time using Node.js APIs (`fs`, `child_process`, `os`) and presents the results in a native-looking dark UI.
+SystemCleaner is a single-page stx application that scans your macOS system at render time using Node.js APIs (`fs`, `child_process`, `os`) and presents the results in a native-looking dark UI.
 
 ## Architecture
 

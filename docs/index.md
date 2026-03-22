@@ -1,9 +1,9 @@
 ---
-title: SystemSweep
+title: SystemCleaner
 layout: home
 ---
 
-# SystemSweep
+# SystemCleaner
 
 A macOS-native system performance manager for monitoring and cleaning startup apps, browser extensions, hidden background processes, and disk usage.
 

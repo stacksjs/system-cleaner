@@ -4,7 +4,7 @@ title: Browser Extensions
 
 # Browser Extensions
 
-SystemSweep audits installed extensions across Chrome and Firefox.
+SystemCleaner audits installed extensions across Chrome and Firefox.
 
 ## Chrome
 

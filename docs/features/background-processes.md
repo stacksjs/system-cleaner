@@ -4,7 +4,7 @@ title: Background Processes
 
 # Background Processes
 
-SystemSweep reads a snapshot of `ps aux` and filters for processes above a resource threshold.
+SystemCleaner reads a snapshot of `ps aux` and filters for processes above a resource threshold.
 
 ## Threshold
 

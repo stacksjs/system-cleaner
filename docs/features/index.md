@@ -4,7 +4,7 @@ title: Features Overview
 
 # Features
 
-SystemSweep combines five system management tools into a single native-looking app.
+SystemCleaner combines five system management tools into a single native-looking app.
 
 ## At a Glance
 

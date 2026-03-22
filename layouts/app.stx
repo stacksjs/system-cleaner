@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SystemSweep</title>
+  <title>SystemCleaner</title>
   <link rel="preconnect" href="https://fonts.bunny.net">
   <link href="https://fonts.bunny.net/css?family=inter:300,400,500,600,700" rel="stylesheet" />
   <style>
@@ -247,7 +247,7 @@
   <div class="app-body">
     <aside class="sidebar">
       <div class="sidebar-header">
-        <div class="sidebar-app-name">SystemSweep</div>
+        <div class="sidebar-app-name">SystemCleaner</div>
       </div>
       <nav class="sidebar-nav">
         <div class="sidebar-section-title">Overview</div>

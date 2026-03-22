@@ -1,42 +1,45 @@
 export default {
-  docsDir: './docs',
-  outDir: './dist/docs',
-  theme: 'vitepress',
+  docsDir: "./docs",
+  outDir: "./dist/docs",
+  theme: "vitepress",
 
   markdown: {
-    title: 'SystemSweep',
+    title: "SystemCleaner",
     meta: {
-      description: 'A macOS-native system performance manager',
+      description: "A macOS-native system performance manager",
     },
   },
 
   nav: [
-    { text: 'Guide', link: '/guide/' },
-    { text: 'Features', link: '/features/' },
+    { text: "Guide", link: "/guide/" },
+    { text: "Features", link: "/features/" },
   ],
 
   sidebar: {
-    '/guide/': [
+    "/guide/": [
       {
-        text: 'Getting Started',
+        text: "Getting Started",
         items: [
-          { text: 'Introduction', link: '/guide/' },
-          { text: 'Installation', link: '/guide/installation' },
-          { text: 'Usage', link: '/guide/usage' },
+          { text: "Introduction", link: "/guide/" },
+          { text: "Installation", link: "/guide/installation" },
+          { text: "Usage", link: "/guide/usage" },
         ],
       },
     ],
-    '/features/': [
+    "/features/": [
       {
-        text: 'Features',
+        text: "Features",
         items: [
-          { text: 'Overview', link: '/features/' },
-          { text: 'Startup Items', link: '/features/startup-items' },
-          { text: 'Browser Extensions', link: '/features/browser-extensions' },
-          { text: 'Background Processes', link: '/features/background-processes' },
-          { text: 'Disk Analyzer', link: '/features/disk-analyzer' },
+          { text: "Overview", link: "/features/" },
+          { text: "Startup Items", link: "/features/startup-items" },
+          { text: "Browser Extensions", link: "/features/browser-extensions" },
+          {
+            text: "Background Processes",
+            link: "/features/background-processes",
+          },
+          { text: "Disk Analyzer", link: "/features/disk-analyzer" },
         ],
       },
     ],
   },
-}
+};
