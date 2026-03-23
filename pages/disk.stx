@@ -11,6 +11,10 @@ try {
 
 const scanTotalFormatted = formatBytes(dTotal - dFree)
 const scanBasename = nodePath.basename(HOME)
+const sDUsedPct = String(dUsedPct)
+const fDiskTotalLabel = formatBytes(dTotal)
+const fDiskUsedLabel = formatBytes(dTotal - dFree)
+const fDiskFreeLabel = formatBytes(dFree)
 </script>
 
 <div class="main-content" style="padding: 0; height: 100%;">

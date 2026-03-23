@@ -78,6 +78,20 @@ if (enabledStartup.length > 20) healthDeductions += Math.min(5, Math.floor((enab
 const healthScore = Math.max(0, Math.min(100, 100 - healthDeductions))
 const healthLabel = healthScore >= 90 ? 'Excellent' : healthScore >= 75 ? 'Good' : healthScore >= 60 ? 'Fair' : healthScore >= 40 ? 'Poor' : 'Critical'
 const healthColor = healthScore >= 90 ? '#34c759' : healthScore >= 75 ? '#30d158' : healthScore >= 60 ? '#ff9f0a' : '#ff453a'
+
+// Pre-compute style strings (numeric vars in {{ }} inside style attrs don't resolve in shell mode)
+const sHealthScore = String(healthScore)
+const sMemPercent = String(memPercent)
+const sDUsedPct = String(dUsedPct)
+const healthDasharray = String(2 * Math.PI * 40)
+const healthDashoffset = String(2 * Math.PI * 40 * (1 - healthScore / 100))
+const memBarStyle = 'width: ' + memPercent + '%; background: ' + (memPercent > 80 ? '#ff453a' : memPercent > 60 ? '#ff9f0a' : '#30d158') + ';'
+const diskBarStyle = 'width: ' + dUsedPct + '%; background: ' + (dUsedPct > 90 ? '#ff453a' : dUsedPct > 75 ? '#ff9f0a' : '#30d158') + ';'
+const memDotColor = memPercent > 80 ? '#ff453a' : memPercent > 60 ? '#ff9f0a' : '#30d158'
+const diskDotColor = dUsedPct > 90 ? '#ff453a' : dUsedPct > 75 ? '#ff9f0a' : '#30d158'
+const startupDotColor = enabledStartup.length > 30 ? '#ff453a' : enabledStartup.length > 15 ? '#ff9f0a' : '#30d158'
+const cpuLabel = cpuModel.split(' ').slice(0, 3).join(' ')
+const cpuAvgLabel = String(Math.round(totalCPU / cpuCores))
 </script>
 
 <div class="main-header">

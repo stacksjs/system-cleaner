@@ -8,25 +8,25 @@
           <circle class="ring-bg" cx="50" cy="50" r="40" />
           <circle class="ring-fill" cx="50" cy="50" r="40"
             stroke="{{ healthColor }}"
-            stroke-dasharray="{{ 2 * Math.PI * 40 }}"
-            stroke-dashoffset="{{ 2 * Math.PI * 40 * (1 - healthScore / 100) }}" />
+            stroke-dasharray="{{ healthDasharray }}"
+            stroke-dashoffset="{{ healthDashoffset }}" />
         </svg>
         <div class="ring-text">
-          <span class="ring-score" style="color: {{ healthColor }}">{{ healthScore }}</span>
+          <span class="ring-score" style="color: {{ healthColor }}">{{ sHealthScore }}</span>
           <span class="ring-label">{{ healthLabel }}</span>
         </div>
       </div>
       <div style="flex: 1;">
         <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px;">
-          <span class="statusbar-dot" style="background: {{ memPercent > 80 ? '#ff453a' : memPercent > 60 ? '#ff9f0a' : '#30d158' }}"></span>
-          Memory: {{ usedMemGB }} / {{ totalMemGB }} GB ({{ memPercent }}%)
+          <span class="statusbar-dot" style="background: {{ memDotColor }}"></span>
+          Memory: {{ usedMemGB }} / {{ totalMemGB }} GB ({{ sMemPercent }}%)
         </div>
         <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px;">
-          <span class="statusbar-dot" style="background: {{ dUsedPct > 90 ? '#ff453a' : dUsedPct > 75 ? '#ff9f0a' : '#30d158' }}"></span>
+          <span class="statusbar-dot" style="background: {{ diskDotColor }}"></span>
           Disk: {{ diskUsed }} / {{ diskTotal }} ({{ diskAvail }} free)
         </div>
         <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px;">
-          <span class="statusbar-dot" style="background: {{ enabledStartup.length > 30 ? '#ff453a' : enabledStartup.length > 15 ? '#ff9f0a' : '#30d158' }}"></span>
+          <span class="statusbar-dot" style="background: {{ startupDotColor }}"></span>
           {{ enabledStartup.length }} startup items active
         </div>
         <div style="display: flex; align-items: center; gap: 6px; font-size: 12px;">
@@ -38,8 +38,8 @@
   </div>
   <div class="card">
     <div class="card-label">CPU</div>
-    <div class="card-value" style="font-size: 16px;">{{ cpuModel.split(' ').slice(0, 3).join(' ') }}</div>
-    <div class="card-detail">{{ cpuCores }} cores · {{ Math.round(totalCPU / cpuCores) }}% avg load</div>
+    <div class="card-value" style="font-size: 16px;">{{ cpuLabel }}</div>
+    <div class="card-detail">{{ cpuCores }} cores · {{ cpuAvgLabel }}% avg load</div>
   </div>
 </div>
 
@@ -48,7 +48,7 @@
     <div class="card-label">Memory</div>
     <div class="card-value">{{ usedMemGB }} <span style="font-size: 14px; color: #6c6c70;">/ {{ totalMemGB }} GB</span></div>
     <div class="progress">
-      <div class="progress-fill" style="width: {{ memPercent }}%; background: {{ memPercent > 80 ? '#ff453a' : memPercent > 60 ? '#ff9f0a' : '#30d158' }};"></div>
+      <div class="progress-fill" style="{{ memBarStyle }}"></div>
     </div>
     <div class="card-detail">{{ freeMemGB }} GB available</div>
   </div>
@@ -56,7 +56,7 @@
     <div class="card-label">Disk</div>
     <div class="card-value">{{ diskUsed }} <span style="font-size: 14px; color: #6c6c70;">/ {{ diskTotal }}</span></div>
     <div class="progress">
-      <div class="progress-fill" style="width: {{ dUsedPct }}%; background: {{ dUsedPct > 90 ? '#ff453a' : dUsedPct > 75 ? '#ff9f0a' : '#30d158' }};"></div>
+      <div class="progress-fill" style="{{ diskBarStyle }}"></div>
     </div>
     <div class="card-detail">{{ diskAvail }} available</div>
   </div>

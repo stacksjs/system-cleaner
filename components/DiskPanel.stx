@@ -9,15 +9,15 @@
           <div style="width: 30px; height: 30px; background: linear-gradient(135deg, #3a3a3c, #48484a); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #98989d;">HD</div>
           <div>
             <div style="font-size: 12px; font-weight: 600;">Macintosh HD</div>
-            <div style="font-size: 10px; color: #6c6c70;">{{ formatBytes(dTotal) }} total</div>
+            <div style="font-size: 10px; color: #6c6c70;">{{ fDiskTotalLabel }} total</div>
           </div>
         </div>
         <div class="disk-usage-bar">
-          <div class="disk-usage-fill" style="width: {{ dUsedPct }}%"></div>
+          <div class="disk-usage-fill" style="width: {{ sDUsedPct }}%"></div>
         </div>
         <div class="disk-usage-text">
-          <span>{{ formatBytes(dTotal - dFree) }} used</span>
-          <span>{{ formatBytes(dFree) }} free</span>
+          <span>{{ fDiskUsedLabel }} used</span>
+          <span>{{ fDiskFreeLabel }} free</span>
         </div>
       </div>
     </div>
