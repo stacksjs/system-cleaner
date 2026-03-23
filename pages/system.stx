@@ -37,6 +37,8 @@ const fDiskUsed = fmtSize(diskUsed)
 const fDiskFree = fmtSize(diskFree)
 const fDiskTotal = fmtSize(diskTotal)
 const fDiskPurgeable = fmtSize(diskPurgeable)
+const fDiskPct = String(diskPct)
+const fDiskBarStyle = 'width: ' + diskPct + '%;' + (diskPct > 90 ? ' background: linear-gradient(90deg, #ff453a, #ff453a);' : diskPct > 75 ? ' background: linear-gradient(90deg, #ff9f0a, #ff9f0a);' : '')
 </script>
 
 <style>
@@ -184,7 +186,7 @@ const fDiskPurgeable = fmtSize(diskPurgeable)
           <div>
             <div class="disk-card-title">Macintosh HD</div>
           </div>
-          <div class="disk-card-pct">{{ diskPct }}% full</div>
+          <div class="disk-card-pct">{{ fDiskPct }}% full</div>
         </div>
         <div class="disk-card-meta">
           <div class="disk-card-row">Location: <strong>/</strong></div>
@@ -196,7 +198,7 @@ const fDiskPurgeable = fmtSize(diskPurgeable)
         <div class="disk-bar-wrap">
           <span class="disk-bar-label">{{ fDiskUsed }}</span>
           <div class="disk-bar-track">
-            <div class="disk-bar-fill" style="width: {{ diskPct }}%;{{ diskPct > 90 ? ' background: linear-gradient(90deg, #ff453a, #ff453a);' : diskPct > 75 ? ' background: linear-gradient(90deg, #ff9f0a, #ff9f0a);' : '' }}"></div>
+            <div class="disk-bar-fill" style="{{ fDiskBarStyle }}"></div>
           </div>
           <span class="disk-bar-label">{{ fDiskTotal }}</span>
         </div>
