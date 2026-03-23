@@ -1,10 +1,6 @@
 <script server>
-const { formatBytes, getSystemInfoSync, safeStat, HOME, escapeHtml, execSync } = require('@system-cleaner/core')
+const { formatBytes, safeStat, HOME, escapeHtml, execSync } = require('@system-cleaner/core')
 const { CLEAN_TARGETS } = require('@system-cleaner/clean')
-
-const sysInfo = getSystemInfoSync()
-const username = sysInfo.username
-const macosVersion = sysInfo.macosVersion
 
 // Disk info for the cleanup summary card
 function safeExec(cmd, fallback) { try { return execSync(cmd, { timeout: 5000 }) } catch { return fallback || '' } }
@@ -26,12 +22,6 @@ for (const target of CLEAN_TARGETS) {
 function esc(str) { return escapeHtml(str || '') }
 </script>
 
-@layout('app')
-
-@section('username'){{ username }}@endsection
-@section('macos')macOS {{ macosVersion }}@endsection
-
-@section('body')
 <div x-data="{
   selected: [],
   cleaning: {},
@@ -212,4 +202,3 @@ function scanCleanupSizes(force) {
 // Load instantly from cache, then show. Rescan button forces fresh scan.
 scanCleanupSizes();
 </script>
-@endsection

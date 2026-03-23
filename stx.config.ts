@@ -8,6 +8,7 @@ const config: StxOptions = {
   componentsDir: 'components',
   partialsDir: 'components',
   layoutsDir: 'layouts',
+  defaultLayout: false,
   debug: false,
   cache: false,
 

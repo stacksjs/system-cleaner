@@ -20,6 +20,17 @@ import { getTopProcesses, summarizeProcesses } from "@system-cleaner/monitor";
  * So router.post('/disk-scan', ...) becomes POST /api/disk-scan
  */
 export default async function (router: Router) {
+  // ── System info (lightweight, for shell sidebar) ─────────────
+
+  await router.get("/system-info", async () => {
+    const os = await import("node:os");
+    const { execSync } = await import("@system-cleaner/core");
+    return Response.json({
+      username: os.default.userInfo().username,
+      macosVersion: execSync("sw_vers -productVersion") || "Unknown",
+    });
+  });
+
   await router.post("/disk-scan", async () => {
     // Run scan in a subprocess to avoid blocking the server
     const worker = new Worker(

@@ -1,10 +1,6 @@
 <script server>
 const nodePath = require('node:path')
-const { formatBytes, getSystemInfoSync, HOME, execSync } = require('@system-cleaner/core')
-
-const sysInfo = getSystemInfoSync()
-const username = sysInfo.username
-const macosVersion = sysInfo.macosVersion
+const { formatBytes, HOME, execSync } = require('@system-cleaner/core')
 
 let dTotal = 0, dFree = 0, dUsedPct = 0
 try {
@@ -17,13 +13,6 @@ const scanTotalFormatted = formatBytes(dTotal - dFree)
 const scanBasename = nodePath.basename(HOME)
 </script>
 
-@layout('app')
-
-@section('username'){{ username }}@endsection
-@section('macos')macOS {{ macosVersion }}@endsection
-
-@section('body')
 <div class="main-content" style="padding: 0; height: 100%;">
   @include('DiskPanel')
 </div>
-@endsection

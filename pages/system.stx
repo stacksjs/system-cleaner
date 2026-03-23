@@ -1,9 +1,5 @@
 <script server>
-const { getSystemInfoSync, execSync, formatBytes } = require('@system-cleaner/core')
-
-const sysInfo = getSystemInfoSync()
-const username = sysInfo.username
-const macosVersion = sysInfo.macosVersion
+const { execSync, formatBytes } = require('@system-cleaner/core')
 
 function safeExec(cmd, fallback) {
   try { return execSync(cmd, { timeout: 5000 }) }
@@ -43,12 +39,6 @@ const fDiskTotal = fmtSize(diskTotal)
 const fDiskPurgeable = fmtSize(diskPurgeable)
 </script>
 
-@layout('app')
-
-@section('username'){{ username }}@endsection
-@section('macos')macOS {{ macosVersion }}@endsection
-
-@section('body')
 <style>
 .system-layout { display: flex; height: 100%; min-height: 520px; }
 
@@ -223,4 +213,3 @@ const fDiskPurgeable = fmtSize(diskPurgeable)
   </div>
 </div>
 </div>
-@endsection

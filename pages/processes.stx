@@ -1,17 +1,3 @@
-<script server>
-const { getSystemInfoSync } = require('@system-cleaner/core')
-
-const sysInfo = getSystemInfoSync()
-const username = sysInfo.username
-const macosVersion = sysInfo.macosVersion
-</script>
-
-@layout('app')
-
-@section('username'){{ username }}@endsection
-@section('macos')macOS {{ macosVersion }}@endsection
-
-@section('body')
 <style>
 .live-indicator {
   display: inline-flex;
@@ -212,4 +198,3 @@ window.doKill = function(pid, name) {
   connect();
 })();
 </script>
-@endsection

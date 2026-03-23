@@ -17,8 +17,6 @@ const uptimeDays = Math.floor(uptimeHours / 24)
 const uptimeRemHours = uptimeHours % 24
 const uptimeStr = uptimeDays > 0 ? `${uptimeDays}d ${uptimeRemHours}h` : `${uptimeHours}h`
 const hostname = sysInfo.hostname
-const username = sysInfo.username
-const macosVersion = sysInfo.macosVersion
 
 function safeExec(cmd, fallback) {
   try { return execSync(cmd, { timeout: 5000 }) }
@@ -82,12 +80,6 @@ const healthLabel = healthScore >= 90 ? 'Excellent' : healthScore >= 75 ? 'Good'
 const healthColor = healthScore >= 90 ? '#34c759' : healthScore >= 75 ? '#30d158' : healthScore >= 60 ? '#ff9f0a' : '#ff453a'
 </script>
 
-@layout('app')
-
-@section('username'){{ username }}@endsection
-@section('macos')macOS {{ macosVersion }}@endsection
-
-@section('body')
 <div class="main-header">
   <div class="main-title">Dashboard</div>
   <div class="main-subtitle">System overview for {{ hostname }}</div>
@@ -96,4 +88,3 @@ const healthColor = healthScore >= 90 ? '#34c759' : healthScore >= 75 ? '#30d158
   @include('DashboardCards')
   @include('TopProcesses')
 </div>
-@endsection
