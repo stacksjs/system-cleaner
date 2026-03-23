@@ -1,42 +1,9 @@
 <script server>
-const os = require('node:os')
-const nodePath = require('node:path')
-const { getSystemInfoSync, execSync, escapeHtml } = require('@system-cleaner/core')
+const { getSystemInfoSync } = require('@system-cleaner/core')
 
 const sysInfo = getSystemInfoSync()
 const username = sysInfo.username
 const macosVersion = sysInfo.macosVersion
-
-function safeExec(cmd, fallback) {
-  try { return execSync(cmd, { timeout: 5000 }) }
-  catch { return fallback || '' }
-}
-
-function getRunningProcesses() {
-  const raw = safeExec('ps aux', '')
-  if (!raw) return []
-  const totalMem = os.totalmem()
-  const procs = []
-  for (const line of raw.split('\n').slice(1)) {
-    const p = line.trim().split(/\s+/)
-    if (p.length < 11) continue
-    const user = p[0], pid = p[1], cpu = parseFloat(p[2]) || 0, mem = parseFloat(p[3]) || 0
-    const command = p.slice(10).join(' ')
-    if (user === 'root' && cpu < 0.1 && mem < 0.1) continue
-    if (command.startsWith('/usr/libexec/') && cpu < 0.1) continue
-    if (command.startsWith('/System/') && cpu < 0.1 && mem < 0.1) continue
-    if (cpu < 0.1 && mem < 0.3) continue
-    const cmdPath = command.split(' ')[0]
-    procs.push({ id: `proc-${pid}`, pid: parseInt(pid), name: cmdPath ? nodePath.basename(cmdPath) : `pid-${pid}`, fullCommand: command.slice(0, 120), user, cpu, mem, memMB: Math.round(mem * totalMem / 100 / 1e6), isSystem: user === 'root' || user.startsWith('_') })
-  }
-  return procs.sort((a, b) => b.cpu - a.cpu)
-}
-
-const topCPU = getRunningProcesses().slice(0, 20)
-const totalCPU = topCPU.reduce((s, p) => s + p.cpu, 0)
-const totalMemUsed = topCPU.reduce((s, p) => s + p.memMB, 0)
-
-function esc(str) { return escapeHtml(str || '') }
 </script>
 
 @layout('app')
@@ -45,7 +12,45 @@ function esc(str) { return escapeHtml(str || '') }
 @section('macos')macOS {{ macosVersion }}@endsection
 
 @section('body')
+<style>
+.live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  margin-left: 8px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  transition: color 0.3s;
+}
+.live-indicator.connected { color: #30d158; }
+.live-indicator.disconnected { color: #ff9f0a; }
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  transition: background 0.3s;
+}
+.live-indicator.connected .live-dot {
+  background: #30d158;
+  animation: live-pulse 2s ease-in-out infinite;
+}
+.live-indicator.disconnected .live-dot {
+  background: #ff9f0a;
+  animation: none;
+}
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(48, 209, 88, 0.4); }
+  50% { opacity: 0.6; box-shadow: 0 0 0 4px rgba(48, 209, 88, 0); }
+}
+</style>
+
 <div x-data="{
+  processes: [],
+  totalCPU: 0,
+  totalMemUsed: 0,
+  wsConnected: false,
   selected: [],
   killedPids: [],
   toasts: [],
@@ -79,25 +84,132 @@ function esc(str) { return escapeHtml(str || '') }
 </div>
 
 <script data-stx-scoped>
-function _api(endpoint, data) {
-  return fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data || {}) }).then(function(r) { return r.json(); });
-}
+// All functions registered on window so they survive SPA navigation
+// and are accessible from stx reactive evaluate() (new Function scope)
 
-function _exec(stmt) {
+window.__esc = function(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+};
+
+window.__renderProcessRows = function(processes, killedPids, selected) {
+  if (!processes || !processes.length) return '<tr><td colspan="7" class="empty-state">Loading processes…</td></tr>';
+  selected = selected || [];
+  return processes
+    .filter(function(p) { return killedPids.indexOf(p.pid) === -1; })
+    .map(function(p) {
+      var cpuColor = p.cpu > 50 ? '#ff453a' : p.cpu > 20 ? '#ff9f0a' : '';
+      var barColor = p.cpu > 50 ? '#ff453a' : p.cpu > 20 ? '#ff9f0a' : '#30d158';
+      var isSelected = selected.indexOf(p.id) !== -1;
+      var badge = p.isSystem
+        ? '<span class="badge badge-orange">' + __esc(p.user) + '</span>'
+        : '<span class="badge badge-green">' + __esc(p.user) + '</span>';
+      var action = p.isSystem
+        ? '<span class="dim" style="font-size: 10px;">Protected</span>'
+        : '<button class="btn btn-danger btn-sm" onclick="doKill(' + p.pid + ', \'' + __esc(p.name).replace(/'/g, "\\'") + '\')">Kill</button>';
+      return '<tr>'
+        + '<td><input type="checkbox" class="check"' + (isSelected ? ' checked' : '') + ' onclick="_exec(\\"toggle(\'' + p.id + '\')\\")" /></td>'
+        + '<td><div class="item-name">' + __esc(p.name) + '</div><div class="item-path" title="' + __esc(p.fullCommand) + '">' + __esc(p.fullCommand) + '</div></td>'
+        + '<td class="mono dim" style="font-size: 11px;">' + p.pid + '</td>'
+        + '<td><div class="cpu-bar"><span style="font-size:11px;font-weight:500;min-width:36px;' + (cpuColor ? 'color:' + cpuColor + ';' : '') + '">' + p.cpu.toFixed(1) + '%</span><div class="cpu-track"><div class="cpu-fill" style="width:' + Math.min(100, p.cpu) + '%;background:' + barColor + ';"></div></div></div></td>'
+        + '<td style="font-size: 11px;">' + p.memMB + ' MB</td>'
+        + '<td>' + badge + '</td>'
+        + '<td>' + action + '</td>'
+        + '</tr>';
+    }).join('');
+};
+
+// Queue-based _exec: if reactive scope isn't ready yet (SPA nav timing),
+// queue statements and flush when stx:load fires
+window._execQueue = window._execQueue || [];
+window._exec = function(stmt) {
   var el = document.querySelector('[data-stx-scope]');
-  if (el && el.__stx_execute) el.__stx_execute(stmt);
-}
-
-function doKill(pid, name) {
-  if (!confirm('Kill ' + name + ' (PID ' + pid + ')?')) return;
-  _api('/api/kill-process', { pid: pid }).then(function(r) {
-    if (r.success) {
-      _exec("killedPids = [...killedPids, " + pid + "]");
-      _exec("toast('" + name.replace(/'/g, "\\'") + " killed (PID " + pid + ")', 'success')");
-    } else {
-      _exec("toast('Kill failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");
+  if (el && el.__stx_execute) {
+    while (window._execQueue.length) el.__stx_execute(window._execQueue.shift());
+    el.__stx_execute(stmt);
+  } else {
+    window._execQueue.push(stmt);
+  }
+};
+if (!window._execFlushBound) {
+  window._execFlushBound = true;
+  window.addEventListener('stx:load', function() {
+    var el = document.querySelector('[data-stx-scope]');
+    if (el && el.__stx_execute) {
+      while (window._execQueue.length) el.__stx_execute(window._execQueue.shift());
     }
   });
 }
+
+window.doKill = function(pid, name) {
+  if (!confirm('Kill ' + name + ' (PID ' + pid + ')?')) return;
+  fetch('/api/kill-process', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pid: pid }) })
+    .then(function(r) { return r.json(); })
+    .then(function(r) {
+      if (r.success) {
+        _exec("killedPids = [...killedPids, " + pid + "]");
+        _exec("toast('" + name.replace(/'/g, "\\'") + " killed (PID " + pid + ")', 'success')");
+      } else {
+        _exec("toast('Kill failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");
+      }
+    });
+};
+
+// ── ts-broadcasting WebSocket connection ──────────────────────
+// Single global connection — survives SPA navigations, reconnects if dropped
+
+(function() {
+  // Don't create duplicate connections on SPA re-navigation
+  if (window.__procWs && window.__procWs.readyState <= 1) return;
+
+  var ws = null;
+  var timer = null;
+
+  function connect() {
+    if (timer) { clearTimeout(timer); timer = null; }
+    try {
+      ws = new WebSocket('ws://' + window.location.hostname + ':6001/ws');
+    } catch(e) {
+      timer = setTimeout(connect, 3000);
+      return;
+    }
+
+    window.__procWs = ws;
+
+    ws.onmessage = function(e) {
+      try {
+        var msg = JSON.parse(e.data);
+
+        if (msg.event === 'connection_established') {
+          ws.send(JSON.stringify({ event: 'subscribe', channel: 'processes' }));
+          return;
+        }
+
+        if (msg.event === 'subscription_succeeded' && msg.channel === 'processes') {
+          _exec('wsConnected = true');
+          return;
+        }
+
+        if (msg.event === 'processes.updated' && msg.channel === 'processes') {
+          window.__latestProcs = msg.data;
+          _exec('processes = window.__latestProcs.processes');
+          _exec('totalCPU = window.__latestProcs.totalCPU');
+          _exec('totalMemUsed = window.__latestProcs.totalMemUsed');
+        }
+      } catch(err) {}
+    };
+
+    ws.onclose = function() {
+      ws = null;
+      window.__procWs = null;
+      _exec('wsConnected = false');
+      timer = setTimeout(connect, 2000);
+    };
+
+    ws.onerror = function() {};
+  }
+
+  connect();
+})();
 </script>
 @endsection

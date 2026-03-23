@@ -24,7 +24,8 @@
     "@system-cleaner/clean": "workspace:*",
     "@system-cleaner/uninstall": "workspace:*",
     "@system-cleaner/disk": "workspace:*",
-    "@system-cleaner/monitor": "workspace:*"
+    "@system-cleaner/monitor": "workspace:*",
+    "ts-broadcasting": "link:ts-broadcasting"
   },
   "devDependencies": {
     "better-dx": "latest"

@@ -1,8 +1,6 @@
 import type { StxOptions } from '@stacksjs/stx'
 import { Router } from '@stacksjs/bun-router'
 
-// Create router — auto-discovers routes from routes/ directory
-// routes/api.ts → /api/* prefix (inferred from filename)
 const router = new Router()
 await router._initApiRoutes()
 
@@ -12,6 +10,11 @@ const config: StxOptions = {
   layoutsDir: 'layouts',
   debug: false,
   cache: false,
+
+  broadcasting: {
+    enabled: true,
+    port: 6001,
+  },
 
   apiRouter: router,
 }

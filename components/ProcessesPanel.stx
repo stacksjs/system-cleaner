@@ -1,24 +1,24 @@
-<!-- Background processes panel -->
+<!-- Background processes panel — live via ts-broadcasting WebSocket -->
 <div class="card-row">
   <div class="card">
     <div class="card-label">Processes</div>
-    <div class="card-value" style="color: #ff453a;">{{ topCPU.length }}</div>
+    <div class="card-value" style="color: #ff453a;" x-text="processes.length"></div>
     <div class="card-detail">Above threshold</div>
   </div>
   <div class="card">
     <div class="card-label">Total CPU</div>
-    <div class="card-value">{{ totalCPU.toFixed(0) }}%</div>
+    <div class="card-value" x-text="totalCPU.toFixed(0) + '%'"></div>
     <div class="card-detail">All processes combined</div>
   </div>
   <div class="card">
     <div class="card-label">Process Memory</div>
-    <div class="card-value">{{ (totalMemUsed / 1000).toFixed(1) }} GB</div>
-    <div class="card-detail">{{ topCPU.length }} processes</div>
+    <div class="card-value" x-text="(totalMemUsed / 1000).toFixed(1) + ' GB'"></div>
+    <div class="card-detail" x-text="processes.length + ' processes'"></div>
   </div>
   <div class="card">
     <div class="card-label">System</div>
-    <div class="card-value">{{ topCPU.filter(p => p.isSystem).length }}</div>
-    <div class="card-detail">vs {{ topCPU.filter(p => !p.isSystem).length }} user</div>
+    <div class="card-value" x-text="processes.filter(p => p.isSystem).length"></div>
+    <div class="card-detail" x-text="'vs ' + processes.filter(p => !p.isSystem).length + ' user'"></div>
   </div>
 </div>
 
@@ -27,6 +27,10 @@
     <div>
       <span class="tbl-title">Running Processes</span>
       <span class="tbl-count">sorted by CPU</span>
+      <span class="live-indicator" :class="wsConnected ? 'connected' : 'disconnected'">
+        <span class="live-dot"></span>
+        <span x-text="wsConnected ? 'Live' : 'Reconnecting'"></span>
+      </span>
     </div>
     <button class="btn btn-sm" x-show="selected.length > 0" @click="toast(selected.length + ' processes would be killed (demo)', 'warning')">Kill Selected</button>
   </div>
@@ -42,40 +46,7 @@
         <th>Actions</th>
       </tr>
     </thead>
-    <tbody>
-      @foreach(topCPU as proc)
-        <tr>
-          <td><input type="checkbox" class="check" :checked="isOn('{{ proc.id }}')" @click="toggle('{{ proc.id }}')" /></td>
-          <td>
-            <div class="item-name">{{ proc.name }}</div>
-            <div class="item-path" title="{{ proc.fullCommand }}">{{ proc.fullCommand }}</div>
-          </td>
-          <td class="mono dim" style="font-size: 11px;">{{ proc.pid }}</td>
-          <td>
-            <div class="cpu-bar">
-              <span style="font-size: 11px; font-weight: 500; min-width: 36px; {{ proc.cpu > 50 ? 'color:#ff453a;' : proc.cpu > 20 ? 'color:#ff9f0a;' : '' }}">{{ proc.cpu.toFixed(1) }}%</span>
-              <div class="cpu-track">
-                <div class="cpu-fill" style="width: {{ Math.min(100, proc.cpu) }}%; background: {{ proc.cpu > 50 ? '#ff453a' : proc.cpu > 20 ? '#ff9f0a' : '#30d158' }};"></div>
-              </div>
-            </div>
-          </td>
-          <td style="font-size: 11px;">{{ proc.memMB }} MB</td>
-          <td>
-            @if(proc.isSystem)
-              <span class="badge badge-orange">{{ proc.user }}</span>
-            @else
-              <span class="badge badge-green">{{ proc.user }}</span>
-            @endif
-          </td>
-          <td>
-            @if(!proc.isSystem)
-              <button class="btn btn-danger btn-sm" onclick="doKill({{ proc.pid }}, '{{ esc(proc.name) }}')">Kill</button>
-            @else
-              <span class="dim" style="font-size: 10px;">Protected</span>
-            @endif
-          </td>
-        </tr>
-      @endforeach
+    <tbody x-html="__renderProcessRows(processes, killedPids, selected)">
     </tbody>
   </table>
 </div>

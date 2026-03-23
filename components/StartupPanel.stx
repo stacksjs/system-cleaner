@@ -66,7 +66,7 @@
           </td>
           <td>
             <span x-show="!isDisabled('{{ item.id }}')" class="badge badge-green">Active</span>
-            <span x-show="isDisabled('{{ item.id }}')" class="badge badge-gray">Disabled</span>
+            <span x-show="isDisabled('{{ item.id }}')" x-cloak class="badge badge-gray">Disabled</span>
           </td>
           <td>
             @if(item.runAtLoad)
@@ -81,10 +81,10 @@
             @else
               <div style="display: flex; gap: 4px;" x-show="!isRemoved('{{ item.id }}')">
                 <button x-show="!isDisabled('{{ item.id }}')" class="btn btn-sm" onclick="doToggle('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', 'disable', '{{ item.id }}')">Disable</button>
-                <button x-show="isDisabled('{{ item.id }}')" class="btn btn-sm" onclick="doToggle('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', 'enable', '{{ item.id }}')">Enable</button>
+                <button x-show="isDisabled('{{ item.id }}')" x-cloak class="btn btn-sm" onclick="doToggle('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', 'enable', '{{ item.id }}')">Enable</button>
                 <button class="btn btn-danger btn-sm" onclick="doRemove('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', '{{ item.id }}')">Delete</button>
               </div>
-              <span x-show="isRemoved('{{ item.id }}')" class="badge badge-gray">Removed</span>
+              <span x-show="isRemoved('{{ item.id }}')" x-cloak class="badge badge-gray">Removed</span>
             @endif
           </td>
         </tr>

@@ -11,7 +11,8 @@
         "@system-cleaner/disk": "workspace:*",
         "@system-cleaner/monitor": "workspace:*",
         "@system-cleaner/uninstall": "workspace:*",
-        "bun-plugin-stx": "latest"
+        "bun-plugin-stx": "latest",
+        "ts-broadcasting": "link:ts-broadcasting"
       },
       "devDependencies": {
         "better-dx": "latest"
@@ -121,6 +122,11 @@
         "serve": "./dist/serve.js",
         "stx-serve": "./dist/serve.js"
       }
+    },
+    "ts-broadcasting@link:ts-broadcasting": {
+      "name": "ts-broadcasting",
+      "version": "link:ts-broadcasting",
+      "source": "npm"
     }
   }
 }

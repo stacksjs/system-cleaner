@@ -1,0 +1,226 @@
+<script server>
+const { getSystemInfoSync, execSync, formatBytes } = require('@system-cleaner/core')
+
+const sysInfo = getSystemInfoSync()
+const username = sysInfo.username
+const macosVersion = sysInfo.macosVersion
+
+function safeExec(cmd, fallback) {
+  try { return execSync(cmd, { timeout: 5000 }) }
+  catch { return fallback || '' }
+}
+
+// ── Disk info (fast — just df + diskutil) ──────────────────────
+let diskTotal = 0, diskFree = 0, diskUsed = 0, diskPct = 0, diskPurgeable = 0
+try {
+  const dfOut = safeExec('df -k / 2>/dev/null')
+  const parts = dfOut.split('\n')[1]?.split(/\s+/)
+  if (parts) {
+    diskTotal = parseInt(parts[1]) * 1024
+    diskFree = parseInt(parts[3]) * 1024
+    diskUsed = diskTotal - diskFree
+    diskPct = Math.round((diskUsed / diskTotal) * 100)
+  }
+  const diskInfo = safeExec('diskutil info / 2>/dev/null')
+  const purgeMatch = diskInfo.match(/Purgeable.*?(\d[\d.]*)\s*(GB|MB|TB)/i)
+  if (purgeMatch) {
+    const val = parseFloat(purgeMatch[1])
+    const unit = purgeMatch[2].toUpperCase()
+    diskPurgeable = val * (unit === 'TB' ? 1e12 : unit === 'GB' ? 1e9 : 1e6)
+  }
+} catch {}
+
+function fmtSize(bytes) {
+  if (bytes >= 1e9) return (bytes / 1e9).toFixed(2) + ' GB'
+  if (bytes >= 1e6) return (bytes / 1e6).toFixed(1) + ' MB'
+  if (bytes >= 1e3) return (bytes / 1e3).toFixed(0) + ' KB'
+  return bytes + ' B'
+}
+
+const fDiskUsed = fmtSize(diskUsed)
+const fDiskFree = fmtSize(diskFree)
+const fDiskTotal = fmtSize(diskTotal)
+const fDiskPurgeable = fmtSize(diskPurgeable)
+</script>
+
+@layout('app')
+
+@section('username'){{ username }}@endsection
+@section('macos')macOS {{ macosVersion }}@endsection
+
+@section('body')
+<style>
+.system-layout { display: flex; height: 100%; min-height: 520px; }
+
+/* ── App list sidebar ───────────────────────────── */
+.app-list {
+  width: 320px; min-width: 320px; border-right: 0.5px solid rgba(255,255,255,0.06);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.app-list-header {
+  padding: 16px; border-bottom: 0.5px solid rgba(255,255,255,0.06);
+}
+.app-search {
+  width: 100%; padding: 7px 10px; border-radius: 6px;
+  background: rgba(255,255,255,0.06); border: 0.5px solid rgba(255,255,255,0.08);
+  color: #f5f5f7; font-size: 12px; font-family: inherit; outline: none;
+}
+.app-search::placeholder { color: #6c6c70; }
+.app-search:focus { border-color: rgba(10,132,255,0.5); }
+.app-list-meta {
+  padding: 10px 16px 6px; font-size: 11px; color: #6c6c70; font-weight: 600;
+  display: flex; align-items: center; gap: 6px;
+}
+.app-list-meta .count {
+  background: rgba(255,255,255,0.08); padding: 1px 7px; border-radius: 8px;
+  font-size: 10px; font-weight: 500;
+}
+.app-list-scroll {
+  flex: 1; overflow-y: auto; padding: 4px 8px;
+}
+.app-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 10px; border-radius: 8px; cursor: default;
+  transition: background 0.1s;
+}
+.app-row:hover { background: rgba(255,255,255,0.04); }
+.app-row-name { font-size: 13px; font-weight: 450; }
+.app-row-size { font-size: 12px; color: #6c6c70; font-family: 'SF Mono', Menlo, monospace; white-space: nowrap; }
+
+/* ── Main panel ─────────────────────────────────── */
+.system-main {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  padding: 32px;
+}
+.disk-card {
+  background: rgba(255,255,255,0.04); border: 0.5px solid rgba(255,255,255,0.08);
+  border-radius: 14px; padding: 24px 28px; width: 100%; max-width: 480px;
+}
+.disk-card-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 16px;
+}
+.disk-card-title { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+.disk-card-pct { font-size: 13px; font-weight: 500; color: #6c6c70; }
+.disk-card-meta { display: flex; flex-direction: column; gap: 4px; margin-bottom: 20px; }
+.disk-card-row { font-size: 12px; color: #8e8e93; }
+.disk-card-row strong { color: #f5f5f7; font-weight: 600; }
+.disk-bar-wrap {
+  display: flex; align-items: center; gap: 10px;
+}
+.disk-bar-label { font-size: 11px; color: #6c6c70; white-space: nowrap; font-family: 'SF Mono', Menlo, monospace; }
+.disk-bar-track {
+  flex: 1; height: 8px; background: rgba(255,255,255,0.06);
+  border-radius: 4px; overflow: hidden;
+}
+.disk-bar-fill {
+  height: 100%; border-radius: 4px;
+  background: linear-gradient(90deg, #0a84ff 0%, #0a84ff 100%);
+  transition: width 0.6s ease;
+}
+.disk-card-footer {
+  margin-top: 16px; padding-top: 12px; border-top: 0.5px solid rgba(255,255,255,0.06);
+}
+.disk-card-stat-row { display: flex; gap: 20px; }
+.disk-card-stat { font-size: 11px; color: #6c6c70; }
+.disk-card-stat strong { color: #f5f5f7; }
+</style>
+
+<div x-data="{
+  apps: [],
+  search: '',
+  loading: true,
+  totalSize: 0,
+
+  init() {
+    fetch('/api/system-apps', { method: 'POST' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        this.apps = data.apps || [];
+        this.totalSize = this.apps.reduce(function(s, a) { return s + a.sizeBytes; }, 0);
+        this.loading = false;
+      }.bind(this))
+      .catch(function() { this.loading = false; }.bind(this));
+  },
+
+  fmtSize: function(bytes) {
+    if (bytes >= 1e9) return (bytes / 1e9).toFixed(2) + ' GB';
+    if (bytes >= 1e6) return (bytes / 1e6).toFixed(1) + ' MB';
+    if (bytes >= 1e3) return (bytes / 1e3).toFixed(0) + ' KB';
+    return bytes + ' B';
+  },
+
+  get filteredApps() {
+    if (!this.search) return this.apps;
+    var q = this.search.toLowerCase();
+    return this.apps.filter(function(a) { return a.name.toLowerCase().includes(q); });
+  }
+}">
+
+<div class="main-header">
+  <div class="main-title">System</div>
+  <div class="main-subtitle">
+    <span x-show="loading">Loading apps...</span>
+    <span x-show="!loading" x-cloak x-text="apps.length + ' apps \u00B7 ' + fmtSize(totalSize) + ' total'"></span>
+  </div>
+</div>
+<div class="main-content" style="padding: 0; height: calc(100% - 60px);">
+  <div class="system-layout">
+
+    <!-- ── App list ──────────────────────────────── -->
+    <div class="app-list">
+      <div class="app-list-header">
+        <input type="text" class="app-search" placeholder="Search..." x-model="search" />
+      </div>
+      <div class="app-list-meta">
+        <span>System</span>
+        <span class="count" x-text="loading ? '...' : apps.length">...</span>
+      </div>
+      <div class="app-list-scroll">
+        <div x-show="loading" style="padding: 20px; text-align: center; color: #6c6c70; font-size: 12px;">Scanning apps...</div>
+        <template x-for="app in filteredApps" :key="app.name">
+          <div class="app-row">
+            <span class="app-row-name" x-text="app.name"></span>
+            <span class="app-row-size" x-text="fmtSize(app.sizeBytes)"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ── Disk info panel ───────────────────────── -->
+    <div class="system-main">
+      <div class="disk-card">
+        <div class="disk-card-header">
+          <div>
+            <div class="disk-card-title">Macintosh HD</div>
+          </div>
+          <div class="disk-card-pct">{{ diskPct }}% full</div>
+        </div>
+        <div class="disk-card-meta">
+          <div class="disk-card-row">Location: <strong>/</strong></div>
+          <div class="disk-card-row">Available: <strong>{{ fDiskFree }}</strong></div>
+          @if(diskPurgeable > 0)
+            <div class="disk-card-row">Purgeable: <strong>{{ fDiskPurgeable }}</strong></div>
+          @endif
+        </div>
+        <div class="disk-bar-wrap">
+          <span class="disk-bar-label">{{ fDiskUsed }}</span>
+          <div class="disk-bar-track">
+            <div class="disk-bar-fill" style="width: {{ diskPct }}%;{{ diskPct > 90 ? ' background: linear-gradient(90deg, #ff453a, #ff453a);' : diskPct > 75 ? ' background: linear-gradient(90deg, #ff9f0a, #ff9f0a);' : '' }}"></div>
+          </div>
+          <span class="disk-bar-label">{{ fDiskTotal }}</span>
+        </div>
+        <div class="disk-card-footer">
+          <div class="disk-card-stat-row">
+            <div class="disk-card-stat">Apps: <span x-text="loading ? '...' : fmtSize(totalSize)">...</span></div>
+            <div class="disk-card-stat">Free: <strong>{{ fDiskFree }}</strong></div>
+            <div class="disk-card-stat">Used: <strong>{{ fDiskUsed }}</strong></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</div>
+@endsection
