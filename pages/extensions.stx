@@ -15,12 +15,12 @@ function esc(str) { return escapeHtml(str || '') }
   allOn(ids) { if (ids.every(id => this.selected.includes(id))) this.selected = this.selected.filter(id => !ids.includes(id)); else ids.forEach(id => { if (!this.selected.includes(id)) this.selected.push(id); }); },
   toast(msg, type) { var d = document.createElement('div'); d.className='toast'; d.innerHTML='<span>'+(type==='success'?'✓':type==='error'?'✕':'⚠')+'</span> '+msg; var area = document.querySelector('.toast-area'); if(!area){area=document.createElement('div');area.className='toast-area';document.body.appendChild(area);} area.appendChild(d); setTimeout(function(){d.remove()},4000); }
 }">
-<div class="toast-area"></div>
-<div class="main-header">
-  <div class="main-title">Browser Extensions</div>
-  <div class="main-subtitle">Installed extensions across all browsers</div>
+<div class='toast-area'></div>
+<div class='main-header'>
+  <div class='main-title'>Browser Extensions</div>
+  <div class='main-subtitle'>Installed extensions across all browsers</div>
 </div>
-<div class="main-content">
+<div class='main-content'>
   @include('ExtensionsPanel')
 </div>
 </div>

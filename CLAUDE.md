@@ -37,13 +37,14 @@ Bun workspaces. Root app + 6 packages under `packages/`:
 
 STX is the full-stack web framework powering this app. It is **not** Alpine.js — STX has its own signals-based reactivity system that provides Alpine-like directive syntax (`x-data`, `x-show`, `x-text`, `@click`, etc.) but is a completely separate implementation using JavaScript Proxy objects.
 
-**Page lifecycle — two execution contexts in every `.stx` page:**
+#### Page lifecycle — two execution contexts in every `.stx` page
 
-1. **`<script server>`** — Runs at compile/SSR time on the server. Variables declared here are available in template expressions (`{{ var }}`). Use `require()` not `import`. Code is stripped from client output. **Important**: STX pre-compiles all pages at dev startup, so expensive operations here (shell commands, file scanning) block the dev server from starting. Move heavy work to API endpoints and fetch client-side.
+1. **`<script server>`**— Runs at compile/SSR time on the server. Variables declared here are available in template expressions (`{{ var }}`). Use `require()` not `import`. Code is stripped from client output.**Important**: STX pre-compiles all pages at dev startup, so expensive operations here (shell commands, file scanning) block the dev server from starting. Move heavy work to API endpoints and fetch client-side.
 
 2. **`<script data-stx-scoped>`** — Runs in the browser in an isolated scope. Use for DOM manipulation, `fetch()` calls, and functions called from reactive directives. Functions must be attached to `window` to survive SPA navigation.
 
-**Template directives (server-side, evaluated at compile time):**
+#### Template directives (server-side, evaluated at compile time)
+
 - `@layout('app')` — wrap page in a layout
 - `@section('name')...@endsection` — define content for layout `@yield('name')` slots
 - `@include('ComponentName')` — include a component
@@ -52,7 +53,8 @@ STX is the full-stack web framework powering this app. It is **not** Alpine.js �
 - `@if(cond)...@elseif...@else...@endif` — server-side conditional
 - `{{ expr }}` — HTML-escaped output, `{!! expr !!}` — raw output
 
-**Reactive directives (client-side, STX's own reactivity system):**
+#### Reactive directives (client-side, STX's own reactivity system)
+
 - `x-data="{ ... }"` — define a reactive scope with state and methods
 - `x-show="expr"` — toggle visibility (element stays in DOM)
 - `x-text="expr"` — reactive text content
@@ -68,6 +70,7 @@ STX is the full-stack web framework powering this app. It is **not** Alpine.js �
 **SPA navigation:** Links with `data-stx-link` are intercepted for client-side navigation. STX swaps the `data-stx-content` container, cleans up old scripts, re-executes new `data-stx-scoped` scripts, and uses the View Transitions API for smooth transitions. During navigation, `x-show` elements briefly flash before reactivity initializes — use `x-cloak` on elements that should default to hidden.
 
 **Cross-scope communication pattern:** When `<script data-stx-scoped>` functions need to update `x-data` reactive state, use:
+
 ```js
 var el = document.querySelector('[data-stx-scope]');
 if (el && el.__stx_execute) el.__stx_execute("stateVar = newValue");

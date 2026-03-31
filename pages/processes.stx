@@ -54,17 +54,17 @@
 }">
 
 <!-- Reactive toast container -->
-<div class="toast-area">
+<div class='toast-area'>
   @for(let i = 0; i < 5; i++)
-    <div class="toast" x-show="toasts[{{ i }}]" x-text="toasts[{{ i }}] ? (toasts[{{ i }}].type === 'success' ? '✓' : toasts[{{ i }}].type === 'error' ? '✕' : '⚠') + ' ' + toasts[{{ i }}].msg : ''"></div>
+    <div class='toast' x-show='toasts[{{ i }}]' x-text="toasts[{{ i }}] ? (toasts[{{ i }}].type === 'success' ? '✓' : toasts[{{ i }}].type === 'error' ? '✕' : '⚠') + ' ' + toasts[{{ i }}].msg : ''"></div>
   @endfor
 </div>
 
-<div class="main-header">
-  <div class="main-title">Background Processes</div>
-  <div class="main-subtitle">Active processes using notable CPU or memory</div>
+<div class='main-header'>
+  <div class='main-title'>Background Processes</div>
+  <div class='main-subtitle'>Active processes using notable CPU or memory</div>
 </div>
-<div class="main-content">
+<div class='main-content'>
   @include('ProcessesPanel')
 </div>
 </div>
@@ -79,7 +79,7 @@ window.__esc = function(s) {
 };
 
 window.__renderProcessRows = function(processes, killedPids, selected) {
-  if (!processes || !processes.length) return '<tr><td colspan="7" class="empty-state">Loading processes…</td></tr>';
+  if (!processes || !processes.length) return '<tr><td colspan='7' class='empty-state'>Loading processes…</td></tr>';
   selected = selected || [];
   return processes
     .filter(function(p) { return killedPids.indexOf(p.pid) === -1; })
@@ -88,17 +88,17 @@ window.__renderProcessRows = function(processes, killedPids, selected) {
       var barColor = p.cpu > 50 ? '#ff453a' : p.cpu > 20 ? '#ff9f0a' : '#30d158';
       var isSelected = selected.indexOf(p.id) !== -1;
       var badge = p.isSystem
-        ? '<span class="badge badge-orange">' + __esc(p.user) + '</span>'
-        : '<span class="badge badge-green">' + __esc(p.user) + '</span>';
+        ? '<span class='badge badge-orange'>' + __esc(p.user) + '</span>'
+        : '<span class='badge badge-green'>' + __esc(p.user) + '</span>';
       var action = p.isSystem
-        ? '<span class="dim" style="font-size: 10px;">Protected</span>'
+        ? '<span class='dim' style='font-size: 10px;'>Protected</span>'
         : '<button class="btn btn-danger btn-sm" onclick="doKill(' + p.pid + ', \'' + __esc(p.name).replace(/'/g, "\\'") + '\')">Kill</button>';
       return '<tr>'
-        + '<td><input type="checkbox" class="check"' + (isSelected ? ' checked' : '') + ' onclick="_exec(\\"toggle(\'' + p.id + '\')\\")" /></td>'
-        + '<td><div class="item-name">' + __esc(p.name) + '</div><div class="item-path" title="' + __esc(p.fullCommand) + '">' + __esc(p.fullCommand) + '</div></td>'
-        + '<td class="mono dim" style="font-size: 11px;">' + p.pid + '</td>'
-        + '<td><div class="cpu-bar"><span style="font-size:11px;font-weight:500;min-width:36px;' + (cpuColor ? 'color:' + cpuColor + ';' : '') + '">' + p.cpu.toFixed(1) + '%</span><div class="cpu-track"><div class="cpu-fill" style="width:' + Math.min(100, p.cpu) + '%;background:' + barColor + ';"></div></div></div></td>'
-        + '<td style="font-size: 11px;">' + p.memMB + ' MB</td>'
+        + '<td><input type='checkbox' class='check'' + (isSelected ? ' checked' : '') + ' onclick="_exec(\\"toggle(\'' + p.id + '\')\\')' /></td>'
+        + '<td><div class='item-name'>' + __esc(p.name) + '</div><div class='item-path' title="' + __esc(p.fullCommand) + '">' + __esc(p.fullCommand) + '</div></td>'
+        + '<td class='mono dim' style='font-size: 11px;'>' + p.pid + '</td>'
+        + '<td><div class='cpu-bar'><span style="font-size:11px;font-weight:500;min-width:36px;' + (cpuColor ? 'color:' + cpuColor + ';' : '') + '">' + p.cpu.toFixed(1) + '%</span><div class='cpu-track'><div class='cpu-fill' style="width:' + Math.min(100, p.cpu) + '%;background:' + barColor + ';"></div></div></div></td>'
+        + '<td style='font-size: 11px;'>' + p.memMB + ' MB</td>'
         + '<td>' + badge + '</td>'
         + '<td>' + action + '</td>'
         + '</tr>';
@@ -133,7 +133,7 @@ window.doKill = function(pid, name) {
     .then(function(r) { return r.json(); })
     .then(function(r) {
       if (r.success) {
-        _exec("killedPids = [...killedPids, " + pid + "]");
+        _exec('killedPids = [...killedPids, ' + pid + ']');
         _exec("toast('" + name.replace(/'/g, "\\'") + " killed (PID " + pid + ")', 'success')");
       } else {
         _exec("toast('Kill failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");

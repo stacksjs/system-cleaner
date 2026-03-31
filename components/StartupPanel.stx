@@ -1,47 +1,47 @@
 <!-- Startup items management panel -->
-<div class="card-row">
-  <div class="card">
-    <div class="card-label">Active</div>
-    <div class="card-value" style="color: #ff9f0a;">{{ enabledStartup.length }}</div>
-    <div class="card-detail">Running at startup</div>
+<div class='card-row'>
+  <div class='card'>
+    <div class='card-label'>Active</div>
+    <div class='card-value' style='color: #ff9f0a;'>{{ enabledStartup.length }}</div>
+    <div class='card-detail'>Running at startup</div>
   </div>
-  <div class="card">
-    <div class="card-label">Disabled</div>
-    <div class="card-value dim">{{ disabledStartup.length }}</div>
-    <div class="card-detail">Not running</div>
+  <div class='card'>
+    <div class='card-label'>Disabled</div>
+    <div class='card-value dim'>{{ disabledStartup.length }}</div>
+    <div class='card-detail'>Not running</div>
   </div>
-  <div class="card">
-    <div class="card-label">User Agents</div>
-    <div class="card-value">{{ startupItems.filter(i => i.scope === 'user').length }}</div>
-    <div class="card-detail">~/Library/LaunchAgents</div>
+  <div class='card'>
+    <div class='card-label'>User Agents</div>
+    <div class='card-value'>{{ startupItems.filter(i => i.scope === 'user').length }}</div>
+    <div class='card-detail'>~/Library/LaunchAgents</div>
   </div>
-  <div class="card">
-    <div class="card-label">System Daemons</div>
-    <div class="card-value">{{ startupItems.filter(i => i.type === 'daemon').length }}</div>
-    <div class="card-detail">/Library/LaunchDaemons</div>
+  <div class='card'>
+    <div class='card-label'>System Daemons</div>
+    <div class='card-value'>{{ startupItems.filter(i => i.type === 'daemon').length }}</div>
+    <div class='card-detail'>/Library/LaunchDaemons</div>
   </div>
 </div>
 
-<div class="tabs">
-  <button class="tab" :class="{ active: startupFilter === 'all' }" @click="setFilter('all')">All ({{ startupItems.length }})</button>
-  <button class="tab" :class="{ active: startupFilter === 'enabled' }" @click="setFilter('enabled')">Enabled ({{ enabledStartup.length }})</button>
-  <button class="tab" :class="{ active: startupFilter === 'vendor' }" @click="setFilter('vendor')">Third-party</button>
-  <button class="tab" :class="{ active: startupFilter === 'system' }" @click="setFilter('system')">Apple</button>
+<div class='tabs'>
+  <button class='tab' :class="{ active: startupFilter === 'all' }' @click='setFilter('all')">All ({{ startupItems.length }})</button>
+  <button class='tab' :class="{ active: startupFilter === 'enabled' }' @click='setFilter('enabled')">Enabled ({{ enabledStartup.length }})</button>
+  <button class='tab' :class="{ active: startupFilter === 'vendor' }' @click='setFilter('vendor')">Third-party</button>
+  <button class='tab' :class="{ active: startupFilter === 'system' }' @click='setFilter('system')">Apple</button>
 </div>
 
-<div class="tbl-wrap">
-  <div class="tbl-bar">
-    <span class="tbl-title">Launch Agents & Daemons</span>
-    <div style="display: flex; gap: 6px;">
-      <button class="btn btn-sm" x-show="selected.length > 0" @click="toast(selected.length + ' items would be disabled (demo)', 'warning')">
-        Disable Selected (<span x-text="selected.length">0</span>)
+<div class='tbl-wrap'>
+  <div class='tbl-bar'>
+    <span class='tbl-title'>Launch Agents & Daemons</span>
+    <div style='display: flex; gap: 6px;'>
+      <button class='btn btn-sm' x-show='selected.length > 0' @click="toast(selected.length + ' items would be disabled (demo)', 'warning')">
+        Disable Selected (<span x-text='selected.length'>0</span>)
       </button>
     </div>
   </div>
   <table>
     <thead>
       <tr>
-        <th style="width: 28px;"><input type="checkbox" class="check" @click="allOn({{ JSON.stringify(enabledStartup.map(i => i.id)) }})" /></th>
+        <th style='width: 28px;'><input type='checkbox' class='check' @click='allOn({{ JSON.stringify(enabledStartup.map(i => i.id)) }})' /></th>
         <th>Name</th>
         <th>Scope</th>
         <th>Status</th>
@@ -51,40 +51,40 @@
     </thead>
     <tbody>
       @foreach(startupItems as item)
-        <tr x-show="!isRemoved('{{ item.id }}') && rowVisible('{{ item.category }}', isDisabled('{{ item.id }}') ? 'true' : 'false')" data-item-id="{{ item.id }}">
-          <td><input type="checkbox" class="check" :checked="isOn('{{ item.id }}')" @click="toggle('{{ item.id }}')" /></td>
+        <tr x-show="!isRemoved('{{ item.id }}') && rowVisible('{{ item.category }}', isDisabled('{{ item.id }}') ? 'true' : 'false')' data-item-id='{{ item.id }}">
+          <td><input type='checkbox' class='check' :checked="isOn('{{ item.id }}')' @click='toggle('{{ item.id }}')" /></td>
           <td>
-            <div><span style="margin-right: 4px;">{{ item.icon }}</span><span class="item-name">{{ item.name }}</span></div>
-            <div class="item-sub">{{ item.vendor }}</div>
+            <div><span style='margin-right: 4px;'>{{ item.icon }}</span><span class='item-name'>{{ item.name }}</span></div>
+            <div class='item-sub'>{{ item.vendor }}</div>
           </td>
           <td>
             @if(item.scope === 'user')
-              <span class="badge badge-green">User</span>
+              <span class='badge badge-green'>User</span>
             @else
-              <span class="badge badge-orange">System</span>
+              <span class='badge badge-orange'>System</span>
             @endif
           </td>
           <td>
-            <span x-show="!isDisabled('{{ item.id }}')" class="badge badge-green">Active</span>
-            <span x-show="isDisabled('{{ item.id }}')" x-cloak class="badge badge-gray">Disabled</span>
+            <span x-show="!isDisabled('{{ item.id }}')' class='badge badge-green">Active</span>
+            <span x-show="isDisabled('{{ item.id }}')' x-cloak class='badge badge-gray">Disabled</span>
           </td>
           <td>
             @if(item.runAtLoad)
-              <span style="color: #30d158;">✓</span>
+              <span style='color: #30d158;'>✓</span>
             @else
-              <span class="dim">—</span>
+              <span class='dim'>—</span>
             @endif
           </td>
           <td>
             @if(item.category === 'system')
-              <span class="dim" style="font-size: 10px;">Apple</span>
+              <span class='dim' style='font-size: 10px;'>Apple</span>
             @else
-              <div style="display: flex; gap: 4px;" x-show="!isRemoved('{{ item.id }}')">
-                <button x-show="!isDisabled('{{ item.id }}')" class="btn btn-sm" onclick="doToggle('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', 'disable', '{{ item.id }}')">Disable</button>
-                <button x-show="isDisabled('{{ item.id }}')" x-cloak class="btn btn-sm" onclick="doToggle('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', 'enable', '{{ item.id }}')">Enable</button>
-                <button class="btn btn-danger btn-sm" onclick="doRemove('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', '{{ item.id }}')">Delete</button>
+              <div style='display: flex; gap: 4px;' x-show="!isRemoved('{{ item.id }}')">
+                <button x-show="!isDisabled('{{ item.id }}')' class='btn btn-sm' onclick='doToggle('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', 'disable', '{{ item.id }}')">Disable</button>
+                <button x-show="isDisabled('{{ item.id }}')' x-cloak class='btn btn-sm' onclick='doToggle('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', 'enable', '{{ item.id }}')">Enable</button>
+                <button class='btn btn-danger btn-sm' onclick="doRemove('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', '{{ item.id }}')">Delete</button>
               </div>
-              <span x-show="isRemoved('{{ item.id }}')" x-cloak class="badge badge-gray">Removed</span>
+              <span x-show="isRemoved('{{ item.id }}')' x-cloak class='badge badge-gray">Removed</span>
             @endif
           </td>
         </tr>

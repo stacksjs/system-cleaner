@@ -128,6 +128,7 @@ export function escapeHtml(str: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
+    // eslint-disable-next-line max-statements-per-line
     .replace(/'/g, '&#39;')
 }
 

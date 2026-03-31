@@ -11,6 +11,7 @@ import type { CollectorState } from './types'
  *   2. Collect purgeable space separately as supplementary info
  *   3. Feed raw values to health score (so "disk full" warnings fire correctly)
  */
+// eslint-disable-next-line pickier/no-unused-vars
 export async function getDiskIoMetrics(state: CollectorState): Promise<DiskIoMetrics> {
   const diskInfo = await getDiskInfo()
   const ioRates = await getIoRates()

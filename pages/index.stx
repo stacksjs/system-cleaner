@@ -23,7 +23,7 @@ function safeExec(cmd, fallback) {
   catch { return fallback || '' }
 }
 
-const diskLine = safeExec("df -h / | tail -1")
+const diskLine = safeExec('df -h / | tail -1')
 const diskParts = diskLine.split(/\s+/)
 const diskTotal = diskParts[1] || '—'
 const diskUsed = diskParts[2] || '—'
@@ -94,11 +94,11 @@ const cpuLabel = cpuModel.split(' ').slice(0, 3).join(' ')
 const cpuAvgLabel = String(Math.round(totalCPU / cpuCores))
 </script>
 
-<div class="main-header">
-  <div class="main-title">Dashboard</div>
-  <div class="main-subtitle">System overview for {{ hostname }}</div>
+<div class='main-header'>
+  <div class='main-title'>Dashboard</div>
+  <div class='main-subtitle'>System overview for {{ hostname }}</div>
 </div>
-<div class="main-content">
+<div class='main-content'>
   @include('DashboardCards')
   @include('TopProcesses')
 </div>

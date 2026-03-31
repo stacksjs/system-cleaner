@@ -42,17 +42,17 @@ function esc(str) { return escapeHtml(str || '') }
 }">
 
 <!-- Reactive toast container -->
-<div class="toast-area">
+<div class='toast-area'>
   @for(let i = 0; i < 5; i++)
-    <div class="toast" x-show="toasts[{{ i }}]" x-text="toasts[{{ i }}] ? (toasts[{{ i }}].type === 'success' ? '✓' : toasts[{{ i }}].type === 'error' ? '✕' : '⚠') + ' ' + toasts[{{ i }}].msg : ''"></div>
+    <div class='toast' x-show='toasts[{{ i }}]' x-text="toasts[{{ i }}] ? (toasts[{{ i }}].type === 'success' ? '✓' : toasts[{{ i }}].type === 'error' ? '✕' : '⚠') + ' ' + toasts[{{ i }}].msg : ''"></div>
   @endfor
 </div>
 
-<div class="main-header">
-  <div class="main-title">Quick Clean</div>
-  <div class="main-subtitle">Remove caches, logs, and temporary files to free up disk space</div>
+<div class='main-header'>
+  <div class='main-title'>Quick Clean</div>
+  <div class='main-subtitle'>Remove caches, logs, and temporary files to free up disk space</div>
 </div>
-<div class="main-content">
+<div class='main-content'>
   @include('CleanupPanel')
 </div>
 </div>
@@ -84,9 +84,9 @@ function _fmtBytes(b) {
 
 function doCleanDir(p, name, id) {
   if (!confirm('Clean ' + name + '? This cannot be undone.')) return;
-  _exec("cleaning['" + id + "'] = true");
+  _exec("cleaning['' + id + ''] = true");
   _api('/api/clean-dir', { path: p }).then(function(r) {
-    _exec("delete cleaning['" + id + "']");
+    _exec("delete cleaning['' + id + '']");
     if (r.success) {
       localStorage.removeItem(CACHE_KEY); // invalidate cache
       _exec("toast('Cleaned " + name.replace(/'/g, "\\'") + " — freed " + _fmtBytes(r.freedBytes) + "', 'success')");
@@ -98,7 +98,7 @@ function doCleanDir(p, name, id) {
 function doEmptyTrash() {
   if (!confirm('Empty Trash? This cannot be undone.')) return;
   _api('/api/empty-trash', {}).then(function(r) {
-    if (r.success) _exec("toast('Trash emptied — freed " + _fmtBytes(r.freedBytes) + "', 'success')");
+    if (r.success) _exec("toast('Trash emptied — freed ' + _fmtBytes(r.freedBytes) + '', 'success')");
     else _exec("toast('Failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");
   });
 }
@@ -114,13 +114,13 @@ function doCleanSelected() {
     var row = document.querySelector('[data-clean-id="' + id + '"]');
     var path = row ? row.getAttribute('data-clean-path') : null;
     if (!path) { remaining--; return; }
-    _exec("cleaning['" + id + "'] = true");
+    _exec("cleaning['' + id + ''] = true");
     _api('/api/clean-dir', { path: path }).then(function(r) {
-      _exec("delete cleaning['" + id + "']");
+      _exec("delete cleaning['' + id + '']");
       if (r.success) total += r.freedBytes || 0;
       remaining--;
       if (remaining === 0) {
-        _exec("toast('Cleaned " + items.length + " items — freed " + _fmtBytes(total) + "', 'success'); selected = []");
+        _exec("toast('Cleaned ' + items.length + ' items — freed ' + _fmtBytes(total) + '', 'success'); selected = []");
       }
     });
   });

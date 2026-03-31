@@ -1,26 +1,6 @@
 ---
 title: Usage
 ---
-
-# Usage
-
-## Navigation
-
-The sidebar provides access to five panels:
-
-| Shortcut | Panel |
-|----------|-------|
-| Cmd+1 | Dashboard |
-| Cmd+2 | Startup Items |
-| Cmd+3 | Browser Extensions |
-| Cmd+4 | Background Processes |
-| Cmd+5 | Disk Usage |
-
-Click any sidebar item or use the keyboard shortcuts to switch panels.
-
-## Dashboard
-
-The dashboard shows a health score (0–100) computed from:
 - Memory pressure (penalized above 70%)
 - Disk usage (penalized above 80%)
 - Number of startup items (penalized per 5 active)
@@ -35,6 +15,7 @@ Actions like "Disable", "Remove", and "Kill" run in **demo mode** — they show 
 ## Filtering
 
 The Startup Items panel supports tab-based filtering:
+
 - **All** — every agent and daemon
 - **Enabled** — only active items
 - **Third-party** — non-Apple vendor items

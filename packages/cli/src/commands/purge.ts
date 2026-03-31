@@ -38,6 +38,7 @@ export function registerPurgeCommand(app: CLI): void {
       const totalSize = artifacts.reduce((sum, a) => sum + a.sizeBytes, 0)
 
       if (options.json) {
+        // eslint-disable-next-line no-console
         console.log(JSON.stringify({ artifacts, totalSize, totalSizeFormatted: formatBytes(totalSize) }, null, 2))
         return
       }

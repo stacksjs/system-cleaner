@@ -116,6 +116,7 @@ export async function cleanTargets(
 /**
  * Run a full clean across all targets matching the given categories
  */
+// eslint-disable-next-line pickier/no-unused-vars
 export async function cleanAll(options: CleanOptions = {}): Promise<{
   results: CleanResult[]
   totalFreed: number

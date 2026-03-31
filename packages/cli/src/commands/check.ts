@@ -45,6 +45,7 @@ export function registerCheckCommand(app: CLI): void {
       s.stop(`Completed ${checks.length} checks`)
 
       if (options.json) {
+        // eslint-disable-next-line no-console
         console.log(JSON.stringify({ checks }, null, 2))
         return
       }
@@ -58,6 +59,7 @@ export function registerCheckCommand(app: CLI): void {
       // Security
       log.info('──── Security ────────────────────────')
       for (const c of checks.filter(c => ['FileVault', 'Firewall', 'SIP', 'Gatekeeper'].includes(c.name))) {
+        // eslint-disable-next-line no-console
         console.log(`  ${colors[c.status]}${icons[c.status]}${reset} ${c.name}: ${c.message}`)
       }
 
@@ -65,6 +67,7 @@ export function registerCheckCommand(app: CLI): void {
       log.info('')
       log.info('──── Health ──────────────────────────')
       for (const c of checks.filter(c => ['Disk Space', 'Memory', 'Swap'].includes(c.name))) {
+        // eslint-disable-next-line no-console
         console.log(`  ${colors[c.status]}${icons[c.status]}${reset} ${c.name}: ${c.message}`)
       }
 
@@ -72,6 +75,7 @@ export function registerCheckCommand(app: CLI): void {
       log.info('')
       log.info('──── Configuration ───────────────────')
       for (const c of checks.filter(c => ['Touch ID sudo', 'Rosetta', 'Git Config'].includes(c.name))) {
+        // eslint-disable-next-line no-console
         console.log(`  ${colors[c.status]}${icons[c.status]}${reset} ${c.name}: ${c.message}`)
       }
 
@@ -79,6 +83,7 @@ export function registerCheckCommand(app: CLI): void {
       log.info('')
       log.info('──── Updates ─────────────────────────')
       for (const c of checks.filter(c => ['Homebrew Updates', 'macOS Updates'].includes(c.name))) {
+        // eslint-disable-next-line no-console
         console.log(`  ${colors[c.status]}${icons[c.status]}${reset} ${c.name}: ${c.message}`)
       }
 

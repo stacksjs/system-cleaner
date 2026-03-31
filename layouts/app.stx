@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="en" style="background:#0d0d0d;color-scheme:dark">
+<html lang='en' style='background:#0d0d0d;color-scheme:dark'>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset='UTF-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1.0'>
   <title>SystemCleaner</title>
-  <link rel="preconnect" href="https://fonts.bunny.net">
-  <link href="https://fonts.bunny.net/css?family=inter:300,400,500,600,700" rel="stylesheet" />
+  <link rel='preconnect' href='https://fonts.bunny.net'>
+  <link href='https://fonts.bunny.net/css?family=inter:300,400,500,600,700' rel='stylesheet' />
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -250,48 +250,48 @@
   </style>
 </head>
 <body>
-<div class="app-chrome">
-  <div class="app-body">
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <div class="sidebar-app-name">SystemCleaner</div>
+<div class='app-chrome'>
+  <div class='app-body'>
+    <aside class='sidebar'>
+      <div class='sidebar-header'>
+        <div class='sidebar-app-name'>SystemCleaner</div>
       </div>
-      <nav class="sidebar-nav">
-        <div class="sidebar-section-title">Overview</div>
-        <a class="nav-item" href="/" data-stx-link>
-          <span class="nav-icon">📊</span> Dashboard
+      <nav class='sidebar-nav'>
+        <div class='sidebar-section-title'>Overview</div>
+        <a class='nav-item' href='/' data-stx-link>
+          <span class='nav-icon'>📊</span> Dashboard
         </a>
-        <div class="sidebar-section-title">Manage</div>
-        <a class="nav-item" href="/startup" data-stx-link>
-          <span class="nav-icon">⚡</span> Startup Items
+        <div class='sidebar-section-title'>Manage</div>
+        <a class='nav-item' href='/startup' data-stx-link>
+          <span class='nav-icon'>⚡</span> Startup Items
         </a>
-        <a class="nav-item" href="/extensions" data-stx-link>
-          <span class="nav-icon">🧩</span> Extensions
+        <a class='nav-item' href='/extensions' data-stx-link>
+          <span class='nav-icon'>🧩</span> Extensions
         </a>
-        <a class="nav-item" href="/processes" data-stx-link>
-          <span class="nav-icon">🔄</span> Processes
+        <a class='nav-item' href='/processes' data-stx-link>
+          <span class='nav-icon'>🔄</span> Processes
         </a>
-        <div class="sidebar-section-title">Analyze</div>
-        <a class="nav-item" href="/disk" data-stx-link>
-          <span class="nav-icon">💾</span> Disk Usage
+        <div class='sidebar-section-title'>Analyze</div>
+        <a class='nav-item' href='/disk' data-stx-link>
+          <span class='nav-icon'>💾</span> Disk Usage
         </a>
-        <a class="nav-item" href="/system" data-stx-link>
-          <span class="nav-icon">🖥️</span> System
+        <a class='nav-item' href='/system' data-stx-link>
+          <span class='nav-icon'>🖥️</span> System
         </a>
-        <div class="sidebar-section-title">Maintain</div>
-        <a class="nav-item" href="/updates" data-stx-link>
-          <span class="nav-icon">📦</span> Updates
+        <div class='sidebar-section-title'>Maintain</div>
+        <a class='nav-item' href='/updates' data-stx-link>
+          <span class='nav-icon'>📦</span> Updates
         </a>
-        <a class="nav-item" href="/cleanup" data-stx-link>
-          <span class="nav-icon">🧹</span> Quick Clean
+        <a class='nav-item' href='/cleanup' data-stx-link>
+          <span class='nav-icon'>🧹</span> Quick Clean
         </a>
       </nav>
-      <div class="sidebar-footer">
-        <div class="sidebar-user">@yield('username')</div>
+      <div class='sidebar-footer'>
+        <div class='sidebar-user'>@yield('username')</div>
         <div>@yield('macos')</div>
       </div>
     </aside>
-    <main class="main" data-stx-content>
+    <main class='main' data-stx-content>
       @yield('body')
     </main>
   </div>

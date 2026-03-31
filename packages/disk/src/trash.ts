@@ -7,6 +7,7 @@ import { exec } from '@system-cleaner/core'
  * Matches Mole's delete.go approach — safer than rm -rf.
  * Path validation: rejects empty, root, relative, null-byte, and traversal paths.
  */
+// eslint-disable-next-line pickier/no-unused-vars
 export async function moveToTrash(targetPath: string): Promise<{ success: boolean, error?: string }> {
   const absPath = path.resolve(targetPath)
 

@@ -31,6 +31,7 @@ export function registerDiskCommand(app: CLI): void {
         const totalSize = artifacts.reduce((sum, a) => sum + a.sizeBytes, 0)
 
         if (options.json) {
+          // eslint-disable-next-line no-console
           console.log(JSON.stringify({ artifacts, totalSize }, null, 2))
           return
         }
@@ -71,6 +72,7 @@ export function registerDiskCommand(app: CLI): void {
       s.stop(`Scanned ${result.totalFiles} files, ${result.totalFolders} folders in ${timeStr}${result.aborted ? ` (timeout after ${timeStr} — increase with --depth)` : ''}`)
 
       if (options.json) {
+        // eslint-disable-next-line no-console
         console.log(JSON.stringify({
           path: scanPath,
           totalSize: result.tree.sizeBytes,

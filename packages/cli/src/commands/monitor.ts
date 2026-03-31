@@ -32,6 +32,7 @@ export function registerMonitorCommand(app: CLI): void {
         s.stop('Done')
 
         if (options.json) {
+          // eslint-disable-next-line no-console
           console.log(JSON.stringify(snapshot, null, 2))
           return
         }

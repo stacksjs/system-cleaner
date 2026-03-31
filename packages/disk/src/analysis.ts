@@ -147,7 +147,10 @@ async function scanForArtifacts(
     if (patternNames.has(entry.name)) {
       const pattern = patterns.find(p => p.dirName === entry.name)!
       let mtime = new Date()
-      try { mtime = fs.statSync(fullPath).mtime } catch { /* skip */ }
+      try {
+        mtime = fs.statSync(fullPath).mtime
+      }
+      catch { /* skip */ }
 
       // Determine project name from parent directory
       const projectName = path.basename(dirPath)

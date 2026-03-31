@@ -94,6 +94,7 @@ export async function execOr<T>(command: string, fallback: T, parse: (stdout: st
  * Sanitize a string for safe use in shell commands (prevents injection).
  * Wraps in single quotes and escapes any embedded single quotes.
  */
+// eslint-disable-next-line pickier/no-unused-vars
 export function shellEscape(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`
 }

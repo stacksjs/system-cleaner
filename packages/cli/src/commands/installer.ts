@@ -3,6 +3,7 @@ import { formatBytes, HOME, exec, shellEscape } from '@system-cleaner/core'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 
+// eslint-disable-next-line pickier/no-unused-vars
 const INSTALLER_EXTENSIONS = new Set(['.dmg', '.pkg', '.mpkg', '.iso', '.xip'])
 
 const SCAN_LOCATIONS = [
@@ -81,6 +82,7 @@ export function registerInstallerCommand(app: CLI): void {
       const totalSize = installers.reduce((sum, f) => sum + f.sizeBytes, 0)
 
       if (options.json) {
+        // eslint-disable-next-line no-console
         console.log(JSON.stringify({ files: installers, totalSize, totalSizeFormatted: formatBytes(totalSize) }, null, 2))
         return
       }

@@ -33,17 +33,17 @@ function esc(str) { return escapeHtml(str || '') }
 }">
 
 <!-- Reactive toast container -->
-<div class="toast-area">
+<div class='toast-area'>
   @for(let i = 0; i < 5; i++)
-    <div class="toast" x-show="toasts[{{ i }}]" x-text="toasts[{{ i }}] ? (toasts[{{ i }}].type === 'success' ? '✓' : toasts[{{ i }}].type === 'error' ? '✕' : '⚠') + ' ' + toasts[{{ i }}].msg : ''"></div>
+    <div class='toast' x-show='toasts[{{ i }}]' x-text="toasts[{{ i }}] ? (toasts[{{ i }}].type === 'success' ? '✓' : toasts[{{ i }}].type === 'error' ? '✕' : '⚠') + ' ' + toasts[{{ i }}].msg : ''"></div>
   @endfor
 </div>
 
-<div class="main-header">
-  <div class="main-title">Startup Items</div>
-  <div class="main-subtitle">Launch Agents & Daemons that run when your Mac starts</div>
+<div class='main-header'>
+  <div class='main-title'>Startup Items</div>
+  <div class='main-subtitle'>Launch Agents & Daemons that run when your Mac starts</div>
 </div>
-<div class="main-content">
+<div class='main-content'>
   @include('StartupPanel')
 </div>
 </div>
@@ -76,7 +76,7 @@ function doRemove(fp, name, itemId) {
   if (!confirm('Permanently delete ' + name + '?\nThis will unload and remove the launch agent/daemon.')) return;
   _api('/api/remove-startup', { filepath: fp }).then(function(r) {
     if (r.success) {
-      _exec("removedItems = [...removedItems, '" + itemId + "']");
+      _exec("removedItems = [...removedItems, '' + itemId + '']");
       _exec("toast('" + name.replace(/'/g, "\\'") + " removed', 'success')");
     } else {
       _exec("toast('Failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");

@@ -51,7 +51,9 @@ export function scanDirectory(rootPath: string, options: ScanOptions = {}): Scan
         const parent = (i - 1) >> 1
         if (topEntries[parent].sizeBytes <= topEntries[i].sizeBytes)
           break
-        ;[topEntries[parent], topEntries[i]] = [topEntries[i], topEntries[parent]]
+        const temp = topEntries[parent]
+        topEntries[parent] = topEntries[i]
+        topEntries[i] = temp
         i = parent
       }
     }
@@ -70,7 +72,9 @@ export function scanDirectory(rootPath: string, options: ScanOptions = {}): Scan
           smallest = right
         if (smallest === i)
           break
-        ;[topEntries[smallest], topEntries[i]] = [topEntries[i], topEntries[smallest]]
+        const swp = topEntries[smallest]
+        topEntries[smallest] = topEntries[i]
+        topEntries[i] = swp
         i = smallest
       }
     }

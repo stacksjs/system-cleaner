@@ -1,40 +1,40 @@
 <!-- Browser extensions panel -->
-<div class="card-row">
-  <div class="card">
-    <div class="card-label">Total Extensions</div>
-    <div class="card-value" style="color: #bf5af2;">{{ browserExtensions.length }}</div>
-    <div class="card-detail">Across all browsers</div>
+<div class='card-row'>
+  <div class='card'>
+    <div class='card-label'>Total Extensions</div>
+    <div class='card-value' style='color: #bf5af2;'>{{ browserExtensions.length }}</div>
+    <div class='card-detail'>Across all browsers</div>
   </div>
-  <div class="card">
-    <div class="card-label">Total Size</div>
-    <div class="card-value">{{ formatBytes(totalExtSize) }}</div>
-    <div class="card-detail">Disk space used</div>
+  <div class='card'>
+    <div class='card-label'>Total Size</div>
+    <div class='card-value'>{{ formatBytes(totalExtSize) }}</div>
+    <div class='card-detail'>Disk space used</div>
   </div>
-  <div class="card">
-    <div class="card-label">Chrome</div>
-    <div class="card-value">{{ browserExtensions.filter(e => e.browser === 'Chrome').length }}</div>
-    <div class="card-detail">extensions</div>
+  <div class='card'>
+    <div class='card-label'>Chrome</div>
+    <div class='card-value'>{{ browserExtensions.filter(e => e.browser === 'Chrome').length }}</div>
+    <div class='card-detail'>extensions</div>
   </div>
-  <div class="card">
-    <div class="card-label">Firefox</div>
-    <div class="card-value">{{ browserExtensions.filter(e => e.browser === 'Firefox').length }}</div>
-    <div class="card-detail">extensions</div>
+  <div class='card'>
+    <div class='card-label'>Firefox</div>
+    <div class='card-value'>{{ browserExtensions.filter(e => e.browser === 'Firefox').length }}</div>
+    <div class='card-detail'>extensions</div>
   </div>
 </div>
 
 @if(browserExtensions.length > 0)
-  <div class="tbl-wrap">
-    <div class="tbl-bar">
+  <div class='tbl-wrap'>
+    <div class='tbl-bar'>
       <div>
-        <span class="tbl-title">Installed Extensions</span>
-        <span class="tbl-count">sorted by size</span>
+        <span class='tbl-title'>Installed Extensions</span>
+        <span class='tbl-count'>sorted by size</span>
       </div>
-      <button class="btn btn-sm" x-show="selected.length > 0" @click="toast(selected.length + ' extensions would be removed (demo)', 'warning')">Remove Selected</button>
+      <button class='btn btn-sm' x-show='selected.length > 0' @click="toast(selected.length + ' extensions would be removed (demo)', 'warning')">Remove Selected</button>
     </div>
     <table>
       <thead>
         <tr>
-          <th style="width: 28px;"><input type="checkbox" class="check" @click="allOn({{ JSON.stringify(browserExtensions.map(e => e.id)) }})" /></th>
+          <th style='width: 28px;'><input type='checkbox' class='check' @click='allOn({{ JSON.stringify(browserExtensions.map(e => e.id)) }})' /></th>
           <th>Extension</th>
           <th>Browser</th>
           <th>Version</th>
@@ -46,27 +46,27 @@
       <tbody>
         @foreach(browserExtensions as ext)
           <tr>
-            <td><input type="checkbox" class="check" :checked="isOn('{{ ext.id }}')" @click="toggle('{{ ext.id }}')" /></td>
+            <td><input type='checkbox' class='check' :checked="isOn('{{ ext.id }}')' @click='toggle('{{ ext.id }}')" /></td>
             <td>
-              <div class="item-name">{{ ext.browserIcon }} {{ ext.name }}</div>
+              <div class='item-name'>{{ ext.browserIcon }} {{ ext.name }}</div>
               @if(ext.description)
-                <div class="item-sub">{{ ext.description }}</div>
+                <div class='item-sub'>{{ ext.description }}</div>
               @endif
             </td>
-            <td><span class="badge badge-purple">{{ ext.browser }}</span></td>
-            <td class="mono dim" style="font-size: 11px;">{{ ext.version }}</td>
-            <td style="font-size: 11px;">{{ ext.sizeStr }}</td>
+            <td><span class='badge badge-purple'>{{ ext.browser }}</span></td>
+            <td class='mono dim' style='font-size: 11px;'>{{ ext.version }}</td>
+            <td style='font-size: 11px;'>{{ ext.sizeStr }}</td>
             <td>
               @if(ext.permissions + ext.hostPermissions > 5)
-                <span class="badge badge-red">{{ ext.permissions + ext.hostPermissions }} perms</span>
+                <span class='badge badge-red'>{{ ext.permissions + ext.hostPermissions }} perms</span>
               @elseif(ext.permissions + ext.hostPermissions > 0)
-                <span class="badge badge-orange">{{ ext.permissions + ext.hostPermissions }} perms</span>
+                <span class='badge badge-orange'>{{ ext.permissions + ext.hostPermissions }} perms</span>
               @else
-                <span class="badge badge-gray">None</span>
+                <span class='badge badge-gray'>None</span>
               @endif
             </td>
             <td>
-              <button class="btn btn-danger btn-sm" @click="toast('{{ ext.name }} would be removed (demo)', 'warning')">Remove</button>
+              <button class='btn btn-danger btn-sm' @click="toast('{{ ext.name }} would be removed (demo)', 'warning')">Remove</button>
             </td>
           </tr>
         @endforeach
@@ -74,7 +74,7 @@
     </table>
   </div>
 @else
-  <div class="tbl-wrap">
-    <div class="empty-state">🧩 No browser extensions found. Chrome and Firefox are scanned.</div>
+  <div class='tbl-wrap'>
+    <div class='empty-state'>🧩 No browser extensions found. Chrome and Firefox are scanned.</div>
   </div>
 @endif

@@ -1,71 +1,71 @@
 <!-- DiskScope — sunburst disk usage analyzer (lazy-loaded) -->
-<div class="disk-layout">
+<div class='disk-layout'>
 
   <!-- Disk sidebar -->
-  <div class="disk-sidebar">
-    <div class="disk-sidebar-section">
-      <div class="disk-card">
-        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-          <div style="width: 30px; height: 30px; background: linear-gradient(135deg, #3a3a3c, #48484a); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #98989d;">HD</div>
+  <div class='disk-sidebar'>
+    <div class='disk-sidebar-section'>
+      <div class='disk-card'>
+        <div style='display: flex; align-items: center; gap: 8px; margin-bottom: 8px;'>
+          <div style='width: 30px; height: 30px; background: linear-gradient(135deg, #3a3a3c, #48484a); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #98989d;'>HD</div>
           <div>
-            <div style="font-size: 12px; font-weight: 600;">Macintosh HD</div>
-            <div style="font-size: 10px; color: #6c6c70;">{{ fDiskTotalLabel }} total</div>
+            <div style='font-size: 12px; font-weight: 600;'>Macintosh HD</div>
+            <div style='font-size: 10px; color: #6c6c70;'>{{ fDiskTotalLabel }} total</div>
           </div>
         </div>
-        <div class="disk-usage-bar">
-          <div class="disk-usage-fill" style="width: {{ sDUsedPct }}%"></div>
+        <div class='disk-usage-bar'>
+          <div class='disk-usage-fill' style='width: {{ sDUsedPct }}%'></div>
         </div>
-        <div class="disk-usage-text">
+        <div class='disk-usage-text'>
           <span>{{ fDiskUsedLabel }} used</span>
           <span>{{ fDiskFreeLabel }} free</span>
         </div>
       </div>
     </div>
 
-    <div class="disk-sidebar-section" id="disk-scan-info">
-      <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: #6c6c70; margin-bottom: 8px;">Home: {{ scanBasename }}</div>
-      <div style="font-size: 18px; font-weight: 700; margin-bottom: 2px;" id="disk-scan-total">{{ scanTotalFormatted }}</div>
-      <div style="font-size: 10px; color: #6c6c70;" id="disk-scan-meta">Click "Scan Disk" to analyze</div>
+    <div class='disk-sidebar-section' id='disk-scan-info'>
+      <div style='font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: #6c6c70; margin-bottom: 8px;'>Home: {{ scanBasename }}</div>
+      <div style='font-size: 18px; font-weight: 700; margin-bottom: 2px;' id='disk-scan-total'>{{ scanTotalFormatted }}</div>
+      <div style='font-size: 10px; color: #6c6c70;' id='disk-scan-meta'>Click 'Scan Disk' to analyze</div>
     </div>
 
-    <div class="disk-sidebar-section" style="padding-bottom: 4px;">
-      <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: #6c6c70;">Largest Items</div>
+    <div class='disk-sidebar-section' style='padding-bottom: 4px;'>
+      <div style='font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: #6c6c70;'>Largest Items</div>
     </div>
-    <div class="folder-list" id="folder-list"></div>
+    <div class='folder-list' id='folder-list'></div>
   </div>
 
   <!-- Sunburst chart -->
-  <div class="disk-chart">
-    <div id="disk-loading" style="position: relative; z-index: 1; text-align: center; color: #6c6c70; font-size: 13px;">
-      <div id="disk-icon" style="margin-bottom: 12px; font-size: 24px;">💾</div>
-      <div id="disk-prompt">
-        <div style="margin-bottom: 12px;">Analyze disk usage with an interactive sunburst chart</div>
-        <button class="btn" id="disk-scan-btn" onclick="startDiskScan()" style="padding: 8px 20px; font-size: 13px;">Scan Disk</button>
-        <div style="margin-top: 8px; font-size: 10px; color: #48484a;">Results are cached for 10 minutes</div>
+  <div class='disk-chart'>
+    <div id='disk-loading' style='position: relative; z-index: 1; text-align: center; color: #6c6c70; font-size: 13px;'>
+      <div id='disk-icon' style='margin-bottom: 12px; font-size: 24px;'>💾</div>
+      <div id='disk-prompt'>
+        <div style='margin-bottom: 12px;'>Analyze disk usage with an interactive sunburst chart</div>
+        <button class='btn' id='disk-scan-btn' onclick='startDiskScan()' style='padding: 8px 20px; font-size: 13px;'>Scan Disk</button>
+        <div style='margin-top: 8px; font-size: 10px; color: #48484a;'>Results are cached for 10 minutes</div>
       </div>
-      <div id="disk-scanning" style="display:none">Scanning disk...</div>
+      <div id='disk-scanning' style='display:none'>Scanning disk...</div>
     </div>
-    <svg class="sunburst-svg" id="sunburst" viewBox="-320 -320 640 640" style="display:none">
-      <circle cx="0" cy="0" r="115" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="0.5" />
-      <circle cx="0" cy="0" r="170" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="0.5" />
-      <circle cx="0" cy="0" r="225" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="0.5" />
-      <g id="segments-group"></g>
-      <circle cx="0" cy="0" r="57" class="center-bg" id="center-circle" />
-      <circle cx="0" cy="0" r="57" class="center-ring" />
-      <text id="center-size" x="0" y="-5" class="center-text-size">{{ scanTotalFormatted }}</text>
-      <text id="center-name" x="0" y="12" class="center-text-name">{{ scanBasename }}</text>
-      <text x="0" y="26" class="center-back" id="center-back">Back</text>
+    <svg class='sunburst-svg' id='sunburst' viewBox='-320 -320 640 640' style='display:none'>
+      <circle cx='0' cy='0' r='115' fill='none' stroke='rgba(255,255,255,0.03)' stroke-width='0.5' />
+      <circle cx='0' cy='0' r='170' fill='none' stroke='rgba(255,255,255,0.03)' stroke-width='0.5' />
+      <circle cx='0' cy='0' r='225' fill='none' stroke='rgba(255,255,255,0.03)' stroke-width='0.5' />
+      <g id='segments-group'></g>
+      <circle cx='0' cy='0' r='57' class='center-bg' id='center-circle' />
+      <circle cx='0' cy='0' r='57' class='center-ring' />
+      <text id='center-size' x='0' y='-5' class='center-text-size'>{{ scanTotalFormatted }}</text>
+      <text id='center-name' x='0' y='12' class='center-text-name'>{{ scanBasename }}</text>
+      <text x='0' y='26' class='center-back' id='center-back'>Back</text>
     </svg>
   </div>
 
   <!-- Inspector -->
-  <div class="disk-inspector">
-    <div class="inspector-title">Inspector</div>
-    <div class="inspector-body">
-      <div class="inspector-placeholder" id="inspector-placeholder">
+  <div class='disk-inspector'>
+    <div class='inspector-title'>Inspector</div>
+    <div class='inspector-body'>
+      <div class='inspector-placeholder' id='inspector-placeholder'>
         <div>Hover over a segment<br>to inspect its details</div>
       </div>
-      <div class="info-card" id="inspector-card" style="display:none"></div>
+      <div class='info-card' id='inspector-card' style='display:none'></div>
     </div>
   </div>
 
@@ -153,7 +153,7 @@
       if(_cb)_cb.style.opacity=viewStack.length>0?'0.6':'0';
       var top=segs.filter(function(s){return s.depth===1}).sort(function(a,b){return b.size-a.size}).slice(0,20);
       var maxS=top.length>0?top[0].size:1;var fhtml='';
-      for(var f=0;f<top.length;f++){var bw=Math.max(3,Math.round((top[f].size/maxS)*100));fhtml+='<div class="folder-item" data-seg="'+top[f].idx+'"><span class="folder-dot" style="background:'+top[f].color+'"></span><span class="folder-name">'+top[f].name+'</span><span class="folder-size">'+top[f].formattedSize+'</span><div class="folder-bar-track"><div class="folder-bar-fill" style="width:'+bw+'%;background:'+top[f].color+'"></div></div></div>';}
+      for(var f=0;f<top.length;f++){var bw=Math.max(3,Math.round((top[f].size/maxS)*100));fhtml+='<div class='folder-item' data-seg="'+top[f].idx+''><span class='folder-dot' style='background:'+top[f].color+''></span><span class='folder-name">'+top[f].name+'</span><span class='folder-size'>'+top[f].formattedSize+'</span><div class='folder-bar-track'><div class='folder-bar-fill' style="width:'+bw+'%;background:'+top[f].color+'"></div></div></div>';}
       if(folderListEl)folderListEl.innerHTML=fhtml;
       showInfo(null);
     }
@@ -166,7 +166,7 @@
       var _ph = document.getElementById('inspector-placeholder');
       if(!s){if(_cs)_cs.textContent=defaultSize;if(_cn)_cn.textContent=defaultName;if(_card)_card.style.display='none';if(_ph)_ph.style.display='';return;}
       if(_cs)_cs.textContent=s.formattedSize;if(_cn)_cn.textContent=s.name;if(_ph)_ph.style.display='none';if(_card){_card.style.display='';
-      _card.innerHTML='<div class="info-icon-row"><div class="info-type-icon" style="background:'+s.color+'20;color:'+s.color+'">'+(s.isDir?'Dir':'File')+'</div><div><div class="info-type-name">'+s.name+'</div><div class="info-type-kind">'+(s.isDir?'Folder':'File')+' · Level '+s.depth+'</div></div></div><div class="info-row"><span class="info-label">Size</span><span class="info-value">'+s.formattedSize+'</span></div><div class="info-row"><span class="info-label">% of View</span><span class="info-value">'+s.percent+'%</span></div>'+(s.isDir?'<div class="info-row"><span class="info-label">Items</span><span class="info-value">'+s.childCount+'</span></div>':'')+'<div class="info-row" style="border-bottom:none"><span class="info-label">Depth</span><span class="info-value">Ring '+s.depth+'</span></div><div class="info-path">'+s.fullPath+'</div><div class="info-bar"><div class="info-bar-label">Proportion</div><div class="info-bar-track"><div class="info-bar-fill" style="width:'+s.percent+'%;background:'+s.color+'"></div></div><div class="info-bar-text">'+s.formattedSize+' of '+defaultSize+'</div></div>'+(s.isDir&&s.childCount>0?'<div class="info-drill">Click to drill down</div>':'');}
+      _card.innerHTML='<div class='info-icon-row'><div class='info-type-icon' style="background:'+s.color+'20;color:'+s.color+'">'+(s.isDir?'Dir':'File')+'</div><div><div class='info-type-name'>'+s.name+'</div><div class='info-type-kind'>'+(s.isDir?'Folder':'File')+' · Level '+s.depth+'</div></div></div><div class='info-row'><span class='info-label'>Size</span><span class='info-value'>'+s.formattedSize+'</span></div><div class='info-row'><span class='info-label'>% of View</span><span class='info-value'>'+s.percent+'%</span></div>'+(s.isDir?'<div class='info-row'><span class='info-label'>Items</span><span class='info-value'>'+s.childCount+'</span></div>':'')+'<div class='info-row' style='border-bottom:none'><span class='info-label'>Depth</span><span class='info-value'>Ring '+s.depth+'</span></div><div class='info-path'>'+s.fullPath+'</div><div class='info-bar'><div class='info-bar-label'>Proportion</div><div class='info-bar-track'><div class='info-bar-fill' style="width:'+s.percent+'%;background:'+s.color+''></div></div><div class='info-bar-text">'+s.formattedSize+' of '+defaultSize+'</div></div>'+(s.isDir&&s.childCount>0?'<div class='info-drill'>Click to drill down</div>':'');}
     }
 
     // Event delegation on the disk-layout container — survives SPA DOM replacement

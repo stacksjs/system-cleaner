@@ -1,43 +1,43 @@
 <!-- Background processes panel — live via ts-broadcasting WebSocket -->
-<div class="card-row">
-  <div class="card">
-    <div class="card-label">Processes</div>
-    <div class="card-value" style="color: #ff453a;" x-text="processes.length"></div>
-    <div class="card-detail">Above threshold</div>
+<div class='card-row'>
+  <div class='card'>
+    <div class='card-label'>Processes</div>
+    <div class='card-value' style='color: #ff453a;' x-text='processes.length'></div>
+    <div class='card-detail'>Above threshold</div>
   </div>
-  <div class="card">
-    <div class="card-label">Total CPU</div>
-    <div class="card-value" x-text="totalCPU.toFixed(0) + '%'"></div>
-    <div class="card-detail">All processes combined</div>
+  <div class='card'>
+    <div class='card-label'>Total CPU</div>
+    <div class='card-value' x-text="totalCPU.toFixed(0) + '%'"></div>
+    <div class='card-detail'>All processes combined</div>
   </div>
-  <div class="card">
-    <div class="card-label">Process Memory</div>
-    <div class="card-value" x-text="(totalMemUsed / 1000).toFixed(1) + ' GB'"></div>
-    <div class="card-detail" x-text="processes.length + ' processes'"></div>
+  <div class='card'>
+    <div class='card-label'>Process Memory</div>
+    <div class='card-value' x-text="(totalMemUsed / 1000).toFixed(1) + ' GB'"></div>
+    <div class='card-detail' x-text="processes.length + ' processes'"></div>
   </div>
-  <div class="card">
-    <div class="card-label">System</div>
-    <div class="card-value" x-text="processes.filter(p => p.isSystem).length"></div>
-    <div class="card-detail" x-text="'vs ' + processes.filter(p => !p.isSystem).length + ' user'"></div>
+  <div class='card'>
+    <div class='card-label'>System</div>
+    <div class='card-value' x-text='processes.filter(p => p.isSystem).length'></div>
+    <div class='card-detail' x-text="'vs ' + processes.filter(p => !p.isSystem).length + ' user'"></div>
   </div>
 </div>
 
-<div class="tbl-wrap">
-  <div class="tbl-bar">
+<div class='tbl-wrap'>
+  <div class='tbl-bar'>
     <div>
-      <span class="tbl-title">Running Processes</span>
-      <span class="tbl-count">sorted by CPU</span>
-      <span class="live-indicator" :class="wsConnected ? 'connected' : 'disconnected'">
-        <span class="live-dot"></span>
+      <span class='tbl-title'>Running Processes</span>
+      <span class='tbl-count'>sorted by CPU</span>
+      <span class='live-indicator' :class="wsConnected ? 'connected' : 'disconnected'">
+        <span class='live-dot'></span>
         <span x-text="wsConnected ? 'Live' : 'Reconnecting'"></span>
       </span>
     </div>
-    <button class="btn btn-sm" x-show="selected.length > 0" @click="toast(selected.length + ' processes would be killed (demo)', 'warning')">Kill Selected</button>
+    <button class='btn btn-sm' x-show='selected.length > 0' @click="toast(selected.length + ' processes would be killed (demo)', 'warning')">Kill Selected</button>
   </div>
   <table>
     <thead>
       <tr>
-        <th style="width: 28px;"><input type="checkbox" class="check" /></th>
+        <th style='width: 28px;'><input type='checkbox' class='check' /></th>
         <th>Process</th>
         <th>PID</th>
         <th>CPU</th>
@@ -46,7 +46,7 @@
         <th>Actions</th>
       </tr>
     </thead>
-    <tbody x-html="__renderProcessRows(processes, killedPids, selected)">
+    <tbody x-html='__renderProcessRows(processes, killedPids, selected)'>
     </tbody>
   </table>
 </div>

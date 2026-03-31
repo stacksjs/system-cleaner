@@ -1,47 +1,47 @@
 <template>
 @nolayout
-<div class="app-chrome">
-  <div class="app-body">
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <div class="sidebar-app-name">SystemCleaner</div>
+<div class='app-chrome'>
+  <div class='app-body'>
+    <aside class='sidebar'>
+      <div class='sidebar-header'>
+        <div class='sidebar-app-name'>SystemCleaner</div>
       </div>
-      <nav class="sidebar-nav">
-        <div class="sidebar-section-title">Overview</div>
-        <a class="nav-item" href="/" data-stx-link>
-          <span class="nav-icon">📊</span> Dashboard
+      <nav class='sidebar-nav'>
+        <div class='sidebar-section-title'>Overview</div>
+        <a class='nav-item' href='/' data-stx-link>
+          <span class='nav-icon'>📊</span> Dashboard
         </a>
-        <div class="sidebar-section-title">Manage</div>
-        <a class="nav-item" href="/startup" data-stx-link>
-          <span class="nav-icon">⚡</span> Startup Items
+        <div class='sidebar-section-title'>Manage</div>
+        <a class='nav-item' href='/startup' data-stx-link>
+          <span class='nav-icon'>⚡</span> Startup Items
         </a>
-        <a class="nav-item" href="/extensions" data-stx-link>
-          <span class="nav-icon">🧩</span> Extensions
+        <a class='nav-item' href='/extensions' data-stx-link>
+          <span class='nav-icon'>🧩</span> Extensions
         </a>
-        <a class="nav-item" href="/processes" data-stx-link>
-          <span class="nav-icon">🔄</span> Processes
+        <a class='nav-item' href='/processes' data-stx-link>
+          <span class='nav-icon'>🔄</span> Processes
         </a>
-        <div class="sidebar-section-title">Analyze</div>
-        <a class="nav-item" href="/disk" data-stx-link>
-          <span class="nav-icon">💾</span> Disk Usage
+        <div class='sidebar-section-title'>Analyze</div>
+        <a class='nav-item' href='/disk' data-stx-link>
+          <span class='nav-icon'>💾</span> Disk Usage
         </a>
-        <a class="nav-item" href="/system" data-stx-link>
-          <span class="nav-icon">🖥️</span> System
+        <a class='nav-item' href='/system' data-stx-link>
+          <span class='nav-icon'>🖥️</span> System
         </a>
-        <div class="sidebar-section-title">Maintain</div>
-        <a class="nav-item" href="/updates" data-stx-link>
-          <span class="nav-icon">📦</span> Updates
+        <div class='sidebar-section-title'>Maintain</div>
+        <a class='nav-item' href='/updates' data-stx-link>
+          <span class='nav-icon'>📦</span> Updates
         </a>
-        <a class="nav-item" href="/cleanup" data-stx-link>
-          <span class="nav-icon">🧹</span> Quick Clean
+        <a class='nav-item' href='/cleanup' data-stx-link>
+          <span class='nav-icon'>🧹</span> Quick Clean
         </a>
       </nav>
-      <div class="sidebar-footer" id="sidebar-footer">
-        <div class="sidebar-user" id="sidebar-user"></div>
-        <div id="sidebar-macos"></div>
+      <div class='sidebar-footer' id='sidebar-footer'>
+        <div class='sidebar-user' id='sidebar-user'></div>
+        <div id='sidebar-macos'></div>
       </div>
     </aside>
-    <main class="main">
+    <main class='main'>
       <slot />
     </main>
   </div>
@@ -59,12 +59,7 @@
     if (m) m.textContent = 'macOS ' + d.macosVersion;
   }).catch(function() {});
 
-  // Debug: log SPA navigation events
-  window.addEventListener('stx:navigate', function(e) {
-    console.log('[SPA] navigated to:', e.detail && e.detail.url);
-  });
   window.__spaDebugLoad = Date.now();
-  console.log('[SPA] Shell loaded at', new Date().toISOString(), '- if you see this again on nav, it is a full reload');
 })();
 </script>
 

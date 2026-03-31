@@ -39,6 +39,7 @@ export function registerScanCommand(app: CLI): void {
       s.stop(`${enabledStartup.length} startup items (${thirdPartyStartup.length} third-party)`)
 
       if (options.json) {
+        // eslint-disable-next-line no-console
         console.log(JSON.stringify({
           systemInfo: sysInfo,
           health: snapshot.health,

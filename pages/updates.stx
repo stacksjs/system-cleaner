@@ -141,66 +141,66 @@
   }
 }">
 
-<div class="toast-area">
-  <template x-for="t in toasts" :key="t.id">
-    <div class="toast" x-text="(t.type === 'success' ? '\u2713' : t.type === 'error' ? '\u2715' : '\u26A0') + ' ' + t.msg"></div>
+<div class='toast-area'>
+  <template x-for='t in toasts' :key='t.id'>
+    <div class='toast' x-text="(t.type === 'success' ? '\u2713' : t.type === 'error' ? '\u2715' : '\u26A0') + ' ' + t.msg"></div>
   </template>
 </div>
 
-<div class="main-header">
-  <div class="main-title">Updates</div>
-  <div class="main-subtitle">
-    <span x-show="loading">Checking for updates...</span>
-    <span x-show="!loading" x-cloak x-text="totalOutdated + ' outdated package' + (totalOutdated !== 1 ? 's' : '') + ' found'"></span>
+<div class='main-header'>
+  <div class='main-title'>Updates</div>
+  <div class='main-subtitle'>
+    <span x-show='loading'>Checking for updates...</span>
+    <span x-show='!loading' x-cloak x-text="totalOutdated + ' outdated package' + (totalOutdated !== 1 ? 's' : '') + ' found'"></span>
   </div>
 </div>
-<div class="main-content">
+<div class='main-content'>
 
 <!-- ── Loading state ──────────────────────────────────────────── -->
-<div x-show="loading" style="text-align: center; padding: 60px 16px; color: #6c6c70; font-size: 13px;">
+<div x-show='loading' style='text-align: center; padding: 60px 16px; color: #6c6c70; font-size: 13px;'>
   Checking for updates...
 </div>
 
-<div x-show="!loading" x-cloak>
+<div x-show='!loading' x-cloak>
 
 <!-- ── Summary cards ──────────────────────────────────────────── -->
-<div class="card-row">
-  <div class="card">
-    <div class="card-label">Homebrew</div>
-    <div class="card-value" :style="'color: ' + (brewTotal > 0 ? '#ff9f0a' : '#30d158')" x-text="brewTotal"></div>
-    <div class="card-detail" x-text="brewFormulae.length + ' formulae \u00B7 ' + brewCasks.length + ' casks'"></div>
+<div class='card-row'>
+  <div class='card'>
+    <div class='card-label'>Homebrew</div>
+    <div class='card-value' :style="'color: ' + (brewTotal > 0 ? '#ff9f0a' : '#30d158')' x-text='brewTotal"></div>
+    <div class='card-detail' x-text="brewFormulae.length + ' formulae \u00B7 ' + brewCasks.length + ' casks'"></div>
   </div>
-  <div class="card">
-    <div class="card-label">Pantry</div>
-    <div class="card-value" :style="'color: ' + (pantryOutdated.length > 0 ? '#ff9f0a' : '#30d158')" x-text="pantryOutdated.length"></div>
-    <div class="card-detail" x-text="pantryPackages.length + ' package' + (pantryPackages.length !== 1 ? 's' : '') + ' tracked'"></div>
+  <div class='card'>
+    <div class='card-label'>Pantry</div>
+    <div class='card-value' :style="'color: ' + (pantryOutdated.length > 0 ? '#ff9f0a' : '#30d158')' x-text='pantryOutdated.length"></div>
+    <div class='card-detail' x-text="pantryPackages.length + ' package' + (pantryPackages.length !== 1 ? 's' : '') + ' tracked'"></div>
   </div>
-  <div class="card">
-    <div class="card-label">Desktop Apps</div>
-    <div class="card-value" :style="'color: ' + (desktopOutdated.length > 0 ? '#ff9f0a' : '#30d158')" x-text="desktopOutdated.length"></div>
-    <div class="card-detail" x-text="desktopApps.length + ' app' + (desktopApps.length !== 1 ? 's' : '') + ' in /Applications'"></div>
+  <div class='card'>
+    <div class='card-label'>Desktop Apps</div>
+    <div class='card-value' :style="'color: ' + (desktopOutdated.length > 0 ? '#ff9f0a' : '#30d158')' x-text='desktopOutdated.length"></div>
+    <div class='card-detail' x-text="desktopApps.length + ' app' + (desktopApps.length !== 1 ? 's' : '') + ' in /Applications'"></div>
   </div>
 </div>
 
 <!-- ── Homebrew table ─────────────────────────────────────────── -->
-<div x-show="brewTotal > 0" class="tbl-wrap">
-  <div class="tbl-bar">
+<div x-show='brewTotal > 0' class='tbl-wrap'>
+  <div class='tbl-bar'>
     <div>
-      <span class="tbl-title">Homebrew</span>
-      <span class="tbl-count" x-text="brewTotal + ' outdated'"></span>
-      <span class="tbl-count" x-show="selected.length > 0" x-text="' \u00B7 ' + selected.length + ' selected'"></span>
+      <span class='tbl-title'>Homebrew</span>
+      <span class='tbl-count' x-text="brewTotal + ' outdated'"></span>
+      <span class='tbl-count' x-show='selected.length > 0' x-text="' \u00B7 ' + selected.length + ' selected'"></span>
     </div>
-    <div style="display: flex; gap: 6px;">
-      <button class="btn btn-sm" x-show="selected.length > 0" @click="doUpdateSelected()">
-        Update Selected (<span x-text="selected.length">0</span>)
+    <div style='display: flex; gap: 6px;'>
+      <button class='btn btn-sm' x-show='selected.length > 0' @click='doUpdateSelected()'>
+        Update Selected (<span x-text='selected.length'>0</span>)
       </button>
-      <button class="btn btn-sm" @click="doUpdateAll()">Update All</button>
+      <button class='btn btn-sm' @click='doUpdateAll()'>Update All</button>
     </div>
   </div>
   <table>
     <thead>
       <tr>
-        <th style="width: 28px;"><input type="checkbox" class="check" @click="allOn(allBrewKeys)" /></th>
+        <th style='width: 28px;'><input type='checkbox' class='check' @click='allOn(allBrewKeys)' /></th>
         <th>Package</th>
         <th>Type</th>
         <th>Installed</th>
@@ -209,37 +209,37 @@
       </tr>
     </thead>
     <tbody>
-      <template x-for="pkg in brewCasks" :key="'cask:' + pkg.name">
+      <template x-for='pkg in brewCasks' :key="'cask:' + pkg.name">
         <tr x-show="!isUpdated('cask:' + pkg.name)">
-          <td><input type="checkbox" class="check" :checked="isOn('cask:' + pkg.name)" @click="toggle('cask:' + pkg.name)" /></td>
-          <td><span class="item-name" x-text="pkg.name"></span></td>
-          <td><span class="badge badge-purple">Cask</span></td>
-          <td class="mono dim" style="font-size: 11px;" x-text="pkg.current"></td>
-          <td><span class="mono" style="font-size: 11px; color: #30d158;" x-text="pkg.latest"></span></td>
+          <td><input type='checkbox' class='check' :checked="isOn('cask:' + pkg.name)' @click='toggle('cask:' + pkg.name)" /></td>
+          <td><span class='item-name' x-text='pkg.name'></span></td>
+          <td><span class='badge badge-purple'>Cask</span></td>
+          <td class='mono dim' style='font-size: 11px;' x-text='pkg.current'></td>
+          <td><span class='mono' style='font-size: 11px; color: #30d158;' x-text='pkg.latest'></span></td>
           <td>
-            <button class="btn btn-sm" x-show="!isUpdating('cask:' + pkg.name)" @click="doUpdate(pkg.name, 'cask')">Update</button>
-            <span class="dim" style="font-size: 11px;" x-show="isUpdating('cask:' + pkg.name)">Updating...</span>
+            <button class='btn btn-sm' x-show="!isUpdating('cask:' + pkg.name)' @click='doUpdate(pkg.name, 'cask')">Update</button>
+            <span class='dim' style='font-size: 11px;' x-show="isUpdating('cask:' + pkg.name)">Updating...</span>
           </td>
         </tr>
       </template>
-      <template x-for="pkg in brewFormulae" :key="pkg.name">
-        <tr x-show="!isUpdated(pkg.name)">
-          <td><input type="checkbox" class="check" :checked="isOn(pkg.name)" @click="toggle(pkg.name)" /></td>
+      <template x-for='pkg in brewFormulae' :key='pkg.name'>
+        <tr x-show='!isUpdated(pkg.name)'>
+          <td><input type='checkbox' class='check' :checked='isOn(pkg.name)' @click='toggle(pkg.name)' /></td>
           <td>
-            <span class="item-name" x-text="pkg.name"></span>
-            <span class="badge badge-gray" style="margin-left: 4px;" x-show="pkg.pinned">pinned</span>
+            <span class='item-name' x-text='pkg.name'></span>
+            <span class='badge badge-gray' style='margin-left: 4px;' x-show='pkg.pinned'>pinned</span>
           </td>
-          <td><span class="badge badge-green">Formula</span></td>
-          <td class="mono dim" style="font-size: 11px;" x-text="pkg.current"></td>
-          <td><span class="mono" style="font-size: 11px; color: #30d158;" x-text="pkg.latest"></span></td>
+          <td><span class='badge badge-green'>Formula</span></td>
+          <td class='mono dim' style='font-size: 11px;' x-text='pkg.current'></td>
+          <td><span class='mono' style='font-size: 11px; color: #30d158;' x-text='pkg.latest'></span></td>
           <td>
-            <template x-if="pkg.pinned">
-              <span class="dim" style="font-size: 10px;">Pinned</span>
+            <template x-if='pkg.pinned'>
+              <span class='dim' style='font-size: 10px;'>Pinned</span>
             </template>
-            <template x-if="!pkg.pinned">
+            <template x-if='!pkg.pinned'>
               <span>
-                <button class="btn btn-sm" x-show="!isUpdating(pkg.name)" @click="doUpdate(pkg.name, 'formula')">Update</button>
-                <span class="dim" style="font-size: 11px;" x-show="isUpdating(pkg.name)">Updating...</span>
+                <button class='btn btn-sm' x-show='!isUpdating(pkg.name)' @click="doUpdate(pkg.name, 'formula')">Update</button>
+                <span class='dim' style='font-size: 11px;' x-show='isUpdating(pkg.name)'>Updating...</span>
               </span>
             </template>
           </td>
@@ -250,15 +250,15 @@
 </div>
 
 <!-- ── Pantry table ───────────────────────────────────────────── -->
-<div class="tbl-wrap">
-  <div class="tbl-bar">
+<div class='tbl-wrap'>
+  <div class='tbl-bar'>
     <div>
-      <span class="tbl-title">Pantry</span>
-      <span class="tbl-count" x-show="pantryOutdated.length > 0" x-text="pantryOutdated.length + ' outdated'"></span>
-      <span class="tbl-count" x-show="pantryOutdated.length === 0">all up to date</span>
+      <span class='tbl-title'>Pantry</span>
+      <span class='tbl-count' x-show='pantryOutdated.length > 0' x-text="pantryOutdated.length + ' outdated'"></span>
+      <span class='tbl-count' x-show='pantryOutdated.length === 0'>all up to date</span>
     </div>
   </div>
-  <div x-show="pantryOutdated.length > 0">
+  <div x-show='pantryOutdated.length > 0'>
     <table>
       <thead>
         <tr>
@@ -269,42 +269,42 @@
         </tr>
       </thead>
       <tbody>
-        <template x-for="pkg in pantryOutdated" :key="pkg.name">
+        <template x-for='pkg in pantryOutdated' :key='pkg.name'>
           <tr x-show="!isUpdated('pantry:' + pkg.name)">
-            <td><span class="item-name" x-text="pkg.name"></span></td>
-            <td class="mono dim" style="font-size: 11px;" x-text="pkg.current"></td>
-            <td><span class="mono" style="font-size: 11px; color: #30d158;" x-text="pkg.latest"></span></td>
+            <td><span class='item-name' x-text='pkg.name'></span></td>
+            <td class='mono dim' style='font-size: 11px;' x-text='pkg.current'></td>
+            <td><span class='mono' style='font-size: 11px; color: #30d158;' x-text='pkg.latest'></span></td>
             <td>
-              <button class="btn btn-sm" x-show="!isUpdating('pantry:' + pkg.name)" @click="doPantryUpdate(pkg.name)">Update</button>
-              <span class="dim" style="font-size: 11px;" x-show="isUpdating('pantry:' + pkg.name)">Updating...</span>
+              <button class='btn btn-sm' x-show="!isUpdating('pantry:' + pkg.name)' @click='doPantryUpdate(pkg.name)">Update</button>
+              <span class='dim' style='font-size: 11px;' x-show="isUpdating('pantry:' + pkg.name)">Updating...</span>
             </td>
           </tr>
         </template>
       </tbody>
     </table>
   </div>
-  <div x-show="pantryOutdated.length === 0 && pantryPackages.length > 0" style="padding: 12px 16px;">
-    <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-      <template x-for="pkg in pantryPackages" :key="pkg">
-        <span class="badge badge-green" x-text="pkg"></span>
+  <div x-show='pantryOutdated.length === 0 && pantryPackages.length > 0' style='padding: 12px 16px;'>
+    <div style='display: flex; flex-wrap: wrap; gap: 6px;'>
+      <template x-for='pkg in pantryPackages' :key='pkg'>
+        <span class='badge badge-green' x-text='pkg'></span>
       </template>
     </div>
   </div>
-  <div x-show="pantryOutdated.length === 0 && pantryPackages.length === 0" class="empty-state" style="padding: 20px;">No Pantry packages installed</div>
+  <div x-show='pantryOutdated.length === 0 && pantryPackages.length === 0' class='empty-state' style='padding: 20px;'>No Pantry packages installed</div>
 </div>
 
 <!-- ── Desktop apps table ─────────────────────────────────────── -->
-<div x-show="desktopApps.length > 0" class="tbl-wrap">
-  <div class="tbl-bar">
+<div x-show='desktopApps.length > 0' class='tbl-wrap'>
+  <div class='tbl-bar'>
     <div>
-      <span class="tbl-title">Desktop Apps</span>
-      <span class="tbl-count" x-show="desktopOutdated.length > 0" x-text="desktopOutdated.length + ' update' + (desktopOutdated.length !== 1 ? 's' : '') + ' available'"></span>
-      <span class="tbl-count" x-show="desktopOutdated.length === 0" x-text="desktopApps.length + ' apps'"></span>
+      <span class='tbl-title'>Desktop Apps</span>
+      <span class='tbl-count' x-show='desktopOutdated.length > 0' x-text="desktopOutdated.length + ' update' + (desktopOutdated.length !== 1 ? 's' : '') + ' available'"></span>
+      <span class='tbl-count' x-show='desktopOutdated.length === 0' x-text="desktopApps.length + ' apps'"></span>
     </div>
-    <div style="display: flex; gap: 4px;">
-      <button class="btn btn-sm" :class="{ 'btn-active': appFilter === 'all' }" @click="appFilter = 'all'" x-text="'All (' + desktopApps.length + ')'"></button>
-      <button class="btn btn-sm" x-show="desktopOutdated.length > 0" :class="{ 'btn-active': appFilter === 'outdated' }" @click="appFilter = 'outdated'" x-text="'Outdated (' + desktopOutdated.length + ')'"></button>
-      <button class="btn btn-sm" :class="{ 'btn-active': appFilter === 'uptodate' }" @click="appFilter = 'uptodate'">Up to date</button>
+    <div style='display: flex; gap: 4px;'>
+      <button class='btn btn-sm' :class="{ 'btn-active': appFilter === 'all' }' @click='appFilter = 'all'' x-text=''All (' + desktopApps.length + ')'"></button>
+      <button class='btn btn-sm' x-show='desktopOutdated.length > 0' :class="{ 'btn-active': appFilter === 'outdated' }' @click='appFilter = 'outdated'' x-text=''Outdated (' + desktopOutdated.length + ')'"></button>
+      <button class='btn btn-sm' :class="{ 'btn-active': appFilter === 'uptodate' }' @click='appFilter = 'uptodate'">Up to date</button>
     </div>
   </div>
   <table>
@@ -318,39 +318,39 @@
       </tr>
     </thead>
     <tbody>
-      <template x-for="app in filteredDesktopApps" :key="app.name">
-        <tr x-show="!isUpdated('app:' + app.name)" :style="app.updateAvailable ? '' : 'opacity: 0.7;'">
+      <template x-for='app in filteredDesktopApps' :key='app.name'>
+        <tr x-show="!isUpdated('app:' + app.name)' :style='app.updateAvailable ? '' : 'opacity: 0.7;'">
           <td>
-            <span class="item-name" x-text="app.name"></span>
-            <span class="badge badge-gray" style="margin-left: 4px; font-size: 9px;" x-show="app.autoUpdates">auto-updates</span>
+            <span class='item-name' x-text='app.name'></span>
+            <span class='badge badge-gray' style='margin-left: 4px; font-size: 9px;' x-show='app.autoUpdates'>auto-updates</span>
           </td>
-          <td class="mono dim" style="font-size: 11px;" x-text="app.version"></td>
+          <td class='mono dim' style='font-size: 11px;' x-text='app.version'></td>
           <td>
-            <span x-show="app.latestVersion && app.updateAvailable" class="mono" style="font-size: 11px; color: #30d158;" x-text="app.latestVersion"></span>
-            <span x-show="app.latestVersion && !app.updateAvailable" class="mono dim" style="font-size: 11px;" x-text="app.latestVersion"></span>
-            <span x-show="!app.latestVersion" class="dim" style="font-size: 10px;">&mdash;</span>
-          </td>
-          <td>
-            <span x-show="app.source === 'brew'" class="badge badge-purple" style="font-size: 9px;">Homebrew</span>
-            <span x-show="app.source === 'auto'" class="badge badge-blue" style="font-size: 9px;">Homebrew</span>
-            <span x-show="app.source === 'mas'" class="badge badge-green" style="font-size: 9px;">App Store</span>
-            <span x-show="app.source !== 'brew' && app.source !== 'auto' && app.source !== 'mas'" class="badge badge-gray" style="font-size: 9px;">Manual</span>
+            <span x-show='app.latestVersion && app.updateAvailable' class='mono' style='font-size: 11px; color: #30d158;' x-text='app.latestVersion'></span>
+            <span x-show='app.latestVersion && !app.updateAvailable' class='mono dim' style='font-size: 11px;' x-text='app.latestVersion'></span>
+            <span x-show='!app.latestVersion' class='dim' style='font-size: 10px;'>&mdash;</span>
           </td>
           <td>
-            <template x-if="app.updateAvailable && app.caskToken">
+            <span x-show="app.source === 'brew'' class='badge badge-purple' style='font-size: 9px;">Homebrew</span>
+            <span x-show="app.source === 'auto'' class='badge badge-blue' style='font-size: 9px;">Homebrew</span>
+            <span x-show="app.source === 'mas'' class='badge badge-green' style='font-size: 9px;">App Store</span>
+            <span x-show="app.source !== 'brew' && app.source !== 'auto' && app.source !== 'mas'' class='badge badge-gray' style='font-size: 9px;">Manual</span>
+          </td>
+          <td>
+            <template x-if='app.updateAvailable && app.caskToken'>
               <span>
-                <button class="btn btn-sm" x-show="!isUpdating('app:' + app.name)" @click="doAppUpdate(app.name, app.caskToken)">Update</button>
-                <span class="dim" style="font-size: 11px;" x-show="isUpdating('app:' + app.name)">Updating...</span>
+                <button class='btn btn-sm' x-show="!isUpdating('app:' + app.name)' @click='doAppUpdate(app.name, app.caskToken)">Update</button>
+                <span class='dim' style='font-size: 11px;' x-show="isUpdating('app:' + app.name)">Updating...</span>
               </span>
             </template>
             <template x-if="app.source === 'mas' && !app.updateAvailable">
-              <span class="dim" style="font-size: 10px;">via App Store</span>
+              <span class='dim' style='font-size: 10px;'>via App Store</span>
             </template>
-            <template x-if="app.updateAvailable && !app.caskToken">
-              <span class="dim" style="font-size: 10px;">Manual update</span>
+            <template x-if='app.updateAvailable && !app.caskToken'>
+              <span class='dim' style='font-size: 10px;'>Manual update</span>
             </template>
             <template x-if="!app.updateAvailable && app.latestVersion && app.source !== 'mas'">
-              <span class="dim" style="font-size: 10px; color: #30d158;">Up to date</span>
+              <span class='dim' style='font-size: 10px; color: #30d158;'>Up to date</span>
             </template>
           </td>
         </tr>
@@ -359,8 +359,8 @@
   </table>
 </div>
 
-<div x-show="totalOutdated === 0 && desktopApps.length === 0" class="empty-state">
-  <div style="font-size: 32px; margin-bottom: 8px;">&#10004;</div>
+<div x-show='totalOutdated === 0 && desktopApps.length === 0' class='empty-state'>
+  <div style='font-size: 32px; margin-bottom: 8px;'>&#10004;</div>
   Everything is up to date!
 </div>
 
