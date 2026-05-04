@@ -96,7 +96,7 @@ window.__renderProcessRows = function(processes, killedPids, selected) {
       return '<tr>'
         + '<td><input type='checkbox' class='check'' + (isSelected ? ' checked' : '') + ' onclick="_exec(\\"toggle(\'' + p.id + '\')\\')' /></td>'
         + '<td><div class='item-name'>' + __esc(p.name) + '</div><div class='item-path' title="' + __esc(p.fullCommand) + '">' + __esc(p.fullCommand) + '</div></td>'
-        + '<td class='mono dim' style='font-size: 11px;'>' + p.pid + '</td>'
+        + '<td class='dim mono' style='font-size: 11px;'>' + p.pid + '</td>'
         + '<td><div class='cpu-bar'><span style="font-size:11px;font-weight:500;min-width:36px;' + (cpuColor ? 'color:' + cpuColor + ';' : '') + '">' + p.cpu.toFixed(1) + '%</span><div class='cpu-track'><div class='cpu-fill' style="width:' + Math.min(100, p.cpu) + '%;background:' + barColor + ';"></div></div></div></td>'
         + '<td style='font-size: 11px;'>' + p.memMB + ' MB</td>'
         + '<td>' + badge + '</td>'

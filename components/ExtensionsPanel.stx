@@ -54,7 +54,7 @@
               @endif
             </td>
             <td><span class='badge badge-purple'>{{ ext.browser }}</span></td>
-            <td class='mono dim' style='font-size: 11px;'>{{ ext.version }}</td>
+            <td class='dim mono' style='font-size: 11px;'>{{ ext.version }}</td>
             <td style='font-size: 11px;'>{{ ext.sizeStr }}</td>
             <td>
               @if(ext.permissions + ext.hostPermissions > 5)

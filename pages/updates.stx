@@ -214,7 +214,7 @@
           <td><input type='checkbox' class='check' :checked="isOn('cask:' + pkg.name)' @click='toggle('cask:' + pkg.name)" /></td>
           <td><span class='item-name' x-text='pkg.name'></span></td>
           <td><span class='badge badge-purple'>Cask</span></td>
-          <td class='mono dim' style='font-size: 11px;' x-text='pkg.current'></td>
+          <td class='dim mono' style='font-size: 11px;' x-text='pkg.current'></td>
           <td><span class='mono' style='font-size: 11px; color: #30d158;' x-text='pkg.latest'></span></td>
           <td>
             <button class='btn btn-sm' x-show="!isUpdating('cask:' + pkg.name)' @click='doUpdate(pkg.name, 'cask')">Update</button>
@@ -230,7 +230,7 @@
             <span class='badge badge-gray' style='margin-left: 4px;' x-show='pkg.pinned'>pinned</span>
           </td>
           <td><span class='badge badge-green'>Formula</span></td>
-          <td class='mono dim' style='font-size: 11px;' x-text='pkg.current'></td>
+          <td class='dim mono' style='font-size: 11px;' x-text='pkg.current'></td>
           <td><span class='mono' style='font-size: 11px; color: #30d158;' x-text='pkg.latest'></span></td>
           <td>
             <template x-if='pkg.pinned'>
@@ -272,7 +272,7 @@
         <template x-for='pkg in pantryOutdated' :key='pkg.name'>
           <tr x-show="!isUpdated('pantry:' + pkg.name)">
             <td><span class='item-name' x-text='pkg.name'></span></td>
-            <td class='mono dim' style='font-size: 11px;' x-text='pkg.current'></td>
+            <td class='dim mono' style='font-size: 11px;' x-text='pkg.current'></td>
             <td><span class='mono' style='font-size: 11px; color: #30d158;' x-text='pkg.latest'></span></td>
             <td>
               <button class='btn btn-sm' x-show="!isUpdating('pantry:' + pkg.name)' @click='doPantryUpdate(pkg.name)">Update</button>
@@ -324,10 +324,10 @@
             <span class='item-name' x-text='app.name'></span>
             <span class='badge badge-gray' style='margin-left: 4px; font-size: 9px;' x-show='app.autoUpdates'>auto-updates</span>
           </td>
-          <td class='mono dim' style='font-size: 11px;' x-text='app.version'></td>
+          <td class='dim mono' style='font-size: 11px;' x-text='app.version'></td>
           <td>
             <span x-show='app.latestVersion && app.updateAvailable' class='mono' style='font-size: 11px; color: #30d158;' x-text='app.latestVersion'></span>
-            <span x-show='app.latestVersion && !app.updateAvailable' class='mono dim' style='font-size: 11px;' x-text='app.latestVersion'></span>
+            <span x-show='app.latestVersion && !app.updateAvailable' class='dim mono' style='font-size: 11px;' x-text='app.latestVersion'></span>
             <span x-show='!app.latestVersion' class='dim' style='font-size: 10px;'>&mdash;</span>
           </td>
           <td>
