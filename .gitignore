@@ -4,3 +4,8 @@
 .stx
 pantry
 .claude/scheduled_tasks.lock
+# Crosswind writes compiled CSS to dist/crosswind.css; STX picks it up
+# automatically at build time, so it's a generated artifact rather than
+# tracked source. Same with any other build output that lands here.
+dist/
+**/dist/
