@@ -23,10 +23,10 @@
 </div>
 
 <div class='tabs'>
-  <button class='tab' :class="{ active: startupFilter === 'all' }' @click='setFilter('all')">All ({{ startupItems.length }})</button>
-  <button class='tab' :class="{ active: startupFilter === 'enabled' }' @click='setFilter('enabled')">Enabled ({{ enabledStartup.length }})</button>
-  <button class='tab' :class="{ active: startupFilter === 'vendor' }' @click='setFilter('vendor')">Third-party</button>
-  <button class='tab' :class="{ active: startupFilter === 'system' }' @click='setFilter('system')">Apple</button>
+  <button class='tab' :class="{ active: startupFilter === 'all' }" @click="setFilter('all')">All ({{ startupItems.length }})</button>
+  <button class='tab' :class="{ active: startupFilter === 'enabled' }" @click="setFilter('enabled')">Enabled ({{ enabledStartup.length }})</button>
+  <button class='tab' :class="{ active: startupFilter === 'vendor' }" @click="setFilter('vendor')">Third-party</button>
+  <button class='tab' :class="{ active: startupFilter === 'system' }" @click="setFilter('system')">Apple</button>
 </div>
 
 <div class='tbl-wrap'>
@@ -41,7 +41,7 @@
   <table>
     <thead>
       <tr>
-        <th style='width: 28px;'><input type='checkbox' class='check' @click='allOn({{ JSON.stringify(enabledStartup.map(i => i.id)) }})' /></th>
+        <th style='width: 28px;'><input type="checkbox" class="check" @click="allOn({{ enabledStartupIdsJson }})" /></th>
         <th>Name</th>
         <th>Scope</th>
         <th>Status</th>
@@ -51,8 +51,8 @@
     </thead>
     <tbody>
       @foreach(startupItems as item)
-        <tr x-show="!isRemoved('{{ item.id }}') && rowVisible('{{ item.category }}', isDisabled('{{ item.id }}') ? 'true' : 'false')' data-item-id='{{ item.id }}">
-          <td><input type='checkbox' class='check' :checked="isOn('{{ item.id }}')' @click='toggle('{{ item.id }}')" /></td>
+        <tr x-show="!isRemoved('{{ item.id }}') && rowVisible('{{ item.category }}', isDisabled('{{ item.id }}') ? 'true' : 'false')" data-item-id="{{ item.id }}">
+          <td><input type="checkbox" class="check" :checked="isOn('{{ item.id }}')" @click="toggle('{{ item.id }}')" /></td>
           <td>
             <div><span style='margin-right: 4px;'>{{ item.icon }}</span><span class='item-name'>{{ item.name }}</span></div>
             <div class='item-sub'>{{ item.vendor }}</div>
@@ -65,8 +65,8 @@
             @endif
           </td>
           <td>
-            <span x-show="!isDisabled('{{ item.id }}')' class='badge badge-green">Active</span>
-            <span x-show="isDisabled('{{ item.id }}')' x-cloak class='badge badge-gray">Disabled</span>
+            <span x-show="!isDisabled('{{ item.id }}')" class="badge badge-green">Active</span>
+            <span x-show="isDisabled('{{ item.id }}')" x-cloak class="badge badge-gray">Disabled</span>
           </td>
           <td>
             @if(item.runAtLoad)
@@ -80,11 +80,11 @@
               <span class='dim' style='font-size: 10px;'>Apple</span>
             @else
               <div style='display: flex; gap: 4px;' x-show="!isRemoved('{{ item.id }}')">
-                <button x-show="!isDisabled('{{ item.id }}')' class='btn btn-sm' onclick='doToggle('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', 'disable', '{{ item.id }}')">Disable</button>
-                <button x-show="isDisabled('{{ item.id }}')' x-cloak class='btn btn-sm' onclick='doToggle('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', 'enable', '{{ item.id }}')">Enable</button>
+                <button x-show="!isDisabled('{{ item.id }}')" class="btn btn-sm" onclick="doToggle('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', 'disable', '{{ item.id }}')">Disable</button>
+                <button x-show="isDisabled('{{ item.id }}')" x-cloak class="btn btn-sm" onclick="doToggle('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', 'enable', '{{ item.id }}')">Enable</button>
                 <button class='btn btn-danger btn-sm' onclick="doRemove('{{ esc(item.filepath) }}', '{{ esc(item.name) }}', '{{ item.id }}')">Delete</button>
               </div>
-              <span x-show="isRemoved('{{ item.id }}')' x-cloak class='badge badge-gray">Removed</span>
+              <span x-show="isRemoved('{{ item.id }}')" x-cloak class="badge badge-gray">Removed</span>
             @endif
           </td>
         </tr>

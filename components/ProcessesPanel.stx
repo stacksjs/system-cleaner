@@ -46,7 +46,47 @@
         <th>Actions</th>
       </tr>
     </thead>
-    <tbody x-html='__renderProcessRows(processes, killedPids, selected)'>
+    <tbody>
+      <template x-if="processes.length === 0">
+        <tr><td colspan="7" class="empty-state">Loading processes&hellip;</td></tr>
+      </template>
+      <template x-for="p in processes.filter(p => !killedPids.includes(p.pid))" :key="p.pid">
+        <tr>
+          <td>
+            <input type="checkbox" class="check"
+              :checked="selected.includes(p.id)"
+              @click="toggle(p.id)" />
+          </td>
+          <td>
+            <div class="item-name" x-text="p.name"></div>
+            <div class="item-path" :title="p.fullCommand" x-text="p.fullCommand"></div>
+          </td>
+          <td class="dim mono" style="font-size: 11px;" x-text="p.pid"></td>
+          <td>
+            <div class="cpu-bar">
+              <span
+                :style="'font-size:11px;font-weight:500;min-width:36px;' + (p.cpu > 50 ? 'color:#ff453a;' : p.cpu > 20 ? 'color:#ff9f0a;' : '')"
+                x-text="p.cpu.toFixed(1) + '%'"></span>
+              <div class="cpu-track">
+                <div class="cpu-fill"
+                  :style="'width:' + Math.min(100, p.cpu) + '%;background:' + (p.cpu > 50 ? '#ff453a' : p.cpu > 20 ? '#ff9f0a' : '#30d158') + ';'"></div>
+              </div>
+            </div>
+          </td>
+          <td style="font-size: 11px;" x-text="p.memMB + ' MB'"></td>
+          <td>
+            <span :class="'badge ' + (p.isSystem ? 'badge-orange' : 'badge-green')" x-text="p.user"></span>
+          </td>
+          <td>
+            <template x-if="p.isSystem">
+              <span class="dim" style="font-size: 10px;">Protected</span>
+            </template>
+            <template x-if="!p.isSystem">
+              <button class="btn btn-danger btn-sm" @click="confirmKill(p)">Kill</button>
+            </template>
+          </td>
+        </tr>
+      </template>
     </tbody>
   </table>
 </div>

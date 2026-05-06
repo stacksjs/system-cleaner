@@ -5,6 +5,8 @@ const { discoverStartupItems } = require('@system-cleaner/uninstall')
 const startupItems = discoverStartupItems()
 const enabledStartup = startupItems.filter(i => !i.disabled)
 const disabledStartup = startupItems.filter(i => i.disabled)
+const disabledStartupIdsJson = JSON.stringify(disabledStartup.map(i => i.id))
+const enabledStartupIdsJson = JSON.stringify(enabledStartup.map(i => i.id))
 
 function esc(str) { return escapeHtml(str || '') }
 </script>
@@ -12,7 +14,7 @@ function esc(str) { return escapeHtml(str || '') }
 <div x-data="{
   selected: [],
   startupFilter: 'all',
-  disabledItems: {{ JSON.stringify(disabledStartup.map(i => i.id)) }},
+  disabledItems: {{ disabledStartupIdsJson }},
   removedItems: [],
   toasts: [],
   toastId: 0,

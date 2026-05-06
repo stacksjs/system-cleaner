@@ -1,5 +1,28 @@
-<!-- DiskScope — sunburst disk usage analyzer (lazy-loaded) -->
-<div class='disk-layout'>
+<!--
+  DiskScope — sunburst disk usage analyzer.
+
+  The SVG path math (segment arcs) stays imperative — declarative templating
+  doesn't help when generating hundreds of computed `<path d="...">` strings.
+  Everything else (folder sidebar, scan totals, inspector card) is bound
+  reactively, and the imperative scan code talks to the scope via _exec().
+-->
+<div class='disk-layout' x-data="{
+  scanInfo: null,
+  scanTotalLabel: '{{ scanTotalFormatted }}',
+  rootName: '{{ scanBasename }}',
+  defaultSize: '{{ scanTotalFormatted }}',
+  defaultName: '{{ scanBasename }}',
+  topItems: [],
+  hovered: null,
+  scanState: 'idle',
+  centerSize() { return this.hovered ? this.hovered.formattedSize : this.defaultSize; },
+  centerName() { return this.hovered ? this.hovered.name : this.defaultName; },
+  metaText() {
+    if (this.scanState === 'scanning') return 'Scanning disk…';
+    if (this.scanInfo) return this.scanInfo.folderCount + ' folders · ' + this.scanInfo.fileCount + ' files · ' + this.scanInfo.scanTime + (this.scanInfo.cached ? ' (cached)' : '');
+    return 'Click Scan Disk to analyze';
+  },
+}">
 
   <!-- Disk sidebar -->
   <div class='disk-sidebar'>
@@ -22,38 +45,51 @@
       </div>
     </div>
 
-    <div class='disk-sidebar-section' id='disk-scan-info'>
-      <div style='font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: #6c6c70; margin-bottom: 8px;'>Home: {{ scanBasename }}</div>
-      <div style='font-size: 18px; font-weight: 700; margin-bottom: 2px;' id='disk-scan-total'>{{ scanTotalFormatted }}</div>
-      <div style='font-size: 10px; color: #6c6c70;' id='disk-scan-meta'>Click 'Scan Disk' to analyze</div>
+    <div class='disk-sidebar-section'>
+      <div style='font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: #6c6c70; margin-bottom: 8px;' x-text="'Home: ' + rootName">Home: {{ scanBasename }}</div>
+      <div style='font-size: 18px; font-weight: 700; margin-bottom: 2px;' x-text="scanTotalLabel">{{ scanTotalFormatted }}</div>
+      <div style='font-size: 10px; color: #6c6c70;' x-text="metaText()">Click 'Scan Disk' to analyze</div>
     </div>
 
     <div class='disk-sidebar-section' style='padding-bottom: 4px;'>
       <div style='font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: #6c6c70;'>Largest Items</div>
     </div>
-    <div class='folder-list' id='folder-list'></div>
+    <div class='folder-list'>
+      <template x-for="item in topItems" :key="item.idx">
+        <div class="folder-item"
+             @mouseover="hovered = item"
+             @mouseleave="hovered = null">
+          <span class="folder-dot" :style="'background:' + item.color"></span>
+          <span class="folder-name" x-text="item.name"></span>
+          <span class="folder-size" x-text="item.formattedSize"></span>
+          <div class="folder-bar-track">
+            <div class="folder-bar-fill" :style="'width:' + item.barPct + '%;background:' + item.color"></div>
+          </div>
+        </div>
+      </template>
+    </div>
   </div>
 
   <!-- Sunburst chart -->
   <div class='disk-chart'>
-    <div id='disk-loading' style='position: relative; z-index: 1; text-align: center; color: #6c6c70; font-size: 13px;'>
-      <div id='disk-icon' style='margin-bottom: 12px; font-size: 24px;'>💾</div>
-      <div id='disk-prompt'>
+    <div id='disk-loading' x-show="scanState !== 'done'" style='position: relative; z-index: 1; text-align: center; color: #6c6c70; font-size: 13px;'>
+      <div :style="scanState === 'scanning' ? 'margin-bottom: 12px; font-size: 24px; animation: pulse 1.5s ease-in-out infinite;' : 'margin-bottom: 12px; font-size: 24px;'">&#x1F4BE;</div>
+      <div x-show="scanState === 'idle'">
         <div style='margin-bottom: 12px;'>Analyze disk usage with an interactive sunburst chart</div>
-        <button class='btn' id='disk-scan-btn' onclick='startDiskScan()' style='padding: 8px 20px; font-size: 13px;'>Scan Disk</button>
+        <button class='btn' onclick='startDiskScan()' style='padding: 8px 20px; font-size: 13px;'>Scan Disk</button>
         <div style='margin-top: 8px; font-size: 10px; color: #48484a;'>Results are cached for 10 minutes</div>
       </div>
-      <div id='disk-scanning' style='display:none'>Scanning disk...</div>
+      <div x-show="scanState === 'scanning'">Scanning disk&hellip;</div>
     </div>
-    <svg class='sunburst-svg' id='sunburst' viewBox='-320 -320 640 640' style='display:none'>
+    <svg class='sunburst-svg' id='sunburst' viewBox='-320 -320 640 640' x-show="scanState === 'done'" x-cloak>
       <circle cx='0' cy='0' r='115' fill='none' stroke='rgba(255,255,255,0.03)' stroke-width='0.5' />
       <circle cx='0' cy='0' r='170' fill='none' stroke='rgba(255,255,255,0.03)' stroke-width='0.5' />
       <circle cx='0' cy='0' r='225' fill='none' stroke='rgba(255,255,255,0.03)' stroke-width='0.5' />
       <g id='segments-group'></g>
-      <circle cx='0' cy='0' r='57' class='center-bg' id='center-circle' />
+      <circle cx='0' cy='0' r='57' class='center-bg' />
       <circle cx='0' cy='0' r='57' class='center-ring' />
-      <text id='center-size' x='0' y='-5' class='center-text-size'>{{ scanTotalFormatted }}</text>
-      <text id='center-name' x='0' y='12' class='center-text-name'>{{ scanBasename }}</text>
+      <text x='0' y='-5' class='center-text-size' x-text="centerSize()">{{ scanTotalFormatted }}</text>
+      <text x='0' y='12' class='center-text-name' x-text="centerName()">{{ scanBasename }}</text>
       <text x='0' y='26' class='center-back' id='center-back'>Back</text>
     </svg>
   </div>
@@ -62,10 +98,42 @@
   <div class='disk-inspector'>
     <div class='inspector-title'>Inspector</div>
     <div class='inspector-body'>
-      <div class='inspector-placeholder' id='inspector-placeholder'>
+      <div class='inspector-placeholder' x-show="!hovered">
         <div>Hover over a segment<br>to inspect its details</div>
       </div>
-      <div class='info-card' id='inspector-card' style='display:none'></div>
+      <template x-if="hovered">
+        <div class="info-card">
+          <div class="info-icon-row">
+            <div class="info-type-icon" :style="'background:' + hovered.color + '20;color:' + hovered.color" x-text="hovered.isDir ? 'Dir' : 'File'"></div>
+            <div>
+              <div class="info-type-name" x-text="hovered.name"></div>
+              <div class="info-type-kind" x-text="(hovered.isDir ? 'Folder' : 'File') + ' · Level ' + hovered.depth"></div>
+            </div>
+          </div>
+          <div class="info-row"><span class="info-label">Size</span><span class="info-value" x-text="hovered.formattedSize"></span></div>
+          <div class="info-row"><span class="info-label">% of View</span><span class="info-value" x-text="hovered.percent + '%'"></span></div>
+          <template x-if="hovered.isDir">
+            <div class="info-row"><span class="info-label">Items</span><span class="info-value" x-text="hovered.childCount"></span></div>
+          </template>
+          <div class="info-row" style="border-bottom:none"><span class="info-label">Depth</span><span class="info-value" x-text="'Ring ' + hovered.depth"></span></div>
+          <div class="info-path" x-text="hovered.fullPath"></div>
+          <div class="info-bar">
+            <div class="info-bar-label">Proportion</div>
+            <div class="info-bar-track"><div class="info-bar-fill" :style="'width:' + hovered.percent + '%;background:' + hovered.color"></div></div>
+            <div class="info-bar-text" x-text="hovered.formattedSize + ' of ' + defaultSize"></div>
+          </div>
+          <template x-if="hovered.isDir && hovered.childCount > 0">
+            <div class="info-drill">Click segment to drill down</div>
+          </template>
+          <div class="info-actions" x-show="hovered.fullPath">
+            <button class="btn btn-sm" @click="diskRevealInFinder(hovered.fullPath)">Reveal in Finder</button>
+            <button class="btn btn-sm btn-danger"
+                    x-show="hovered.isDir && hovered.depth >= 1"
+                    @click="diskDeletePath(hovered.fullPath, hovered.name, hovered.size)"
+                    x-text="'Delete ' + hovered.formattedSize">Delete</button>
+          </div>
+        </div>
+      </template>
     </div>
   </div>
 
@@ -77,17 +145,9 @@
 
 <script client>
   (function() {
+    // ── Pure helpers ─────────────────────────────────────────────────
     var PAL = ['#FF6B6B','#4ECDC4','#45B7D1','#96CEB4','#F7DC6F','#DDA0DD','#98D8C8','#F8C471','#BB8FCE','#85C1E9','#82E0AA','#F1948A','#AED6F1','#D7BDE2','#F5B7B1','#73C6B6','#F0B27A','#A9CCE3','#D2B4DE','#A3E4D7'];
     var CFG = { centerR: 60, maxR: 280, maxDepth: 4, padAngle: 0.004, minAngle: 0.005, maxSegs: 400 };
-
-    var segs = [];
-    var tree = null;
-    var defaultSize = '';
-    var defaultName = '';
-
-    // DOM refs re-queried as needed (SPA navigation replaces elements)
-    var segGroup = document.getElementById('segments-group');
-    var folderListEl = document.getElementById('folder-list');
 
     function fmtBytes(b) {
       if (b >= 1e12) return (b/1e12).toFixed(1)+' TB';
@@ -101,7 +161,11 @@
       r=Math.min(255,Math.round(r+(255-r)*amt));g=Math.min(255,Math.round(g+(255-g)*amt));b=Math.min(255,Math.round(b+(255-b)*amt));
       return '#'+r.toString(16).padStart(2,'0')+g.toString(16).padStart(2,'0')+b.toString(16).padStart(2,'0');
     }
-
+    function arcPath(sa,ea,ir,or2) {
+      var a=sa+CFG.padAngle/2,b=ea-CFG.padAngle/2;if(b-a<0.001)return '';
+      var la=(b-a>Math.PI)?1:0,sx=Math.sin(a),sy=-Math.cos(a),ex=Math.sin(b),ey=-Math.cos(b);
+      return 'M '+(sx*or2).toFixed(2)+' '+(sy*or2).toFixed(2)+' A '+or2+' '+or2+' 0 '+la+' 1 '+(ex*or2).toFixed(2)+' '+(ey*or2).toFixed(2)+' L '+(ex*ir).toFixed(2)+' '+(ey*ir).toFixed(2)+' A '+ir+' '+ir+' 0 '+la+' 0 '+(sx*ir).toFixed(2)+' '+(sy*ir).toFixed(2)+' Z';
+    }
     function computeLayout(node, maxD) {
       var rw = (CFG.maxR - CFG.centerR) / maxD;
       function go(nd, sa, ea, depth) {
@@ -111,15 +175,6 @@
       }
       go(node,0,2*Math.PI,0);
     }
-    function arcPath(sa,ea,ir,or2) {
-      var a=sa+CFG.padAngle/2,b=ea-CFG.padAngle/2;if(b-a<0.001)return '';
-      var la=(b-a>Math.PI)?1:0,sx=Math.sin(a),sy=-Math.cos(a),ex=Math.sin(b),ey=-Math.cos(b);
-      return 'M '+(sx*or2).toFixed(2)+' '+(sy*or2).toFixed(2)+' A '+or2+' '+or2+' 0 '+la+' 1 '+(ex*or2).toFixed(2)+' '+(ey*or2).toFixed(2)+' L '+(ex*ir).toFixed(2)+' '+(ey*ir).toFixed(2)+' A '+ir+' '+ir+' 0 '+la+' 0 '+(sx*ir).toFixed(2)+' '+(sy*ir).toFixed(2)+' Z';
-    }
-
-    var viewStack = [];
-    var currentRoot = null;
-
     function flatten(node,arr,ci){
       if(node._d===undefined||arr.length>=CFG.maxSegs)return;
       if(node._d===0){if(node.c)for(var i=0;i<node.c.length;i++)flatten(node.c[i],arr,i);return;}
@@ -129,112 +184,143 @@
       arr.push({idx:arr.length,d:d,color:col,name:node.n,fullPath:node.p||'',size:node.s,formattedSize:fmtBytes(node.s),depth:node._d,isDir:node.d!==false,childCount:node.c?node.c.length:0,percent:'0',colorIdx:ci,_node:node});
       if(node.c)for(var j=0;j<node.c.length;j++)flatten(node.c[j],arr,ci);
     }
-
-    function renderView(root){
-      currentRoot=root;computeLayout(root,CFG.maxDepth);
-      var ns=[];flatten(root,ns,0);var rs=root.s;
-      for(var i=0;i<ns.length;i++)ns[i].percent=rs>0?((ns[i].size/rs)*100).toFixed(1):'0';
-      segs=ns;
-      // Re-query DOM refs (SPA nav replaces elements)
-      segGroup = document.getElementById('segments-group');
-      folderListEl = document.getElementById('folder-list');
-      var _cs = document.getElementById('center-size');
-      var _cn = document.getElementById('center-name');
-      var _cb = document.getElementById('center-back');
-      if(segGroup){segGroup.innerHTML='';
-      var svgns='http://www.w3.org/2000/svg';
-      for(var k=0;k<segs.length;k++){
-        var p=document.createElementNS(svgns,'path');p.setAttribute('class','segment');p.setAttribute('d',segs[k].d);p.setAttribute('fill',segs[k].color);p.setAttribute('data-idx',segs[k].idx);
-        var t=document.createElementNS(svgns,'title');t.textContent=segs[k].name+' — '+segs[k].formattedSize+' ('+segs[k].percent+'%)';p.appendChild(t);segGroup.appendChild(p);
-      }}
-      defaultSize=fmtBytes(root.s);defaultName=root.n;
-      if(_cs)_cs.textContent=defaultSize;
-      if(_cn)_cn.textContent=defaultName;
-      if(_cb)_cb.style.opacity=viewStack.length>0?'0.6':'0';
-      var top=segs.filter(function(s){return s.depth===1}).sort(function(a,b){return b.size-a.size}).slice(0,20);
-      var maxS=top.length>0?top[0].size:1;var fhtml='';
-      for(var f=0;f<top.length;f++){var bw=Math.max(3,Math.round((top[f].size/maxS)*100));fhtml+='<div class='folder-item' data-seg="'+top[f].idx+''><span class='folder-dot' style='background:'+top[f].color+''></span><span class='folder-name">'+top[f].name+'</span><span class='folder-size'>'+top[f].formattedSize+'</span><div class='folder-bar-track'><div class='folder-bar-fill' style="width:'+bw+'%;background:'+top[f].color+'"></div></div></div>';}
-      if(folderListEl)folderListEl.innerHTML=fhtml;
-      showInfo(null);
-    }
-
-    function showInfo(s){
-      // Re-query DOM elements each call (SPA navigation replaces them)
-      var _cs = document.getElementById('center-size');
-      var _cn = document.getElementById('center-name');
-      var _card = document.getElementById('inspector-card');
-      var _ph = document.getElementById('inspector-placeholder');
-      if(!s){if(_cs)_cs.textContent=defaultSize;if(_cn)_cn.textContent=defaultName;if(_card)_card.style.display='none';if(_ph)_ph.style.display='';return;}
-      if(_cs)_cs.textContent=s.formattedSize;if(_cn)_cn.textContent=s.name;if(_ph)_ph.style.display='none';if(_card){_card.style.display='';
-      _card.innerHTML='<div class='info-icon-row'><div class='info-type-icon' style="background:'+s.color+'20;color:'+s.color+'">'+(s.isDir?'Dir':'File')+'</div><div><div class='info-type-name'>'+s.name+'</div><div class='info-type-kind'>'+(s.isDir?'Folder':'File')+' · Level '+s.depth+'</div></div></div><div class='info-row'><span class='info-label'>Size</span><span class='info-value'>'+s.formattedSize+'</span></div><div class='info-row'><span class='info-label'>% of View</span><span class='info-value'>'+s.percent+'%</span></div>'+(s.isDir?'<div class='info-row'><span class='info-label'>Items</span><span class='info-value'>'+s.childCount+'</span></div>':'')+'<div class='info-row' style='border-bottom:none'><span class='info-label'>Depth</span><span class='info-value'>Ring '+s.depth+'</span></div><div class='info-path'>'+s.fullPath+'</div><div class='info-bar'><div class='info-bar-label'>Proportion</div><div class='info-bar-track'><div class='info-bar-fill' style="width:'+s.percent+'%;background:'+s.color+''></div></div><div class='info-bar-text">'+s.formattedSize+' of '+defaultSize+'</div></div>'+(s.isDir&&s.childCount>0?'<div class='info-drill'>Click to drill down</div>':'');}
-    }
-
-    // Event delegation on the disk-layout container — survives SPA DOM replacement
-    // since we bind to the freshly-queried container each time
-    var diskLayout = document.querySelector('.disk-layout');
-    if (diskLayout) {
-      diskLayout.addEventListener('mouseover', function(e) {
-        var seg = e.target.closest('.segment');
-        if (seg) { var idx = parseInt(seg.getAttribute('data-idx')); if (segs[idx]) showInfo(segs[idx]); }
-        var folder = e.target.closest('.folder-item');
-        if (folder) { var idx = parseInt(folder.getAttribute('data-seg')); if (segs[idx]) showInfo(segs[idx]); }
-      });
-      diskLayout.addEventListener('mouseout', function(e) {
-        var seg = e.target.closest('.segment');
-        if (seg && (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest('.segment'))) showInfo(null);
-        var folder = e.target.closest('.folder-item');
-        if (folder) showInfo(null);
-      });
-      diskLayout.addEventListener('click', function(e) {
-        var seg = e.target.closest('.segment');
-        if (seg) { var idx = parseInt(seg.getAttribute('data-idx')); var s = segs[idx]; if (s && s.isDir && s._node && s._node.c && s._node.c.length > 0) { viewStack.push(currentRoot); renderView(s._node); } }
-        if (e.target.closest('.center-bg')) { if (viewStack.length > 0) renderView(viewStack.pop()); }
-      });
-    }
-
-    var DISK_CACHE_KEY = 'systemcleaner:disk-scan';
-    var DISK_SCANNING_KEY = 'systemcleaner:disk-scanning';
-    var DISK_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
-
     function normalize(node) {
       var result = { n: node.name || node.n, s: node.sizeBytes || node.s || 0, p: node.path || node.p || '', d: node.isDirectory !== undefined ? node.isDirectory : (node.d !== false) };
       result.c = (node.children || node.c || []).map(normalize);
       return result;
     }
+    function pruneFromTree(node, targetPath) {
+      if (!node || !node.c) return 0;
+      for (var i = 0; i < node.c.length; i++) {
+        if (node.c[i].p === targetPath) {
+          var removed = node.c.splice(i, 1)[0];
+          node.s = Math.max(0, node.s - (removed.s || 0));
+          return removed.s || 0;
+        }
+        var freed = pruneFromTree(node.c[i], targetPath);
+        if (freed) { node.s = Math.max(0, node.s - freed); return freed; }
+      }
+      return 0;
+    }
 
-    // These functions re-query DOM elements each time they're called
-    // so they work correctly after SPA navigation replaces the DOM
-    function showScanResult(data, label) {
+    // ── State (closure — mirror of the SVG's data) ──────────────────
+    var segs = [];
+    var tree = null;
+    var viewStack = [];
+    var currentRoot = null;
+
+    // ── Reactive bridge ─────────────────────────────────────────────
+    // The reactive scope holds presentation state — folder list, hovered
+    // segment, scan totals. We push to it via _exec() because the script
+    // pre-dates the scope being registered (it runs at first paint).
+    function exec(stmt) {
+      var el = document.querySelector('[data-stx-scope]');
+      if (el && el.__stx_execute) el.__stx_execute(stmt);
+    }
+    window.__diskTopItems = [];
+    window.__diskHovered = null;
+    window.__diskScanInfo = null;
+
+    // ── SVG (imperative — path math doesn't fit declarative templating) ─
+    function renderSegments(root) {
+      currentRoot = root;
+      computeLayout(root, CFG.maxDepth);
+      var ns = []; flatten(root, ns, 0);
+      var rs = root.s;
+      for (var i = 0; i < ns.length; i++) ns[i].percent = rs > 0 ? ((ns[i].size / rs) * 100).toFixed(1) : '0';
+      segs = ns;
+
+      var segGroup = document.getElementById('segments-group');
+      if (segGroup) {
+        segGroup.innerHTML = '';
+        var svgns = 'http://www.w3.org/2000/svg';
+        for (var k = 0; k < segs.length; k++) {
+          var p = document.createElementNS(svgns, 'path');
+          p.setAttribute('class', 'segment');
+          p.setAttribute('d', segs[k].d);
+          p.setAttribute('fill', segs[k].color);
+          p.setAttribute('data-idx', segs[k].idx);
+          var t = document.createElementNS(svgns, 'title');
+          t.textContent = segs[k].name + ' — ' + segs[k].formattedSize + ' (' + segs[k].percent + '%)';
+          p.appendChild(t);
+          segGroup.appendChild(p);
+        }
+      }
+      var cb = document.getElementById('center-back');
+      if (cb) cb.style.opacity = viewStack.length > 0 ? '0.6' : '0';
+
+      var top = segs.filter(function(s){ return s.depth === 1; })
+                    .sort(function(a,b){ return b.size - a.size; })
+                    .slice(0, 20);
+      var maxS = top.length > 0 ? top[0].size : 1;
+      window.__diskTopItems = top.map(function(t){
+        return {
+          idx: t.idx, color: t.color, name: t.name,
+          formattedSize: t.formattedSize, size: t.size,
+          fullPath: t.fullPath, isDir: t.isDir, depth: t.depth,
+          childCount: t.childCount, percent: t.percent,
+          barPct: Math.max(3, Math.round((t.size / maxS) * 100)),
+        };
+      });
+      exec('topItems = window.__diskTopItems; defaultSize = ' + JSON.stringify(fmtBytes(root.s)) + '; defaultName = ' + JSON.stringify(root.n) + '; rootName = ' + JSON.stringify(root.n) + '; scanTotalLabel = ' + JSON.stringify(fmtBytes(root.s)) + '; hovered = null');
+    }
+
+    // SVG-level event delegation. Hover/click on `<path class="segment">`
+    // pushes the segment descriptor into the reactive scope so the inspector
+    // panel updates declaratively.
+    function bindSvgEvents() {
+      var diskLayout = document.querySelector('.disk-layout');
+      if (!diskLayout || diskLayout.__diskBound) return;
+      diskLayout.__diskBound = true;
+      diskLayout.addEventListener('mouseover', function(e) {
+        var seg = e.target.closest('.segment');
+        if (seg) {
+          var idx = parseInt(seg.getAttribute('data-idx'));
+          var s = segs[idx];
+          if (s) { window.__diskHovered = s; exec('hovered = window.__diskHovered'); }
+        }
+      });
+      diskLayout.addEventListener('mouseout', function(e) {
+        var seg = e.target.closest('.segment');
+        if (seg && (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest('.segment'))) {
+          window.__diskHovered = null;
+          exec('hovered = null');
+        }
+      });
+      diskLayout.addEventListener('click', function(e) {
+        var seg = e.target.closest('.segment');
+        if (seg) {
+          var idx = parseInt(seg.getAttribute('data-idx'));
+          var s = segs[idx];
+          if (s && s.isDir && s._node && s._node.c && s._node.c.length > 0) {
+            viewStack.push(currentRoot);
+            renderSegments(s._node);
+          }
+        }
+        if (e.target.closest('.center-bg')) {
+          if (viewStack.length > 0) renderSegments(viewStack.pop());
+        }
+      });
+    }
+
+    // ── Scan lifecycle ──────────────────────────────────────────────
+    var DISK_CACHE_KEY = 'systemcleaner:disk-scan';
+    var DISK_SCANNING_KEY = 'systemcleaner:disk-scanning';
+    var DISK_CACHE_TTL = 10 * 60 * 1000;
+
+    function applyScanResult(data, cached) {
       tree = data.tree.n ? data.tree : normalize(data.tree);
-      var _loading = document.getElementById('disk-loading');
-      var _svg = document.getElementById('sunburst');
-      var _total = document.getElementById('disk-scan-total');
-      var _meta = document.getElementById('disk-scan-meta');
-      if (_loading) _loading.style.display = 'none';
-      if (_svg) _svg.style.display = '';
-      if (_total) _total.textContent = fmtBytes(tree.s);
-      if (_meta) _meta.textContent = data.folderCount + ' folders \u00b7 ' + data.fileCount + ' files \u00b7 ' + data.scanTime + (label || '');
-      // Re-acquire segGroup since DOM may have been replaced
-      segGroup = document.getElementById('segments-group');
-      folderListEl = document.getElementById('folder-list');
-      renderView(tree);
+      window.__diskScanInfo = {
+        folderCount: data.folderCount,
+        fileCount: data.fileCount,
+        scanTime: data.scanTime,
+        cached: !!cached,
+      };
+      exec('scanInfo = window.__diskScanInfo; scanState = "done"');
+      bindSvgEvents();
+      renderSegments(tree);
     }
 
-    function showScanningUI() {
-      var prompt = document.getElementById('disk-prompt');
-      var scanning = document.getElementById('disk-scanning');
-      var icon = document.getElementById('disk-icon');
-      var _svg = document.getElementById('sunburst');
-      var _loading = document.getElementById('disk-loading');
-      if (prompt) prompt.style.display = 'none';
-      if (scanning) scanning.style.display = '';
-      if (icon) icon.style.animation = 'pulse 1.5s ease-in-out infinite';
-      if (_svg) _svg.style.display = 'none';
-      if (_loading) _loading.style.display = '';
-    }
-
-    // Global scan manager — persists across SPA navigations on window.
-    // Only manages the fetch lifecycle and localStorage. Never holds DOM refs.
     if (!window._diskScan) {
       window._diskScan = {
         scanning: false,
@@ -246,46 +332,66 @@
             .then(function(data) {
               window._diskScan.scanning = false;
               localStorage.removeItem(DISK_SCANNING_KEY);
-              if (!data.success) return;
+              if (!data.success) {
+                exec('scanState = "idle"');
+                return;
+              }
               data.tree = normalize(data.tree);
-              try { localStorage.setItem(DISK_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data })); } catch {}
-              // Notify the disk page if it's currently mounted
+              try { localStorage.setItem(DISK_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data })); } catch (_) {}
               if (typeof window._diskScan.onComplete === 'function') window._diskScan.onComplete(data);
             })
             .catch(function() {
               window._diskScan.scanning = false;
               localStorage.removeItem(DISK_SCANNING_KEY);
+              exec('scanState = "idle"');
             });
         },
-        onComplete: null
+        onComplete: null,
       };
     }
+    window._diskScan.onComplete = function(data) { applyScanResult(data, false); };
 
-    // Register fresh callback — uses current DOM (re-queried inside showScanResult)
-    window._diskScan.onComplete = function(data) { showScanResult(data); };
-
-    // Restore state:
-    // 1. Scan in progress → show scanning UI and wait for callback
-    // 2. Cached result → render immediately
-    // 3. Neither → show scan button
+    // Restore on (re-)mount
     if (window._diskScan.scanning || localStorage.getItem(DISK_SCANNING_KEY) === 'true') {
-      showScanningUI();
+      exec('scanState = "scanning"');
     } else {
       try {
         var raw = localStorage.getItem(DISK_CACHE_KEY);
         if (raw) {
           var cached = JSON.parse(raw);
-          if (Date.now() - cached.ts < DISK_CACHE_TTL) {
-            showScanResult(cached.data, ' (cached)');
-            document.getElementById('disk-prompt').style.display = 'none';
-          }
+          if (Date.now() - cached.ts < DISK_CACHE_TTL) applyScanResult(cached.data, true);
         }
-      } catch {}
+      } catch (_) {}
     }
 
+    // ── Public actions wired from the template ─────────────────────
     window.startDiskScan = function() {
-      showScanningUI();
+      exec('scanState = "scanning"');
       window._diskScan.run();
+    };
+
+    window.diskRevealInFinder = function(path) {
+      fetch('/api/reveal-in-finder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: path }) }).catch(function(){});
+    };
+
+    window.diskDeletePath = function(path, name, sizeBytes) {
+      var sizeStr = fmtBytes(sizeBytes || 0);
+      if (!confirm('Delete "' + name + '" (' + sizeStr + ')?\n\n' + path + '\n\nThis cannot be undone.')) return;
+      fetch('/api/delete-path', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: path }) })
+        .then(function(r) { return r.json(); })
+        .then(function(r) {
+          if (r.success) {
+            try { localStorage.removeItem(DISK_CACHE_KEY); } catch (_) {}
+            if (tree) pruneFromTree(tree, path);
+            renderSegments(currentRoot && currentRoot.p !== path ? currentRoot : tree);
+            exec('hovered = null');
+          } else {
+            alert('Delete failed: ' + (r.error || 'Unknown'));
+          }
+        })
+        .catch(function(err) {
+          alert('Delete failed: ' + err.message);
+        });
     };
   })();
 </script>

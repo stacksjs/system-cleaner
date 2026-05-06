@@ -7,10 +7,11 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "rm -rf .stx && stx dev --port 3456",
+    "dev": "bun ./scripts/dev.ts",
     "build": "stx build pages/",
     "native": "stx dev pages/index.stx --native",
     "cli": "bun run packages/cli/bin/system-cleaner.ts",
+    "shoot": "bun ./scripts/shoot.ts",
     "dev:docs": "bunpress dev docs",
     "build:docs": "bunpress build docs",
     "preview:docs": "bunpress preview docs",
@@ -29,6 +30,8 @@
     "ts-broadcasting": "link:ts-broadcasting"
   },
   "devDependencies": {
-    "better-dx": "latest"
+    "better-dx": "latest",
+    "puppeteer": "^24.42.0",
+    "typescript": "^6.0.3"
   }
 }

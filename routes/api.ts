@@ -31,8 +31,26 @@ export default async function (router: Router) {
     });
   });
 
-  await router.post('/disk-scan', async () => {
-    // Run scan in a subprocess to avoid blocking the server
+  await router.post('/disk-scan', async (req) => {
+    let scanRoot = HOME;
+    let maxDepth = 6;
+    try {
+      const body = (await req.json()) as { path?: string; maxDepth?: number };
+      if (body.path && typeof body.path === 'string') {
+        const resolved = path.resolve(body.path);
+        if (resolved.startsWith(HOME) || resolved === '/' || resolved.startsWith('/Volumes')) {
+          scanRoot = resolved;
+        }
+      }
+      if (typeof body.maxDepth === 'number' && body.maxDepth >= 2 && body.maxDepth <= 10) {
+        maxDepth = body.maxDepth;
+      }
+    }
+    catch {}
+
+    const HARD_TIMEOUT_MS = 60_000;
+    const WORKER_TIMEOUT_MS = 50_000;
+
     const worker = new Worker(
       new URL('../workers/disk-scan.ts', import.meta.url).href,
     );
@@ -40,8 +58,8 @@ export default async function (router: Router) {
     return new Promise<Response>((resolve) => {
       const timeout = setTimeout(() => {
         worker.terminate();
-        resolve(Response.json({ success: false, error: 'Scan timed out' }));
-      }, 15000);
+        resolve(Response.json({ success: false, error: `Scan exceeded ${HARD_TIMEOUT_MS / 1000}s` }));
+      }, HARD_TIMEOUT_MS);
 
       worker.onmessage = (e: MessageEvent) => {
         clearTimeout(timeout);
@@ -57,7 +75,7 @@ export default async function (router: Router) {
         );
       };
 
-      worker.postMessage({ home: HOME, maxDepth: 6, timeoutMs: 12000 });
+      worker.postMessage({ home: scanRoot, maxDepth, timeoutMs: WORKER_TIMEOUT_MS });
     });
   });
 
@@ -75,9 +93,35 @@ export default async function (router: Router) {
         { status: 403 },
       );
     const resolved = path.resolve(target);
-    const size = await getDirSize(resolved);
-    fs.rmSync(resolved, { recursive: true, force: true });
+    let size = 0;
+    try {
+      const st = fs.lstatSync(resolved);
+      size = st.isDirectory() ? await getDirSize(resolved) : st.size;
+    }
+    catch {
+      return Response.json({ success: false, error: 'Path does not exist' }, { status: 404 });
+    }
+    try {
+      fs.rmSync(resolved, { recursive: true, force: true });
+    }
+    catch (err: any) {
+      return Response.json({ success: false, error: err.message || 'Delete failed' }, { status: 500 });
+    }
     return Response.json({ success: true, freedBytes: size });
+  });
+
+  await router.post('/reveal-in-finder', async (req) => {
+    const { path: target } = (await req.json()) as { path: string };
+    if (!target) return Response.json({ success: false, error: 'No path' }, { status: 400 });
+    const resolved = path.resolve(target);
+    if (!resolved.startsWith(HOME) && !resolved.startsWith('/Applications') && !resolved.startsWith('/Volumes')) {
+      return Response.json({ success: false, error: 'Outside allowed scope' }, { status: 403 });
+    }
+    try {
+      Bun.spawn(['open', '-R', resolved], { stdout: 'ignore', stderr: 'ignore' });
+    }
+    catch {}
+    return Response.json({ success: true });
   });
 
   await router.post('/clean-dir', async (req) => {
