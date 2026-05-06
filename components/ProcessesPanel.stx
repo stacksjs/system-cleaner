@@ -32,7 +32,10 @@
         <span x-text="wsConnected ? 'Live' : 'Reconnecting'"></span>
       </span>
     </div>
-    <button class='btn btn-sm' x-show='selected.length > 0' @click="toast(selected.length + ' processes would be killed (demo)', 'warning')">Kill Selected</button>
+    <!-- Bulk kill is hidden until it's wired to /api/kill-process for each
+         pid; the previous "(demo)" toast was misleading because users
+         assumed they had killed something. Per-row kill still works. -->
+    <button class='btn btn-sm' x-cloak x-show='false' aria-hidden='true'>Kill Selected</button>
   </div>
   <table>
     <thead>

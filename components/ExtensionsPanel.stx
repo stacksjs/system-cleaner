@@ -29,7 +29,9 @@
         <span class='tbl-title'>Installed Extensions</span>
         <span class='tbl-count'>sorted by size</span>
       </div>
-      <button class='btn btn-sm' x-show='selected.length > 0' @click="toast(selected.length + ' extensions would be removed (demo)', 'warning')">Remove Selected</button>
+      <!-- Hidden until extension-removal is implemented. Toasting "(demo)"
+           was misleading; the user expected something to happen. -->
+      <button class='btn btn-sm' x-cloak x-show='false' aria-hidden='true'>Remove Selected</button>
     </div>
     <table>
       <thead>
@@ -66,7 +68,9 @@
               @endif
             </td>
             <td>
-              <button class='btn btn-danger btn-sm' @click="toast('{{ ext.name }} would be removed (demo)', 'warning')">Remove</button>
+              <!-- TODO: wire per-row remove to a real /api/remove-extension
+                   endpoint. The previous "(demo)" toast looked like success. -->
+              <span class='dim' style='font-size: 11px;'>—</span>
             </td>
           </tr>
         @endforeach

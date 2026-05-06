@@ -52,12 +52,23 @@ function esc(str) { return escapeHtml(str || '') }
 
 <script data-stx-scoped>
 function _api(endpoint, data) {
-  return fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data || {}) }).then(function(r) { return r.json(); });
+  return fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data || {}) })
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
 }
 
 function _exec(stmt) {
   var el = document.querySelector('[data-stx-scope]');
   if (el && el.__stx_execute) el.__stx_execute(stmt);
+}
+
+function _toastErr(label) {
+  return function(err) {
+    var msg = (err && err.message) ? err.message : 'network error';
+    _exec("toast(" + JSON.stringify(label + ': ' + msg) + ", 'error')");
+  };
 }
 
 function doToggle(fp, name, action, itemId) {
@@ -71,7 +82,7 @@ function doToggle(fp, name, action, itemId) {
     } else {
       _exec("toast('Failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");
     }
-  });
+  }).catch(_toastErr(verb + ' failed'));
 }
 
 function doRemove(fp, name, itemId) {
@@ -83,6 +94,6 @@ function doRemove(fp, name, itemId) {
     } else {
       _exec("toast('Failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");
     }
-  });
+  }).catch(_toastErr('Remove failed'));
 }
 </script>

@@ -167,17 +167,17 @@
 <div class='card-row'>
   <div class='card'>
     <div class='card-label'>Homebrew</div>
-    <div class='card-value' :style="'color: ' + (brewTotal > 0 ? '#ff9f0a' : '#30d158')' x-text='brewTotal"></div>
+    <div class='card-value' :style="brewTotal > 0 ? 'color: #ff9f0a' : 'color: #30d158'" x-text="brewTotal"></div>
     <div class='card-detail' x-text="brewFormulae.length + ' formulae \u00B7 ' + brewCasks.length + ' casks'"></div>
   </div>
   <div class='card'>
     <div class='card-label'>Pantry</div>
-    <div class='card-value' :style="'color: ' + (pantryOutdated.length > 0 ? '#ff9f0a' : '#30d158')' x-text='pantryOutdated.length"></div>
+    <div class='card-value' :style="pantryOutdated.length > 0 ? 'color: #ff9f0a' : 'color: #30d158'" x-text="pantryOutdated.length"></div>
     <div class='card-detail' x-text="pantryPackages.length + ' package' + (pantryPackages.length !== 1 ? 's' : '') + ' tracked'"></div>
   </div>
   <div class='card'>
     <div class='card-label'>Desktop Apps</div>
-    <div class='card-value' :style="'color: ' + (desktopOutdated.length > 0 ? '#ff9f0a' : '#30d158')' x-text='desktopOutdated.length"></div>
+    <div class='card-value' :style="desktopOutdated.length > 0 ? 'color: #ff9f0a' : 'color: #30d158'" x-text="desktopOutdated.length"></div>
     <div class='card-detail' x-text="desktopApps.length + ' app' + (desktopApps.length !== 1 ? 's' : '') + ' in /Applications'"></div>
   </div>
 </div>

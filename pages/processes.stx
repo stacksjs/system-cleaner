@@ -39,6 +39,7 @@
   wsConnected: false,
   selected: [],
   killedPids: [],
+  killing: {},
   toasts: [],
   toastId: 0,
 
@@ -54,19 +55,30 @@
 
   confirmKill(p) {
     if (!confirm('Kill ' + p.name + ' (PID ' + p.pid + ')?')) return;
+    // In-flight guard so a double click doesn't post twice.
+    if (this.killing[p.pid]) return;
+    this.killing = { ...this.killing, [p.pid]: true };
     fetch('/api/kill-process', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pid: p.pid }),
     })
-      .then(r => r.json())
       .then(r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(r => {
+        const next = { ...this.killing }; delete next[p.pid]; this.killing = next;
         if (r.success) {
           this.killedPids = [...this.killedPids, p.pid];
           this.toast(p.name + ' killed (PID ' + p.pid + ')', 'success');
         } else {
           this.toast('Kill failed: ' + (r.error || 'Unknown'), 'error');
         }
+      })
+      .catch(err => {
+        const next = { ...this.killing }; delete next[p.pid]; this.killing = next;
+        this.toast('Kill failed: ' + (err.message || 'network error'), 'error');
       });
   }
 }">
@@ -127,7 +139,12 @@ if (!window._execFlushBound) {
   function connect() {
     if (timer) { clearTimeout(timer); timer = null; }
     try {
-      ws = new WebSocket('ws://' + window.location.hostname + ':6001/ws');
+      // Broadcasting port is configurable on the server side; the client
+      // expects it under the same host. Use the page's protocol family
+      // (ws/wss) so reverse-proxied / TLS deployments work.
+      var wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      var wsPort = (window.__broadcastPort != null ? window.__broadcastPort : 6001);
+      ws = new WebSocket(wsProto + '//' + window.location.hostname + ':' + wsPort + '/ws');
     } catch(e) {
       timer = setTimeout(connect, 3000);
       return;

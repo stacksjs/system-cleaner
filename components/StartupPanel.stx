@@ -33,7 +33,9 @@
   <div class='tbl-bar'>
     <span class='tbl-title'>Launch Agents & Daemons</span>
     <div style='display: flex; gap: 6px;'>
-      <button class='btn btn-sm' x-show='selected.length > 0' @click="toast(selected.length + ' items would be disabled (demo)', 'warning')">
+      <!-- Bulk disable is hidden until it loops over /api/toggle-startup;
+           the previous "(demo)" toast misled users. Per-row disable works. -->
+      <button class='btn btn-sm' x-cloak x-show='false' aria-hidden='true'>
         Disable Selected (<span x-text='selected.length'>0</span>)
       </button>
     </div>

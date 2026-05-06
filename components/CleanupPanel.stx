@@ -17,7 +17,7 @@
     <button class='btn' @click='selected.length === {{ cleanCategories.length }} ? (selected = []) : (selected = {{ JSON.stringify(cleanCategories.map(c => c.id)) }})'>
       <span x-text="selected.length === {{ cleanCategories.length }} ? 'Deselect All' : 'Select All'">Select All</span>
     </button>
-    <button class='btn btn-danger' x-show='selected.length > 0' onclick='doCleanSelected()'>
+    <button class='btn btn-danger' x-cloak x-show='selected.length > 0' onclick='doCleanSelected()'>
       Clean Selected (<span x-text='selected.length'>0</span>)
     </button>
     <button class='btn' onclick='doEmptyTrash()'>
