@@ -81,10 +81,25 @@ export async function cleanTarget(target: CleanTarget, options: CleanOptions = {
     }
   }
 
-  const sizeAfter = await getDirSize(target.path).catch(() => 0)
+  // Honest freed-bytes accounting:
+  //   - Full success: the path is gone (or its contents are), so we
+  //     measure the surviving size and subtract.
+  //   - Partial failure: silently using `getDirSize(...).catch(() => 0)`
+  //     means a permission-denied child made `du` fail, the size came
+  //     back as 0, and we reported the *entire* pre-clean size as freed
+  //     even though some of it is still on disk. Re-walk and report only
+  //     the real delta.
+  let sizeAfter = 0
+  try {
+    sizeAfter = await getDirSize(target.path)
+  }
+  catch {
+    // The directory itself is gone — that's the success case.
+    sizeAfter = 0
+  }
   result.freedBytes = Math.max(0, sizeBefore - sizeAfter)
   result.freedFormatted = formatBytes(result.freedBytes)
-  result.success = true
+  result.success = result.errors.length === 0
 
   options.onProgress?.(target.id, 'done')
   return result
@@ -200,6 +215,14 @@ export async function cleanDirectory(dirPath: string): Promise<{ freedBytes: num
     errors.push(err instanceof Error ? err.message : String(err))
   }
 
-  const sizeAfter = await getDirSize(resolvedPath).catch(() => 0)
+  // Same accounting fix as cleanTarget: re-walk the actual surviving
+  // size rather than treating "du failed" as "everything was freed".
+  let sizeAfter = 0
+  try {
+    sizeAfter = await getDirSize(resolvedPath)
+  }
+  catch {
+    sizeAfter = 0
+  }
   return { freedBytes: Math.max(0, sizeBefore - sizeAfter), errors }
 }

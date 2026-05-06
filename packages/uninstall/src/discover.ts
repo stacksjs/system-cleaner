@@ -1,5 +1,5 @@
 import * as path from 'node:path'
-import { HOME, getDirSize, macPaths, pathExists, safeReadDir, safeStat, parsePlist, exec, shellEscape } from '@system-cleaner/core'
+import { HOME, appleScriptEscape, getDirSize, macPaths, pathExists, safeReadDir, safeStat, parsePlist, exec, shellEscape } from '@system-cleaner/core'
 import { readBundleInfo } from './bundle'
 import type { AppInfo, StartupItem } from './types'
 
@@ -167,29 +167,50 @@ export function discoverStartupItems(): StartupItem[] {
 }
 
 /**
+ * Validate that a launch-agent / launch-daemon path is in one of the
+ * official locations and that traversal sequences (`..`) can't smuggle the
+ * filename out. Returns the resolved absolute path or `null`.
+ */
+function validateLaunchAgentPath(filepath: string): string | null {
+  if (!filepath || !path.isAbsolute(filepath)) return null
+  const resolved = path.resolve(filepath)
+  const userAgentsDir = path.join(HOME, 'Library/LaunchAgents')
+  const inUser = resolved === userAgentsDir || resolved.startsWith(`${userAgentsDir}/`)
+  const inSystem = resolved.startsWith('/Library/LaunchAgents/') || resolved.startsWith('/Library/LaunchDaemons/')
+  if (!inUser && !inSystem) return null
+  return resolved
+}
+
+/**
  * Toggle a launch agent on or off.
- * Uses shellEscape to prevent command injection from filepath.
+ *
+ * For system agents we go through `osascript -e 'do shell script "..."'`
+ * to get a sudo prompt. The shell command is *itself* embedded in an
+ * AppleScript double-quoted string — historically the filepath was only
+ * shell-escaped (single-quoted), so a path containing `"` (which the
+ * `startsWith('/Library/LaunchAgents/')` check did not block) would
+ * close the AppleScript literal and inject extra script. We now apply
+ * BOTH shell-quoting (for the inner sh) and AppleScript-escaping (for
+ * the outer "..."), and validate the resolved path so traversal
+ * sequences can't reach non-LaunchAgents files.
  */
 export async function toggleStartupItem(filepath: string, action: 'enable' | 'disable'): Promise<{ success: boolean, error?: string }> {
-  const userAgentsDir = path.join(HOME, 'Library/LaunchAgents')
-  const isUserAgent = filepath.startsWith(userAgentsDir)
-  const isSystemAgent = filepath.startsWith('/Library/LaunchAgents/') || filepath.startsWith('/Library/LaunchDaemons/')
+  const resolved = validateLaunchAgentPath(filepath)
+  if (resolved === null) return { success: false, error: 'Invalid launch agent path' }
+  const isUserAgent = resolved.startsWith(path.join(HOME, 'Library/LaunchAgents'))
 
-  if (!isUserAgent && !isSystemAgent) {
-    return { success: false, error: 'Invalid launch agent path' }
-  }
-
-  const escaped = shellEscape(filepath)
+  const shellQuoted = shellEscape(resolved)
   const launchctlCmd = action === 'disable'
-    ? `launchctl unload -w ${escaped}`
-    : `launchctl load -w ${escaped}`
+    ? `launchctl unload -w ${shellQuoted}`
+    : `launchctl load -w ${shellQuoted}`
 
   try {
     if (isUserAgent) {
       await exec(`${launchctlCmd} 2>/dev/null`, { timeout: 5000 })
     }
     else {
-      const osaCmd = `osascript -e 'do shell script "${launchctlCmd}" with administrator privileges'`
+      const innerForAS = appleScriptEscape(launchctlCmd)
+      const osaCmd = `osascript -e 'do shell script "${innerForAS}" with administrator privileges'`
       await exec(osaCmd, { timeout: 30000 })
     }
     return { success: true }
@@ -201,31 +222,25 @@ export async function toggleStartupItem(filepath: string, action: 'enable' | 'di
 
 /**
  * Remove a launch agent/daemon permanently.
- * Unloads the agent first, then deletes the plist file.
+ * Same dual-escaping defense as `toggleStartupItem`.
  */
 export async function removeStartupItem(filepath: string): Promise<{ success: boolean, error?: string }> {
-  const userAgentsDir = path.join(HOME, 'Library/LaunchAgents')
-  const isUserAgent = filepath.startsWith(userAgentsDir)
-  const isSystemAgent = filepath.startsWith('/Library/LaunchAgents/') || filepath.startsWith('/Library/LaunchDaemons/')
+  const resolved = validateLaunchAgentPath(filepath)
+  if (resolved === null) return { success: false, error: 'Invalid launch agent path' }
+  const isUserAgent = resolved.startsWith(path.join(HOME, 'Library/LaunchAgents'))
 
-  if (!isUserAgent && !isSystemAgent) {
-    return { success: false, error: 'Invalid launch agent path' }
-  }
-
-  const escaped = shellEscape(filepath)
+  const shellQuoted = shellEscape(resolved)
 
   try {
     if (isUserAgent) {
-      // Unload first (ignore errors — might already be unloaded)
-      await exec(`launchctl unload -w ${escaped} 2>/dev/null`, { timeout: 5000 }).catch(() => {})
-      // Delete the plist
+      await exec(`launchctl unload -w ${shellQuoted} 2>/dev/null`, { timeout: 5000 }).catch(() => {})
       const fs = await import('node:fs')
-      fs.unlinkSync(filepath)
+      fs.unlinkSync(resolved)
     }
     else {
-      // System: unload + delete via osascript (single auth prompt)
-      const cmd = `launchctl unload -w ${escaped} 2>/dev/null; rm -f ${escaped}`
-      const osaCmd = `osascript -e 'do shell script "${cmd}" with administrator privileges'`
+      const cmd = `launchctl unload -w ${shellQuoted} 2>/dev/null; rm -f ${shellQuoted}`
+      const innerForAS = appleScriptEscape(cmd)
+      const osaCmd = `osascript -e 'do shell script "${innerForAS}" with administrator privileges'`
       await exec(osaCmd, { timeout: 30000 })
     }
     return { success: true }

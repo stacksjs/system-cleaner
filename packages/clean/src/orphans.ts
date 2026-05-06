@@ -95,7 +95,6 @@ export async function findOrphanedAppData(): Promise<OrphanedItem[]> {
 }
 
 async function getInstalledBundleIds(): Promise<Set<string>> {
-  // Use two separate safe commands instead of piping mdfind through xargs
   const result = await exec(
     'mdfind "kMDItemContentType == \'com.apple.application-bundle\'" 2>/dev/null',
     { timeout: 15_000 },
@@ -104,8 +103,11 @@ async function getInstalledBundleIds(): Promise<Set<string>> {
   const ids = new Set<string>()
 
   if (result.ok) {
-    const appPaths = result.stdout.split('\n').filter(Boolean).slice(0, 300)
-    // Batch plist reads to avoid overwhelming FS on slow disks
+    // No artificial cap. The previous `slice(0, 300)` silently classified
+    // every app installed past index 300 as an orphan — and its support
+    // data was queued for deletion. The PLIST_BATCH below already keeps
+    // FS pressure bounded.
+    const appPaths = result.stdout.split('\n').filter(Boolean)
     const PLIST_BATCH = 20
     for (let i = 0; i < appPaths.length; i += PLIST_BATCH) {
       for (const appPath of appPaths.slice(i, i + PLIST_BATCH)) {
@@ -120,7 +122,9 @@ async function getInstalledBundleIds(): Promise<Set<string>> {
     }
   }
 
-  // Add well-known system bundle IDs as fallback
+  // Well-known system bundle IDs as fallback in case mdfind is unavailable
+  // (e.g. Spotlight indexing disabled). Without these we'd misclassify
+  // Apple's own caches as orphans.
   for (const id of ['com.apple.Safari', 'com.apple.mail', 'com.apple.finder', 'com.apple.dock'])
     ids.add(id)
 

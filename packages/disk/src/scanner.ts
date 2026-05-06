@@ -8,6 +8,22 @@ const DEFAULT_TIMEOUT_MS = 15_000
 const CHECK_INTERVAL = 200
 const MAX_HEAP_SIZE = 50
 
+/**
+ * Cap on total entries (files + folders) processed in a single scan.
+ * Prevents heap exhaustion on directories with millions of entries —
+ * `timeoutMs` alone isn't enough because `readdirSync` loads each
+ * directory's entries synchronously before the timer can fire.
+ */
+const DEFAULT_MAX_ENTRIES = 750_000
+
+/**
+ * Hard cap on children kept on each non-folded directory. Without it the
+ * tree pinned by the scanner can grow proportional to the entry count;
+ * we already heap-track the global top-N so deeply-fanned directories
+ * past this cap are summarized via their largest direct children.
+ */
+const MAX_CHILDREN_PER_DIR = 5_000
+
 /** Directories that should never be recursed into — use `du` for size instead */
 const FOLDED_DIRS = new Set([
   'node_modules', '.git', '__pycache__', '.cache', 'vendor', 'DerivedData',
@@ -30,6 +46,7 @@ const SYSTEM_SKIP = new Set([
 export function scanDirectory(rootPath: string, options: ScanOptions = {}): ScanResult {
   const maxDepth = options.maxDepth ?? DEFAULT_MAX_DEPTH
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES
   const skipPatterns = options.skipPatterns ?? FOLDED_DIRS
   const includeHidden = options.includeHidden ?? false
 
@@ -93,6 +110,10 @@ export function scanDirectory(rootPath: string, options: ScanOptions = {}): Scan
         aborted = true
         return { name: baseName, path: dirPath, sizeBytes: 0, isDirectory: true, children: [] }
       }
+      if (totalFiles + totalFolders > maxEntries) {
+        aborted = true
+        return { name: baseName, path: dirPath, sizeBytes: 0, isDirectory: true, children: [] }
+      }
       options.onProgress?.(totalFiles + totalFolders, dirPath)
     }
 
@@ -110,6 +131,23 @@ export function scanDirectory(rootPath: string, options: ScanOptions = {}): Scan
     for (const entry of entries) {
       if (aborted)
         break
+
+      // Per-entry guards: the cap must trip on flat directories with
+      // millions of children (the depth-1 recursion cap doesn't reach
+      // them). Same for wallclock — `readdirSync` can't yield, so we
+      // check inside the entry loop.
+      checks++
+      if (checks % CHECK_INTERVAL === 0) {
+        if (Date.now() - scanStart > timeoutMs) {
+          aborted = true
+          break
+        }
+        if (totalFiles + totalFolders > maxEntries) {
+          aborted = true
+          break
+        }
+        options.onProgress?.(totalFiles + totalFolders, dirPath)
+      }
 
       if (!includeHidden && entry.name.startsWith('.') && depth > 0)
         continue
@@ -170,15 +208,21 @@ export function scanDirectory(rootPath: string, options: ScanOptions = {}): Scan
     // Sort children by size descending
     children.sort((a, b) => b.sizeBytes - a.sizeBytes)
 
-    // Count files in this directory's direct children only
+    // Count files based on the full child list before truncation.
     const directFileCount = children.filter(c => !c.isDirectory).length
+
+    // Cap retained children — the global top-N heap already tracks the
+    // largest items, so this just keeps the returned tree bounded.
+    const trimmedChildren = children.length > MAX_CHILDREN_PER_DIR
+      ? children.slice(0, MAX_CHILDREN_PER_DIR)
+      : children
 
     return {
       name: baseName,
       path: dirPath,
       sizeBytes: totalSize,
       isDirectory: true,
-      children,
+      children: trimmedChildren,
       fileCount: directFileCount,
     }
   }

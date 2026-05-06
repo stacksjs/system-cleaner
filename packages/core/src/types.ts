@@ -131,6 +131,13 @@ export interface DiskEntry {
 export interface ScanOptions {
   maxDepth?: number
   timeoutMs?: number
+  /**
+   * Hard cap on total entries (files + folders) processed in a single
+   * scan. Prevents heap exhaustion on directories with millions of
+   * entries — `timeoutMs` alone isn't enough because `readdirSync` loads
+   * the entries synchronously before the timer can fire.
+   */
+  maxEntries?: number
   skipPatterns?: Set<string>
   includeHidden?: boolean
   onProgress?: (scanned: number, currentPath: string) => void

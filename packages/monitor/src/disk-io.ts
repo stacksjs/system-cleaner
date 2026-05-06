@@ -3,29 +3,36 @@ import type { DiskIoMetrics, DiskPartitionMetrics } from '@system-cleaner/core'
 import type { CollectorState } from './types'
 
 /**
- * Collect disk I/O metrics using RAW df values (honest reporting).
+ * Collect disk I/O metrics using RAW df values plus per-direction byte
+ * counters from `ioreg -rc IOBlockStorageDriver`.
  *
- * Unlike Mole which replaces raw values with Finder osascript (which counts
- * purgeable space as "free" and misleads users with full disks), we:
- *   1. Use raw df values as truth (matches what the user experiences)
- *   2. Collect purgeable space separately as supplementary info
- *   3. Feed raw values to health score (so "disk full" warnings fire correctly)
+ * Earlier versions parsed `iostat -d` and split the total MB/s 50/50
+ * into `readBytesPerSec` and `writeBytesPerSec` — those numbers were
+ * fabricated. `ioreg` exposes cumulative `Bytes (Read)` and
+ * `Bytes (Write)` per disk; sample twice with a short gap and diff to
+ * get an honest rate (the same approach Activity Monitor uses).
  */
 // eslint-disable-next-line pickier/no-unused-vars
 export async function getDiskIoMetrics(state: CollectorState): Promise<DiskIoMetrics> {
   const diskInfo = await getDiskInfo()
-  const ioRates = await getIoRates()
+  const ioRates = await getIoRatesPerDisk()
 
-  const partitions: DiskPartitionMetrics[] = diskInfo.map(disk => ({
-    name: disk.filesystem,
-    mountPoint: disk.mountPoint,
-    totalBytes: disk.totalBytes,
-    usedBytes: disk.usedBytes,
-    freeBytes: disk.freeBytes,
-    usedPercent: disk.usedPercent,
-    readBytesPerSec: ioRates.readBytesPerSec,
-    writeBytesPerSec: ioRates.writeBytesPerSec,
-  }))
+  const partitions: DiskPartitionMetrics[] = diskInfo.map((disk) => {
+    // Match by leading disk identifier (e.g. `disk0s5` → `disk0`).
+    const diskKey = disk.filesystem.match(/disk\d+/)?.[0] ?? ''
+    const rate = ioRates.get(diskKey) ?? { read: 0, write: 0 }
+
+    return {
+      name: disk.filesystem,
+      mountPoint: disk.mountPoint,
+      totalBytes: disk.totalBytes,
+      usedBytes: disk.usedBytes,
+      freeBytes: disk.freeBytes,
+      usedPercent: disk.usedPercent,
+      readBytesPerSec: rate.read,
+      writeBytesPerSec: rate.write,
+    }
+  })
 
   return { partitions }
 }
@@ -50,7 +57,6 @@ export async function getPurgeableSpace(): Promise<{ purgeableBytes: number, fin
 
   const finderFreeBytes = parts[0]
 
-  // Get actual free space from df
   const dfResult = await exec('df -k / 2>/dev/null | tail -1', { timeout: 3000 })
   if (!dfResult.ok)
     return null
@@ -58,25 +64,64 @@ export async function getPurgeableSpace(): Promise<{ purgeableBytes: number, fin
   const dfParts = dfResult.stdout.split(/\s+/)
   const rawFreeBytes = (Number.parseInt(dfParts[3]) || 0) * 1024
 
-  // Purgeable = Finder's "free" minus actual free
   const purgeableBytes = Math.max(0, finderFreeBytes - rawFreeBytes)
 
   return { purgeableBytes, finderFreeBytes }
 }
 
-async function getIoRates(): Promise<{ readBytesPerSec: number, writeBytesPerSec: number }> {
-  const result = await exec('iostat -d -c 2 -w 1 2>/dev/null | tail -1', { timeout: 5000 })
-  if (!result.ok)
-    return { readBytesPerSec: 0, writeBytesPerSec: 0 }
+interface IoCounters { read: number, write: number }
 
-  const parts = result.stdout.trim().split(/\s+/)
-  if (parts.length >= 3) {
-    const mbPerSec = Number.parseFloat(parts[2]) || 0
-    return {
-      readBytesPerSec: Math.max(0, mbPerSec * 1e6 * 0.5),
-      writeBytesPerSec: Math.max(0, mbPerSec * 1e6 * 0.5),
-    }
+/**
+ * Read cumulative read/write byte counters per physical disk from ioreg.
+ * Returns a map keyed by `BSD Name` (e.g. "disk0").
+ */
+async function readIoCounters(): Promise<Map<string, IoCounters>> {
+  const out = new Map<string, IoCounters>()
+
+  const r = await exec(
+    `ioreg -rc IOBlockStorageDriver -d 1 2>/dev/null`,
+    { timeout: 5000 },
+  )
+  if (!r.ok)
+    return out
+
+  // Each device is a block; we walk lines and snapshot when we see a
+  // BSD Name plus the matching read/write counters in the same block.
+  const blocks = r.stdout.split(/\n\s*\+-o /)
+  for (const block of blocks) {
+    const name = block.match(/"BSD Name"\s*=\s*"([^"]+)"/)?.[1]
+    if (!name)
+      continue
+    const read = Number(block.match(/"Bytes \(Read\)"\s*=\s*(\d+)/)?.[1] ?? 0)
+    const write = Number(block.match(/"Bytes \(Write\)"\s*=\s*(\d+)/)?.[1] ?? 0)
+    if (read > 0 || write > 0)
+      out.set(name, { read, write })
   }
+  return out
+}
 
-  return { readBytesPerSec: 0, writeBytesPerSec: 0 }
+/**
+ * Sample ioreg twice with a 1s gap and diff the cumulative counters to
+ * get per-disk read/write bytes-per-second.
+ */
+async function getIoRatesPerDisk(): Promise<Map<string, IoCounters>> {
+  const t0 = await readIoCounters()
+  if (t0.size === 0)
+    return new Map()
+
+  const t0Time = Date.now()
+  await new Promise(r => setTimeout(r, 1000))
+  const t1 = await readIoCounters()
+  const elapsedSec = Math.max(0.001, (Date.now() - t0Time) / 1000)
+
+  const rates = new Map<string, IoCounters>()
+  for (const [name, t1Counters] of t1) {
+    const prev = t0.get(name)
+    if (!prev) continue
+    rates.set(name, {
+      read: Math.max(0, (t1Counters.read - prev.read) / elapsedSec),
+      write: Math.max(0, (t1Counters.write - prev.write) / elapsedSec),
+    })
+  }
+  return rates
 }
