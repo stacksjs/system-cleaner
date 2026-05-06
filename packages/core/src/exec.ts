@@ -48,21 +48,45 @@ export async function exec(command: string, options: ExecOptions = {}): Promise<
   }
 }
 
+export interface ExecSyncResult {
+  stdout: string
+  stderr: string
+  ok: boolean
+}
+
 /**
- * Execute a shell command synchronously
+ * Execute a shell command synchronously, returning stdout/stderr and an
+ * `ok` flag. Use this when callers need to distinguish "command failed"
+ * from "command produced empty output" — the legacy `execSync` below
+ * collapses those cases and silently returns `''`, which has bitten us
+ * with fallbacks like `parseInt(execSync(...)) || cpus.length` masking
+ * real failures (e.g. `hw.physicalcpu` lookup quietly returning logical
+ * core count).
  */
-export function execSync(command: string, options: ExecOptions = {}): string {
+export function execSyncResult(command: string, options: ExecOptions = {}): ExecSyncResult {
   try {
-    return nodeExecSync(command, {
+    const stdout = nodeExecSync(command, {
       encoding: (options.encoding ?? 'utf8') as BufferEncoding,
       timeout: options.timeout ?? DEFAULT_TIMEOUT,
       cwd: options.cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
     }).trim()
+    return { stdout, stderr: '', ok: true }
   }
-  catch {
-    return ''
+  catch (err) {
+    const e = err as { stderr?: Buffer | string, message?: string }
+    const stderr = (e.stderr ? e.stderr.toString().trim() : '') || e.message || ''
+    return { stdout: '', stderr, ok: false }
   }
+}
+
+/**
+ * Execute a shell command synchronously, returning stdout (or `''` on
+ * failure). Prefer {@link execSyncResult} when the empty-string fallback
+ * would mask a failure.
+ */
+export function execSync(command: string, options: ExecOptions = {}): string {
+  return execSyncResult(command, options).stdout
 }
 
 /**

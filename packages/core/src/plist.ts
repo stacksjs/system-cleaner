@@ -1,12 +1,58 @@
+import { execFileSync } from 'node:child_process'
+import * as fs from 'node:fs'
+import * as path from 'node:path'
 import type { PlistEntry } from './types'
 import { safeReadFile } from './paths'
-import * as path from 'node:path'
+
+// macOS app bundles ship binary plists (`bplist00…`) almost universally; the
+// previous regex parser silently returned empty strings for every binary
+// file and a hidden cascade of empty bundle IDs broke orphan detection and
+// app discovery. Detect the binary magic and shell out to
+// `plutil -convert xml1` once, then parse the XML the same way as before.
+const BPLIST_MAGIC = Buffer.from('bplist00', 'ascii')
+
+function readPlistAsXml(filepath: string): string {
+  // Sniff the first 8 bytes to avoid spawning plutil for files that are
+  // already XML. Fall back to an empty string on any read error so callers
+  // stay simple — every getter handles "" gracefully.
+  let isBinary = false
+  try {
+    const fd = fs.openSync(filepath, 'r')
+    try {
+      const head = Buffer.alloc(8)
+      fs.readSync(fd, head, 0, 8, 0)
+      isBinary = head.equals(BPLIST_MAGIC)
+    }
+    finally {
+      fs.closeSync(fd)
+    }
+  }
+  catch {
+    return ''
+  }
+
+  if (!isBinary)
+    return safeReadFile(filepath)
+
+  try {
+    // execFile (not exec) — no shell, no quoting risk; filepath is passed
+    // as an argv element so spaces/quotes in the path are handled by the OS.
+    return execFileSync('plutil', ['-convert', 'xml1', '-o', '-', filepath], {
+      encoding: 'utf8',
+      timeout: 5000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+  }
+  catch {
+    return ''
+  }
+}
 
 /**
- * Parse a macOS plist XML file and extract common fields
+ * Parse a macOS plist (XML or binary) and extract launch-agent fields.
  */
 export function parsePlist(filepath: string): PlistEntry {
-  const content = safeReadFile(filepath)
+  const content = readPlistAsXml(filepath)
 
   const getStringField = (key: string): string => {
     const match = content.match(new RegExp(`<key>${key}</key>\\s*<string>([^<]*)</string>`))
@@ -50,10 +96,10 @@ export function parsePlist(filepath: string): PlistEntry {
 }
 
 /**
- * Parse plist to a generic key-value object
+ * Parse a plist (XML or binary) to a generic key-value object.
  */
 export function parsePlistToObject(filepath: string): Record<string, string | boolean | string[]> {
-  const content = safeReadFile(filepath)
+  const content = readPlistAsXml(filepath)
   const result: Record<string, string | boolean | string[]> = {}
 
   const keyPattern = /<key>([^<]+)<\/key>/g
@@ -97,7 +143,7 @@ export function parsePlistToObject(filepath: string): Record<string, string | bo
 }
 
 /**
- * Read an app bundle's Info.plist
+ * Read an app bundle's Info.plist (handles binary plists transparently).
  */
 export function readAppInfoPlist(appPath: string): Record<string, string | boolean | string[]> {
   const plistPath = path.join(appPath, 'Contents', 'Info.plist')
