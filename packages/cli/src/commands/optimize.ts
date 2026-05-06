@@ -172,9 +172,9 @@ export function registerOptimizeCommand(app: CLI): void {
       }
 
       if (!options.all) {
-        const ok = await confirm({
+        const ok = (await confirm({
           message: `Run ${selectedTasks.length} optimization task(s)?`,
-        })
+        })) as unknown as boolean
         if (!ok) {
           outro('Cancelled')
           return

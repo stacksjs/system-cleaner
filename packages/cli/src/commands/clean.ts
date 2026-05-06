@@ -71,9 +71,9 @@ export function registerCleanCommand(app: CLI): void {
         .reduce((sum, r) => sum + r.sizeBytes, 0)
 
       if (!options.all) {
-        const ok = await confirm({
+        const ok = (await confirm({
           message: `Clean ${selectedTargets.length} items (${formatBytes(selectedBytes)})?`,
-        })
+        })) as unknown as boolean
         if (!ok) {
           outro('Cancelled')
           return

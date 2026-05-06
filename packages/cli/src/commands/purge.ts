@@ -73,9 +73,9 @@ export function registerPurgeCommand(app: CLI): void {
       const selectedSize = selectedArtifacts.reduce((sum, a) => sum + a.sizeBytes, 0)
 
       if (!options.all) {
-        const ok = await confirm({
+        const ok = (await confirm({
           message: `Remove ${selectedArtifacts.length} artifact(s) (${formatBytes(selectedSize)})?`,
-        })
+        })) as unknown as boolean
         if (!ok) {
           outro('Cancelled')
           return

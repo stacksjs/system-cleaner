@@ -117,9 +117,9 @@ export function registerInstallerCommand(app: CLI): void {
       const selectedSize = selectedFiles.reduce((sum, f) => sum + f.sizeBytes, 0)
 
       if (!options.all) {
-        const ok = await confirm({
+        const ok = (await confirm({
           message: `Remove ${selectedFiles.length} file(s) (${formatBytes(selectedSize)})?`,
-        })
+        })) as unknown as boolean
         if (!ok) {
           outro('Cancelled')
           return

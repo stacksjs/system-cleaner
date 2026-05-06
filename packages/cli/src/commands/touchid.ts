@@ -28,13 +28,13 @@ export function registerTouchIdCommand(app: CLI): void {
       const isEnabled = sudoLocalHasTid || sudoHasTid
 
       if (!action) {
-        action = await select({
+        action = (await select({
           message: `Touch ID for sudo is ${isEnabled ? 'ENABLED' : 'DISABLED'}. What would you like to do?`,
           options: [
             { value: 'status', label: 'Show status' },
             { value: isEnabled ? 'disable' : 'enable', label: isEnabled ? 'Disable Touch ID for sudo' : 'Enable Touch ID for sudo' },
           ],
-        }) as string
+        })) as unknown as string
       }
 
       if (action === 'status') {
@@ -52,7 +52,7 @@ export function registerTouchIdCommand(app: CLI): void {
           return
         }
 
-        const ok = await confirm({ message: 'Enable Touch ID for sudo? (requires admin password)' })
+        const ok = (await confirm({ message: 'Enable Touch ID for sudo? (requires admin password)' })) as unknown as boolean
         if (!ok) {
           outro('Cancelled')
           return
@@ -95,7 +95,7 @@ export function registerTouchIdCommand(app: CLI): void {
           return
         }
 
-        const ok = await confirm({ message: 'Disable Touch ID for sudo? (requires admin password)' })
+        const ok = (await confirm({ message: 'Disable Touch ID for sudo? (requires admin password)' })) as unknown as boolean
         if (!ok) {
           outro('Cancelled')
           return

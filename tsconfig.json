@@ -1,0 +1,45 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext", "DOM"],
+    "types": ["bun"],
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": false,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "paths": {
+      "@system-cleaner/core": ["./packages/core/src/index.ts"],
+      "@system-cleaner/clean": ["./packages/clean/src/index.ts"],
+      "@system-cleaner/uninstall": ["./packages/uninstall/src/index.ts"],
+      "@system-cleaner/disk": ["./packages/disk/src/index.ts"],
+      "@system-cleaner/monitor": ["./packages/monitor/src/index.ts"],
+      "@stacksjs/stx": ["./node_modules/.bun/node_modules/@stacksjs/stx/dist/index.d.ts"]
+    }
+  },
+  "include": [
+    "packages/*/src/**/*.ts",
+    "packages/*/test/**/*.ts",
+    "packages/cli/bin/**/*.ts",
+    "routes/**/*.ts",
+    "workers/**/*.ts",
+    "channels.ts",
+    "stx.config.ts",
+    "scripts/**/*.ts",
+    "test/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "pantry",
+    ".stx",
+    "dist"
+  ]
+}

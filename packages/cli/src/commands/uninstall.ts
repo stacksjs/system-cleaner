@@ -48,14 +48,14 @@ export function registerUninstallCommand(app: CLI): void {
           targetApp = matches[0]
         }
         else {
-          const selected = await select({
+          const selected = (await select({
             message: 'Multiple apps found. Select one:',
             options: matches.map(app => ({
               value: app.path,
               label: `${app.name} (${app.version || '—'})`,
               hint: `${formatBytes(app.sizeBytes)} — ${app.path}`,
             })),
-          })
+          })) as unknown as string
 
           targetApp = matches.find(a => a.path === selected)
           if (!targetApp) {
@@ -70,7 +70,7 @@ export function registerUninstallCommand(app: CLI): void {
         const apps = await discoverApps(options.includeSystem)
         s.stop(`Found ${apps.length} apps`)
 
-        const selected = await select({
+        const selected = (await select({
           message: 'Select an app to uninstall:',
           options: apps.map(app => ({
             value: app.path,
@@ -78,7 +78,7 @@ export function registerUninstallCommand(app: CLI): void {
             hint: formatBytes(app.sizeBytes),
           })),
           maxItems: 15,
-        })
+        })) as unknown as string
 
         targetApp = apps.find(a => a.path === selected)
         if (!targetApp) {
@@ -115,9 +115,9 @@ export function registerUninstallCommand(app: CLI): void {
       log.info(`Total to remove: ${summary.totalSizeFormatted}`)
 
       // Confirm
-      const ok = await confirm({
+      const ok = (await confirm({
         message: `Uninstall ${targetApp.name} and remove all remnants?`,
-      })
+      })) as unknown as boolean
 
       if (!ok) {
         outro('Cancelled')

@@ -31,7 +31,7 @@ export default async function (router: Router) {
     });
   });
 
-  await router.post('/disk-scan', async (req) => {
+  await router.post('/disk-scan', async (req: Request) => {
     let scanRoot = HOME;
     let maxDepth = 6;
     try {
@@ -79,7 +79,7 @@ export default async function (router: Router) {
     });
   });
 
-  await router.post('/delete-path', async (req) => {
+  await router.post('/delete-path', async (req: Request) => {
     const { path: target } = (await req.json()) as { path: string };
     if (!target)
       return Response.json(
@@ -110,7 +110,7 @@ export default async function (router: Router) {
     return Response.json({ success: true, freedBytes: size });
   });
 
-  await router.post('/reveal-in-finder', async (req) => {
+  await router.post('/reveal-in-finder', async (req: Request) => {
     const { path: target } = (await req.json()) as { path: string };
     if (!target) return Response.json({ success: false, error: 'No path' }, { status: 400 });
     const resolved = path.resolve(target);
@@ -124,7 +124,7 @@ export default async function (router: Router) {
     return Response.json({ success: true });
   });
 
-  await router.post('/clean-dir', async (req) => {
+  await router.post('/clean-dir', async (req: Request) => {
     const { path: target } = (await req.json()) as { path: string };
     if (!target)
       return Response.json(
@@ -139,7 +139,7 @@ export default async function (router: Router) {
     });
   });
 
-  await router.post('/kill-process', async (req) => {
+  await router.post('/kill-process', async (req: Request) => {
     const { pid } = (await req.json()) as { pid: number };
     if (!pid)
       return Response.json(
@@ -150,7 +150,7 @@ export default async function (router: Router) {
     return Response.json({ ...result, pid });
   });
 
-  await router.post('/toggle-startup', async (req) => {
+  await router.post('/toggle-startup', async (req: Request) => {
     const { filepath, action } = (await req.json()) as {
       filepath: string;
       label: string;
@@ -165,7 +165,7 @@ export default async function (router: Router) {
     return Response.json({ ...result, action });
   });
 
-  await router.post('/remove-startup', async (req) => {
+  await router.post('/remove-startup', async (req: Request) => {
     const { filepath } = (await req.json()) as { filepath: string };
     if (!filepath)
       return Response.json(
@@ -176,7 +176,7 @@ export default async function (router: Router) {
     return Response.json(result);
   });
 
-  await router.post('/dir-sizes', async (req) => {
+  await router.post('/dir-sizes', async (req: Request) => {
     const { paths } = (await req.json()) as { paths: string[] };
     if (!paths || !Array.isArray(paths))
       return Response.json(
@@ -230,7 +230,7 @@ export default async function (router: Router) {
 
   // ── Brew update endpoints ──────────────────────────────────
 
-  await router.post('/brew-update', async (req) => {
+  await router.post('/brew-update', async (req: Request) => {
     const { name, type } = (await req.json()) as {
       name: string;
       type: 'formula' | 'cask';
@@ -296,7 +296,7 @@ export default async function (router: Router) {
 
   // ── Pantry update endpoint ─────────────────────────────────
 
-  await router.post('/pantry-update', async (req) => {
+  await router.post('/pantry-update', async (req: Request) => {
     const { name } = (await req.json()) as { name: string };
     if (!name)
       return Response.json({ success: false, error: 'No package name' }, { status: 400 });
@@ -322,7 +322,7 @@ export default async function (router: Router) {
 
   // ── Desktop app update endpoint ──────────────────────────────
 
-  await router.post('/app-update', async (req) => {
+  await router.post('/app-update', async (req: Request) => {
     const { name, caskToken } = (await req.json()) as {
       name: string;
       caskToken: string;
