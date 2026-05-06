@@ -126,5 +126,25 @@ for (const port of [PORT, BROADCAST_PORT]) {
 // Clear STX cache (preserves prior behavior)
 try { fs.rmSync('.stx', { recursive: true, force: true }) } catch {}
 
-const child = spawn('stx', ['dev', '--port', String(PORT)], { stdio: 'inherit' })
+// Locate the stx CLI. The pantry symlink (`pantry/.bin/stx`) is the
+// fast path on this machine, but `pantry/` is gitignored so a fresh
+// clone won't have it. Fall back to the bun-hoisted node_modules copy
+// before giving up. Last resort: trust PATH.
+function resolveStxCommand(): { cmd: string, args: string[] } {
+  const candidates = [
+    path.join(CWD, 'pantry/@stacksjs/stx/dist/cli.js'),
+    path.join(CWD, 'node_modules/.bun/node_modules/@stacksjs/stx/dist/cli.js'),
+    path.join(CWD, 'node_modules/@stacksjs/stx/dist/cli.js'),
+  ]
+  for (const c of candidates) {
+    try {
+      if (fs.statSync(c).isFile()) return { cmd: 'bun', args: [c] }
+    }
+    catch {}
+  }
+  return { cmd: 'stx', args: [] }
+}
+
+const stx = resolveStxCommand()
+const child = spawn(stx.cmd, [...stx.args, 'dev', '--port', String(PORT)], { stdio: 'inherit' })
 child.on('exit', code => process.exit(code ?? 0))
