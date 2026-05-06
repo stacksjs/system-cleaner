@@ -1,11 +1,19 @@
-<!-- Top processes quick view on dashboard -->
+<!--
+  Top processes quick view on dashboard.
+
+  Migrated to crosswind utility classes (see /crosswind.config.ts for the
+  Apple-system palette). The original `.tbl-wrap`, `.tbl-bar`, and
+  `.cpu-bar` custom classes are intentionally kept where they encapsulate
+  several rules at once (border colors + 0.5px subpixel borders aren't a
+  one-liner with utilities); the rest is utility-classed inline.
+-->
 <div class='tbl-wrap'>
   <div class='tbl-bar'>
     <div>
-      <span class='tbl-title'>Top Processes</span>
-      <span class='tbl-count'>by CPU usage</span>
+      <span class='text-sm font-semibold'>Top Processes</span>
+      <span class='ml-2 text-[11px] text-text-dim'>by CPU usage</span>
     </div>
-    <a class='btn btn-sm' href='/processes' data-stx-link style='text-decoration:none;'>View All</a>
+    <a class='btn btn-sm no-underline' href='/processes' data-stx-link>View All</a>
   </div>
   <table>
     <thead>
@@ -20,18 +28,18 @@
     <tbody>
       @foreach(topCPU.slice(0, 8) as proc)
         <tr>
-          <td><span class='item-name'>{{ proc.name }}</span></td>
-          <td class='dim mono' style='font-size: 11px;'>{{ proc.pid }}</td>
+          <td><span class='font-medium'>{{ proc.name }}</span></td>
+          <td class='text-text-dim font-mono text-[11px]'>{{ proc.pid }}</td>
           <td>
-            <div class='cpu-bar'>
-              <span style="font-size: 11px; min-width: 36px; {{ proc.cpu > 50 ? 'color:#ff453a;' : proc.cpu > 20 ? 'color:#ff9f0a;' : '' }}">{{ proc.cpu.toFixed(1) }}%</span>
-              <div class='cpu-track'>
-                <div class='cpu-fill' style="width: {{ Math.min(100, proc.cpu) }}%; background: {{ proc.cpu > 50 ? '#ff453a' : proc.cpu > 20 ? '#ff9f0a' : '#30d158' }};"></div>
+            <div class='flex items-center gap-1.5'>
+              <span class='text-[11px] min-w-[36px] {{ proc.cpu > 50 ? "text-apple-red" : proc.cpu > 20 ? "text-apple-orange" : "" }}'>{{ proc.cpu.toFixed(1) }}%</span>
+              <div class='flex-1 h-[3px] max-w-[60px] bg-bg-track rounded-[2px] overflow-hidden'>
+                <div class='h-full rounded-[2px] {{ proc.cpu > 50 ? "bg-apple-red" : proc.cpu > 20 ? "bg-apple-orange" : "bg-apple-green" }}' style='width: {{ Math.min(100, proc.cpu) }}%;'></div>
               </div>
             </div>
           </td>
-          <td style='font-size: 11px;'>{{ proc.memMB }} MB</td>
-          <td class='dim' style='font-size: 11px;'>{{ proc.user }}</td>
+          <td class='text-[11px]'>{{ proc.memMB }} MB</td>
+          <td class='text-text-dim text-[11px]'>{{ proc.user }}</td>
         </tr>
       @endforeach
     </tbody>
