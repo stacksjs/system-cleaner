@@ -1,12 +1,12 @@
 #!/usr/bin/env bun
 // Dev wrapper that frees ports + kills stale `stx dev` runs before handing off.
 //
-// Why: `stx dev` silently rolls to a different port (3456 → 34560 → ...) when
-// 3456 is busy, and broadcasting on 6001 silently fails when its port is busy.
-// A previous run that didn't shut down cleanly will keep holding 6001 plus a
-// rolled-over port — invisible to a wrapper that only checks port 3456. So
-// we identify stale STX runs by *command line* (this workspace's pantry path)
-// and kill them first, then sweep the named ports as a final safety net.
+// Why: a previous run that didn't shut down cleanly (terminal closed,
+// SIGKILL, crash) will keep holding ports — including broadcasting on 6001,
+// where stx silently degrades to a warning if its port is busy. We identify
+// stale stx runs by command line (this workspace's pantry symlink) and kill
+// them first, then sweep the named ports + poll until they're bindable on
+// both IPv4 and IPv6 so the freshly-spawned stx finds them clean.
 
 import * as net from 'node:net'
 import { spawn, spawnSync } from 'node:child_process'

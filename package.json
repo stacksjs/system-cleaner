@@ -21,12 +21,12 @@
   },
   "dependencies": {
     "@stacksjs/bun-router": "link:@stacksjs/bun-router",
-    "bun-plugin-stx": "latest",
-    "@system-cleaner/core": "workspace:*",
     "@system-cleaner/clean": "workspace:*",
-    "@system-cleaner/uninstall": "workspace:*",
+    "@system-cleaner/core": "workspace:*",
     "@system-cleaner/disk": "workspace:*",
     "@system-cleaner/monitor": "workspace:*",
+    "@system-cleaner/uninstall": "workspace:*",
+    "bun-plugin-stx": "^0.2.47",
     "ts-broadcasting": "link:ts-broadcasting"
   },
   "devDependencies": {
