@@ -59,14 +59,27 @@ interface VmStatData {
   pageSize: number
 }
 
+// Cache the kernel page size at module init so a vm_stat regex break
+// doesn't fall back to the wrong default. Apple Silicon uses 16384, not
+// 4096; reporting wrong page size 4× misreports memory metrics.
+let cachedPageSize: number | null = null
+async function getKernelPageSize(): Promise<number> {
+  if (cachedPageSize !== null) return cachedPageSize
+  const r = await exec('sysctl -n hw.pagesize', { timeout: 1000 })
+  const parsed = Number.parseInt(r.stdout, 10)
+  cachedPageSize = (r.ok && Number.isFinite(parsed) && parsed > 0) ? parsed : 16384
+  return cachedPageSize
+}
+
 async function parseVmStat(): Promise<VmStatData> {
+  const fallbackPageSize = await getKernelPageSize()
   const result = await exec('vm_stat', { timeout: 3000 })
   if (!result.ok) {
-    return { active: 0, wired: 0, compressed: 0, inactive: 0, free: 0, pageSize: 4096 }
+    return { active: 0, wired: 0, compressed: 0, inactive: 0, free: 0, pageSize: fallbackPageSize }
   }
 
   const output = result.stdout
-  const pageSize = Number.parseInt(output.match(/page size of (\d+) bytes/)?.[1] || '4096')
+  const pageSize = Number.parseInt(output.match(/page size of (\d+) bytes/)?.[1] || String(fallbackPageSize))
 
   const getPages = (label: string): number => {
     const match = output.match(new RegExp(`${label}:\\s+(\\d+)`))

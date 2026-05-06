@@ -7,8 +7,13 @@ import { HOME, exec, shellEscape } from '@system-cleaner/core'
  * Matches Mole's clean_ds_store_tree with the same exclusion patterns.
  */
 export async function findDsStoreFiles(): Promise<{ paths: string[], count: number }> {
+  // -xdev keeps `find` on the same filesystem as $HOME so it can't wander
+  // into iCloud Drive sync points, Time Machine snapshots, NFS shares, or
+  // mounted external drives — those make the 30s timer fire on partial
+  // results and silently truncate the file list.
   const result = await exec(
-    `find ${shellEscape(HOME)} -maxdepth 5 `
+    `find ${shellEscape(HOME)} -xdev -maxdepth 5 `
+    + `-path "*/Library/Mobile Documents" -prune -o `
     + `-path "*/Library/Application Support/MobileSync" -prune -o `
     + `-path "*/Library/Developer" -prune -o `
     + `-path "*/.Trash" -prune -o `

@@ -74,10 +74,27 @@ export function isHomebrewCask(appPath: string): boolean {
 
 /**
  * Get the Homebrew cask name for an app, if applicable.
- * Uses shellEscape to prevent command injection from app names.
+ *
+ * The previous version used `grep -i` against the cask list, which
+ * returned multiple matches concatenated by newlines for ambiguous
+ * names — `appName = "Code"` matched `visual-studio-code`,
+ * `vscode-insiders`, `geany-with-spell-check-code-generator`, etc.,
+ * and the caller treated the join as a single cask. Now we look for an
+ * exact match against the slug derived from the app name.
  */
 export function getHomebrewCaskName(appName: string): string | null {
-  const safeName = appName.replace('.app', '').replace(/[^a-zA-Z0-9 \-_.]/g, '')
-  const output = execSync(`brew list --cask 2>/dev/null | grep -i ${shellEscape(safeName)}`)
-  return output || null
+  const slug = appName
+    .replace(/\.app$/i, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(?:^-+|-+$)/g, '')
+  if (!slug) return null
+
+  const output = execSync('brew list --cask 2>/dev/null')
+  if (!output) return null
+  for (const line of output.split('\n')) {
+    const cask = line.trim()
+    if (cask && cask === slug) return cask
+  }
+  return null
 }
