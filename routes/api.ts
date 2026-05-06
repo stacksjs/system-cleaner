@@ -1,7 +1,15 @@
 import type { Router } from '@stacksjs/bun-router';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { isPathSafe, getDirSize, HOME, exec } from '@system-cleaner/core';
+import {
+  isPathSafe,
+  getDirSize,
+  HOME,
+  exec,
+  sanitizePackageName,
+  sanitizePid,
+  sanitizeStringArray,
+} from '@system-cleaner/core';
 import { cleanDirectory, emptyTrash } from '@system-cleaner/clean';
 import {
   killProcess,
@@ -10,6 +18,39 @@ import {
 } from '@system-cleaner/uninstall';
 import { scanDirectory } from '@system-cleaner/disk';
 import { getTopProcesses, summarizeProcesses } from '@system-cleaner/monitor';
+
+/**
+ * Safely parse a JSON request body. Returns the parsed object or `null`
+ * if the body is malformed; callers turn `null` into a 400. Without this,
+ * malformed-JSON requests silently fell through to handler defaults.
+ */
+async function readJsonBody<T>(req: Request): Promise<T | null> {
+  try { return await req.json() as T }
+  catch { return null }
+}
+
+const badJson = () => Response.json({ success: false, error: 'Invalid JSON body' }, { status: 400 });
+const badRequest = (msg: string, status = 400) =>
+  Response.json({ success: false, error: msg }, { status });
+
+/**
+ * Verify that a path is absolute and resolves under one of the allowed
+ * roots. We don't reuse `isPathSafe` here because that helper rejects
+ * symlinks and sensitive segments — fine for delete operations, wrong
+ * for things like "open this in Finder".
+ */
+function pathInAllowedRoots(p: string, roots: string[]): boolean {
+  if (!path.isAbsolute(p)) return false;
+  const resolved = path.resolve(p);
+  return roots.some(root => resolved === root || resolved.startsWith(`${root}/`));
+}
+
+/**
+ * Single-flight gate for /disk-scan. Without it, every request spawned a
+ * new Worker; an attacker (or a panicky frontend) could exhaust I/O by
+ * firing parallel scans. One in-flight scan at a time is enough.
+ */
+let diskScanInFlight = false;
 
 /**
  * API routes for SystemCleaner.
@@ -32,47 +73,66 @@ export default async function (router: Router) {
   });
 
   await router.post('/disk-scan', async (req: Request) => {
+    if (diskScanInFlight) {
+      return Response.json(
+        { success: false, error: 'A disk scan is already in progress' },
+        { status: 409 },
+      );
+    }
+
+    const body = await readJsonBody<{ path?: string; maxDepth?: number }>(req);
+    if (body === null) return badJson();
+
     let scanRoot = HOME;
     let maxDepth = 6;
-    try {
-      const body = (await req.json()) as { path?: string; maxDepth?: number };
-      if (body.path && typeof body.path === 'string') {
-        const resolved = path.resolve(body.path);
-        if (resolved.startsWith(HOME) || resolved === '/' || resolved.startsWith('/Volumes')) {
-          scanRoot = resolved;
-        }
-      }
-      if (typeof body.maxDepth === 'number' && body.maxDepth >= 2 && body.maxDepth <= 10) {
-        maxDepth = body.maxDepth;
+    if (body.path && typeof body.path === 'string') {
+      const resolved = path.resolve(body.path);
+      if (resolved.startsWith(HOME) || resolved === '/' || resolved.startsWith('/Volumes')) {
+        scanRoot = resolved;
       }
     }
-    catch {}
+    if (typeof body.maxDepth === 'number' && body.maxDepth >= 2 && body.maxDepth <= 10) {
+      maxDepth = body.maxDepth;
+    }
 
     const HARD_TIMEOUT_MS = 60_000;
     const WORKER_TIMEOUT_MS = 50_000;
 
+    diskScanInFlight = true;
     const worker = new Worker(
       new URL('../workers/disk-scan.ts', import.meta.url).href,
     );
 
     return new Promise<Response>((resolve) => {
+      const finish = (response: Response) => {
+        diskScanInFlight = false;
+        resolve(response);
+      };
+
       const timeout = setTimeout(() => {
         worker.terminate();
-        resolve(Response.json({ success: false, error: `Scan exceeded ${HARD_TIMEOUT_MS / 1000}s` }));
+        finish(Response.json({ success: false, error: `Scan exceeded ${HARD_TIMEOUT_MS / 1000}s` }));
       }, HARD_TIMEOUT_MS);
 
       worker.onmessage = (e: MessageEvent) => {
         clearTimeout(timeout);
         worker.terminate();
-        resolve(Response.json(e.data));
+        finish(Response.json(e.data));
       };
 
       worker.onerror = (e: ErrorEvent) => {
         clearTimeout(timeout);
         worker.terminate();
-        resolve(
-          Response.json({ success: false, error: e.message || 'Scan failed' }),
-        );
+        finish(Response.json({ success: false, error: e.message || 'Scan failed' }));
+      };
+
+      // Catch structured-clone failures (huge tree → can't be serialized
+      // back to the main thread). Without this they silently hung until
+      // the route timeout fired.
+      (worker as Worker & { onmessageerror?: (e: MessageEvent) => void }).onmessageerror = () => {
+        clearTimeout(timeout);
+        worker.terminate();
+        finish(Response.json({ success: false, error: 'Scan result was too large to transfer' }));
       };
 
       worker.postMessage({ home: scanRoot, maxDepth, timeoutMs: WORKER_TIMEOUT_MS });
@@ -80,18 +140,14 @@ export default async function (router: Router) {
   });
 
   await router.post('/delete-path', async (req: Request) => {
-    const { path: target } = (await req.json()) as { path: string };
-    if (!target)
-      return Response.json(
-        { success: false, error: 'No path provided' },
-        { status: 400 },
-      );
+    const body = await readJsonBody<{ path: string }>(req);
+    if (body === null) return badJson();
+    const { path: target } = body;
+    if (typeof target !== 'string' || !target) return badRequest('No path provided');
+
     const check = isPathSafe(target);
-    if (!check.safe)
-      return Response.json(
-        { success: false, error: check.reason },
-        { status: 403 },
-      );
+    if (!check.safe) return badRequest(check.reason || 'Unsafe path', 403);
+
     const resolved = path.resolve(target);
     let size = 0;
     try {
@@ -99,38 +155,51 @@ export default async function (router: Router) {
       size = st.isDirectory() ? await getDirSize(resolved) : st.size;
     }
     catch {
-      return Response.json({ success: false, error: 'Path does not exist' }, { status: 404 });
+      return badRequest('Path does not exist', 404);
     }
     try {
       fs.rmSync(resolved, { recursive: true, force: true });
     }
     catch (err: any) {
-      return Response.json({ success: false, error: err.message || 'Delete failed' }, { status: 500 });
+      return badRequest(err.message || 'Delete failed', 500);
     }
     return Response.json({ success: true, freedBytes: size });
   });
 
   await router.post('/reveal-in-finder', async (req: Request) => {
-    const { path: target } = (await req.json()) as { path: string };
-    if (!target) return Response.json({ success: false, error: 'No path' }, { status: 400 });
-    const resolved = path.resolve(target);
-    if (!resolved.startsWith(HOME) && !resolved.startsWith('/Applications') && !resolved.startsWith('/Volumes')) {
-      return Response.json({ success: false, error: 'Outside allowed scope' }, { status: 403 });
+    const body = await readJsonBody<{ path: string }>(req);
+    if (body === null) return badJson();
+    const { path: target } = body;
+    if (typeof target !== 'string' || !target) return badRequest('No path');
+
+    // Require absolute paths so a relative input like "../../etc" can't
+    // be resolved against the server's CWD into something out of scope.
+    if (!path.isAbsolute(target)) return badRequest('Path must be absolute', 400);
+
+    if (!pathInAllowedRoots(target, [HOME, '/Applications', '/Volumes'])) {
+      return badRequest('Outside allowed scope', 403);
     }
+
     try {
-      Bun.spawn(['open', '-R', resolved], { stdout: 'ignore', stderr: 'ignore' });
+      Bun.spawn(['open', '-R', path.resolve(target)], { stdout: 'ignore', stderr: 'ignore' });
     }
     catch {}
     return Response.json({ success: true });
   });
 
   await router.post('/clean-dir', async (req: Request) => {
-    const { path: target } = (await req.json()) as { path: string };
-    if (!target)
-      return Response.json(
-        { success: false, error: 'No path provided' },
-        { status: 400 },
-      );
+    const body = await readJsonBody<{ path: string }>(req);
+    if (body === null) return badJson();
+    const { path: target } = body;
+    if (typeof target !== 'string' || !target) return badRequest('No path provided');
+
+    // Route-level gate: only allow cleaning paths under HOME from the web
+    // UI. The CLI can target /Library and /private/var/* via cleanDirectory
+    // directly; the HTTP surface stays narrower.
+    if (!pathInAllowedRoots(target, [HOME])) {
+      return badRequest('Path must be under your home directory', 403);
+    }
+
     const result = await cleanDirectory(target);
     return Response.json({
       success: result.errors.length === 0,
@@ -140,62 +209,75 @@ export default async function (router: Router) {
   });
 
   await router.post('/kill-process', async (req: Request) => {
-    const { pid } = (await req.json()) as { pid: number };
-    if (!pid)
-      return Response.json(
-        { success: false, error: 'No PID provided' },
-        { status: 400 },
-      );
+    const body = await readJsonBody<{ pid: unknown }>(req);
+    if (body === null) return badJson();
+    const pid = sanitizePid(body.pid);
+    if (pid === null) return badRequest('Invalid PID');
+
     const result = await killProcess(pid);
     return Response.json({ ...result, pid });
   });
 
   await router.post('/toggle-startup', async (req: Request) => {
-    const { filepath, action } = (await req.json()) as {
-      filepath: string;
-      label: string;
-      action: 'enable' | 'disable';
-    };
-    if (!filepath)
-      return Response.json(
-        { success: false, error: 'No filepath provided' },
-        { status: 400 },
-      );
+    const body = await readJsonBody<{ filepath: string; action: 'enable' | 'disable' }>(req);
+    if (body === null) return badJson();
+    const { filepath, action } = body;
+    if (typeof filepath !== 'string' || !filepath) return badRequest('No filepath provided');
+    if (action !== 'enable' && action !== 'disable') return badRequest('Invalid action');
+
+    // The package validates again, but enforce the prefix here so an
+    // attacker can't reach the (now AppleScript-escaped) launchctl path
+    // with a shell-poisoned filepath that snuck past the JSON parser.
+    if (!pathInAllowedRoots(filepath, [
+      path.join(HOME, 'Library/LaunchAgents'),
+      '/Library/LaunchAgents',
+      '/Library/LaunchDaemons',
+    ])) {
+      return badRequest('filepath must point to a launch agent/daemon plist', 403);
+    }
+
     const result = await toggleStartupItem(filepath, action);
     return Response.json({ ...result, action });
   });
 
   await router.post('/remove-startup', async (req: Request) => {
-    const { filepath } = (await req.json()) as { filepath: string };
-    if (!filepath)
-      return Response.json(
-        { success: false, error: 'No filepath provided' },
-        { status: 400 },
-      );
+    const body = await readJsonBody<{ filepath: string }>(req);
+    if (body === null) return badJson();
+    const { filepath } = body;
+    if (typeof filepath !== 'string' || !filepath) return badRequest('No filepath provided');
+
+    if (!pathInAllowedRoots(filepath, [
+      path.join(HOME, 'Library/LaunchAgents'),
+      '/Library/LaunchAgents',
+      '/Library/LaunchDaemons',
+    ])) {
+      return badRequest('filepath must point to a launch agent/daemon plist', 403);
+    }
+
     const result = await removeStartupItem(filepath);
     return Response.json(result);
   });
 
   await router.post('/dir-sizes', async (req: Request) => {
-    const { paths } = (await req.json()) as { paths: string[] };
-    if (!paths || !Array.isArray(paths))
-      return Response.json(
-        { success: false, error: 'No paths provided' },
-        { status: 400 },
-      );
+    const body = await readJsonBody<{ paths: unknown }>(req);
+    if (body === null) return badJson();
+    const paths = sanitizeStringArray(body.paths, 1024);
+    if (paths === null) return badRequest('paths must be a non-empty string array (≤1024)');
+
     const results: Record<string, number> = {};
-    await Promise.all(
-      paths.map(async (p) => {
-        const resolved = path.resolve(p);
-        if (!resolved.startsWith(HOME)) return;
-        try {
-          results[p] = await getDirSize(resolved);
-        }
-        catch {
-          results[p] = 0;
-        }
-      }),
-    );
+    // Bound parallelism so we don't fire 1024 simultaneous `du` walks.
+    const CONCURRENCY = 8;
+    for (let i = 0; i < paths.length; i += CONCURRENCY) {
+      const slice = paths.slice(i, i + CONCURRENCY);
+      await Promise.all(
+        slice.map(async (p) => {
+          const resolved = path.resolve(p);
+          if (!resolved.startsWith(HOME)) return;
+          try { results[p] = await getDirSize(resolved); }
+          catch { results[p] = 0; }
+        }),
+      );
+    }
     return Response.json({ success: true, sizes: results });
   });
 
@@ -231,34 +313,39 @@ export default async function (router: Router) {
   // ── Brew update endpoints ──────────────────────────────────
 
   await router.post('/brew-update', async (req: Request) => {
-    const { name, type } = (await req.json()) as {
-      name: string;
-      type: 'formula' | 'cask';
-    };
-    if (!name) return Response.json({ success: false, error: 'No package name' }, { status: 400 });
+    const body = await readJsonBody<{ name: unknown; type: unknown }>(req);
+    if (body === null) return badJson();
+
+    const name = sanitizePackageName(body.name);
+    if (name === null) return badRequest('Invalid package name');
+    if (body.type !== 'formula' && body.type !== 'cask') return badRequest('Invalid package type');
 
     try {
-      const cmd = type === 'cask'
-        ? `brew upgrade --cask ${name} 2>&1`
-        : `brew upgrade ${name} 2>&1`;
-      const proc = Bun.spawn(['bash', '-c', cmd], { stdout: 'pipe', stderr: 'pipe' });
-      const output = await new Response(proc.stdout).text();
+      // argv form — no shell expansion, name can never become its own command.
+      const upgradeArgs = body.type === 'cask'
+        ? ['brew', 'upgrade', '--cask', name]
+        : ['brew', 'upgrade', name];
+      const proc = Bun.spawn(upgradeArgs, { stdout: 'pipe', stderr: 'pipe' });
+      const [stdout, stderr] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
       const exitCode = await proc.exited;
+      const output = (stdout + stderr).trim();
 
       if (exitCode !== 0) {
-        return Response.json({ success: false, error: output.trim().split('\n').pop() || 'Upgrade failed' });
+        return Response.json({ success: false, error: output.split('\n').pop() || 'Upgrade failed' });
       }
 
-      // Get the new version
-      const verCmd = type === 'cask'
-        ? `brew info --cask --json=v2 ${name} 2>/dev/null`
-        : `brew info --json=v2 ${name} 2>/dev/null`;
-      const verProc = Bun.spawn(['bash', '-c', verCmd], { stdout: 'pipe', stderr: 'pipe' });
+      const verArgs = body.type === 'cask'
+        ? ['brew', 'info', '--cask', '--json=v2', name]
+        : ['brew', 'info', '--json=v2', name];
+      const verProc = Bun.spawn(verArgs, { stdout: 'pipe', stderr: 'ignore' });
       const verOutput = await new Response(verProc.stdout).text();
       let version = 'latest';
       try {
         const info = JSON.parse(verOutput);
-        if (type === 'cask') {
+        if (body.type === 'cask') {
           version = info.casks?.[0]?.version?.split(',')?.[0] || 'latest';
         }
         else {
@@ -297,22 +384,27 @@ export default async function (router: Router) {
   // ── Pantry update endpoint ─────────────────────────────────
 
   await router.post('/pantry-update', async (req: Request) => {
-    const { name } = (await req.json()) as { name: string };
-    if (!name)
-      return Response.json({ success: false, error: 'No package name' }, { status: 400 });
+    const body = await readJsonBody<{ name: unknown }>(req);
+    if (body === null) return badJson();
+
+    const name = sanitizePackageName(body.name);
+    if (name === null) return badRequest('Invalid package name');
 
     try {
-      const proc = Bun.spawn(['bash', '-c', `pantry update ${name} 2>&1`], {
-        stdout: 'pipe',
-        stderr: 'pipe',
-      });
-      const output = await new Response(proc.stdout).text();
+      // argv form (no shell). Stderr is captured separately so the failure
+      // line doesn't get lost in the success-path "tail".
+      const proc = Bun.spawn(['pantry', 'update', name], { stdout: 'pipe', stderr: 'pipe' });
+      const [stdout, stderr] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
       const exitCode = await proc.exited;
+      const output = (stdout + stderr).trim();
 
       return Response.json({
         success: exitCode === 0,
-        output: output.trim().split('\n').slice(-3).join('\n'),
-        error: exitCode !== 0 ? output.trim().split('\n').pop() || 'Update failed' : undefined,
+        output: output.split('\n').slice(-3).join('\n'),
+        error: exitCode !== 0 ? (output.split('\n').pop() || 'Update failed') : undefined,
       });
     }
     catch (err: any) {
@@ -323,48 +415,40 @@ export default async function (router: Router) {
   // ── Desktop app update endpoint ──────────────────────────────
 
   await router.post('/app-update', async (req: Request) => {
-    const { name, caskToken } = (await req.json()) as {
-      name: string;
-      caskToken: string;
-    };
-    if (!caskToken)
-      return Response.json({ success: false, error: 'No cask token provided' }, { status: 400 });
+    const body = await readJsonBody<{ name?: unknown; caskToken: unknown }>(req);
+    if (body === null) return badJson();
 
-    // Sanitize cask token to prevent command injection
-    const safeCaskToken = caskToken.replace(/[^a-z0-9@._+-]/gi, '');
-    if (!safeCaskToken || safeCaskToken !== caskToken)
-      return Response.json({ success: false, error: 'Invalid cask token' }, { status: 400 });
+    const safeCaskToken = sanitizePackageName(body.caskToken);
+    if (safeCaskToken === null) return badRequest('Invalid cask token');
 
     try {
-      // Try upgrade first (for brew-managed casks)
-      let proc = Bun.spawn(
-        ['bash', '-c', `brew upgrade --cask ${safeCaskToken} 2>&1`],
-        { stdout: 'pipe', stderr: 'pipe' },
-      );
-      let output = await new Response(proc.stdout).text();
-      let exitCode = await proc.exited;
+      // argv form, no shell.
+      const runBrew = async (action: 'upgrade' | 'install') => {
+        const proc = Bun.spawn(['brew', action, '--cask', safeCaskToken], {
+          stdout: 'pipe', stderr: 'pipe',
+        });
+        const [stdout, stderr] = await Promise.all([
+          new Response(proc.stdout).text(),
+          new Response(proc.stderr).text(),
+        ]);
+        return { output: (stdout + stderr).trim(), exitCode: await proc.exited };
+      };
 
-      // If not installed via brew, try fresh install
+      let { output, exitCode } = await runBrew('upgrade');
       if (exitCode !== 0 && (output.includes('not installed') || output.includes('No available'))) {
-        proc = Bun.spawn(
-          ['bash', '-c', `brew install --cask ${safeCaskToken} 2>&1`],
-          { stdout: 'pipe', stderr: 'pipe' },
-        );
-        output = await new Response(proc.stdout).text();
-        exitCode = await proc.exited;
+        ({ output, exitCode } = await runBrew('install'));
       }
 
       if (exitCode !== 0) {
         return Response.json({
           success: false,
-          error: output.trim().split('\n').pop() || 'Update failed',
+          error: output.split('\n').pop() || 'Update failed',
         });
       }
 
-      // Get new version
       const verProc = Bun.spawn(
-        ['bash', '-c', `brew info --cask --json=v2 ${safeCaskToken} 2>/dev/null`],
-        { stdout: 'pipe', stderr: 'pipe' },
+        ['brew', 'info', '--cask', '--json=v2', safeCaskToken],
+        { stdout: 'pipe', stderr: 'ignore' },
       );
       const verOutput = await new Response(verProc.stdout).text();
       let version = 'latest';
