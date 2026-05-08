@@ -21,15 +21,15 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@stacksjs/bun-router": "link:@stacksjs/bun-router",
+    "@stacksjs/bun-router": "^0.0.13",
     "@stacksjs/stx": "0.2.48",
-    "@system-cleaner/clean": "workspace:*",
+    "bun-plugin-stx": "^0.2.47",
     "@system-cleaner/core": "workspace:*",
+    "@system-cleaner/clean": "workspace:*",
     "@system-cleaner/disk": "workspace:*",
     "@system-cleaner/monitor": "workspace:*",
     "@system-cleaner/uninstall": "workspace:*",
-    "bun-plugin-stx": "^0.2.47",
-    "ts-broadcasting": "link:ts-broadcasting"
+    "ts-broadcasting": "^0.0.5"
   },
   "devDependencies": {
     "@types/bun": "^1.3.13",

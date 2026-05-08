@@ -15,7 +15,7 @@
     "@system-cleaner/uninstall": "workspace:*",
     "@system-cleaner/disk": "workspace:*",
     "@system-cleaner/monitor": "workspace:*",
-    "@stacksjs/clapp": "link:@stacksjs/clapp"
+    "@stacksjs/clapp": "^0.2.8"
   },
   "scripts": {
     "typecheck": "bun --bun tsc --noEmit"

@@ -296,6 +296,7 @@ export function flattenTree(tree: DiskEntry): DiskEntry[] {
 function getDirSizeSync(dirPath: string): number {
   try {
     const { execSync: nodeExecSync } = require('node:child_process') as typeof import('node:child_process')
+    // eslint-disable-next-line quotes -- string contains single quote, double quotes needed
     const safePath = dirPath.replace(/'/g, "'\\''")
     const out = nodeExecSync(`du -sk '${safePath}' 2>/dev/null | cut -f1`, {
       encoding: 'utf8',
