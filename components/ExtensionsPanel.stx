@@ -30,7 +30,7 @@
         <span class='tbl-count'>sorted by size</span>
       </div>
       <!-- Hidden until extension-removal is implemented. Toasting "(demo)"
-           was misleading; the user expected something to happen. -->
+          was misleading; the user expected something to happen. -->
       <button class='btn btn-sm' x-cloak x-show='false' aria-hidden='true'>Remove Selected</button>
     </div>
     <table>
@@ -69,7 +69,7 @@
             </td>
             <td>
               <!-- TODO: wire per-row remove to a real /api/remove-extension
-                   endpoint. The previous "(demo)" toast looked like success. -->
+                  endpoint. The previous "(demo)" toast looked like success. -->
               <span class='dim' style='font-size: 11px;'>—</span>
             </td>
           </tr>

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+/* eslint-disable ts/no-top-level-await */
 // Visual smoke test — captures screenshots of every page and reports any
 // pageerror or console.error events. Use as a quick regression check before
 // shipping changes to the chrome / panels.

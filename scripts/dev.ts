@@ -51,7 +51,7 @@ function findPortHolders(port: number): Holder[] {
 }
 
 function isOursByCmd(cmd: string): boolean {
-  return /^(stx|bun|node)$/i.test(cmd)
+  return /^(?:stx|bun|node)$/i.test(cmd)
 }
 
 function killAll(holders: Holder[], label: string): void {

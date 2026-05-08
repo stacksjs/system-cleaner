@@ -57,8 +57,8 @@
     <div class='folder-list'>
       <template x-for="item in topItems" :key="item.idx">
         <div class="folder-item"
-             @mouseover="hovered = item"
-             @mouseleave="hovered = null">
+            @mouseover="hovered = item"
+            @mouseleave="hovered = null">
           <span class="folder-dot" :style="'background:' + item.color"></span>
           <span class="folder-name" x-text="item.name"></span>
           <span class="folder-size" x-text="item.formattedSize"></span>
@@ -127,7 +127,7 @@
           </template>
           <div class="info-actions" x-show="hovered.fullPath">
             <button class="btn btn-sm" @click="diskRevealInFinder(hovered.fullPath)">Reveal in Finder</button>
-            <button class="btn btn-sm btn-danger"
+            <button class="btn btn-danger btn-sm"
                     x-show="hovered.isDir && hovered.depth >= 1"
                     @click="diskDeletePath(hovered.fullPath, hovered.name, hovered.size)"
                     x-text="'Delete ' + hovered.formattedSize">Delete</button>

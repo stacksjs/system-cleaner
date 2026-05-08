@@ -10,10 +10,10 @@
 <div class='tbl-wrap'>
   <div class='tbl-bar'>
     <div>
-      <span class='text-sm font-semibold'>Top Processes</span>
+      <span class='font-semibold text-sm'>Top Processes</span>
       <span class='ml-2 text-[11px] text-text-dim'>by CPU usage</span>
     </div>
-    <a class='btn btn-sm no-underline' href='/processes' data-stx-link>View All</a>
+    <a class='no-underline btn btn-sm' href='/processes' data-stx-link>View All</a>
   </div>
   <table>
     <thead>
@@ -29,17 +29,17 @@
       @foreach(topCPU.slice(0, 8) as proc)
         <tr>
           <td><span class='font-medium'>{{ proc.name }}</span></td>
-          <td class='text-text-dim font-mono text-[11px]'>{{ proc.pid }}</td>
+          <td class='font-mono text-[11px] text-text-dim'>{{ proc.pid }}</td>
           <td>
-            <div class='flex items-center gap-1.5'>
+            <div class='flex gap-1.5 items-center'>
               <span class='text-[11px] min-w-[36px] {{ proc.cpu > 50 ? "text-apple-red" : proc.cpu > 20 ? "text-apple-orange" : "" }}'>{{ proc.cpu.toFixed(1) }}%</span>
-              <div class='flex-1 h-[3px] max-w-[60px] bg-bg-track rounded-[2px] overflow-hidden'>
+              <div class='overflow-hidden flex-1 h-[3px] max-w-[60px] bg-bg-track rounded-[2px]'>
                 <div class='h-full rounded-[2px] {{ proc.cpu > 50 ? "bg-apple-red" : proc.cpu > 20 ? "bg-apple-orange" : "bg-apple-green" }}' style='width: {{ Math.min(100, proc.cpu) }}%;'></div>
               </div>
             </div>
           </td>
           <td class='text-[11px]'>{{ proc.memMB }} MB</td>
-          <td class='text-text-dim text-[11px]'>{{ proc.user }}</td>
+          <td class='text-[11px] text-text-dim'>{{ proc.user }}</td>
         </tr>
       @endforeach
     </tbody>

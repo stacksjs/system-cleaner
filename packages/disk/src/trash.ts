@@ -74,6 +74,7 @@ function shellSafe(s: string): string {
  * Move multiple paths to Trash, processing deeper paths first to avoid
  * parent/child conflicts.
  */
+// eslint-disable-next-line pickier/no-unused-vars
 export async function moveMultipleToTrash(
   paths: string[],
   options: MoveToTrashOptions = {},

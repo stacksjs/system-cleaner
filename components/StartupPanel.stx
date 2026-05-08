@@ -34,7 +34,7 @@
     <span class='tbl-title'>Launch Agents & Daemons</span>
     <div style='display: flex; gap: 6px;'>
       <!-- Bulk disable is hidden until it loops over /api/toggle-startup;
-           the previous "(demo)" toast misled users. Per-row disable works. -->
+          the previous "(demo)" toast misled users. Per-row disable works. -->
       <button class='btn btn-sm' x-cloak x-show='false' aria-hidden='true'>
         Disable Selected (<span x-text='selected.length'>0</span>)
       </button>
