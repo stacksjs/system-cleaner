@@ -34,7 +34,7 @@
   "devDependencies": {
     "@types/bun": "^1.3.13",
     "better-dx": "latest",
-    "puppeteer": "^24.42.0",
+    "puppeteer": "^25.0.2",
     "typescript": "^6.0.3"
   }
 }
