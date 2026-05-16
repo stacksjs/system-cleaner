@@ -22,8 +22,8 @@
   },
   "dependencies": {
     "@stacksjs/bun-router": "^0.0.13",
-    "@stacksjs/stx": "0.2.48",
-    "bun-plugin-stx": "^0.2.47",
+    "@stacksjs/stx": "0.2.64",
+    "bun-plugin-stx": "^0.2.65",
     "@system-cleaner/core": "workspace:*",
     "@system-cleaner/clean": "workspace:*",
     "@system-cleaner/disk": "workspace:*",
@@ -32,9 +32,9 @@
     "ts-broadcasting": "^0.0.5"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.13",
+    "@types/bun": "^1.3.14",
     "better-dx": "latest",
-    "puppeteer": "^24.42.0",
+    "puppeteer": "^24.43.1",
     "typescript": "^6.0.3"
   }
 }
