@@ -21,7 +21,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@stacksjs/bun-router": "^0.0.13",
+    "@stacksjs/bun-router": "^0.0.14",
     "@stacksjs/stx": "0.2.48",
     "bun-plugin-stx": "^0.2.47",
     "@system-cleaner/core": "workspace:*",
