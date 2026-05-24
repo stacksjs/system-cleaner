@@ -1,15 +1,24 @@
-<script server>
-const { formatBytes, escapeHtml } = require('@system-cleaner/core')
-const { getAllExtensions } = require('@system-cleaner/clean')
-
-const browserExtensions = getAllExtensions().map(e => ({ ...e, size: 0, sizeStr: '—' }))
-const totalExtSize = 0
-
-function esc(str) { return escapeHtml(str || '') }
-</script>
-
 <div x-data="{
   selected: [],
+  browserExtensions: [],
+  loading: true,
+  totalExtSize: 0,
+
+  init() {
+    var self = this;
+    fetch('/api/extensions-list', { method: 'POST' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.success) {
+          self.browserExtensions = (d.extensions || []).map(function(e) {
+            return Object.assign({}, e, { size: 0, sizeStr: '—' });
+          });
+        }
+        self.loading = false;
+      })
+      .catch(function() { self.loading = false; });
+  },
+
   toggle(id) { const i = this.selected.indexOf(id); if (i === -1) this.selected.push(id); else this.selected.splice(i, 1); },
   isOn(id) { return this.selected.includes(id); },
   allOn(ids) { if (ids.every(id => this.selected.includes(id))) this.selected = this.selected.filter(id => !ids.includes(id)); else ids.forEach(id => { if (!this.selected.includes(id)) this.selected.push(id); }); },
@@ -21,6 +30,9 @@ function esc(str) { return escapeHtml(str || '') }
   <div class='main-subtitle'>Installed extensions across all browsers</div>
 </div>
 <div class='main-content'>
-  @include('ExtensionsPanel')
+  <div x-show='loading' class='empty-state'>Scanning extensions...</div>
+  <div x-show='!loading' x-cloak>
+    @include('ExtensionsPanel')
+  </div>
 </div>
 </div>

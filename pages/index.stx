@@ -1,9 +1,6 @@
 <script server>
 const os = require('node:os')
-const nodePath = require('node:path')
-const { formatBytes, getSystemInfoSync, HOME, execSync, escapeHtml } = require('@system-cleaner/core')
-const { discoverStartupItems } = require('@system-cleaner/uninstall')
-const { getAllExtensions } = require('@system-cleaner/clean')
+const { getSystemInfoSync } = require('@system-cleaner/core')
 
 const sysInfo = getSystemInfoSync()
 const cpuModel = sysInfo.cpuModel
@@ -18,81 +15,40 @@ const uptimeRemHours = uptimeHours % 24
 const uptimeStr = uptimeDays > 0 ? `${uptimeDays}d ${uptimeRemHours}h` : `${uptimeHours}h`
 const hostname = sysInfo.hostname
 
-function safeExec(cmd, fallback) {
-  try { return execSync(cmd, { timeout: 5000 }) }
-  catch { return fallback || '' }
-}
-
-const diskLine = safeExec('df -h / | tail -1')
-const diskParts = diskLine.split(/\s+/)
-const diskTotal = diskParts[1] || '—'
-const diskUsed = diskParts[2] || '—'
-const diskAvail = diskParts[3] || '—'
-const diskPercent = parseInt(diskParts[4]) || 0
-
-let dTotal = 0, dFree = 0, dUsedPct = 0
-try {
-  const dfOut = execSync('df -k / 2>/dev/null')
-  const dfLines = dfOut.split('\n')
-  if (dfLines.length >= 2) { const p = dfLines[1].split(/\s+/); dTotal = parseInt(p[1]) * 1024; dFree = parseInt(p[3]) * 1024; dUsedPct = Math.round((1 - dFree / dTotal) * 100) }
-} catch {}
-
-const startupItems = discoverStartupItems()
-const enabledStartup = startupItems.filter(i => !i.disabled)
-const disabledStartup = startupItems.filter(i => i.disabled)
-const browserExtensions = getAllExtensions()
-const totalExtSize = 0
-
-function getRunningProcesses() {
-  const raw = safeExec('ps aux', '')
-  if (!raw) return []
-  const totalMem = os.totalmem()
-  const procs = []
-  for (const line of raw.split('\n').slice(1)) {
-    const p = line.trim().split(/\s+/)
-    if (p.length < 11) continue
-    const user = p[0], pid = p[1], cpu = parseFloat(p[2]) || 0, mem = parseFloat(p[3]) || 0
-    const command = p.slice(10).join(' ')
-    if (user === 'root' && cpu < 0.1 && mem < 0.1) continue
-    if (command.startsWith('/usr/libexec/') && cpu < 0.1) continue
-    if (command.startsWith('/System/') && cpu < 0.1 && mem < 0.1) continue
-    if (cpu < 0.1 && mem < 0.3) continue
-    const cmdPath = command.split(' ')[0]
-    procs.push({ id: `proc-${pid}`, pid: parseInt(pid), name: cmdPath ? nodePath.basename(cmdPath) : `pid-${pid}`, fullCommand: command.slice(0, 120), user, cpu, mem, memMB: Math.round(mem * totalMem / 100 / 1e6), isSystem: user === 'root' || user.startsWith('_') })
-  }
-  return procs.sort((a, b) => b.cpu - a.cpu)
-}
-
-const topCPU = getRunningProcesses().slice(0, 20)
-const totalCPU = topCPU.reduce((s, p) => s + p.cpu, 0)
-
-const cpuAvgPercent = cpuCores > 0 ? Math.round(totalCPU / cpuCores) : 0
-let healthDeductions = 0
-if (cpuAvgPercent > 70) healthDeductions += Math.min(30, Math.round(((cpuAvgPercent - 70) / 30) * 30))
-else if (cpuAvgPercent > 30) healthDeductions += Math.min(15, Math.round(((cpuAvgPercent - 30) / 40) * 15))
-if (memPercent > 80) healthDeductions += Math.min(25, Math.round(((memPercent - 80) / 20) * 25))
-else if (memPercent > 50) healthDeductions += Math.min(12, Math.round(((memPercent - 50) / 30) * 12))
-if (dUsedPct > 90) healthDeductions += Math.min(20, Math.round(((dUsedPct - 90) / 10) * 20))
-else if (dUsedPct > 70) healthDeductions += Math.min(10, Math.round(((dUsedPct - 70) / 20) * 10))
-if (enabledStartup.length > 20) healthDeductions += Math.min(5, Math.floor((enabledStartup.length - 20) / 10))
-const healthScore = Math.max(0, Math.min(100, 100 - healthDeductions))
-const healthLabel = healthScore >= 90 ? 'Excellent' : healthScore >= 75 ? 'Good' : healthScore >= 60 ? 'Fair' : healthScore >= 40 ? 'Poor' : 'Critical'
-const healthColor = healthScore >= 90 ? '#34c759' : healthScore >= 75 ? '#30d158' : healthScore >= 60 ? '#ff9f0a' : '#ff453a'
-
-// Pre-compute style strings (numeric vars in {{ }} inside style attrs don't resolve in shell mode)
-const sHealthScore = String(healthScore)
 const sMemPercent = String(memPercent)
-const sDUsedPct = String(dUsedPct)
-const healthDasharray = String(2 * Math.PI * 40)
-const healthDashoffset = String(2 * Math.PI * 40 * (1 - healthScore / 100))
 const memBarStyle = 'width: ' + memPercent + '%; background: ' + (memPercent > 80 ? '#ff453a' : memPercent > 60 ? '#ff9f0a' : '#30d158') + ';'
-const diskBarStyle = 'width: ' + dUsedPct + '%; background: ' + (dUsedPct > 90 ? '#ff453a' : dUsedPct > 75 ? '#ff9f0a' : '#30d158') + ';'
 const memDotColor = memPercent > 80 ? '#ff453a' : memPercent > 60 ? '#ff9f0a' : '#30d158'
-const diskDotColor = dUsedPct > 90 ? '#ff453a' : dUsedPct > 75 ? '#ff9f0a' : '#30d158'
-const startupDotColor = enabledStartup.length > 30 ? '#ff453a' : enabledStartup.length > 15 ? '#ff9f0a' : '#30d158'
 const cpuLabel = cpuModel.split(' ').slice(0, 3).join(' ')
-const cpuAvgLabel = String(Math.round(totalCPU / cpuCores))
+const healthDasharray = String(2 * Math.PI * 40)
 </script>
+
+<div x-data="{
+  stats: null,
+  statsLoading: true,
+
+  init() {
+    var self = this;
+    fetch('/api/dashboard-stats', { method: 'POST' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.success) self.stats = d;
+        self.statsLoading = false;
+      })
+      .catch(function() { self.statsLoading = false; });
+  },
+
+  get healthScore() { return this.stats ? this.stats.healthScore : 75; },
+  get healthLabel() {
+    var s = this.healthScore;
+    return s >= 90 ? 'Excellent' : s >= 75 ? 'Good' : s >= 60 ? 'Fair' : s >= 40 ? 'Poor' : 'Critical';
+  },
+  get healthColor() {
+    var s = this.healthScore;
+    return s >= 90 ? '#34c759' : s >= 75 ? '#30d158' : s >= 60 ? '#ff9f0a' : '#ff453a';
+  },
+  get healthDashoffset() { return String(2 * Math.PI * 40 * (1 - this.healthScore / 100)); },
+  get processes() { return this.stats && this.stats.processes ? this.stats.processes.slice(0, 8) : []; }
+}">
 
 <div class='main-header'>
   <div class='main-title'>Dashboard</div>
@@ -100,5 +56,22 @@ const cpuAvgLabel = String(Math.round(totalCPU / cpuCores))
 </div>
 <div class='main-content'>
   @include('DashboardCards')
+
+  <div x-data="{ pendingUpdates: null }" x-init="
+    (window.__updatesSummaryPromise || fetch('/api/updates-summary', { method: 'POST' }).then(function(r) { return r.json(); }))
+      .then(function(d) { pendingUpdates = d.success ? d.total : 0; })
+      .catch(function() { pendingUpdates = 0; });
+  " x-show='pendingUpdates !== null && pendingUpdates > 0' x-cloak style='margin-bottom: 20px;'>
+    <a href='/updates' data-stx-link class='card' style="display: flex; align-items: center; justify-content: space-between; text-decoration: none; color: inherit; border-color: rgba(255,159,10,0.25);'>
+      <div>
+        <div class='card-label'>Pending Updates</div>
+        <div class='card-value' style='color: #ff9f0a;' x-text='pendingUpdates'></div>
+        <div class='card-detail'>System, Homebrew, and app updates available</div>
+      </div>
+      <span style='font-size: 13px; color: #0a84ff;'>View →</span>
+    </a>
+  </div>
+
   @include('TopProcesses')
+</div>
 </div>

@@ -1,23 +1,35 @@
 <script server>
 const { escapeHtml } = require('@system-cleaner/core')
-const { discoverStartupItems } = require('@system-cleaner/uninstall')
-
-const startupItems = discoverStartupItems()
-const enabledStartup = startupItems.filter(i => !i.disabled)
-const disabledStartup = startupItems.filter(i => i.disabled)
-const disabledStartupIdsJson = JSON.stringify(disabledStartup.map(i => i.id))
-const enabledStartupIdsJson = JSON.stringify(enabledStartup.map(i => i.id))
-
 function esc(str) { return escapeHtml(str || '') }
 </script>
 
 <div x-data="{
   selected: [],
   startupFilter: 'all',
-  disabledItems: {{ disabledStartupIdsJson }},
+  startupItems: [],
+  loading: true,
+  disabledItems: [],
   removedItems: [],
   toasts: [],
   toastId: 0,
+
+  init() {
+    var self = this;
+    fetch('/api/startup-items', { method: 'POST' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.success) {
+          self.startupItems = d.items || [];
+          self.disabledItems = (d.items || []).filter(function(i) { return i.disabled; }).map(function(i) { return i.id; });
+        }
+        self.loading = false;
+      })
+      .catch(function() { self.loading = false; });
+  },
+
+  get enabledStartup() { return this.startupItems.filter(function(i) { return !this.disabledItems.includes(i.id); }.bind(this)); },
+  get disabledStartup() { return this.startupItems.filter(function(i) { return this.disabledItems.includes(i.id); }.bind(this)); },
+  get enabledIds() { return this.enabledStartup.map(function(i) { return i.id; }); },
 
   toggle(id) { const i = this.selected.indexOf(id); if (i === -1) this.selected.push(id); else this.selected.splice(i, 1); },
   isOn(id) { return this.selected.includes(id); },
@@ -25,7 +37,13 @@ function esc(str) { return escapeHtml(str || '') }
   isRemoved(id) { return this.removedItems.includes(id); },
   allOn(ids) { if (ids.every(id => this.selected.includes(id))) this.selected = this.selected.filter(id => !ids.includes(id)); else ids.forEach(id => { if (!this.selected.includes(id)) this.selected.push(id); }); },
   setFilter(f) { this.startupFilter = f; },
-  rowVisible(cat, dis) { if (this.startupFilter==='all') return true; if (this.startupFilter==='enabled') return dis!=='true'; if (this.startupFilter==='vendor') return cat==='vendor'||cat==='other'||cat==='dev'; if (this.startupFilter==='system') return cat==='system'; return true; },
+  rowVisible(item) {
+    if (this.startupFilter === 'all') return true;
+    if (this.startupFilter === 'enabled') return !this.isDisabled(item.id);
+    if (this.startupFilter === 'vendor') return item.category === 'vendor' || item.category === 'other' || item.category === 'dev';
+    if (this.startupFilter === 'system') return item.category === 'system';
+    return true;
+  },
 
   toast(msg, type) {
     const id = ++this.toastId;
@@ -46,7 +64,10 @@ function esc(str) { return escapeHtml(str || '') }
   <div class='main-subtitle'>Launch Agents & Daemons that run when your Mac starts</div>
 </div>
 <div class='main-content'>
-  @include('StartupPanel')
+  <div x-show='loading' class='empty-state'>Scanning startup items...</div>
+  <div x-show='!loading' x-cloak>
+    @include('StartupPanel')
+  </div>
 </div>
 </div>
 
@@ -96,4 +117,7 @@ function doRemove(fp, name, itemId) {
     }
   }).catch(_toastErr('Remove failed'));
 }
+
+window.doToggle = doToggle;
+window.doRemove = doRemove;
 </script>

@@ -1,24 +1,5 @@
 <script server>
-const { formatBytes, safeStat, HOME, escapeHtml, execSync } = require('@system-cleaner/core')
-const { CLEAN_TARGETS } = require('@system-cleaner/clean')
-
-// Disk info for the cleanup summary card
-function safeExec(cmd, fallback) { try { return execSync(cmd, { timeout: 5000 }) } catch { return fallback || '' } }
-const diskLine = safeExec('df -h / | tail -1')
-const diskParts = diskLine.split(/\s+/)
-const diskAvail = diskParts[3] || '—'
-const diskPercent = parseInt(diskParts[4]) || 0
-
-const cleanCategories = []
-for (const target of CLEAN_TARGETS) {
-  if (target.requiresSudo) continue
-  const st = safeStat(target.path)
-  if (!st) continue
-  if (st.isDirectory() || !target.contentsOnly) {
-    cleanCategories.push({ id: target.id, name: target.name, path: target.path, icon: target.icon, desc: target.description, size: 0, sizeStr: '...' })
-  }
-}
-
+const { escapeHtml } = require('@system-cleaner/core')
 function esc(str) { return escapeHtml(str || '') }
 </script>
 
@@ -27,10 +8,38 @@ function esc(str) { return escapeHtml(str || '') }
   cleaning: {},
   toasts: [],
   toastId: 0,
+  cleanCategories: [],
+  diskAvail: '—',
+  diskPercent: 0,
+  targetsLoading: true,
+
+  init() {
+    var self = this;
+    Promise.all([
+      fetch('/api/cleanup-targets', { method: 'POST' }).then(function(r) { return r.json(); }),
+      fetch('/api/system-disk-info', { method: 'POST' }).then(function(r) { return r.json(); }),
+    ]).then(function(results) {
+      var targets = results[0];
+      var disk = results[1];
+      if (targets.success) self.cleanCategories = targets.targets || [];
+      if (disk.success) {
+        self.diskAvail = disk.fDiskFree || '—';
+        self.diskPercent = disk.diskPct || 0;
+      }
+      self.targetsLoading = false;
+      setTimeout(function() { scanCleanupSizes(); }, 50);
+    }).catch(function() { self.targetsLoading = false; });
+  },
 
   toggle(id) { const i = this.selected.indexOf(id); if (i === -1) this.selected.push(id); else this.selected.splice(i, 1); },
   isOn(id) { return this.selected.includes(id); },
   allOn(ids) { if (ids.every(id => this.selected.includes(id))) this.selected = this.selected.filter(id => !ids.includes(id)); else ids.forEach(id => { if (!this.selected.includes(id)) this.selected.push(id); }); },
+  shortPath(p) {
+    if (!p || p.indexOf('/Users/') !== 0) return p;
+    var rest = p.slice(7);
+    var slash = rest.indexOf('/');
+    return '~' + (slash >= 0 ? rest.slice(slash) : '');
+  },
 
   toast(msg, type) {
     const id = ++this.toastId;
@@ -53,7 +62,10 @@ function esc(str) { return escapeHtml(str || '') }
   <div class='main-subtitle'>Remove caches, logs, and temporary files to free up disk space</div>
 </div>
 <div class='main-content'>
-  @include('CleanupPanel')
+  <div x-show='targetsLoading' class='empty-state'>Loading cleanable targets...</div>
+  <div x-show='!targetsLoading' x-cloak>
+    @include('CleanupPanel')
+  </div>
 </div>
 </div>
 
@@ -222,6 +234,5 @@ function scanCleanupSizes(force) {
   }
 }
 
-// Load instantly from cache, then show. Rescan button forces fresh scan.
-scanCleanupSizes();
+// Load after targets render (init() triggers scanCleanupSizes).
 </script>

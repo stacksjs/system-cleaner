@@ -31,6 +31,7 @@
         <div class='sidebar-section-title'>Maintain</div>
         <a class='nav-item' href='/updates' data-stx-link>
           <span class='nav-icon'>📦</span> Updates
+          <span class='nav-badge' id='updates-badge' style='display: none; background: rgba(255,159,10,0.18); color: #ff9f0a;'></span>
         </a>
         <a class='nav-item' href='/cleanup' data-stx-link>
           <span class='nav-icon'>🧹</span> Quick Clean
@@ -57,6 +58,17 @@
   fetch('/api/system-info').then(function(r) { return r.json(); }).then(function(d) {
     if (u) u.textContent = d.username;
     if (m) m.textContent = 'macOS ' + d.macosVersion;
+  }).catch(function() {});
+
+  if (!window.__updatesSummaryPromise) {
+    window.__updatesSummaryPromise = fetch('/api/updates-summary', { method: 'POST' }).then(function(r) { return r.json(); });
+  }
+  window.__updatesSummaryPromise.then(function(d) {
+    var badge = document.getElementById('updates-badge');
+    if (badge && d.success && d.total > 0) {
+      badge.textContent = d.total;
+      badge.style.display = '';
+    }
   }).catch(function() {});
 
   window.__spaDebugLoad = Date.now();

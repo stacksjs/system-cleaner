@@ -3,19 +3,19 @@
   <div class='card' style='grid-column: span 2;'>
     <div class='card-label'>Space Recoverable</div>
     <div class='card-value' style='color: #30d158;' id='total-cleanable'>Scanning...</div>
-    <div class='card-detail'>{{ cleanCategories.length }} cleanable categories found</div>
+    <div class='card-detail'><span x-text='cleanCategories.length'></span> cleanable categories found</div>
   </div>
   <div class='card'>
     <div class='card-label'>Disk Free</div>
-    <div class='card-value'>{{ diskAvail }}</div>
-    <div class='card-detail'>{{ diskPercent }}% used</div>
+    <div class='card-value' x-text='diskAvail'></div>
+    <div class='card-detail'><span x-text='diskPercent'></span>% used</div>
   </div>
 </div>
 
-@if(cleanCategories.length > 0)
+<div x-show='cleanCategories.length > 0'>
   <div style='display: flex; gap: 8px; margin-bottom: 16px; align-items: center; flex-wrap: wrap;'>
-    <button class='btn' @click='selected.length === {{ cleanCategories.length }} ? (selected = []) : (selected = {{ JSON.stringify(cleanCategories.map(c => c.id)) }})'>
-      <span x-text="selected.length === {{ cleanCategories.length }} ? 'Deselect All' : 'Select All'">Select All</span>
+    <button class='btn' @click="selected.length === cleanCategories.length ? (selected = []) : (selected = cleanCategories.map(function(c){ return c.id; }))">
+      <span x-text="selected.length === cleanCategories.length ? 'Deselect All' : 'Select All'">Select All</span>
     </button>
     <button class='btn btn-danger' x-cloak x-show='selected.length > 0' onclick='doCleanSelected()'>
       Clean Selected (<span x-text='selected.length'>0</span>)
@@ -38,7 +38,7 @@
     <table>
       <thead>
         <tr>
-          <th style='width: 28px;'><input type='checkbox' class='check' @click='allOn({{ JSON.stringify(cleanCategories.map(c => c.id)) }})' /></th>
+          <th style='width: 28px;'><input type='checkbox' class='check' @click="allOn(cleanCategories.map(function(c){ return c.id; }))" /></th>
           <th>Category</th>
           <th>Size</th>
           <th>Path</th>
@@ -46,25 +46,25 @@
         </tr>
       </thead>
       <tbody id='cleanup-tbody'>
-        @foreach(cleanCategories as cat)
-          <tr data-clean-id='{{ cat.id }}' data-clean-path='{{ cat.path }}'>
-            <td><input type='checkbox' class='check' :checked="isOn('{{ cat.id }}')' @click='toggle('{{ cat.id }}')" /></td>
+        <template x-for="cat in cleanCategories" :key="cat.id">
+          <tr :data-clean-id="cat.id" :data-clean-path="cat.path">
+            <td><input type='checkbox' class='check' :checked="isOn(cat.id)" @click="toggle(cat.id)" /></td>
             <td>
-              <div><span style='margin-right: 4px;'>{{ cat.icon }}</span><span class='item-name'>{{ cat.name }}</span></div>
-              <div class='item-sub'>{{ cat.desc }}</div>
+              <div><span style='margin-right: 4px;' x-text='cat.icon'></span><span class='item-name' x-text='cat.name'></span></div>
+              <div class='item-sub' x-text='cat.desc'></div>
             </td>
             <td class='clean-size' style='font-weight: 600; font-variant-numeric: tabular-nums; color: #6c6c70;'>...</td>
-            <td><div class="item-path" title="{{ cat.path }}">{{ cat.path.replace(HOME, '~') }}</div></td>
+            <td><div class="item-path" :title="cat.path" x-text="shortPath(cat.path)"></div></td>
             <td>
               <button class='btn btn-danger btn-sm'
-                :disabled="cleaning['{{ cat.id }}']"
-                onclick="doCleanDir('{{ esc(cat.path) }}', '{{ esc(cat.name) }}', '{{ cat.id }}')">
-                <span x-show="!cleaning['{{ cat.id }}']">Clean</span>
-                <span x-show="cleaning['{{ cat.id }}']">...</span>
+                :disabled="cleaning[cat.id]"
+                onclick="doCleanDir(this.closest('tr').getAttribute('data-clean-path'), this.closest('tr').querySelector('.item-name').textContent, this.closest('tr').getAttribute('data-clean-id'))">
+                <span x-show="!cleaning[cat.id]">Clean</span>
+                <span x-show="cleaning[cat.id]">...</span>
               </button>
             </td>
           </tr>
-        @endforeach
+        </template>
       </tbody>
     </table>
   </div>
@@ -72,9 +72,10 @@
   <div style='margin-top: 12px; padding: 12px 16px; background: rgba(255,255,255,0.02); border-radius: 8px; border: 0.5px solid rgba(255,255,255,0.04); font-size: 11px; color: #6c6c70;'>
     Cleaning removes contents inside each directory. Some apps may rebuild caches on next launch. Click <strong style='color: #98989d;'>Rescan</strong> after cleaning to see updated sizes.
   </div>
-@else
+</div>
+
+<div x-show='!targetsLoading && cleanCategories.length === 0' x-cloak>
   <div class='tbl-wrap'>
     <div class='empty-state'>Your system is clean! No cache directories found.</div>
   </div>
-@endif
-
+</div>

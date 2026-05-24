@@ -7,27 +7,31 @@
         <svg viewBox='0 0 100 100'>
           <circle class='ring-bg' cx='50' cy='50' r='40' />
           <circle class='ring-fill' cx='50' cy='50' r='40'
-            stroke='{{ healthColor }}'
-            stroke-dasharray='{{ healthDasharray }}'
-            stroke-dashoffset='{{ healthDashoffset }}' />
+            :stroke='healthColor'
+            :stroke-dasharray='{{ healthDasharray }}'
+            :stroke-dashoffset='healthDashoffset' />
         </svg>
         <div class='ring-text'>
-          <span class='ring-score' style='color: {{ healthColor }}'>{{ sHealthScore }}</span>
-          <span class='ring-label'>{{ healthLabel }}</span>
+          <span class='ring-score' :style="'color: ' + healthColor" x-text='healthScore'></span>
+          <span class='ring-label' x-text='healthLabel'></span>
         </div>
       </div>
       <div style='flex: 1;'>
         <div style='display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px;'>
           <span class='statusbar-dot' style='background: {{ memDotColor }}'></span>
-          Memory: {{ usedMemGB }} / {{ totalMemGB }} GB ({{ sMemPercent }}%)
+          Memory: {{ usedMemGB }} / {{ totalMemGB }} GB (<span x-text="stats ? stats.memPercent : {{ sMemPercent }}"></span>%)
         </div>
-        <div style='display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px;'>
-          <span class='statusbar-dot' style='background: {{ diskDotColor }}'></span>
-          Disk: {{ diskUsed }} / {{ diskTotal }} ({{ diskAvail }} free)
+        <div style='display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px;' x-show='stats' x-cloak>
+          <span class='statusbar-dot' :style="'background: ' + (stats.dUsedPct > 90 ? '#ff453a' : stats.dUsedPct > 75 ? '#ff9f0a' : '#30d158')"></span>
+          Disk: <span x-text='stats.diskUsed'></span> / <span x-text='stats.diskTotal'></span> (<span x-text='stats.diskAvail'></span> free)
         </div>
-        <div style='display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px;'>
-          <span class='statusbar-dot' style='background: {{ startupDotColor }}'></span>
-          {{ enabledStartup.length }} startup items active
+        <div style='display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px;' x-show='!stats'>
+          <span class='statusbar-dot' style='background: #6c6c70'></span>
+          Disk: loading...
+        </div>
+        <div style='display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px;' x-show='stats' x-cloak>
+          <span class='statusbar-dot' :style="'background: ' + (stats.enabledStartup > 30 ? '#ff453a' : stats.enabledStartup > 15 ? '#ff9f0a' : '#30d158')"></span>
+          <span x-text="stats.enabledStartup + ' startup items active'"></span>
         </div>
         <div style='display: flex; align-items: center; gap: 6px; font-size: 12px;'>
           <span class='statusbar-dot' style='background: #30d158'></span>
@@ -39,7 +43,7 @@
   <div class='card'>
     <div class='card-label'>CPU</div>
     <div class='card-value' style='font-size: 16px;'>{{ cpuLabel }}</div>
-    <div class='card-detail'>{{ cpuCores }} cores · {{ cpuAvgLabel }}% avg load</div>
+    <div class='card-detail'>{{ cpuCores }} cores · <span x-text="stats ? stats.cpuAvgPercent + '% avg load' : '...'"></span></div>
   </div>
 </div>
 
@@ -52,22 +56,26 @@
     </div>
     <div class='card-detail'>{{ freeMemGB }} GB available</div>
   </div>
-  <div class='card'>
+  <div class='card' x-show='stats' x-cloak>
     <div class='card-label'>Disk</div>
-    <div class='card-value'>{{ diskUsed }} <span style='font-size: 14px; color: #6c6c70;'>/ {{ diskTotal }}</span></div>
+    <div class='card-value'><span x-text='stats.diskUsed'></span> <span style='font-size: 14px; color: #6c6c70;'>/ <span x-text='stats.diskTotal'></span></span></div>
     <div class='progress'>
-      <div class='progress-fill' style='{{ diskBarStyle }}'></div>
+      <div class='progress-fill' :style="'width: ' + stats.dUsedPct + '%; background: ' + (stats.dUsedPct > 90 ? '#ff453a' : stats.dUsedPct > 75 ? '#ff9f0a' : '#30d158') + ';'"></div>
     </div>
-    <div class='card-detail'>{{ diskAvail }} available</div>
+    <div class='card-detail'><span x-text='stats.diskAvail'></span> available</div>
+  </div>
+  <div class='card' x-show='!stats'>
+    <div class='card-label'>Disk</div>
+    <div class='card-value dim'>...</div>
   </div>
   <div class='card'>
     <div class='card-label'>Startup Items</div>
-    <div class='card-value' style='color: #ff9f0a;'>{{ enabledStartup.length }}</div>
-    <div class='card-detail'>{{ disabledStartup.length }} disabled · {{ startupItems.length }} total</div>
+    <div class='card-value' style='color: #ff9f0a;' x-text="stats ? stats.enabledStartup : '...'"></div>
+    <div class='card-detail'><span x-text="stats ? stats.disabledStartup + ' disabled · ' + stats.totalStartup + ' total' : 'loading...'"></span></div>
   </div>
   <div class='card'>
     <div class='card-label'>Extensions</div>
-    <div class='card-value' style='color: #bf5af2;'>{{ browserExtensions.length }}</div>
-    <div class='card-detail'>{{ formatBytes(totalExtSize) }} total size</div>
+    <div class='card-value' style='color: #bf5af2;' x-text="stats ? stats.extensions : '...'"></div>
+    <div class='card-detail'>browser extensions</div>
   </div>
 </div>
