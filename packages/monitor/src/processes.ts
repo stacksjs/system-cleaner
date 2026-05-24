@@ -18,24 +18,24 @@ export async function getAllProcesses(): Promise<ProcessInfo[]> {
 }
 
 async function parseProcessList(filterLowUsage: boolean, limit?: number): Promise<ProcessInfo[]> {
-  const result = await exec('ps aux 2>/dev/null', { timeout: 5000 })
+  const result = await exec('ps -Arc -o user=,pid=,pcpu=,pmem=,command= 2>/dev/null', { timeout: 3000 })
   if (!result.ok)
     return []
 
-  const lines = result.stdout.split('\n').slice(1)
+  const lines = result.stdout.split('\n').filter(Boolean)
   const totalMem = os.totalmem()
   const procs: ProcessInfo[] = []
 
   for (const line of lines) {
     const parts = line.trim().split(/\s+/)
-    if (parts.length < 11)
+    if (parts.length < 5)
       continue
 
     const user = parts[0]
     const pid = Number.parseInt(parts[1])
     const cpu = Number.parseFloat(parts[2]) || 0
     const mem = Number.parseFloat(parts[3]) || 0
-    const command = parts.slice(10).join(' ')
+    const command = parts.slice(4).join(' ')
 
     if (filterLowUsage) {
       if (user === 'root' && cpu < 0.1 && mem < 0.1)
