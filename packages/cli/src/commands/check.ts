@@ -1,5 +1,5 @@
 import type { CLI } from '@stacksjs/clapp'
-import { exec, formatBytes, formatPercent, getSystemInfo } from '@system-cleaner/core'
+import { exec, formatBytes, formatPercent, getSystemInfo, checkSoftwareUpdates } from '@system-cleaner/core'
 import { getMemoryMetrics } from '@system-cleaner/monitor'
 
 interface CheckResult {
@@ -31,15 +31,20 @@ export function registerCheckCommand(app: CLI): void {
         checkMemory(),
         checkSwap(),
         checkHomebrewUpdates(),
-        checkMacosUpdates(),
+        checkSystemUpdates(),
         checkTouchIdSudo(),
         checkRosetta(),
         checkGitConfig(),
       ])
 
       for (const result of results) {
-        if (result.status === 'fulfilled')
-          checks.push(result.value)
+        if (result.status === 'fulfilled') {
+          const value = result.value
+          if (Array.isArray(value))
+            checks.push(...value)
+          else
+            checks.push(value)
+        }
       }
 
       s.stop(`Completed ${checks.length} checks`)
@@ -82,7 +87,7 @@ export function registerCheckCommand(app: CLI): void {
       // Updates
       log.info('')
       log.info('──── Updates ─────────────────────────')
-      for (const c of checks.filter(c => ['Homebrew Updates', 'macOS Updates'].includes(c.name))) {
+      for (const c of checks.filter(c => ['Homebrew Updates', 'macOS Updates', 'Xcode CLT'].includes(c.name))) {
         // eslint-disable-next-line no-console
         console.log(`  ${colors[c.status]}${icons[c.status]}${reset} ${c.name}: ${c.message}`)
       }
@@ -178,15 +183,42 @@ async function checkHomebrewUpdates(): Promise<CheckResult> {
   return { name: 'Homebrew Updates', status: 'pass', message: 'All packages up to date' }
 }
 
-async function checkMacosUpdates(): Promise<CheckResult> {
-  // --no-scan uses cached results (fast but may be stale)
-  const r = await exec('softwareupdate -l --no-scan 2>&1', { timeout: 15_000 })
-  if (!r.ok || r.stdout.includes('No new software available'))
-    return { name: 'macOS Updates', status: 'pass', message: 'System up to date (cached check)' }
-  const count = (r.stdout.match(/\*/g) || []).length
-  if (count > 0)
-    return { name: 'macOS Updates', status: 'warn', message: `${count} update(s) available` }
-  return { name: 'macOS Updates', status: 'pass', message: 'System up to date' }
+async function checkSystemUpdates(): Promise<CheckResult[]> {
+  const result = await checkSoftwareUpdates({ fullScan: false })
+  const macosUpdates = result.updates.filter(u => u.kind === 'macos')
+  const cltUpdates = result.updates.filter(u => u.kind === 'cltools')
+  const otherSystem = result.updates.filter(u => u.kind !== 'macos' && u.kind !== 'cltools')
+  const installed = result.clToolsInfo.version
+
+  const macosCheck: CheckResult = result.updates.length === 0
+    ? { name: 'macOS Updates', status: 'pass', message: 'System up to date (cached check)' }
+    : {
+        name: 'macOS Updates',
+        status: 'warn',
+        message: (() => {
+          const parts: string[] = []
+          if (macosUpdates.length > 0) parts.push(`${macosUpdates.length} macOS`)
+          if (cltUpdates.length > 0) parts.push(`${cltUpdates.length} CLT`)
+          if (otherSystem.length > 0) parts.push(`${otherSystem.length} other`)
+          return `${result.updates.length} update(s) available (${parts.join(', ')})`
+        })(),
+      }
+
+  const cltCheck: CheckResult = cltUpdates.length === 0
+    ? {
+        name: 'Xcode CLT',
+        status: 'pass',
+        message: installed ? `Command Line Tools ${installed} up to date` : 'No CLT updates pending',
+      }
+    : {
+        name: 'Xcode CLT',
+        status: 'warn',
+        message: installed
+          ? `Update available: ${installed} → ${cltUpdates[0]?.version || '?'}`
+          : `${cltUpdates.length} Command Line Tools update(s) available (${cltUpdates[0]?.version || '?'})`,
+      }
+
+  return [macosCheck, cltCheck]
 }
 
 async function checkTouchIdSudo(): Promise<CheckResult> {

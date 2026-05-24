@@ -13,7 +13,7 @@ const config: StxOptions = {
   // mean "no auto-wrap" but isn't in the published types yet.
   defaultLayout: false as unknown as string,
   debug: false,
-  cache: false,
+  cache: true,
 
   broadcasting: {
     enabled: true,

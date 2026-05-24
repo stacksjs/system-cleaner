@@ -123,8 +123,11 @@ for (const port of [PORT, BROADCAST_PORT]) {
   }
 }
 
-// Clear STX cache (preserves prior behavior)
-try { fs.rmSync('.stx', { recursive: true, force: true }) } catch {}
+// Clear STX cache unless --fresh is passed
+const fresh = process.argv.includes('--fresh')
+if (fresh) {
+  try { fs.rmSync('.stx', { recursive: true, force: true }) } catch {}
+}
 
 // Locate the stx CLI. The pantry symlink (`pantry/.bin/stx`) is the
 // fast path on this machine, but `pantry/` is gitignored so a fresh

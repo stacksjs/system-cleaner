@@ -3,7 +3,7 @@ import { getTopProcesses, summarizeProcesses } from '@system-cleaner/monitor'
 
 export default function ({ channel }: ChannelRegistrar) {
   channel('processes', {
-    interval: 3000,
+    interval: 5000,
 
     async data() {
       const procs = await getTopProcesses(20)

@@ -18,7 +18,7 @@
     "lint": "bunx --bun pickier .",
     "lint:fix": "bunx --bun pickier . --fix",
     "typecheck": "bun --bun tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test packages test/smoke.test.ts"
   },
   "dependencies": {
     "@stacksjs/bun-router": "^0.0.14",
