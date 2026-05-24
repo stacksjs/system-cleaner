@@ -9,7 +9,19 @@ import {
   sanitizePackageName,
   sanitizePid,
   sanitizeStringArray,
+  TtlCache,
 } from '@system-cleaner/core';
+import { invalidateUpdatesCaches, getUpdatesSummary, runUpdatesCheck } from './updates-check';
+import {
+  getStartupItemsCached,
+  getExtensionsCached,
+  getSystemDiskInfoCached,
+  getCleanupTargetsCached,
+  getDashboardStatsCached,
+  invalidateStartupCache,
+} from './data-service';
+import { runDiskScan } from '../workers/disk-worker-pool';
+import { listApplicationEntries } from '@system-cleaner/core';
 import { cleanDirectory, emptyTrash } from '@system-cleaner/clean';
 import {
   killProcess,
@@ -51,6 +63,11 @@ function pathInAllowedRoots(p: string, roots: string[]): boolean {
  * firing parallel scans. One in-flight scan at a time is enough.
  */
 let diskScanInFlight = false;
+
+const systemAppsListCache = new TtlCache<{ name: string; sizeBytes: number | null }[]>(15 * 60_000);
+const systemAppsSizesCache = new TtlCache<{ name: string; sizeBytes: number }[]>(15 * 60_000);
+const dashboardStatsCache = new TtlCache<Record<string, unknown>>(30_000);
+const dirSizesCache = new TtlCache<Record<string, number>>(5 * 60_000);
 
 /**
  * API routes for SystemCleaner.
@@ -99,44 +116,19 @@ export default async function (router: Router) {
     const WORKER_TIMEOUT_MS = 50_000;
 
     diskScanInFlight = true;
-    const worker = new Worker(
-      new URL('../workers/disk-scan.ts', import.meta.url).href,
-    );
-
-    return new Promise<Response>((resolve) => {
-      const finish = (response: Response) => {
-        diskScanInFlight = false;
-        resolve(response);
-      };
-
-      const timeout = setTimeout(() => {
-        worker.terminate();
-        finish(Response.json({ success: false, error: `Scan exceeded ${HARD_TIMEOUT_MS / 1000}s` }));
-      }, HARD_TIMEOUT_MS);
-
-      worker.onmessage = (e: MessageEvent) => {
-        clearTimeout(timeout);
-        worker.terminate();
-        finish(Response.json(e.data));
-      };
-
-      worker.onerror = (e: ErrorEvent) => {
-        clearTimeout(timeout);
-        worker.terminate();
-        finish(Response.json({ success: false, error: e.message || 'Scan failed' }));
-      };
-
-      // Catch structured-clone failures (huge tree → can't be serialized
-      // back to the main thread). Without this they silently hung until
-      // the route timeout fired.
-      (worker as Worker & { onmessageerror?: (e: MessageEvent) => void }).onmessageerror = () => {
-        clearTimeout(timeout);
-        worker.terminate();
-        finish(Response.json({ success: false, error: 'Scan result was too large to transfer' }));
-      };
-
-      worker.postMessage({ home: scanRoot, maxDepth, timeoutMs: WORKER_TIMEOUT_MS });
-    });
+    try {
+      const result = await runDiskScan(
+        { home: scanRoot, maxDepth, timeoutMs: WORKER_TIMEOUT_MS },
+        HARD_TIMEOUT_MS,
+      );
+      return Response.json(result);
+    }
+    catch (err: any) {
+      return Response.json({ success: false, error: err.message || 'Scan failed' });
+    }
+    finally {
+      diskScanInFlight = false;
+    }
   });
 
   await router.post('/delete-path', async (req: Request) => {
@@ -237,6 +229,8 @@ export default async function (router: Router) {
     }
 
     const result = await toggleStartupItem(filepath, action);
+    invalidateStartupCache();
+    dashboardStatsCache.clear();
     return Response.json({ ...result, action });
   });
 
@@ -255,6 +249,8 @@ export default async function (router: Router) {
     }
 
     const result = await removeStartupItem(filepath);
+    invalidateStartupCache();
+    dashboardStatsCache.clear();
     return Response.json(result);
   });
 
@@ -263,6 +259,10 @@ export default async function (router: Router) {
     if (body === null) return badJson();
     const paths = sanitizeStringArray(body.paths, 1024);
     if (paths === null) return badRequest('paths must be a non-empty string array (≤1024)');
+
+    const cacheKey = paths.slice().sort().join('\0');
+    const cached = dirSizesCache.get(cacheKey);
+    if (cached) return Response.json({ success: true, sizes: cached, cached: true });
 
     const results: Record<string, number> = {};
     // Bound parallelism so we don't fire 1024 simultaneous `du` walks.
@@ -278,7 +278,8 @@ export default async function (router: Router) {
         }),
       );
     }
-    return Response.json({ success: true, sizes: results });
+    dirSizesCache.set(cacheKey, results);
+    return Response.json({ success: true, sizes: results, cached: false });
   });
 
   await router.post('/empty-trash', async () => {
@@ -359,25 +360,35 @@ export default async function (router: Router) {
     catch (err: any) {
       return Response.json({ success: false, error: err.message || 'Upgrade failed' });
     }
+    finally {
+      invalidateUpdatesCaches();
+    }
   });
 
   await router.post('/brew-update-all', async () => {
     try {
-      const proc = Bun.spawn(['bash', '-c', 'brew upgrade 2>&1'], {
+      const proc = Bun.spawn(['brew', 'upgrade'], {
         stdout: 'pipe',
         stderr: 'pipe',
       });
-      const output = await new Response(proc.stdout).text();
+      const [stdout, stderr] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
+      const output = (stdout + stderr).trim();
       const exitCode = await proc.exited;
 
       return Response.json({
         success: exitCode === 0,
-        output: output.trim().split('\n').slice(-5).join('\n'),
+        output: output.split('\n').slice(-5).join('\n'),
         error: exitCode !== 0 ? 'Some packages failed to update' : undefined,
       });
     }
     catch (err: any) {
       return Response.json({ success: false, error: err.message || 'Upgrade failed' });
+    }
+    finally {
+      invalidateUpdatesCaches();
     }
   });
 
@@ -409,6 +420,9 @@ export default async function (router: Router) {
     }
     catch (err: any) {
       return Response.json({ success: false, error: err.message || 'Update failed' });
+    }
+    finally {
+      invalidateUpdatesCaches();
     }
   });
 
@@ -463,330 +477,207 @@ export default async function (router: Router) {
     catch (err: any) {
       return Response.json({ success: false, error: err.message || 'Update failed' });
     }
+    finally {
+      invalidateUpdatesCaches();
+    }
   });
 
-  // ── System apps with sizes ───────────────────────────────────
+  // ── Dashboard stats (cached, client-fetched) ─────────────────
 
-  await router.post('/system-apps', async () => {
-    const apps: {
-      name: string
-      sizeBytes: number
-    }[] = [];
+  await router.post('/dashboard-stats', async () => {
+    const cached = dashboardStatsCache.get('stats');
+    if (cached) return Response.json({ success: true, ...cached, cached: true });
+
+    const os = await import('node:os');
+    const procs = await getTopProcesses(8);
+    const base = getDashboardStatsCached();
+    const totalCPU = procs.reduce((s, p) => s + p.cpuPercent, 0);
+    const cpuCores = os.default.cpus().length;
+    const memPercent = Math.round(((os.default.totalmem() - os.default.freemem()) / os.default.totalmem()) * 100);
+    const cpuAvgPercent = cpuCores > 0 ? Math.round(totalCPU / cpuCores) : 0;
+
+    let dUsedPct = 0;
     try {
-      const entries = fs.readdirSync('/Applications').filter((e: string) => e.endsWith('.app')).sort();
-      const BATCH = 10;
-      for (let i = 0; i < entries.length; i += BATCH) {
-        const batch = entries.slice(i, i + BATCH);
-        const results = await Promise.all(
-          batch.map(async (entry: string) => {
-            const name = entry.replace(/\.app$/, '');
-            let sizeBytes = 0;
-            try {
-              sizeBytes = await getDirSize(path.resolve('/Applications', entry));
-            }
-            catch {}
-            return { name, sizeBytes };
-          }),
-        );
-        apps.push(...results);
+      const { execSync } = await import('@system-cleaner/core');
+      const dfOut = execSync('df -k / 2>/dev/null');
+      const parts = dfOut.split('\n')[1]?.split(/\s+/);
+      if (parts) {
+        const total = Number.parseInt(parts[1], 10) * 1024;
+        const free = Number.parseInt(parts[3], 10) * 1024;
+        dUsedPct = total > 0 ? Math.round((1 - free / total) * 100) : 0;
       }
     }
     catch {}
-    return Response.json({ success: true, apps });
+
+    let healthDeductions = 0;
+    if (cpuAvgPercent > 70) healthDeductions += Math.min(30, Math.round(((cpuAvgPercent - 70) / 30) * 30));
+    else if (cpuAvgPercent > 30) healthDeductions += Math.min(15, Math.round(((cpuAvgPercent - 30) / 40) * 15));
+    if (memPercent > 80) healthDeductions += Math.min(25, Math.round(((memPercent - 80) / 20) * 25));
+    else if (memPercent > 50) healthDeductions += Math.min(12, Math.round(((memPercent - 50) / 30) * 12));
+    if (dUsedPct > 90) healthDeductions += Math.min(20, Math.round(((dUsedPct - 90) / 10) * 20));
+    else if (dUsedPct > 70) healthDeductions += Math.min(10, Math.round(((dUsedPct - 70) / 20) * 10));
+    if (base.enabledStartup > 20) healthDeductions += Math.min(5, Math.floor((base.enabledStartup - 20) / 10));
+    const healthScore = Math.max(0, Math.min(100, 100 - healthDeductions));
+
+    let diskTotal = '—';
+    let diskUsed = '—';
+    let diskAvail = '—';
+    let diskPercent = 0;
+    try {
+      const { execSync } = await import('@system-cleaner/core');
+      const dfLine = execSync('df -h / | tail -1');
+      const dfParts = dfLine.split(/\s+/);
+      diskTotal = dfParts[1] || '—';
+      diskUsed = dfParts[2] || '—';
+      diskAvail = dfParts[3] || '—';
+      diskPercent = Number.parseInt(dfParts[4]) || 0;
+    }
+    catch {}
+
+    const payload = {
+      ...base,
+      healthScore,
+      memPercent,
+      dUsedPct,
+      diskTotal,
+      diskUsed,
+      diskAvail,
+      diskPercent,
+      cpuAvgPercent,
+      processes: procs.map(p => ({
+        id: `proc-${p.pid}`,
+        pid: p.pid,
+        name: p.name,
+        fullCommand: p.fullCommand,
+        user: p.user,
+        cpu: p.cpuPercent,
+        memMB: p.memoryMB,
+        isSystem: p.isSystem,
+      })),
+      cached: false,
+    };
+    dashboardStatsCache.set('stats', payload);
+    return Response.json({ success: true, ...payload });
   });
 
-  // ── Updates check (brew, pantry, desktop apps) ───────────────
+  await router.post('/startup-items', async () => {
+    const { items, cached } = getStartupItemsCached();
+    return Response.json({ success: true, items, cached });
+  });
 
-  await router.post('/updates-check', async () => {
-    // App name → Homebrew cask token mapping
-    const CASK_MAP: Record<string, string> = {
-      '1Password': '1password', '1Password 7': '1password',
-      'Alacritty': 'alacritty', 'Alfred': 'alfred',
-      'Android Studio': 'android-studio', 'AppCleaner': 'appcleaner',
-      'Arc': 'arc', 'Audacity': 'audacity',
-      'BBEdit': 'bbedit', 'Bartender': 'bartender',
-      'Bear': 'bear', 'BetterTouchTool': 'bettertouchtool',
-      'Brave Browser': 'brave-browser',
-      'CLion': 'clion', 'Caffeine': 'caffeine',
-      'ChatGPT': 'chatgpt', 'Claude': 'claude',
-      'CleanMyMac': 'cleanmymac', 'CleanMyMac X': 'cleanmymac',
-      'CleanShot X': 'cleanshot', 'CotEditor': 'coteditor',
-      'Cursor': 'cursor', 'Cyberduck': 'cyberduck',
-      'Dash': 'dash', 'DataGrip': 'datagrip',
-      'DaVinci Resolve': 'davinci-resolve',
-      'Discord': 'discord', 'Docker': 'docker',
-      'Dropbox': 'dropbox', 'Dynobase': 'dynobase',
-      'Fantastical': 'fantastical', 'Figma': 'figma',
-      'Firefox': 'firefox', 'Fork': 'fork', 'ForkLift': 'forklift',
-      'Ghostty': 'ghostty', 'GitHub Desktop': 'github',
-      'GitKraken': 'gitkraken', 'GoLand': 'goland',
-      'Google Chrome': 'google-chrome', 'Google Drive': 'google-drive',
-      'Grammarly Desktop': 'grammarly-desktop',
-      'HTTPie': 'httpie', 'HandBrake': 'handbrake',
-      'Hyper': 'hyper',
-      'IINA': 'iina', 'ImageOptim': 'imageoptim',
-      'IntelliJ IDEA': 'intellij-idea', 'Insomnia': 'insomnia',
-      'Joplin': 'joplin',
-      'Kap': 'kap', 'Karabiner-Elements': 'karabiner-elements',
-      'Keka': 'keka', 'Kitty': 'kitty',
-      'Linear': 'linear-linear', 'Logseq': 'logseq',
-      'Logi Options+': 'logi-options-plus',
-      'logioptionsplus': 'logi-options-plus',
-      'Logi Options Plus': 'logi-options-plus',
-      'Loom': 'loom',
-      'Maccy': 'maccy', 'MediaInfo': 'mediainfo',
-      'Microsoft Edge': 'microsoft-edge',
-      'Microsoft Teams': 'microsoft-teams',
-      'MonitorControl': 'monitorcontrol', 'Mullvad VPN': 'mullvad-vpn',
-      'Muzzle': 'muzzle',
-      'NordVPN': 'nordvpn', 'Notion': 'notion', 'Nova': 'nova',
-      'Numi': 'numi',
-      'OBS': 'obs', 'Obsidian': 'obsidian',
-      'OneDrive': 'onedrive', 'Opera': 'opera',
-      'OrbStack': 'orbstack', 'Orion': 'orion',
-      'Parallels Desktop': 'parallels',
-      'Pearcleaner': 'pearcleaner', 'PhpStorm': 'phpstorm',
-      'Plex': 'plex', 'Postman': 'postman',
-      'Proxyman': 'proxyman', 'PyCharm': 'pycharm',
-      'Raycast': 'raycast', 'Rectangle': 'rectangle',
-      'Rider': 'rider', 'RubyMine': 'rubymine',
-      'Sequel Ace': 'sequel-ace',
-      'Setapp': 'setapp', 'Shottr': 'shottr',
-      'Signal': 'signal', 'Sketch': 'sketch',
-      'Skype': 'skype', 'Slack': 'slack',
-      'SourceTree': 'sourcetree', 'Spotify': 'spotify',
-      'Steam': 'steam', 'Sublime Merge': 'sublime-merge',
-      'Sublime Text': 'sublime-text',
-      'TablePlus': 'tableplus', 'Tailscale': 'tailscale',
-      'Telegram': 'telegram', 'The Unarchiver': 'the-unarchiver',
-      'Things3': 'things', 'Things': 'things',
-      'TickTick': 'ticktick', 'Tinkerwell': 'tinkerwell',
-      'Todoist': 'todoist', 'Tower': 'tower',
-      'Transmit': 'transmit', 'Typora': 'typora',
-      'UTM': 'utm',
-      'VLC': 'vlc', 'VMware Fusion': 'vmware-fusion',
-      'Visual Studio Code': 'visual-studio-code',
-      'Vivaldi': 'vivaldi',
-      'Warp': 'warp', 'WebStorm': 'webstorm',
-      'WhatsApp': 'whatsapp', 'WireGuard': 'wireguard-go',
-      'Zed': 'zed', 'Zen Browser': 'zen-browser',
-      'Zoom': 'zoom', 'iTerm': 'iterm2',
-      'iStat Menus': 'istat-menus',
-    };
+  await router.post('/extensions-list', async () => {
+    const { extensions, cached } = getExtensionsCached();
+    return Response.json({ success: true, extensions, cached });
+  });
 
-    const SYSTEM_APPS = new Set([
-      'Safari', 'Preview', 'TextEdit', 'Automator', 'Font Book',
-      'Migration Assistant', 'Photo Booth', 'System Preferences',
-      'System Settings', 'Disk Utility', 'Terminal', 'Activity Monitor',
-      'Console', 'Grapher', 'Script Editor', 'Time Machine', 'Photos',
-      'Mail', 'Calendar', 'Contacts', 'Reminders', 'Notes', 'Maps',
-      'Messages', 'FaceTime', 'Books', 'News', 'Stocks', 'Weather',
-      'Home', 'Podcasts', 'Music', 'TV', 'Voice Memos', 'Freeform',
-      'Shortcuts', 'Chess', 'Dictionary', 'Stickies', 'Image Capture',
-      'Color Picker', 'Simulator', 'Simulator (Watch)',
-    ]);
+  await router.post('/system-disk-info', async () => {
+    const info = getSystemDiskInfoCached();
+    return Response.json({ success: true, ...info });
+  });
 
-    const MAS_APPS = new Set([
-      'Xcode', 'Numbers', 'Pages', 'Keynote', 'GarageBand', 'iMovie',
-      'Grammarly for Safari', 'AdBlock', 'HP Smart', 'Audible',
-      'CleanMyMac_5_MAS', 'Mini Motorways', 'Snake.io+',
-      'Numbers Creator Studio', 'Things3',
-    ]);
+  await router.post('/cleanup-targets', async () => {
+    const { targets, cached } = getCleanupTargetsCached();
+    return Response.json({ success: true, targets, cached });
+  });
 
-    function isNewerVersion(latest: string, current: string): boolean {
-      if (!latest || !current || latest === current) return false;
-      if (current === '?') return !!latest;
-      const norm = (v: string) => v.replace(/[,+].*/g, '').replace(/-.*$/, '').split('.').map(n => parseInt(n, 10) || 0);
-      const a = norm(latest);
-      const b = norm(current);
-      for (let i = 0; i < Math.max(a.length, b.length); i++) {
-        if ((a[i] || 0) > (b[i] || 0)) return true;
-        if ((a[i] || 0) < (b[i] || 0)) return false;
-      }
-      return false;
+  await router.post('/system-apps', async (req: Request) => {
+    const body = await readJsonBody<{ sizes?: unknown }>(req);
+    const wantSizes = body?.sizes === true;
+
+    if (!wantSizes) {
+      const cached = systemAppsListCache.get('apps');
+      if (cached) return Response.json({ success: true, apps: cached, sizesPending: true, cached: true });
+
+      const apps = listApplicationEntries()
+        .map(({ name }) => ({ name, sizeBytes: null as number | null }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      systemAppsListCache.set('apps', apps);
+      return Response.json({ success: true, apps, sizesPending: true, cached: false });
     }
 
-    // Run brew outdated, pantry outdated, and app plist reads concurrently
-    const entries = (() => {
-      try {
-        return fs.readdirSync('/Applications').filter((e: string) => e.endsWith('.app'));
-      }
-      catch {
-        return [];
-      }
-    })();
+    const cached = systemAppsSizesCache.get('apps');
+    if (cached) return Response.json({ success: true, apps: cached, sizesPending: false, cached: true });
 
-    const [brewResult, pantryResult, pantryPkgs, rawApps] = await Promise.all([
-      exec('brew outdated --json 2>/dev/null', { timeout: 30000 }),
-      exec('pantry outdated 2>/dev/null', { timeout: 10000 }),
-      (async () => {
+    const apps: { name: string; sizeBytes: number }[] = [];
+    const appDirs = ['/Applications', path.join(HOME, 'Applications')];
+    const seen = new Set<string>();
+    try {
+      for (const dir of appDirs) {
+        let entries: string[] = [];
         try {
-          const globalDir = path.join(HOME, '.pantry/global/packages');
-          return fs.existsSync(globalDir) ? fs.readdirSync(globalDir) : [];
+          entries = fs.readdirSync(dir).filter((e: string) => e.endsWith('.app')).sort();
         }
-        catch {
-          return [] as string[];
-        }
-      })(),
-      Promise.all(entries.map(async (app: string) => {
-        const name = app.replace(/\.app$/, '');
-        if (SYSTEM_APPS.has(name)) return null;
-        let version = '?';
-        try {
-          const plistPath = `/Applications/${app}/Contents/Info.plist`;
-          if (fs.existsSync(plistPath)) {
-            const r = await exec(`/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "${plistPath}" 2>/dev/null`, { timeout: 2000 });
-            if (r.ok && r.stdout) version = r.stdout;
-          }
-        }
-        catch {}
-        return { name, version };
-      })).then(results => results.filter((r): r is {
-        name: string
-        version: string
-      } => r !== null)),
-    ]);
-
-    // Parse brew outdated
-    const brewFormulae: {
-      name: string
-      current: string
-      latest: string
-      pinned: boolean
-    }[] = [];
-    const brewCasks: {
-      name: string
-      current: string
-      latest: string
-    }[] = [];
-    if (brewResult.ok && brewResult.stdout) {
-      try {
-        const data = JSON.parse(brewResult.stdout);
-        for (const f of (data.formulae || [])) {
-          brewFormulae.push({ name: f.name, current: (f.installed_versions || [])[0] || '?', latest: f.current_version || '?', pinned: f.pinned || false });
-        }
-        for (const c of (data.casks || [])) {
-          brewCasks.push({ name: c.name, current: (c.installed_versions || [])[0]?.split(',')[0] || '?', latest: c.current_version?.split(',')[0] || '?' });
-        }
-      }
-      catch {}
-    }
-
-    // Parse pantry outdated
-    const pantryOutdated: {
-      name: string
-      current: string
-      latest: string
-    }[] = [];
-    if (pantryResult.ok && pantryResult.stdout) {
-      const lines = pantryResult.stdout.split('\n');
-      let inTable = false;
-      for (const line of lines) {
-        if (line.startsWith('---')) {
-          inTable = true;
-          continue;
-        }
-        if (!inTable || !line.trim() || line.startsWith('Legend') || line.startsWith('Found')) continue;
-        const parts = line.trim().split(/\s{2,}/);
-        if (parts.length >= 4) {
-          pantryOutdated.push({
-            name: parts[0].replace(/\u001b\[\d+m/g, '').trim(),
-            current: parts[1].replace(/"/g, '').trim(),
-            latest: parts[3].trim(),
+        catch { continue; }
+        const BATCH = 10;
+        for (let i = 0; i < entries.length; i += BATCH) {
+          const batch = entries.slice(i, i + BATCH).filter((entry) => {
+            const name = entry.replace(/\.app$/, '');
+            if (seen.has(name)) return false;
+            seen.add(name);
+            return true;
           });
+          const results = await Promise.all(
+            batch.map(async (entry: string) => {
+              const name = entry.replace(/\.app$/, '');
+              let sizeBytes = 0;
+              try {
+                sizeBytes = await getDirSize(path.resolve(dir, entry));
+              }
+              catch {}
+              return { name, sizeBytes };
+            }),
+          );
+          apps.push(...results);
         }
       }
+      apps.sort((a, b) => a.name.localeCompare(b.name));
     }
+    catch {}
+    systemAppsSizesCache.set('apps', apps);
+    return Response.json({ success: true, apps, sizesPending: false, cached: false });
+  });
 
-    // Collect cask tokens to query
-    const tokensToQuery: string[] = [];
-    for (const app of rawApps) {
-      const token = CASK_MAP[app.name];
-      if (token && !tokensToQuery.includes(token)) tokensToQuery.push(token);
+  // ── Open System Settings → Software Update ───────────────────
+
+  await router.post('/open-software-update', async () => {
+    try {
+      const proc = Bun.spawn(
+        ['open', 'x-apple.systempreferences:com.apple.Software-Update-Settings.extension'],
+        { stdout: 'ignore', stderr: 'ignore' },
+      );
+      const exitCode = await proc.exited;
+      return Response.json({ success: exitCode === 0 });
     }
-
-    // Batch query brew for latest cask versions
-    const caskVersions: Record<string, {
-      version: string
-      autoUpdates: boolean
-    }> = {};
-    if (tokensToQuery.length > 0) {
-      const batchPromises: Promise<void>[] = [];
-      for (let i = 0; i < tokensToQuery.length; i += 15) {
-        const batch = tokensToQuery.slice(i, i + 15);
-        batchPromises.push(
-          exec(`brew info --cask --json=v2 ${batch.join(' ')} 2>/dev/null`, { timeout: 30000 })
-            .then(r => {
-              if (r.ok && r.stdout) {
-                try {
-                  const data = JSON.parse(r.stdout);
-                  for (const cask of (data.casks || [])) {
-                    caskVersions[cask.token] = {
-                      version: (cask.version || '').split(',')[0],
-                      autoUpdates: cask.auto_updates || false,
-                    };
-                  }
-                }
-                catch {}
-              }
-            }),
-        );
-      }
-      await Promise.all(batchPromises);
+    catch (err: any) {
+      return Response.json({ success: false, error: err.message || 'Could not open System Settings' });
     }
+  });
 
-    // Build desktop apps list
-    interface DesktopApp {
-      name: string
-      version: string
-      latestVersion: string | null
-      updateAvailable: boolean
-      source: string
-      caskToken: string | null
-      autoUpdates: boolean
+  await router.post('/open-app-store-updates', async () => {
+    try {
+      const proc = Bun.spawn(['open', 'macappstore://showUpdatesPage'], { stdout: 'ignore', stderr: 'ignore' });
+      const exitCode = await proc.exited;
+      return Response.json({ success: exitCode === 0 });
     }
-    const desktopApps: DesktopApp[] = [];
-    const desktopOutdated: DesktopApp[] = [];
-
-    for (const app of rawApps) {
-      const isMAS = MAS_APPS.has(app.name);
-      const token = CASK_MAP[app.name] || null;
-      const caskInfo = token ? caskVersions[token] : null;
-
-      let source = 'unknown';
-      let latestVersion: string | null = null;
-      let updateAvailable = false;
-      let autoUpdates = false;
-
-      if (isMAS) {
-        source = 'mas';
-      }
-      else if (caskInfo) {
-        latestVersion = caskInfo.version;
-        autoUpdates = caskInfo.autoUpdates;
-        updateAvailable = isNewerVersion(latestVersion, app.version);
-        source = autoUpdates ? 'auto' : 'brew';
-      }
-
-      const entry: DesktopApp = {
-        name: app.name, version: app.version, latestVersion,
-        updateAvailable, source, caskToken: token, autoUpdates,
-      };
-      desktopApps.push(entry);
-      if (updateAvailable) desktopOutdated.push(entry);
+    catch (err: any) {
+      return Response.json({ success: false, error: err.message || 'Could not open App Store' });
     }
+  });
 
-    desktopApps.sort((a, b) => {
-      if (a.updateAvailable && !b.updateAvailable) return -1;
-      if (!a.updateAvailable && b.updateAvailable) return 1;
-      return a.name.localeCompare(b.name);
-    });
+  // ── Lightweight update count for sidebar / dashboard ─────────
 
-    return Response.json({
-      success: true,
-      brewFormulae, brewCasks,
-      pantryOutdated, pantryPackages: pantryPkgs,
-      desktopApps, desktopOutdated,
-    });
+  await router.post('/updates-summary', async () => {
+    return Response.json(await getUpdatesSummary());
+  });
+
+  // ── Updates check (system, brew, pantry, desktop apps) ───────
+
+  await router.post('/updates-check', async (req: Request) => {
+    const body = await readJsonBody<{ fullScan?: unknown; forceRefresh?: unknown; tier?: unknown }>(req);
+    const fullScan = body?.fullScan === true;
+    const forceRefresh = body?.forceRefresh === true;
+    const tier = body?.tier === 'quick' ? 'quick' : 'full';
+    const result = await runUpdatesCheck(fullScan, forceRefresh, tier);
+    return Response.json(result);
   });
 }
