@@ -5,17 +5,21 @@
     "": {
       "name": "system-cleaner",
       "dependencies": {
-        "@stacksjs/bun-router": "link:@stacksjs/bun-router",
+        "@stacksjs/bun-router": "^0.0.14",
+        "@stacksjs/stx": "0.2.48",
         "@system-cleaner/clean": "workspace:*",
         "@system-cleaner/core": "workspace:*",
         "@system-cleaner/disk": "workspace:*",
         "@system-cleaner/monitor": "workspace:*",
         "@system-cleaner/uninstall": "workspace:*",
-        "bun-plugin-stx": "latest",
-        "ts-broadcasting": "link:ts-broadcasting"
+        "bun-plugin-stx": "^0.2.47",
+        "ts-broadcasting": "^0.0.5"
       },
       "devDependencies": {
-        "better-dx": "latest"
+        "@types/bun": "^1.3.13",
+        "better-dx": "^0.2.15",
+        "puppeteer": "^24.42.0",
+        "typescript": "^6.0.3"
       }
     },
     "packages/clean": {
@@ -29,7 +33,7 @@
       "name": "@system-cleaner/cli",
       "version": "0.1.0",
       "dependencies": {
-        "@stacksjs/clapp": "file:../../../../Tools/clapp/packages/ts",
+        "@stacksjs/clapp": "^0.2.8",
         "@system-cleaner/clean": "workspace:*",
         "@system-cleaner/core": "workspace:*",
         "@system-cleaner/disk": "workspace:*",
@@ -64,31 +68,48 @@
     }
   },
   "packages": {
-    "@stacksjs/bun-router@link:@stacksjs/bun-router": {
+    "@stacksjs/bun-router@^0.0.14": {
       "name": "@stacksjs/bun-router",
-      "version": "link:@stacksjs/bun-router",
+      "version": "^0.0.14",
       "source": "npm"
     },
-    "@stacksjs/clapp@file:../../../../Tools/clapp/packages/ts": {
+    "@stacksjs/clapp@^0.2.8": {
       "name": "@stacksjs/clapp",
-      "version": "file:../../../../Tools/clapp/packages/ts",
+      "version": "^0.2.8",
+      "source": "npm"
+    },
+    "@stacksjs/stx@0.2.48": {
+      "name": "@stacksjs/stx",
+      "version": "0.2.48",
       "source": "npm",
-      "resolved": "https://registry.npmjs.org/@stacksjs/clapp/-/clapp-file:../../../../Tools/clapp/packages/ts.tgz",
       "dependencies": {
-        "mri": "^1.2.0",
-        "wrap-ansi": "^9.0.0"
+        "@cwcss/crosswind": "^0.2.0",
+        "@stacksjs/clapp": "^0.2.0",
+        "@stacksjs/desktop": "0.2.46",
+        "@stacksjs/sanitizer": "0.2.35",
+        "@stacksjs/ts-craft": "^0.0.2",
+        "bun-plugin-stx": "0.2.47",
+        "bunfig": "^0.15.6",
+        "stx-router": "0.2.48",
+        "ts-broadcasting": "^0.0.4",
+        "ts-syntax-highlighter": "^0.2.1"
       },
       "bin": {
-        "@stacksjs/clapp": "./dist/bin/cli.js",
-        "clapp": "./dist/bin/cli.js"
+        "stx": "./dist/cli.js"
       }
     },
-    "better-dx@0.2.7": {
-      "name": "better-dx",
-      "version": "0.2.7",
+    "@types/bun@^1.3.13": {
+      "name": "@types/bun",
+      "version": "^1.3.13",
       "source": "npm",
-      "resolved": "https://registry.npmjs.org/better-dx/-/better-dx-0.2.7.tgz",
-      "integrity": "sha512-J5Msp8jYKl4/YrTt/IWE32ZZg36/+M5klkAhSZb6Av5LGuFd7tylTerKq/8AwZxAYl9h8ZXV79Paygc+YjmCyw==",
+      "dependencies": {
+        "bun-types": "1.3.14"
+      }
+    },
+    "better-dx@^0.2.15": {
+      "name": "better-dx",
+      "version": "^0.2.15",
+      "source": "npm",
       "peerDependencies": {
         "@stacksjs/bumpx": "^0.2.4",
         "@stacksjs/bunpress": "^0.1.1",
@@ -109,12 +130,10 @@
         "dx": "./dist/bin/cli.js"
       }
     },
-    "bun-plugin-stx@0.2.10": {
+    "bun-plugin-stx@^0.2.47": {
       "name": "bun-plugin-stx",
-      "version": "0.2.10",
+      "version": "^0.2.47",
       "source": "npm",
-      "resolved": "https://registry.npmjs.org/bun-plugin-stx/-/bun-plugin-stx-0.2.10.tgz",
-      "integrity": "sha512-JlPzquwyGdFDkKU078XThaWFnpN7BzCdxK+COaRloEVwdF4t896nbK0hE48ffUmsJ8KzgnukxIaogG8U0xSevQ==",
       "dependencies": {
         "@stacksjs/stx": "0.2.10"
       },
@@ -123,9 +142,33 @@
         "stx-serve": "./dist/serve.js"
       }
     },
-    "ts-broadcasting@link:ts-broadcasting": {
+    "puppeteer@^24.42.0": {
+      "name": "puppeteer",
+      "version": "^24.42.0",
+      "source": "npm",
+      "dependencies": {
+        "@puppeteer/browsers": "2.13.2",
+        "chromium-bidi": "14.0.0",
+        "cosmiconfig": "^9.0.0",
+        "devtools-protocol": "0.0.1608973",
+        "puppeteer-core": "24.43.1",
+        "typed-query-selector": "^2.12.2"
+      },
+      "bin": {
+        "puppeteer": "./lib/cjs/puppeteer/node/cli.js"
+      }
+    },
+    "ts-broadcasting@^0.0.5": {
       "name": "ts-broadcasting",
-      "version": "link:ts-broadcasting",
+      "version": "^0.0.5",
+      "source": "npm",
+      "bin": {
+        "broadcast": "./dist/bin/cli.js"
+      }
+    },
+    "typescriptlang.org@^6.0.3": {
+      "name": "typescriptlang.org",
+      "version": "^6.0.3",
       "source": "npm"
     }
   }
