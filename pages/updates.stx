@@ -1,252 +1,5 @@
-<div x-data="{
-  loading: true,
-  fullScan: false,
-  brewFormulae: [],
-  brewCasks: [],
-  pantryOutdated: [],
-  pantryPackages: [],
-  desktopApps: [],
-  desktopOutdated: [],
-  systemUpdates: [],
-  clToolsInfo: { installed: false, version: null, installPath: null },
-  macosVersion: null,
-  updateScanCached: true,
-  updateScannedAt: null,
-  selected: [],
-  updating: {},
-  updated: {},
-  toasts: [],
-  toastId: 0,
-  appFilter: 'all',
-
-  get systemOutdatedCount() {
-    return this.systemUpdates.length;
-  },
-
-  init() {
-    this.loadUpdates(false, false);
-  },
-
-  applyData(data) {
-    this.brewFormulae = data.brewFormulae || [];
-    this.brewCasks = data.brewCasks || [];
-    this.pantryOutdated = data.pantryOutdated || [];
-    this.pantryPackages = data.pantryPackages || [];
-    this.desktopApps = data.desktopApps || [];
-    this.desktopOutdated = data.desktopOutdated || [];
-    this.systemUpdates = data.systemUpdates || [];
-    this.clToolsInfo = data.clToolsInfo || { installed: false, version: null, installPath: null };
-    this.macosVersion = data.macosVersion || null;
-    this.updateScanCached = data.updateScanCached !== false;
-    this.updateScannedAt = data.updateScannedAt || null;
-  },
-
-  loadUpdates(fullScan, forceRefresh) {
-    var self = this;
-    var useFullScan = !!fullScan;
-    var bustCache = !!forceRefresh;
-    var cacheKey = 'sc-updates-v1-' + (useFullScan ? 'full' : 'quick');
-
-    if (!bustCache) {
-      try {
-        var raw = localStorage.getItem(cacheKey);
-        if (raw) {
-          var cached = JSON.parse(raw);
-          if (Date.now() - cached.at < 5 * 60 * 1000) {
-            self.applyData(cached.data);
-            self.loading = false;
-          }
-        }
-      } catch (e) {}
-    } else {
-      this.loading = true;
-    }
-
-    this.fullScan = useFullScan;
-    fetch('/api/updates-check', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fullScan: useFullScan, forceRefresh: bustCache, tier: 'quick' })
-    })
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        self.applyData(data);
-        self.loading = false;
-        try {
-          localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), data: data }));
-        } catch (e) {}
-        fetch('/api/updates-check', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fullScan: useFullScan, forceRefresh: false, tier: 'full' })
-        })
-          .then(function(r) { return r.json(); })
-          .then(function(fullData) {
-            self.desktopApps = fullData.desktopApps || [];
-            self.desktopOutdated = fullData.desktopOutdated || [];
-            try {
-              localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), data: Object.assign({}, data, {
-                desktopApps: self.desktopApps,
-                desktopOutdated: self.desktopOutdated,
-              }) }));
-            } catch (e) {}
-          })
-          .catch(function() {});
-      }.bind(this))
-      .catch(function() { self.loading = false; });
-  },
-
-  refresh(fullScan) {
-    this.updated = {};
-    this.loadUpdates(!!fullScan, true);
-    this.toast(fullScan ? 'Running full system update scan...' : 'Refreshing...', 'info');
-  },
-
-  get totalOutdated() {
-    return this.brewFormulae.length + this.brewCasks.length + this.pantryOutdated.length + this.desktopOutdated.length + this.systemUpdates.length;
-  },
-
-  get brewTotal() { return this.brewFormulae.length + this.brewCasks.length; },
-
-  kindLabel(kind) {
-    if (kind === 'macos') return 'macOS';
-    if (kind === 'cltools') return 'Xcode CLT';
-    if (kind === 'safari') return 'Safari';
-    if (kind === 'firmware') return 'Firmware';
-    return 'System';
-  },
-
-  kindBadgeClass(kind) {
-    if (kind === 'macos') return 'badge-blue';
-    if (kind === 'cltools') return 'badge-purple';
-    if (kind === 'safari') return 'badge-green';
-    return 'badge-orange';
-  },
-
-  openSystemSettings() {
-    fetch('/api/open-software-update', { method: 'POST' })
-      .then(function(r) { return r.json(); })
-      .then(function(r) {
-        if (r.success) this.toast('Opened System Settings', 'success');
-        else this.toast('Could not open System Settings', 'error');
-      }.bind(this));
-  },
-
-  openAppStore() {
-    fetch('/api/open-app-store-updates', { method: 'POST' })
-      .then(function(r) { return r.json(); })
-      .then(function(r) {
-        if (r.success) this.toast('Opened App Store Updates', 'success');
-        else this.toast('Could not open App Store', 'error');
-      }.bind(this));
-  },
-
-  toggle(name) { var i = this.selected.indexOf(name); if (i === -1) this.selected.push(name); else this.selected.splice(i, 1); },
-  isOn(name) { return this.selected.includes(name); },
-  isUpdating(name) { return !!this.updating[name]; },
-  isUpdated(name) { return !!this.updated[name]; },
-  allOn(names) {
-    if (names.every(function(n) { return this.selected.includes(n); }.bind(this)))
-      this.selected = this.selected.filter(function(n) { return !names.includes(n); });
-    else
-      names.forEach(function(n) { if (!this.selected.includes(n)) this.selected.push(n); }.bind(this));
-  },
-
-  toast(msg, type) {
-    var id = ++this.toastId;
-    this.toasts = this.toasts.concat([{ id: id, msg: msg, type: type || 'info' }]);
-    var self = this;
-    setTimeout(function() { self.toasts = self.toasts.filter(function(t) { return t.id !== id; }); }, 5000);
-  },
-
-  doUpdate(name, type) {
-    var key = type === 'cask' ? 'cask:' + name : name;
-    this.updating = Object.assign({}, this.updating, Object.fromEntries([[key, true]]));
-    var self = this;
-    fetch('/api/brew-update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name, type: type }) })
-      .then(function(r) { return r.json(); })
-      .then(function(r) {
-        var u = Object.assign({}, self.updating); delete u[key]; self.updating = u;
-        if (r.success) {
-          self.updated = Object.assign({}, self.updated, Object.fromEntries([[key, true]]));
-          self.toast(name + ' updated to ' + (r.version || 'latest'), 'success');
-        } else {
-          self.toast('Failed: ' + (r.error || 'Unknown'), 'error');
-        }
-      });
-  },
-
-  doUpdateSelected() {
-    var items = this.selected.slice();
-    if (items.length === 0) return;
-    if (!confirm('Update ' + items.length + ' packages?')) return;
-    var self = this;
-    items.forEach(function(key) {
-      var isCask = key.startsWith('cask:');
-      var name = isCask ? key.slice(5) : key;
-      self.doUpdate(name, isCask ? 'cask' : 'formula');
-    });
-  },
-
-  doUpdateAll() {
-    if (!confirm('Update all outdated Homebrew packages? This may take a while.')) return;
-    this.toast('Running brew upgrade...', 'info');
-    var self = this;
-    fetch('/api/brew-update-all', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
-      .then(function(r) { return r.json(); })
-      .then(function(r) {
-        if (r.success) { self.toast('All packages updated!', 'success'); self.refresh(false); }
-        else self.toast('Update failed: ' + (r.error || 'Unknown'), 'error');
-      });
-  },
-
-  doPantryUpdate(name) {
-    var key = 'pantry:' + name;
-    this.updating = Object.assign({}, this.updating, Object.fromEntries([[key, true]]));
-    var self = this;
-    fetch('/api/pantry-update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name }) })
-      .then(function(r) { return r.json(); })
-      .then(function(r) {
-        var u = Object.assign({}, self.updating); delete u[key]; self.updating = u;
-        if (r.success) {
-          self.updated = Object.assign({}, self.updated, Object.fromEntries([[key, true]]));
-          self.toast(name + ' updated', 'success');
-        } else {
-          self.toast('Failed: ' + (r.error || 'Unknown'), 'error');
-        }
-      });
-  },
-
-  doAppUpdate(name, caskToken) {
-    var key = 'app:' + name;
-    this.updating = Object.assign({}, this.updating, Object.fromEntries([[key, true]]));
-    var self = this;
-    fetch('/api/app-update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name, caskToken: caskToken }) })
-      .then(function(r) { return r.json(); })
-      .then(function(r) {
-        var u = Object.assign({}, self.updating); delete u[key]; self.updating = u;
-        if (r.success) {
-          self.updated = Object.assign({}, self.updated, Object.fromEntries([[key, true]]));
-          self.toast(name + ' updated to ' + (r.version || 'latest'), 'success');
-        } else {
-          self.toast('Failed: ' + (r.error || 'Unknown'), 'error');
-        }
-      });
-  },
-
-  get filteredDesktopApps() {
-    var f = this.appFilter;
-    return this.desktopApps.filter(function(app) {
-      if (f === 'outdated') return app.updateAvailable;
-      if (f === 'uptodate') return !app.updateAvailable && app.source !== 'unknown' && app.source !== 'mas';
-      return true;
-    });
-  },
-
-  get allBrewKeys() {
-    return this.brewFormulae.map(function(f) { return f.name; }).concat(this.brewCasks.map(function(c) { return 'cask:' + c.name; }));
-  }
-}">
+<script src='/updates-xdata.js'></script>
+<div x-data='updatesXData()'>
 
 <div class='toast-area'>
   <template x-for='t in toasts' :key='t.id'>
@@ -260,7 +13,7 @@
       <div class='main-title'>Updates</div>
       <div class='main-subtitle'>
         <span x-show='loading'>Checking for updates...</span>
-        <span x-show='!loading' x-cloak x-text="totalOutdated + ' outdated item' + (totalOutdated !== 1 ? 's' : '') + ' found'"></span>
+        <span x-show='!loading' x-cloak x-text="totalOutdated() + ' outdated item' + (totalOutdated() !== 1 ? 's' : '') + ' found'"></span>
       </div>
     </div>
     <div x-show='!loading' x-cloak style='display: flex; gap: 6px; flex-shrink: 0;'>
@@ -280,7 +33,7 @@
 <div class='card-row'>
   <div class='card'>
     <div class='card-label'>System</div>
-    <div class='card-value' :style="systemOutdatedCount > 0 ? 'color: #ff9f0a' : 'color: #30d158'" x-text="systemOutdatedCount"></div>
+    <div class='card-value' :style="systemOutdatedCount() > 0 ? 'color: #ff9f0a' : 'color: #30d158'" x-text="systemOutdatedCount()"></div>
     <div class='card-detail'>
       <span x-show='macosVersion' x-text="'macOS ' + macosVersion"></span>
       <span x-show='clToolsInfo.version' x-text="(macosVersion ? ' \u00B7 ' : '') + 'CLT ' + clToolsInfo.version"></span>
@@ -289,13 +42,13 @@
   </div>
   <div class='card'>
     <div class='card-label'>Homebrew</div>
-    <div class='card-value' :style="brewTotal > 0 ? 'color: #ff9f0a' : 'color: #30d158'" x-text="brewTotal"></div>
+    <div class='card-value' :style="brewTotal() > 0 ? 'color: #ff9f0a' : 'color: #30d158'" x-text="brewTotal()"></div>
     <div class='card-detail' x-text="brewFormulae.length + ' formulae \u00B7 ' + brewCasks.length + ' casks'"></div>
   </div>
   <div class='card'>
     <div class='card-label'>Pantry</div>
     <div class='card-value' :style="pantryOutdated.length > 0 ? 'color: #ff9f0a' : 'color: #30d158'" x-text="pantryOutdated.length"></div>
-    <div class='card-detail' x-text="pantryPackages.length + ' package' + (pantryPackages.length !== 1 ? 's' : '') + ' tracked'"></div>
+    <div class='card-detail' x-text="pantryTrackedCount + ' package' + (pantryTrackedCount !== 1 ? 's' : '') + ' tracked'"></div>
   </div>
   <div class='card'>
     <div class='card-label'>Desktop Apps</div>
@@ -308,14 +61,14 @@
   <div class='tbl-bar'>
     <div>
       <span class='tbl-title'>macOS &amp; System Updates</span>
-      <span class='tbl-count' x-show='systemOutdatedCount > 0' x-text="systemOutdatedCount + ' available'"></span>
-      <span class='tbl-count' x-show='systemOutdatedCount === 0'>up to date</span>
+      <span class='tbl-count' x-show='systemOutdatedCount() > 0' x-text="systemOutdatedCount() + ' available'"></span>
+      <span class='tbl-count' x-show='systemOutdatedCount() === 0'>up to date</span>
     </div>
     <div style='display: flex; gap: 6px;'>
       <button class='btn btn-sm' @click='openSystemSettings()'>Open System Settings</button>
     </div>
   </div>
-  <div x-show='systemOutdatedCount > 0'>
+  <div x-show='systemOutdatedCount() > 0'>
     <table>
       <thead>
         <tr>
@@ -347,18 +100,18 @@
       </tbody>
     </table>
   </div>
-  <div x-show='systemOutdatedCount === 0' class='empty-state' style='padding: 20px;'>
+  <div x-show='systemOutdatedCount() === 0' class='empty-state' style='padding: 20px;'>
     <div style='font-size: 13px; color: #30d158; margin-bottom: 4px;'>&#10004; No pending macOS or system updates</div>
     <div class='dim' style='font-size: 11px;' x-show='clToolsInfo.version' x-text="'Command Line Tools ' + clToolsInfo.version + ' installed'"></div>
     <div class='dim' style='font-size: 11px; margin-top: 4px;' x-show='updateScanCached'>Use Deep Scan for a fresh Apple catalog check</div>
   </div>
 </div>
 
-<div x-show='brewTotal > 0' class='tbl-wrap'>
+<div x-show='brewTotal() > 0' class='tbl-wrap'>
   <div class='tbl-bar'>
     <div>
       <span class='tbl-title'>Homebrew</span>
-      <span class='tbl-count' x-text="brewTotal + ' outdated'"></span>
+      <span class='tbl-count' x-text="brewTotal() + ' outdated'"></span>
       <span class='tbl-count' x-show='selected.length > 0' x-text="' \u00B7 ' + selected.length + ' selected'"></span>
     </div>
     <div style='display: flex; gap: 6px;'>
@@ -371,7 +124,7 @@
   <table>
     <thead>
       <tr>
-        <th style='width: 28px;'><input type='checkbox' class='check' @click='allOn(allBrewKeys)' /></th>
+        <th style='width: 28px;'><input type='checkbox' class='check' @click='allOn(allBrewKeys())' /></th>
         <th>Package</th>
         <th>Type</th>
         <th>Installed</th>
@@ -387,9 +140,13 @@
           <td><span class='badge badge-purple'>Cask</span></td>
           <td class='dim mono' style='font-size: 11px;' x-text='pkg.current'></td>
           <td><span class='mono' style='font-size: 11px; color: #30d158;' x-text='pkg.latest'></span></td>
-          <td>
-            <button class='btn btn-sm' x-show="!isUpdating('cask:' + pkg.name)" @click="doUpdate(pkg.name, 'cask')">Update</button>
-            <span class='dim' style='font-size: 11px;' x-show="isUpdating('cask:' + pkg.name)">Updating...</span>
+          <td class='action-cell'>
+            <template x-if="isUpdating('cask:' + pkg.name)">
+              <span class='updating-label'>Updating…</span>
+            </template>
+            <template x-if="!isUpdating('cask:' + pkg.name)">
+              <button class='btn btn-sm' @click="doUpdate(pkg.name, 'cask')">Update</button>
+            </template>
           </td>
         </tr>
       </template>
@@ -408,9 +165,13 @@
               <span class='dim' style='font-size: 10px;'>Pinned</span>
             </template>
             <template x-if='!pkg.pinned'>
-              <span>
-                <button class='btn btn-sm' x-show='!isUpdating(pkg.name)' @click="doUpdate(pkg.name, 'formula')">Update</button>
-                <span class='dim' style='font-size: 11px;' x-show='isUpdating(pkg.name)'>Updating...</span>
+              <span class='action-cell'>
+                <template x-if="isUpdating(pkg.name)">
+                  <span class='updating-label'>Updating…</span>
+                </template>
+                <template x-if="!isUpdating(pkg.name)">
+                  <button class='btn btn-sm' @click="doUpdate(pkg.name, 'formula')">Update</button>
+                </template>
               </span>
             </template>
           </td>
@@ -433,7 +194,8 @@
       <thead>
         <tr>
           <th>Package</th>
-          <th>Constraint</th>
+          <th>Installed</th>
+          <th>Wanted</th>
           <th>Latest</th>
           <th>Actions</th>
         </tr>
@@ -443,10 +205,15 @@
           <tr x-show="!isUpdated('pantry:' + pkg.name)">
             <td><span class='item-name' x-text='pkg.name'></span></td>
             <td class='dim mono' style='font-size: 11px;' x-text='pkg.current'></td>
+            <td class='dim mono' style='font-size: 11px;' x-text='pkg.wanted'></td>
             <td><span class='mono' style='font-size: 11px; color: #30d158;' x-text='pkg.latest'></span></td>
-            <td>
-              <button class='btn btn-sm' x-show="!isUpdating('pantry:' + pkg.name)" @click='doPantryUpdate(pkg.name)'>Update</button>
-              <span class='dim' style='font-size: 11px;' x-show="isUpdating('pantry:' + pkg.name)">Updating...</span>
+            <td class='action-cell'>
+              <template x-if="isUpdating('pantry:' + pkg.name)">
+                <span class='updating-label'>Updating…</span>
+              </template>
+              <template x-if="!isUpdating('pantry:' + pkg.name)">
+                <button class='btn btn-sm' @click='doPantryUpdate(pkg.name)'>Update</button>
+              </template>
             </td>
           </tr>
         </template>
@@ -460,7 +227,7 @@
       </template>
     </div>
   </div>
-  <div x-show='pantryOutdated.length === 0 && pantryPackages.length === 0' class='empty-state' style='padding: 20px;'>No Pantry packages installed</div>
+  <div x-show='pantryOutdated.length === 0 && pantryTrackedCount === 0' class='empty-state' style='padding: 20px;'>No Pantry packages in this project</div>
 </div>
 
 <div x-show='desktopApps.length > 0' class='tbl-wrap'>
@@ -487,7 +254,7 @@
       </tr>
     </thead>
     <tbody>
-      <template x-for='app in filteredDesktopApps' :key='app.name'>
+      <template x-for='app in filteredDesktopApps()' :key='app.name'>
         <tr x-show="!isUpdated('app:' + app.name)" :style="app.updateAvailable ? '' : 'opacity: 0.7;'">
           <td>
             <span class='item-name' x-text='app.name'></span>
@@ -507,9 +274,13 @@
           </td>
           <td>
             <template x-if='app.updateAvailable && app.caskToken'>
-              <span>
-                <button class='btn btn-sm' x-show="!isUpdating('app:' + app.name)" @click='doAppUpdate(app.name, app.caskToken)'>Update</button>
-                <span class='dim' style='font-size: 11px;' x-show="isUpdating('app:' + app.name)">Updating...</span>
+              <span class='action-cell'>
+                <template x-if="isUpdating('app:' + app.name)">
+                  <span class='updating-label'>Updating…</span>
+                </template>
+                <template x-if="!isUpdating('app:' + app.name)">
+                  <button class='btn btn-sm' @click='doAppUpdate(app.name, app.caskToken)'>Update</button>
+                </template>
               </span>
             </template>
             <template x-if="app.source === 'mas' && app.updateAvailable">
@@ -531,7 +302,7 @@
   </table>
 </div>
 
-<div x-show='totalOutdated === 0' class='empty-state'>
+<div x-show='totalOutdated() === 0 && !loading' class='empty-state'>
   <div style='font-size: 32px; margin-bottom: 8px;'>&#10004;</div>
   Everything is up to date!
 </div>

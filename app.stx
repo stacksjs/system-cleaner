@@ -42,16 +42,39 @@
         <div id='sidebar-macos'></div>
       </div>
     </aside>
-    <main class='main'>
+    <main class='main' data-stx-content>
       <slot />
     </main>
   </div>
 </div>
+<script>window.__stxRouterConfig={container:'[data-stx-content]',viewTransitions:true,scrollToTop:true,prefetch:true};</script>
+<script src='/stx-router.js'></script>
+<script src='/disk-panel.js'></script>
 </template>
 
 <script client>
 (function() {
   document.title = 'SystemCleaner';
+
+  function updateSidebarNav() {
+    var path = window.location.pathname || '/';
+    document.querySelectorAll('.sidebar-nav a.nav-item[href]').forEach(function(a) {
+      var href = a.getAttribute('href') || '/';
+      var active = href === path || (href !== '/' && path.indexOf(href) === 0);
+      a.classList.toggle('active', active);
+    });
+  }
+  if (!window.__sidebarNavBound) {
+    window.__sidebarNavBound = true;
+    window.addEventListener('stx:load', updateSidebarNav);
+    window.addEventListener('popstate', updateSidebarNav);
+    document.addEventListener('click', function(e) {
+      var link = e.target.closest && e.target.closest('a[data-stx-link]');
+      if (link) queueMicrotask(updateSidebarNav);
+    });
+  }
+  updateSidebarNav();
+
   var u = document.getElementById('sidebar-user');
   var m = document.getElementById('sidebar-macos');
   if (!u || u.textContent) return;

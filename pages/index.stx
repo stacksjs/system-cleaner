@@ -22,33 +22,8 @@ const cpuLabel = cpuModel.split(' ').slice(0, 3).join(' ')
 const healthDasharray = String(2 * Math.PI * 40)
 </script>
 
-<div x-data="{
-  stats: null,
-  statsLoading: true,
-
-  init() {
-    var self = this;
-    fetch('/api/dashboard-stats', { method: 'POST' })
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        if (d.success) self.stats = d;
-        self.statsLoading = false;
-      })
-      .catch(function() { self.statsLoading = false; });
-  },
-
-  get healthScore() { return this.stats ? this.stats.healthScore : 75; },
-  get healthLabel() {
-    var s = this.healthScore;
-    return s >= 90 ? 'Excellent' : s >= 75 ? 'Good' : s >= 60 ? 'Fair' : s >= 40 ? 'Poor' : 'Critical';
-  },
-  get healthColor() {
-    var s = this.healthScore;
-    return s >= 90 ? '#34c759' : s >= 75 ? '#30d158' : s >= 60 ? '#ff9f0a' : '#ff453a';
-  },
-  get healthDashoffset() { return String(2 * Math.PI * 40 * (1 - this.healthScore / 100)); },
-  get processes() { return this.stats && this.stats.processes ? this.stats.processes.slice(0, 8) : []; }
-}">
+<script src='/dashboard-xdata.js'></script>
+<div x-data='dashboardXData()'>
 
 <div class='main-header'>
   <div class='main-title'>Dashboard</div>
@@ -57,12 +32,8 @@ const healthDasharray = String(2 * Math.PI * 40)
 <div class='main-content'>
   @include('DashboardCards')
 
-  <div x-data="{ pendingUpdates: null }" x-init="
-    (window.__updatesSummaryPromise || fetch('/api/updates-summary', { method: 'POST' }).then(function(r) { return r.json(); }))
-      .then(function(d) { pendingUpdates = d.success ? d.total : 0; })
-      .catch(function() { pendingUpdates = 0; });
-  " x-show='pendingUpdates !== null && pendingUpdates > 0' x-cloak style='margin-bottom: 20px;'>
-    <a href='/updates' data-stx-link class='card' style="display: flex; align-items: center; justify-content: space-between; text-decoration: none; color: inherit; border-color: rgba(255,159,10,0.25);'>
+  <div x-show='pendingUpdates != null && pendingUpdates' x-cloak style='margin-bottom: 20px;'>
+    <a href='/updates' data-stx-link class='card' style='display: flex; align-items: center; justify-content: space-between; text-decoration: none; color: inherit; border-color: rgba(255,159,10,0.25);'>
       <div>
         <div class='card-label'>Pending Updates</div>
         <div class='card-value' style='color: #ff9f0a;' x-text='pendingUpdates'></div>
@@ -72,6 +43,49 @@ const healthDasharray = String(2 * Math.PI * 40)
     </a>
   </div>
 
-  @include('TopProcesses')
+  <div class='tbl-wrap'>
+    <div class='tbl-bar'>
+      <div>
+        <span class='font-semibold text-sm'>Top Processes</span>
+        <span class='ml-2 text-[11px] text-text-dim'>by CPU usage</span>
+      </div>
+      <a class='no-underline btn btn-sm' href='/processes' data-stx-link>View All</a>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Process</th>
+          <th>PID</th>
+          <th>CPU</th>
+          <th>Memory</th>
+          <th>User</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr x-show='statsLoading'>
+          <td colspan='5' class='dim' style='text-align: center; padding: 16px;'>Loading processes...</td>
+        </tr>
+        <tr x-show='!statsLoading && !(stats && stats.processes && stats.processes.length)'>
+          <td colspan='5' class='empty-state'>No processes to show</td>
+        </tr>
+        <template x-for='proc in (stats && stats.processes ? stats.processes.slice(0, 8) : [])' :key='proc.id'>
+          <tr x-show='!statsLoading'>
+            <td><span class='font-medium' x-text='proc.name'></span></td>
+            <td class='font-mono text-[11px] text-text-dim' x-text='proc.pid'></td>
+            <td>
+              <div class='flex gap-1.5 items-center'>
+                <span class='text-[11px] min-w-[36px]' :class="cpuTextClass(proc.cpu)" x-text="proc.cpu.toFixed(1) + '%'"></span>
+                <div class='overflow-hidden flex-1 h-[3px] max-w-[60px] bg-bg-track rounded-[2px]'>
+                  <div class='h-full rounded-[2px]' :class="cpuBarClass(proc.cpu)" :style="cpuBarStyle(proc.cpu)"></div>
+                </div>
+              </div>
+            </td>
+            <td class='text-[11px]' x-text="proc.memMB + ' MB'"></td>
+            <td class='text-[11px] text-text-dim' x-text='proc.user'></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
 </div>
 </div>

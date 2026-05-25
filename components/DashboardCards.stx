@@ -12,7 +12,7 @@
             :stroke-dashoffset='healthDashoffset' />
         </svg>
         <div class='ring-text'>
-          <span class='ring-score' :style="'color: ' + healthColor" x-text='healthScore'></span>
+          <span class='ring-score' :style="healthScoreStyle()" x-text='healthScore'></span>
           <span class='ring-label' x-text='healthLabel'></span>
         </div>
       </div>
@@ -22,7 +22,7 @@
           Memory: {{ usedMemGB }} / {{ totalMemGB }} GB (<span x-text="stats ? stats.memPercent : {{ sMemPercent }}"></span>%)
         </div>
         <div style='display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px;' x-show='stats' x-cloak>
-          <span class='statusbar-dot' :style="'background: ' + (stats.dUsedPct > 90 ? '#ff453a' : stats.dUsedPct > 75 ? '#ff9f0a' : '#30d158')"></span>
+          <span class='statusbar-dot' :style="diskDotStyle(stats.dUsedPct)"></span>
           Disk: <span x-text='stats.diskUsed'></span> / <span x-text='stats.diskTotal'></span> (<span x-text='stats.diskAvail'></span> free)
         </div>
         <div style='display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px;' x-show='!stats'>
@@ -30,7 +30,7 @@
           Disk: loading...
         </div>
         <div style='display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px;' x-show='stats' x-cloak>
-          <span class='statusbar-dot' :style="'background: ' + (stats.enabledStartup > 30 ? '#ff453a' : stats.enabledStartup > 15 ? '#ff9f0a' : '#30d158')"></span>
+          <span class='statusbar-dot' :style="startupDotStyle(stats.enabledStartup)"></span>
           <span x-text="stats.enabledStartup + ' startup items active'"></span>
         </div>
         <div style='display: flex; align-items: center; gap: 6px; font-size: 12px;'>
@@ -60,7 +60,7 @@
     <div class='card-label'>Disk</div>
     <div class='card-value'><span x-text='stats.diskUsed'></span> <span style='font-size: 14px; color: #6c6c70;'>/ <span x-text='stats.diskTotal'></span></span></div>
     <div class='progress'>
-      <div class='progress-fill' :style="'width: ' + stats.dUsedPct + '%; background: ' + (stats.dUsedPct > 90 ? '#ff453a' : stats.dUsedPct > 75 ? '#ff9f0a' : '#30d158') + ';'"></div>
+      <div class='progress-fill' :style="diskProgressStyle(stats.dUsedPct)"></div>
     </div>
     <div class='card-detail'><span x-text='stats.diskAvail'></span> available</div>
   </div>

@@ -7,6 +7,7 @@ import {
   isNewerVersion,
   listApplicationEntries,
   readAppVersion,
+  stripAnsi,
   TtlCache,
   singleFlight,
 } from '@system-cleaner/core'
@@ -15,8 +16,9 @@ export interface UpdatesCheckResult {
   success: true
   brewFormulae: Array<{ name: string; current: string; latest: string; pinned: boolean }>
   brewCasks: Array<{ name: string; current: string; latest: string }>
-  pantryOutdated: Array<{ name: string; current: string; latest: string }>
+  pantryOutdated: Array<{ name: string; current: string; wanted: string; latest: string }>
   pantryPackages: string[]
+  pantryTrackedCount: number
   desktopApps: Array<{
     name: string
     version: string
@@ -143,6 +145,53 @@ function appNameToCaskSlug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(?:^-+|-+$)/g, '')
 }
 
+function getPantryTrackedFromLock(cwd = process.cwd()): { count: number; names: string[] } {
+  const lockPath = path.join(cwd, 'pantry.lock')
+  if (!fs.existsSync(lockPath))
+    return { count: 0, names: [] }
+  try {
+    const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8')) as {
+      workspaces?: Record<string, { dependencies?: Record<string, string>; devDependencies?: Record<string, string> }>
+    }
+    const root = lock.workspaces?.['']
+    if (!root)
+      return { count: 0, names: [] }
+    const names = [
+      ...Object.keys(root.dependencies || {}),
+      ...Object.keys(root.devDependencies || {}),
+    ]
+    return { count: names.length, names }
+  }
+  catch {
+    return { count: 0, names: [] }
+  }
+}
+
+function parsePantryOutdated(stdout: string): UpdatesCheckResult['pantryOutdated'] {
+  const pantryOutdated: UpdatesCheckResult['pantryOutdated'] = []
+  const lines = stdout.split('\n')
+  let inTable = false
+  for (const rawLine of lines) {
+    const line = stripAnsi(rawLine).trim()
+    if (line.startsWith('---')) {
+      inTable = true
+      continue
+    }
+    if (!inTable || !line || line.startsWith('Legend') || line.startsWith('Found') || line.startsWith('Checking'))
+      continue
+    const parts = line.split(/\s{2,}/).map(p => p.trim()).filter(Boolean)
+    if (parts.length >= 4) {
+      pantryOutdated.push({
+        name: parts[0],
+        current: parts[1].replace(/^["']|["']$/g, ''),
+        wanted: parts[2].replace(/^["']|["']$/g, ''),
+        latest: parts[3],
+      })
+    }
+  }
+  return pantryOutdated
+}
+
 async function isMasInstalled(): Promise<boolean> {
   const cached = masAvailableCache.get('mas')
   if (cached !== undefined) return cached
@@ -210,15 +259,7 @@ async function performUpdatesCheck(fullScan: boolean, tier: UpdatesTier): Promis
   const [brewJson, pantryResult, pantryPkgs, systemUpdates, brewCaskList, masResult] = await Promise.all([
     getBrewOutdatedJson(),
     exec('pantry outdated 2>/dev/null', { timeout: 10_000 }),
-    (async () => {
-      try {
-        const globalDir = path.join(HOME, '.pantry/global/packages')
-        return fs.existsSync(globalDir) ? fs.readdirSync(globalDir) : []
-      }
-      catch {
-        return [] as string[]
-      }
-    })(),
+    Promise.resolve(getPantryTrackedFromLock()),
     checkSoftwareUpdates({ fullScan }),
     skipDesktop ? Promise.resolve('') : getBrewCaskList(),
     skipDesktop
@@ -255,26 +296,17 @@ async function performUpdatesCheck(fullScan: boolean, tier: UpdatesTier): Promis
     catch {}
   }
 
-  const pantryOutdated: UpdatesCheckResult['pantryOutdated'] = []
-  if (pantryResult.ok && pantryResult.stdout) {
-    const lines = pantryResult.stdout.split('\n')
-    let inTable = false
-    for (const line of lines) {
-      if (line.startsWith('---')) {
-        inTable = true
-        continue
-      }
-      if (!inTable || !line.trim() || line.startsWith('Legend') || line.startsWith('Found')) continue
-      const parts = line.trim().split(/\s{2,}/)
-      if (parts.length >= 4) {
-        pantryOutdated.push({
-          name: parts[0].replace(/\u001b\[\d+m/g, '').trim(),
-          current: parts[1].replace(/"/g, '').trim(),
-          latest: parts[3].trim(),
-        })
-      }
-    }
-  }
+  const pantryOutdated = pantryResult.ok && pantryResult.stdout
+    ? parsePantryOutdated(pantryResult.stdout)
+    : []
+  const pantryTracked = typeof pantryPkgs === 'object' && pantryPkgs !== null && 'names' in pantryPkgs
+    ? pantryPkgs as { count: number; names: string[] }
+    : { count: 0, names: [] as string[] }
+  const checkingMatch = pantryResult.stdout?.match(/Checking (\d+) packages/)
+  const pantryTrackedCount = checkingMatch
+    ? Math.max(pantryTracked.count, Number.parseInt(checkingMatch[1], 10) || 0)
+    : pantryTracked.count
+  const pantryPackageNames = pantryTracked.names
 
   const systemOutdated = systemUpdates.updates
 
@@ -284,7 +316,8 @@ async function performUpdatesCheck(fullScan: boolean, tier: UpdatesTier): Promis
       brewFormulae,
       brewCasks,
       pantryOutdated,
-      pantryPackages: pantryPkgs,
+      pantryPackages: pantryPackageNames,
+      pantryTrackedCount,
       desktopApps: [],
       desktopOutdated: [],
       systemUpdates: systemOutdated,
@@ -405,7 +438,8 @@ async function performUpdatesCheck(fullScan: boolean, tier: UpdatesTier): Promis
     brewFormulae,
     brewCasks,
     pantryOutdated,
-    pantryPackages: pantryPkgs,
+    pantryPackages: pantryPackageNames,
+    pantryTrackedCount,
     desktopApps,
     desktopOutdated,
     systemUpdates: systemOutdated,
@@ -418,44 +452,53 @@ async function performUpdatesCheck(fullScan: boolean, tier: UpdatesTier): Promis
   }
 }
 
+function countOutdatedFromCheck(check: UpdatesCheckResult): number {
+  return check.systemUpdateCount
+    + check.brewFormulae.length
+    + check.brewCasks.length
+    + check.pantryOutdated.length
+    + check.desktopOutdated.length
+}
+
 export async function getUpdatesSummary(): Promise<{
   success: true
   total: number
   systemCount: number
   brewCount: number
   pantryCount: number
+  desktopCount: number
   clToolsCount: number
   macosCount: number
   cached: boolean
 }> {
-  const cached = quickTierCache.get('tier-quick') || responseCache.get('quick')
+  const cached = responseCache.get('quick')
+    || quickTierCache.get('tier-quick')
+    || fullScanCache.get('full')
   if (cached) {
     return {
       success: true,
-      total: cached.systemUpdateCount + cached.brewFormulae.length + cached.brewCasks.length + cached.pantryOutdated.length,
+      total: countOutdatedFromCheck(cached),
       systemCount: cached.systemUpdateCount,
       brewCount: cached.brewFormulae.length + cached.brewCasks.length,
       pantryCount: cached.pantryOutdated.length,
+      desktopCount: cached.desktopOutdated.length,
       clToolsCount: cached.systemUpdates.filter(u => u.kind === 'cltools').length,
       macosCount: cached.systemUpdates.filter(u => u.kind === 'macos').length,
       cached: true,
     }
   }
 
-  const [check, brewResult] = await Promise.all([
-    runUpdatesCheck(false, false, 'quick'),
-    exec('brew outdated 2>/dev/null | wc -l', { timeout: 60_000 }),
-  ])
-
-  const brewFromWc = brewResult.ok ? Number.parseInt(brewResult.stdout.trim(), 10) || 0 : 0
-  const brewCount = (check.brewFormulae.length + check.brewCasks.length) || brewFromWc
+  const check = await runUpdatesCheck(false, false, 'quick')
+  const fullHit = responseCache.get('quick')
+  const desktopCount = fullHit?.desktopOutdated.length ?? 0
 
   return {
     success: true,
-    total: check.systemUpdateCount + brewCount + check.pantryOutdated.length,
+    total: countOutdatedFromCheck(check) + desktopCount,
     systemCount: check.systemUpdateCount,
-    brewCount,
+    brewCount: check.brewFormulae.length + check.brewCasks.length,
     pantryCount: check.pantryOutdated.length,
+    desktopCount,
     clToolsCount: check.systemUpdates.filter(u => u.kind === 'cltools').length,
     macosCount: check.systemUpdates.filter(u => u.kind === 'macos').length,
     cached: check.cached,

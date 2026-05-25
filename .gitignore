@@ -9,3 +9,4 @@ pantry
 # tracked source. Same with any other build output that lands here.
 dist/
 **/dist/
+/.screenshots

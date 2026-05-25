@@ -119,6 +119,11 @@ export function formatRate(bytesPerSec: number): string {
   return `${formatBytes(bytesPerSec)}/s`
 }
 
+/** Remove ANSI color / style escape sequences from terminal output. */
+export function stripAnsi(str: string): string {
+  return str.replace(/\u001B\[[0-9;]*m/g, '')
+}
+
 /**
  * Escape a string for safe display in HTML
  */

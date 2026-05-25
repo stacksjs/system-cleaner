@@ -12,6 +12,7 @@
     "native": "stx dev pages/index.stx --native",
     "cli": "bun run packages/cli/bin/system-cleaner.ts",
     "shoot": "bun ./scripts/shoot.ts",
+    "e2e:webview": "bun ./scripts/e2e-webview.ts",
     "dev:docs": "bunpress dev docs",
     "build:docs": "bunpress build docs",
     "preview:docs": "bunpress preview docs",
@@ -21,8 +22,9 @@
     "test": "bun test packages test/smoke.test.ts"
   },
   "dependencies": {
-    "@stacksjs/bun-router": "^0.0.14",
+    "@stacksjs/bun-router": "^0.0.15",
     "@stacksjs/stx": "0.2.48",
+    "stx-router": "0.2.48",
     "bun-plugin-stx": "^0.2.47",
     "@system-cleaner/core": "workspace:*",
     "@system-cleaner/clean": "workspace:*",

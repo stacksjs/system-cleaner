@@ -134,10 +134,13 @@ if (fresh) {
 // clone won't have it. Fall back to the bun-hoisted node_modules copy
 // before giving up. Last resort: trust PATH.
 function resolveStxCommand(): { cmd: string, args: string[] } {
+  // Prefer node_modules over pantry/ — pantry symlinks are machine-local and
+  // often miss hoisted deps like stx-router after a fresh `bun install`.
   const candidates = [
-    path.join(CWD, 'pantry/@stacksjs/stx/dist/cli.js'),
-    path.join(CWD, 'node_modules/.bun/node_modules/@stacksjs/stx/dist/cli.js'),
+    path.join(CWD, '../../Tools/stx/packages/stx/dist/cli.js'),
     path.join(CWD, 'node_modules/@stacksjs/stx/dist/cli.js'),
+    path.join(CWD, 'node_modules/.bun/node_modules/@stacksjs/stx/dist/cli.js'),
+    path.join(CWD, 'pantry/@stacksjs/stx/dist/cli.js'),
   ]
   for (const c of candidates) {
     try {

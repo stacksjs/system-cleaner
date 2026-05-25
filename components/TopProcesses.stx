@@ -1,7 +1,12 @@
 <!--
   Top processes quick view on dashboard.
+  Keep x-data / x-init single-line — multiline attrs break when @include'd in STX.
 -->
-<div class='tbl-wrap'>
+<div
+  class='tbl-wrap'
+  x-data='{ stats: null, statsLoading: true }'
+  x-init='var self = this; var load = window.__dashboardStatsPromise || fetch("/api/dashboard-stats", { method: "POST" }).then(function(r) { return r.json(); }); window.__dashboardStatsPromise = load; load.then(function(d) { if (d.success) self.stats = d; self.statsLoading = false; }).catch(function() { self.statsLoading = false; });'
+>
   <div class='tbl-bar'>
     <div>
       <span class='font-semibold text-sm'>Top Processes</span>
@@ -23,7 +28,10 @@
       <tr x-show='statsLoading'>
         <td colspan='5' class='dim' style='text-align: center; padding: 16px;'>Loading processes...</td>
       </tr>
-      <template x-for='proc in processes' :key='proc.id'>
+      <tr x-show='!statsLoading && !(stats && stats.processes && stats.processes.length)'>
+        <td colspan='5' class='empty-state'>No processes to show</td>
+      </tr>
+      <template x-for='proc in (stats && stats.processes ? stats.processes.slice(0, 8) : [])' :key='proc.id'>
         <tr x-show='!statsLoading'>
           <td><span class='font-medium' x-text='proc.name'></span></td>
           <td class='font-mono text-[11px] text-text-dim' x-text='proc.pid'></td>

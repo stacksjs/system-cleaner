@@ -1,14 +1,13 @@
 import type { StxOptions } from '@stacksjs/stx'
-import { Router } from '@stacksjs/bun-router'
+import path from 'node:path'
+import { apiRouter } from './api-router.ts'
 
-const router = new Router() as Router & { _initApiRoutes: () => Promise<void> }
-// eslint-disable-next-line ts/no-top-level-await
-await router._initApiRoutes()
+const appRoot = import.meta.dir
 
 const config: StxOptions = {
-  componentsDir: 'components',
-  partialsDir: 'components',
-  layoutsDir: 'layouts',
+  componentsDir: path.join(appRoot, 'components'),
+  partialsDir: path.join(appRoot, 'components'),
+  layoutsDir: path.join(appRoot, 'layouts'),
   // STX types want a string layout name; `false` is supported at runtime to
   // mean "no auto-wrap" but isn't in the published types yet.
   defaultLayout: false as unknown as string,
@@ -20,7 +19,15 @@ const config: StxOptions = {
     port: 6001,
   },
 
-  apiRouter: router,
+  apiRouter,
+
+  router: {
+    enabled: true,
+    container: '[data-stx-content]',
+    viewTransitions: true,
+    scrollToTop: true,
+    prefetch: true,
+  },
 }
 
 export default config
