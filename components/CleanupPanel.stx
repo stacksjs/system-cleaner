@@ -3,12 +3,12 @@
   <div class='card' style='grid-column: span 2;'>
     <div class='card-label'>Space Recoverable</div>
     <div class='card-value' style='color: #30d158;' id='total-cleanable'>Scanning...</div>
-    <div class='card-detail'><span x-text='cleanCategories.length'></span> cleanable categories found</div>
+    <div class='card-detail'><span>{{ cleanCategories.length }}</span> cleanable categories found</div>
   </div>
   <div class='card'>
     <div class='card-label'>Disk Free</div>
-    <div class='card-value' x-text='diskAvail'></div>
-    <div class='card-detail'><span x-text='diskPercent'></span>% used</div>
+    <div class='card-value'>{{ diskAvail }}</div>
+    <div class='card-detail'><span>{{ diskPercent }}</span>% used</div>
   </div>
 </div>
 
@@ -50,11 +50,11 @@
           <tr :data-clean-id="cat.id" :data-clean-path="cat.path">
             <td><input type='checkbox' class='check' :checked="isOn(cat.id)" @click="toggle(cat.id)" /></td>
             <td>
-              <div><span style='margin-right: 4px;' x-text='cat.icon'></span><span class='item-name' x-text='cat.name'></span></div>
-              <div class='item-sub' x-text='cat.desc'></div>
+              <div><span style='margin-right: 4px;'>{{ cat.icon }}</span><span class='item-name'>{{ cat.name }}</span></div>
+              <div class='item-sub'>{{ cat.desc }}</div>
             </td>
             <td class='clean-size' style='font-weight: 600; font-variant-numeric: tabular-nums; color: #6c6c70;'>...</td>
-            <td><div class="item-path" :title="cat.path" x-text="shortPath(cat.path)"></div></td>
+            <td><div class="item-path" :title="cat.path">{{ shortPath(cat.path) }}</div></td>
             <td>
               <button class='btn btn-danger btn-sm'
                 :disabled="cleaning[cat.id]"

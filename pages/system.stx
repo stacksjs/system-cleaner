@@ -133,9 +133,9 @@
   <div class='main-subtitle'>
     <span x-show='loading'>Loading apps...</span>
     <span x-show='!loading' x-cloak>
-      <span x-text="apps.length + ' apps'"></span>
+      <span>{{ apps.length + ' apps' }}</span>
       <span x-show='sizesLoading'> · sizing...</span>
-      <span x-show='!sizesLoading' x-cloak x-text="' · ' + fmtSize(totalSize) + ' total'"></span>
+      <span x-show='!sizesLoading' x-cloak>{{ ' · ' + fmtSize(totalSize) + ' total' }}</span>
     </span>
   </div>
 </div>
@@ -155,8 +155,8 @@
         <div x-show='loading' style='padding: 20px; text-align: center; color: #6c6c70; font-size: 12px;'>Scanning apps...</div>
         <template x-for='app in filteredApps' :key='app.name'>
           <div class='app-row'>
-            <span class='app-row-name' x-text='app.name'></span>
-            <span class='app-row-size' x-text='fmtSize(app.sizeBytes)'></span>
+            <span class='app-row-name'>{{ app.name }}</span>
+            <span class='app-row-size'>{{ fmtSize(app.sizeBytes) }}</span>
           </div>
         </template>
       </div>
@@ -169,25 +169,25 @@
           <div>
             <div class='disk-card-title'>Macintosh HD</div>
           </div>
-          <div class='disk-card-pct' x-text="disk ? disk.fDiskPct + '% full' : '...'"></div>
+          <div class='disk-card-pct'>{{ disk ? disk.fDiskPct + '% full' : '...' }}</div>
         </div>
         <div class='disk-card-meta'>
           <div class='disk-card-row'>Location: <strong>/</strong></div>
-          <div class='disk-card-row'>Available: <strong x-text="disk ? disk.fDiskFree : '...'"></strong></div>
-          <div class='disk-card-row' x-show='disk && disk.diskPurgeable > 0' x-cloak>Purgeable: <strong x-text="disk.fDiskPurgeable"></strong></div>
+          <div class='disk-card-row'>Available: <strong>{{ disk ? disk.fDiskFree : '...' }}</strong></div>
+          <div class='disk-card-row' x-show='disk && disk.diskPurgeable > 0' x-cloak>Purgeable: <strong>{{ disk.fDiskPurgeable }}</strong></div>
         </div>
         <div class='disk-bar-wrap'>
-          <span class='disk-bar-label' x-text="disk ? disk.fDiskUsed : '...'"></span>
+          <span class='disk-bar-label'>{{ disk ? disk.fDiskUsed : '...' }}</span>
           <div class='disk-bar-track'>
             <div class='disk-bar-fill' :style="disk ? disk.fDiskBarStyle : 'width: 0%'"></div>
           </div>
-          <span class='disk-bar-label' x-text="disk ? disk.fDiskTotal : '...'"></span>
+          <span class='disk-bar-label'>{{ disk ? disk.fDiskTotal : '...' }}</span>
         </div>
         <div class='disk-card-footer'>
           <div class='disk-card-stat-row'>
             <div class='disk-card-stat'>Apps: <span x-text="loading ? '...' : fmtSize(totalSize)">...</span></div>
-            <div class='disk-card-stat'>Free: <strong x-text="disk ? disk.fDiskFree : '...'"></strong></div>
-            <div class='disk-card-stat'>Used: <strong x-text="disk ? disk.fDiskUsed : '...'"></strong></div>
+            <div class='disk-card-stat'>Free: <strong>{{ disk ? disk.fDiskFree : '...' }}</strong></div>
+            <div class='disk-card-stat'>Used: <strong>{{ disk ? disk.fDiskUsed : '...' }}</strong></div>
           </div>
         </div>
       </div>

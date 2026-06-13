@@ -2,23 +2,23 @@
 <div class='card-row'>
   <div class='card'>
     <div class='card-label'>Processes</div>
-    <div class='card-value' style='color: #ff453a;' x-text='processes.length'></div>
+    <div class='card-value' style='color: #ff453a;'>{{ processes.length }}</div>
     <div class='card-detail'>Above threshold</div>
   </div>
   <div class='card'>
     <div class='card-label'>Total CPU</div>
-    <div class='card-value' x-text="totalCPU.toFixed(0) + '%'"></div>
+    <div class='card-value'>{{ totalCPU.toFixed(0) + '%' }}</div>
     <div class='card-detail'>All processes combined</div>
   </div>
   <div class='card'>
     <div class='card-label'>Process Memory</div>
-    <div class='card-value' x-text="(totalMemUsed / 1000).toFixed(1) + ' GB'"></div>
-    <div class='card-detail' x-text="processes.length + ' processes'"></div>
+    <div class='card-value'>{{ (totalMemUsed / 1000).toFixed(1) + ' GB' }}</div>
+    <div class='card-detail'>{{ processes.length + ' processes' }}</div>
   </div>
   <div class='card'>
     <div class='card-label'>System</div>
-    <div class='card-value' x-text='processes.filter(p => p.isSystem).length'></div>
-    <div class='card-detail' x-text="'vs ' + processes.filter(p => !p.isSystem).length + ' user'"></div>
+    <div class='card-value'>{{ processes.filter(p => p.isSystem).length }}</div>
+    <div class='card-detail'>{{ 'vs ' + processes.filter(p => !p.isSystem).length + ' user' }}</div>
   </div>
 </div>
 
@@ -29,7 +29,7 @@
       <span class='tbl-count'>sorted by CPU</span>
       <span class='live-indicator' :class="wsConnected ? 'connected' : 'disconnected'">
         <span class='live-dot'></span>
-        <span x-text="wsConnected ? 'Live' : 'Reconnecting'"></span>
+        <span>{{ wsConnected ? 'Live' : 'Reconnecting' }}</span>
       </span>
     </div>
     <!-- Bulk kill is hidden until it's wired to /api/kill-process for each
@@ -61,24 +61,23 @@
               @click="toggle(p.id)" />
           </td>
           <td>
-            <div class="item-name" x-text="p.name"></div>
-            <div class="item-path" :title="p.fullCommand" x-text="p.fullCommand"></div>
+            <div class="item-name">{{ p.name }}</div>
+            <div class="item-path" :title="p.fullCommand">{{ p.fullCommand }}</div>
           </td>
-          <td class="dim mono" style="font-size: 11px;" x-text="p.pid"></td>
+          <td class="dim mono" style="font-size: 11px;">{{ p.pid }}</td>
           <td>
             <div class="cpu-bar">
               <span
-                :style="'font-size:11px;font-weight:500;min-width:36px;' + (p.cpu > 50 ? 'color:#ff453a;' : p.cpu > 20 ? 'color:#ff9f0a;' : '')"
-                x-text="p.cpu.toFixed(1) + '%'"></span>
+                :style="'font-size:11px;font-weight:500;min-width:36px;' + (p.cpu > 50 ? 'color:#ff453a;' : p.cpu > 20 ? 'color:#ff9f0a;' : '')">{{ p.cpu.toFixed(1) + '%' }}</span>
               <div class="cpu-track">
                 <div class="cpu-fill"
                   :style="'width:' + Math.min(100, p.cpu) + '%;background:' + (p.cpu > 50 ? '#ff453a' : p.cpu > 20 ? '#ff9f0a' : '#30d158') + ';'"></div>
               </div>
             </div>
           </td>
-          <td style="font-size: 11px;" x-text="p.memMB + ' MB'"></td>
+          <td style="font-size: 11px;">{{ p.memMB + ' MB' }}</td>
           <td>
-            <span :class="'badge ' + (p.isSystem ? 'badge-orange' : 'badge-green')" x-text="p.user"></span>
+            <span :class="'badge ' + (p.isSystem ? 'badge-orange' : 'badge-green')">{{ p.user }}</span>
           </td>
           <td>
             <template x-if="p.isSystem">

@@ -3,7 +3,7 @@
 
 <div class='toast-area'>
   <template x-for='t in toasts' :key='t.id'>
-    <div class='toast' x-text="(t.type === 'success' ? '\u2713' : t.type === 'error' ? '\u2715' : '\u26A0') + ' ' + t.msg"></div>
+    <div class='toast'>{{ (t.type === 'success' ? '\u2713' : t.type === 'error' ? '\u2715' : '\u26A0') + ' ' + t.msg }}</div>
   </template>
 </div>
 
@@ -13,7 +13,7 @@
       <div class='main-title'>Updates</div>
       <div class='main-subtitle'>
         <span x-show='loading'>Checking for updates...</span>
-        <span x-show='!loading' x-cloak x-text="totalOutdated() + ' outdated item' + (totalOutdated() !== 1 ? 's' : '') + ' found'"></span>
+        <span x-show='!loading' x-cloak>{{ totalOutdated() + ' outdated item' + (totalOutdated() !== 1 ? 's' : '') + ' found' }}</span>
       </div>
     </div>
     <div x-show='!loading' x-cloak style='display: flex; gap: 6px; flex-shrink: 0;'>
@@ -33,27 +33,27 @@
 <div class='card-row'>
   <div class='card'>
     <div class='card-label'>System</div>
-    <div class='card-value' :style="systemOutdatedCount() > 0 ? 'color: #ff9f0a' : 'color: #30d158'" x-text="systemOutdatedCount()"></div>
+    <div class='card-value' :style="systemOutdatedCount() > 0 ? 'color: #ff9f0a' : 'color: #30d158'">{{ systemOutdatedCount() }}</div>
     <div class='card-detail'>
-      <span x-show='macosVersion' x-text="'macOS ' + macosVersion"></span>
-      <span x-show='clToolsInfo.version' x-text="(macosVersion ? ' \u00B7 ' : '') + 'CLT ' + clToolsInfo.version"></span>
+      <span x-show='macosVersion'>{{ 'macOS ' + macosVersion }}</span>
+      <span x-show='clToolsInfo.version'>{{ (macosVersion ? ' \u00B7 ' : '') + 'CLT ' + clToolsInfo.version }}</span>
       <span x-show='updateScanCached' style='display: block; margin-top: 2px;'>cached scan</span>
     </div>
   </div>
   <div class='card'>
     <div class='card-label'>Homebrew</div>
-    <div class='card-value' :style="brewTotal() > 0 ? 'color: #ff9f0a' : 'color: #30d158'" x-text="brewTotal()"></div>
-    <div class='card-detail' x-text="brewFormulae.length + ' formulae \u00B7 ' + brewCasks.length + ' casks'"></div>
+    <div class='card-value' :style="brewTotal() > 0 ? 'color: #ff9f0a' : 'color: #30d158'">{{ brewTotal() }}</div>
+    <div class='card-detail'>{{ brewFormulae.length + ' formulae \u00B7 ' + brewCasks.length + ' casks' }}</div>
   </div>
   <div class='card'>
     <div class='card-label'>Pantry</div>
-    <div class='card-value' :style="pantryOutdated.length > 0 ? 'color: #ff9f0a' : 'color: #30d158'" x-text="pantryOutdated.length"></div>
-    <div class='card-detail' x-text="pantryTrackedCount + ' package' + (pantryTrackedCount !== 1 ? 's' : '') + ' tracked'"></div>
+    <div class='card-value' :style="pantryOutdated.length > 0 ? 'color: #ff9f0a' : 'color: #30d158'">{{ pantryOutdated.length }}</div>
+    <div class='card-detail'>{{ pantryTrackedCount + ' package' + (pantryTrackedCount !== 1 ? 's' : '') + ' tracked' }}</div>
   </div>
   <div class='card'>
     <div class='card-label'>Desktop Apps</div>
-    <div class='card-value' :style="desktopOutdated.length > 0 ? 'color: #ff9f0a' : 'color: #30d158'" x-text="desktopOutdated.length"></div>
-    <div class='card-detail' x-text="desktopApps.length + ' app' + (desktopApps.length !== 1 ? 's' : '') + ' scanned'"></div>
+    <div class='card-value' :style="desktopOutdated.length > 0 ? 'color: #ff9f0a' : 'color: #30d158'">{{ desktopOutdated.length }}</div>
+    <div class='card-detail'>{{ desktopApps.length + ' app' + (desktopApps.length !== 1 ? 's' : '') + ' scanned' }}</div>
   </div>
 </div>
 
@@ -61,7 +61,7 @@
   <div class='tbl-bar'>
     <div>
       <span class='tbl-title'>macOS &amp; System Updates</span>
-      <span class='tbl-count' x-show='systemOutdatedCount() > 0' x-text="systemOutdatedCount() + ' available'"></span>
+      <span class='tbl-count' x-show='systemOutdatedCount() > 0'>{{ systemOutdatedCount() + ' available' }}</span>
       <span class='tbl-count' x-show='systemOutdatedCount() === 0'>up to date</span>
     </div>
     <div style='display: flex; gap: 6px;'>
@@ -83,14 +83,14 @@
       <tbody>
         <template x-for='upd in systemUpdates' :key='upd.label'>
           <tr>
-            <td><span class='item-name' x-text='upd.title'></span></td>
-            <td><span class='badge' :class="kindBadgeClass(upd.kind)" x-text="kindLabel(upd.kind)"></span></td>
-            <td class='mono' style='font-size: 11px; color: #30d158;' x-text='upd.version'></td>
-            <td class='dim mono' style='font-size: 11px;' x-text='upd.sizeLabel'></td>
+            <td><span class='item-name'>{{ upd.title }}</span></td>
+            <td><span class='badge' :class="kindBadgeClass(upd.kind)">{{ kindLabel(upd.kind) }}</span></td>
+            <td class='mono' style='font-size: 11px; color: #30d158;'>{{ upd.version }}</td>
+            <td class='dim mono' style='font-size: 11px;'>{{ upd.sizeLabel }}</td>
             <td>
               <span class='badge badge-orange' style='font-size: 9px; margin-right: 4px;' x-show='upd.restartRequired'>Restart</span>
               <span class='badge badge-green' style='font-size: 9px;' x-show='upd.recommended'>Recommended</span>
-              <span x-show='upd.kind === "cltools" && clToolsInfo.version' class='dim' style='font-size: 10px; display: block; margin-top: 2px;' x-text="'Installed: ' + clToolsInfo.version"></span>
+              <span x-show='upd.kind === "cltools" && clToolsInfo.version' class='dim' style='font-size: 10px; display: block; margin-top: 2px;'>{{ 'Installed: ' + clToolsInfo.version }}</span>
             </td>
             <td>
               <button class='btn btn-sm' @click='openSystemSettings()'>Install</button>
@@ -102,7 +102,7 @@
   </div>
   <div x-show='systemOutdatedCount() === 0' class='empty-state' style='padding: 20px;'>
     <div style='font-size: 13px; color: #30d158; margin-bottom: 4px;'>&#10004; No pending macOS or system updates</div>
-    <div class='dim' style='font-size: 11px;' x-show='clToolsInfo.version' x-text="'Command Line Tools ' + clToolsInfo.version + ' installed'"></div>
+    <div class='dim' style='font-size: 11px;' x-show='clToolsInfo.version'>{{ 'Command Line Tools ' + clToolsInfo.version + ' installed' }}</div>
     <div class='dim' style='font-size: 11px; margin-top: 4px;' x-show='updateScanCached'>Use Deep Scan for a fresh Apple catalog check</div>
   </div>
 </div>
@@ -111,8 +111,8 @@
   <div class='tbl-bar'>
     <div>
       <span class='tbl-title'>Homebrew</span>
-      <span class='tbl-count' x-text="brewTotal() + ' outdated'"></span>
-      <span class='tbl-count' x-show='selected.length > 0' x-text="' \u00B7 ' + selected.length + ' selected'"></span>
+      <span class='tbl-count'>{{ brewTotal() + ' outdated' }}</span>
+      <span class='tbl-count' x-show='selected.length > 0'>{{ ' \u00B7 ' + selected.length + ' selected' }}</span>
     </div>
     <div style='display: flex; gap: 6px;'>
       <button class='btn btn-sm' x-show='selected.length > 0' @click='doUpdateSelected()'>
@@ -136,10 +136,10 @@
       <template x-for='pkg in brewCasks' :key="'cask:' + pkg.name">
         <tr x-show="!isUpdated('cask:' + pkg.name)">
           <td><input type='checkbox' class='check' :checked="isOn('cask:' + pkg.name)" @click="toggle('cask:' + pkg.name)" /></td>
-          <td><span class='item-name' x-text='pkg.name'></span></td>
+          <td><span class='item-name'>{{ pkg.name }}</span></td>
           <td><span class='badge badge-purple'>Cask</span></td>
-          <td class='dim mono' style='font-size: 11px;' x-text='pkg.current'></td>
-          <td><span class='mono' style='font-size: 11px; color: #30d158;' x-text='pkg.latest'></span></td>
+          <td class='dim mono' style='font-size: 11px;'>{{ pkg.current }}</td>
+          <td><span class='mono' style='font-size: 11px; color: #30d158;'>{{ pkg.latest }}</span></td>
           <td class='action-cell'>
             <template x-if="isUpdating('cask:' + pkg.name)">
               <span class='updating-label'>Updating…</span>
@@ -154,12 +154,12 @@
         <tr x-show='!isUpdated(pkg.name)'>
           <td><input type='checkbox' class='check' :checked='isOn(pkg.name)' @click='toggle(pkg.name)' /></td>
           <td>
-            <span class='item-name' x-text='pkg.name'></span>
+            <span class='item-name'>{{ pkg.name }}</span>
             <span class='badge badge-gray' style='margin-left: 4px;' x-show='pkg.pinned'>pinned</span>
           </td>
           <td><span class='badge badge-green'>Formula</span></td>
-          <td class='dim mono' style='font-size: 11px;' x-text='pkg.current'></td>
-          <td><span class='mono' style='font-size: 11px; color: #30d158;' x-text='pkg.latest'></span></td>
+          <td class='dim mono' style='font-size: 11px;'>{{ pkg.current }}</td>
+          <td><span class='mono' style='font-size: 11px; color: #30d158;'>{{ pkg.latest }}</span></td>
           <td>
             <template x-if='pkg.pinned'>
               <span class='dim' style='font-size: 10px;'>Pinned</span>
@@ -185,7 +185,7 @@
   <div class='tbl-bar'>
     <div>
       <span class='tbl-title'>Pantry</span>
-      <span class='tbl-count' x-show='pantryOutdated.length > 0' x-text="pantryOutdated.length + ' outdated'"></span>
+      <span class='tbl-count' x-show='pantryOutdated.length > 0'>{{ pantryOutdated.length + ' outdated' }}</span>
       <span class='tbl-count' x-show='pantryOutdated.length === 0'>all up to date</span>
     </div>
   </div>
@@ -203,10 +203,10 @@
       <tbody>
         <template x-for='pkg in pantryOutdated' :key='pkg.name'>
           <tr x-show="!isUpdated('pantry:' + pkg.name)">
-            <td><span class='item-name' x-text='pkg.name'></span></td>
-            <td class='dim mono' style='font-size: 11px;' x-text='pkg.current'></td>
-            <td class='dim mono' style='font-size: 11px;' x-text='pkg.wanted'></td>
-            <td><span class='mono' style='font-size: 11px; color: #30d158;' x-text='pkg.latest'></span></td>
+            <td><span class='item-name'>{{ pkg.name }}</span></td>
+            <td class='dim mono' style='font-size: 11px;'>{{ pkg.current }}</td>
+            <td class='dim mono' style='font-size: 11px;'>{{ pkg.wanted }}</td>
+            <td><span class='mono' style='font-size: 11px; color: #30d158;'>{{ pkg.latest }}</span></td>
             <td class='action-cell'>
               <template x-if="isUpdating('pantry:' + pkg.name)">
                 <span class='updating-label'>Updating…</span>
@@ -223,7 +223,7 @@
   <div x-show='pantryOutdated.length === 0 && pantryPackages.length > 0' style='padding: 12px 16px;'>
     <div style='display: flex; flex-wrap: wrap; gap: 6px;'>
       <template x-for='pkg in pantryPackages' :key='pkg'>
-        <span class='badge badge-green' x-text='pkg'></span>
+        <span class='badge badge-green'>{{ pkg }}</span>
       </template>
     </div>
   </div>
@@ -234,12 +234,12 @@
   <div class='tbl-bar'>
     <div>
       <span class='tbl-title'>Desktop Apps</span>
-      <span class='tbl-count' x-show='desktopOutdated.length > 0' x-text="desktopOutdated.length + ' update' + (desktopOutdated.length !== 1 ? 's' : '') + ' available'"></span>
-      <span class='tbl-count' x-show='desktopOutdated.length === 0' x-text="desktopApps.length + ' apps'"></span>
+      <span class='tbl-count' x-show='desktopOutdated.length > 0'>{{ desktopOutdated.length + ' update' + (desktopOutdated.length !== 1 ? 's' : '') + ' available' }}</span>
+      <span class='tbl-count' x-show='desktopOutdated.length === 0'>{{ desktopApps.length + ' apps' }}</span>
     </div>
     <div style='display: flex; gap: 4px;'>
-      <button class='btn btn-sm' :class="{ 'btn-active': appFilter === 'all' }" @click="appFilter = 'all'" x-text="'All (' + desktopApps.length + ')'"></button>
-      <button class='btn btn-sm' x-show='desktopOutdated.length > 0' :class="{ 'btn-active': appFilter === 'outdated' }" @click="appFilter = 'outdated'" x-text="'Outdated (' + desktopOutdated.length + ')'"></button>
+      <button class='btn btn-sm' :class="{ 'btn-active': appFilter === 'all' }" @click="appFilter = 'all'">{{ 'All (' + desktopApps.length + ')' }}</button>
+      <button class='btn btn-sm' x-show='desktopOutdated.length > 0' :class="{ 'btn-active': appFilter === 'outdated' }" @click="appFilter = 'outdated'">{{ 'Outdated (' + desktopOutdated.length + ')' }}</button>
       <button class='btn btn-sm' :class="{ 'btn-active': appFilter === 'uptodate' }" @click="appFilter = 'uptodate'">Up to date</button>
     </div>
   </div>
@@ -257,13 +257,13 @@
       <template x-for='app in filteredDesktopApps()' :key='app.name'>
         <tr x-show="!isUpdated('app:' + app.name)" :style="app.updateAvailable ? '' : 'opacity: 0.7;'">
           <td>
-            <span class='item-name' x-text='app.name'></span>
+            <span class='item-name'>{{ app.name }}</span>
             <span class='badge badge-gray' style='margin-left: 4px; font-size: 9px;' x-show='app.autoUpdates'>auto-updates</span>
           </td>
-          <td class='dim mono' style='font-size: 11px;' x-text='app.version'></td>
+          <td class='dim mono' style='font-size: 11px;'>{{ app.version }}</td>
           <td>
-            <span x-show='app.latestVersion && app.updateAvailable' class='mono' style='font-size: 11px; color: #30d158;' x-text='app.latestVersion'></span>
-            <span x-show='app.latestVersion && !app.updateAvailable' class='dim mono' style='font-size: 11px;' x-text='app.latestVersion'></span>
+            <span x-show='app.latestVersion && app.updateAvailable' class='mono' style='font-size: 11px; color: #30d158;'>{{ app.latestVersion }}</span>
+            <span x-show='app.latestVersion && !app.updateAvailable' class='dim mono' style='font-size: 11px;'>{{ app.latestVersion }}</span>
             <span x-show='!app.latestVersion' class='dim' style='font-size: 10px;'>&mdash;</span>
           </td>
           <td>

@@ -2,7 +2,7 @@
 <div class='card-row'>
   <div class='card'>
     <div class='card-label'>Total Extensions</div>
-    <div class='card-value' style='color: #bf5af2;' x-text='browserExtensions.length'></div>
+    <div class='card-value' style='color: #bf5af2;'>{{ browserExtensions.length }}</div>
     <div class='card-detail'>Across all browsers</div>
   </div>
   <div class='card'>
@@ -12,12 +12,12 @@
   </div>
   <div class='card'>
     <div class='card-label'>Chrome</div>
-    <div class='card-value' x-text="browserExtensions.filter(function(e){ return e.browser === 'Chrome'; }).length"></div>
+    <div class='card-value'>{{ browserExtensions.filter(function(e){ return e.browser === 'Chrome'; }).length }}</div>
     <div class='card-detail'>extensions</div>
   </div>
   <div class='card'>
     <div class='card-label'>Firefox</div>
-    <div class='card-value' x-text="browserExtensions.filter(function(e){ return e.browser === 'Firefox'; }).length"></div>
+    <div class='card-value'>{{ browserExtensions.filter(function(e){ return e.browser === 'Firefox'; }).length }}</div>
     <div class='card-detail'>extensions</div>
   </div>
 </div>
@@ -48,15 +48,15 @@
           <tr>
             <td><input type='checkbox' class='check' :checked="isOn(ext.id)" @click="toggle(ext.id)" /></td>
             <td>
-              <div class='item-name'><span x-text='ext.browserIcon'></span> <span x-text='ext.name'></span></div>
-              <div class='item-sub' x-show='ext.description' x-text='ext.description'></div>
+              <div class='item-name'><span>{{ ext.browserIcon }}</span> <span>{{ ext.name }}</span></div>
+              <div class='item-sub' x-show='ext.description'>{{ ext.description }}</div>
             </td>
-            <td><span class='badge badge-purple' x-text='ext.browser'></span></td>
-            <td class='dim mono' style='font-size: 11px;' x-text='ext.version'></td>
-            <td style='font-size: 11px;' x-text='ext.sizeStr'></td>
+            <td><span class='badge badge-purple'>{{ ext.browser }}</span></td>
+            <td class='dim mono' style='font-size: 11px;'>{{ ext.version }}</td>
+            <td style='font-size: 11px;'>{{ ext.sizeStr }}</td>
             <td>
-              <span class='badge badge-red' x-show="(ext.permissions + ext.hostPermissions) > 5" x-text="(ext.permissions + ext.hostPermissions) + ' perms'"></span>
-              <span class='badge badge-orange' x-show="(ext.permissions + ext.hostPermissions) > 0 && (ext.permissions + ext.hostPermissions) <= 5" x-text="(ext.permissions + ext.hostPermissions) + ' perms'"></span>
+              <span class='badge badge-red' x-show="(ext.permissions + ext.hostPermissions) > 5">{{ (ext.permissions + ext.hostPermissions) + ' perms' }}</span>
+              <span class='badge badge-orange' x-show="(ext.permissions + ext.hostPermissions) > 0 && (ext.permissions + ext.hostPermissions) <= 5">{{ (ext.permissions + ext.hostPermissions) + ' perms' }}</span>
               <span class='badge badge-gray' x-show="(ext.permissions + ext.hostPermissions) === 0">None</span>
             </td>
             <td>

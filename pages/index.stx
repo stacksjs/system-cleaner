@@ -36,7 +36,7 @@ const healthDasharray = String(2 * Math.PI * 40)
     <a href='/updates' data-stx-link class='card' style='display: flex; align-items: center; justify-content: space-between; text-decoration: none; color: inherit; border-color: rgba(255,159,10,0.25);'>
       <div>
         <div class='card-label'>Pending Updates</div>
-        <div class='card-value' style='color: #ff9f0a;' x-text='pendingUpdates'></div>
+        <div class='card-value' style='color: #ff9f0a;'>{{ pendingUpdates }}</div>
         <div class='card-detail'>System, Homebrew, and app updates available</div>
       </div>
       <span style='font-size: 13px; color: #0a84ff;'>View →</span>
@@ -70,18 +70,18 @@ const healthDasharray = String(2 * Math.PI * 40)
         </tr>
         <template x-for='proc in (stats && stats.processes ? stats.processes.slice(0, 8) : [])' :key='proc.id'>
           <tr x-show='!statsLoading'>
-            <td><span class='font-medium' x-text='proc.name'></span></td>
-            <td class='font-mono text-[11px] text-text-dim' x-text='proc.pid'></td>
+            <td><span class='font-medium'>{{ proc.name }}</span></td>
+            <td class='font-mono text-[11px] text-text-dim'>{{ proc.pid }}</td>
             <td>
               <div class='flex gap-1.5 items-center'>
-                <span class='text-[11px] min-w-[36px]' :class="cpuTextClass(proc.cpu)" x-text="proc.cpu.toFixed(1) + '%'"></span>
+                <span class='text-[11px] min-w-[36px]' :class="cpuTextClass(proc.cpu)">{{ proc.cpu.toFixed(1) + '%' }}</span>
                 <div class='overflow-hidden flex-1 h-[3px] max-w-[60px] bg-bg-track rounded-[2px]'>
                   <div class='h-full rounded-[2px]' :class="cpuBarClass(proc.cpu)" :style="cpuBarStyle(proc.cpu)"></div>
                 </div>
               </div>
             </td>
-            <td class='text-[11px]' x-text="proc.memMB + ' MB'"></td>
-            <td class='text-[11px] text-text-dim' x-text='proc.user'></td>
+            <td class='text-[11px]'>{{ proc.memMB + ' MB' }}</td>
+            <td class='text-[11px] text-text-dim'>{{ proc.user }}</td>
           </tr>
         </template>
       </tbody>
