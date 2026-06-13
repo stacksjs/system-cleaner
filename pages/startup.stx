@@ -55,7 +55,7 @@ function esc(str) { return escapeHtml(str || '') }
 <!-- Reactive toast container -->
 <div class='toast-area'>
   @for(let i = 0; i < 5; i++)
-    <div class='toast' x-show='toasts[{{ i }}]' x-text="toasts[{{ i }}] ? (toasts[{{ i }}].type === 'success' ? '✓' : toasts[{{ i }}].type === 'error' ? '✕' : '⚠') + ' ' + toasts[{{ i }}].msg : ''"></div>
+    <div class='toast' x-show='toasts[{{ i }}]'>{{ toasts[{{ i }}] ? (toasts[{{ i }}].type === 'success' ? '✓' : toasts[{{ i }}].type === 'error' ? '✕' : '⚠') + ' ' + toasts[{{ i }}].msg : '' }}</div>
   @endfor
 </div>
 

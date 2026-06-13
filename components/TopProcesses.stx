@@ -33,18 +33,18 @@
       </tr>
       <template x-for='proc in (stats && stats.processes ? stats.processes.slice(0, 8) : [])' :key='proc.id'>
         <tr x-show='!statsLoading'>
-          <td><span class='font-medium' x-text='proc.name'></span></td>
-          <td class='font-mono text-[11px] text-text-dim' x-text='proc.pid'></td>
+          <td><span class='font-medium'>{{ proc.name }}</span></td>
+          <td class='font-mono text-[11px] text-text-dim'>{{ proc.pid }}</td>
           <td>
             <div class='flex gap-1.5 items-center'>
-              <span class='text-[11px] min-w-[36px]' :class="proc.cpu > 50 ? 'text-apple-red' : proc.cpu > 20 ? 'text-apple-orange' : ''" x-text="proc.cpu.toFixed(1) + '%'"></span>
+              <span class='text-[11px] min-w-[36px]' :class="proc.cpu > 50 ? 'text-apple-red' : proc.cpu > 20 ? 'text-apple-orange' : ''">{{ proc.cpu.toFixed(1) + '%' }}</span>
               <div class='overflow-hidden flex-1 h-[3px] max-w-[60px] bg-bg-track rounded-[2px]'>
                 <div class='h-full rounded-[2px]' :class="proc.cpu > 50 ? 'bg-apple-red' : proc.cpu > 20 ? 'bg-apple-orange' : 'bg-apple-green'" :style="'width: ' + Math.min(100, proc.cpu) + '%;'"></div>
               </div>
             </div>
           </td>
-          <td class='text-[11px]' x-text="proc.memMB + ' MB'"></td>
-          <td class='text-[11px] text-text-dim' x-text='proc.user'></td>
+          <td class='text-[11px]'>{{ proc.memMB + ' MB' }}</td>
+          <td class='text-[11px] text-text-dim'>{{ proc.user }}</td>
         </tr>
       </template>
     </tbody>

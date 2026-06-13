@@ -2,29 +2,29 @@
 <div class='card-row'>
   <div class='card'>
     <div class='card-label'>Active</div>
-    <div class='card-value' style='color: #ff9f0a;' x-text='enabledStartup.length'></div>
+    <div class='card-value' style='color: #ff9f0a;'>{{ enabledStartup.length }}</div>
     <div class='card-detail'>Running at startup</div>
   </div>
   <div class='card'>
     <div class='card-label'>Disabled</div>
-    <div class='card-value dim' x-text='disabledStartup.length'></div>
+    <div class='card-value dim'>{{ disabledStartup.length }}</div>
     <div class='card-detail'>Not running</div>
   </div>
   <div class='card'>
     <div class='card-label'>User Agents</div>
-    <div class='card-value' x-text="startupItems.filter(function(i){ return i.scope === 'user'; }).length"></div>
+    <div class='card-value'>{{ startupItems.filter(function(i){ return i.scope === 'user'; }).length }}</div>
     <div class='card-detail'>~/Library/LaunchAgents</div>
   </div>
   <div class='card'>
     <div class='card-label'>System Daemons</div>
-    <div class='card-value' x-text="startupItems.filter(function(i){ return i.type === 'daemon'; }).length"></div>
+    <div class='card-value'>{{ startupItems.filter(function(i){ return i.type === 'daemon'; }).length }}</div>
     <div class='card-detail'>/Library/LaunchDaemons</div>
   </div>
 </div>
 
 <div class='tabs'>
-  <button class='tab' :class="{ active: startupFilter === 'all' }" @click="setFilter('all')">All (<span x-text='startupItems.length'></span>)</button>
-  <button class='tab' :class="{ active: startupFilter === 'enabled' }" @click="setFilter('enabled')">Enabled (<span x-text='enabledStartup.length'></span>)</button>
+  <button class='tab' :class="{ active: startupFilter === 'all' }" @click="setFilter('all')">All (<span>{{ startupItems.length }}</span>)</button>
+  <button class='tab' :class="{ active: startupFilter === 'enabled' }" @click="setFilter('enabled')">Enabled (<span>{{ enabledStartup.length }}</span>)</button>
   <button class='tab' :class="{ active: startupFilter === 'vendor' }" @click="setFilter('vendor')">Third-party</button>
   <button class='tab' :class="{ active: startupFilter === 'system' }" @click="setFilter('system')">Apple</button>
 </div>
@@ -54,8 +54,8 @@
         <tr x-show="!isRemoved(item.id) && rowVisible(item)" :data-item-id="item.id">
           <td><input type="checkbox" class="check" :checked="isOn(item.id)" @click="toggle(item.id)" /></td>
           <td>
-            <div><span style='margin-right: 4px;' x-text='item.icon'></span><span class='item-name' x-text='item.name'></span></div>
-            <div class='item-sub' x-text='item.vendor'></div>
+            <div><span style='margin-right: 4px;'>{{ item.icon }}</span><span class='item-name'>{{ item.name }}</span></div>
+            <div class='item-sub'>{{ item.vendor }}</div>
           </td>
           <td>
             <span class='badge badge-green' x-show="item.scope === 'user'">User</span>

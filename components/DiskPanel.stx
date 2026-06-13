@@ -60,8 +60,8 @@
             @mouseover="hovered = item"
             @mouseleave="hovered = null">
           <span class="folder-dot" :style="'background:' + item.color"></span>
-          <span class="folder-name" x-text="item.name"></span>
-          <span class="folder-size" x-text="item.formattedSize"></span>
+          <span class="folder-name">{{ item.name }}</span>
+          <span class="folder-size">{{ item.formattedSize }}</span>
           <div class="folder-bar-track">
             <div class="folder-bar-fill" :style="'width:' + item.barPct + '%;background:' + item.color"></div>
           </div>
@@ -104,23 +104,23 @@
       <template x-if="hovered">
         <div class="info-card">
           <div class="info-icon-row">
-            <div class="info-type-icon" :style="'background:' + hovered.color + '20;color:' + hovered.color" x-text="hovered.isDir ? 'Dir' : 'File'"></div>
+            <div class="info-type-icon" :style="'background:' + hovered.color + '20;color:' + hovered.color">{{ hovered.isDir ? 'Dir' : 'File' }}</div>
             <div>
-              <div class="info-type-name" x-text="hovered.name"></div>
-              <div class="info-type-kind" x-text="(hovered.isDir ? 'Folder' : 'File') + ' · Level ' + hovered.depth"></div>
+              <div class="info-type-name">{{ hovered.name }}</div>
+              <div class="info-type-kind">{{ (hovered.isDir ? 'Folder' : 'File') + ' · Level ' + hovered.depth }}</div>
             </div>
           </div>
-          <div class="info-row"><span class="info-label">Size</span><span class="info-value" x-text="hovered.formattedSize"></span></div>
-          <div class="info-row"><span class="info-label">% of View</span><span class="info-value" x-text="hovered.percent + '%'"></span></div>
+          <div class="info-row"><span class="info-label">Size</span><span class="info-value">{{ hovered.formattedSize }}</span></div>
+          <div class="info-row"><span class="info-label">% of View</span><span class="info-value">{{ hovered.percent + '%' }}</span></div>
           <template x-if="hovered.isDir">
-            <div class="info-row"><span class="info-label">Items</span><span class="info-value" x-text="hovered.childCount"></span></div>
+            <div class="info-row"><span class="info-label">Items</span><span class="info-value">{{ hovered.childCount }}</span></div>
           </template>
-          <div class="info-row" style="border-bottom:none"><span class="info-label">Depth</span><span class="info-value" x-text="'Ring ' + hovered.depth"></span></div>
-          <div class="info-path" x-text="hovered.fullPath"></div>
+          <div class="info-row" style="border-bottom:none"><span class="info-label">Depth</span><span class="info-value">{{ 'Ring ' + hovered.depth }}</span></div>
+          <div class="info-path">{{ hovered.fullPath }}</div>
           <div class="info-bar">
             <div class="info-bar-label">Proportion</div>
             <div class="info-bar-track"><div class="info-bar-fill" :style="'width:' + hovered.percent + '%;background:' + hovered.color"></div></div>
-            <div class="info-bar-text" x-text="hovered.formattedSize + ' of ' + defaultSize"></div>
+            <div class="info-bar-text">{{ hovered.formattedSize + ' of ' + defaultSize }}</div>
           </div>
           <template x-if="hovered.isDir && hovered.childCount > 0">
             <div class="info-drill">Click segment to drill down</div>
