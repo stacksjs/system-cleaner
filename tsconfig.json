@@ -32,7 +32,7 @@
     "routes/**/*.ts",
     "workers/**/*.ts",
     "channels.ts",
-    "stx.config.ts",
+    "config/stx.ts",
     "scripts/**/*.ts",
     "test/**/*.ts"
   ],

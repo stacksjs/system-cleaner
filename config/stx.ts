@@ -1,8 +1,9 @@
 import type { StxOptions } from '@stacksjs/stx'
 import path from 'node:path'
-import { apiRouter } from './api-router.ts'
+import { apiRouter } from '../api-router.ts'
 
-const appRoot = import.meta.dir
+// This config now lives in `config/`, so the project root is one level up.
+const appRoot = path.dirname(import.meta.dir)
 
 const config: StxOptions = {
   componentsDir: path.join(appRoot, 'components'),
