@@ -23,9 +23,9 @@
   },
   "dependencies": {
     "@stacksjs/bun-router": "^0.0.15",
-    "@stacksjs/stx": "^0.2.72",
-    "stx-router": "0.2.48",
-    "bun-plugin-stx": "^0.2.72",
+    "@stacksjs/stx": "^0.2.82",
+    "stx-router": "^0.2.82",
+    "bun-plugin-stx": "^0.2.82",
     "@system-cleaner/core": "workspace:*",
     "@system-cleaner/clean": "workspace:*",
     "@system-cleaner/disk": "workspace:*",
