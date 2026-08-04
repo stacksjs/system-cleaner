@@ -1,26 +1,29 @@
 <script server>
+// Every row uses the same blue tint and the same filled SF-style glyph
+// weight. A multi-hue source list turns the sidebar into the loudest thing
+// on screen; the selection highlight should be the only color that moves.
 export const sidebarSections = [
   {
     id: 'overview',
     items: [
-      { id: 'dashboard', label: 'Dashboard', icon: 'i-f7-gauge', iconColor: 'blue', href: '/app' },
+      { id: 'dashboard', label: 'Dashboard', icon: 'i-f7-square-grid-2x2-fill', iconColor: 'blue', href: '/app' },
     ],
   },
   {
     id: 'manage',
     label: 'Manage',
     items: [
-      { id: 'startup', label: 'Startup Items', icon: 'i-f7-bolt-fill', iconColor: 'orange', href: '/app/startup' },
-      { id: 'extensions', label: 'Extensions', icon: 'i-f7-app-badge-fill', iconColor: 'purple', href: '/app/extensions' },
-      { id: 'processes', label: 'Processes', icon: 'i-f7-waveform-path-ecg', iconColor: 'green', href: '/app/processes' },
+      { id: 'startup', label: 'Startup Items', icon: 'i-f7-bolt-fill', iconColor: 'blue', href: '/app/startup' },
+      { id: 'extensions', label: 'Extensions', icon: 'i-f7-square-stack-3d-up-fill', iconColor: 'blue', href: '/app/extensions' },
+      { id: 'processes', label: 'Processes', icon: 'i-f7-chart-bar-alt-fill', iconColor: 'blue', href: '/app/processes' },
     ],
   },
   {
     id: 'analyze',
     label: 'Analyze',
     items: [
-      { id: 'disk', label: 'Disk Usage', icon: 'i-f7-archivebox-fill', iconColor: 'blue', href: '/app/disk' },
-      { id: 'system', label: 'System', icon: 'i-f7-desktopcomputer', iconColor: 'gray', href: '/app/system' },
+      { id: 'disk', label: 'Disk Usage', icon: 'i-f7-chart-pie-fill', iconColor: 'blue', href: '/app/disk' },
+      { id: 'system', label: 'System', icon: 'i-f7-desktopcomputer', iconColor: 'blue', href: '/app/system' },
     ],
   },
   {
