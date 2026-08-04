@@ -20,6 +20,14 @@
   rootName: '',
   defaultSize: '',
   defaultName: '',
+  init() {
+    var root = document.querySelector('[data-scan-total]');
+    if (root) {
+      this.scanTotalLabel = this.defaultSize = root.dataset.scanTotal || '';
+      this.rootName = this.defaultName = root.dataset.scanRoot || '';
+    }
+    queueMicrotask(function() { typeof diskPanelMount === 'function' && diskPanelMount(); });
+  },
   topItems: [],
   hovered: null,
   scanState: 'idle',
@@ -30,7 +38,7 @@
     if (this.scanInfo) return this.scanInfo.folderCount + ' folders · ' + this.scanInfo.fileCount + ' files · ' + this.scanInfo.scanTime + (this.scanInfo.cached ? ' (cached)' : '');
     return 'Click Scan Disk to analyze';
   },
-}" x-init='scanTotalLabel = defaultSize = $el.dataset.scanTotal; rootName = defaultName = $el.dataset.scanRoot; queueMicrotask(function(){ typeof diskPanelMount === "function" && diskPanelMount() })'>
+}">
 
   <!-- Disk sidebar -->
   <div class='disk-sidebar'>
