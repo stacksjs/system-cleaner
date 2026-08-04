@@ -18,6 +18,9 @@ const VIEWPORT_WIDTH = Number(process.env.VIEWPORT_WIDTH ?? 1400)
 const VIEWPORT_HEIGHT = Number(process.env.VIEWPORT_HEIGHT ?? 900)
 const PAGES = [
   { path: '/', name: 'home' },
+  { path: '/features', name: 'features' },
+  { path: '/features/quick-clean', name: 'feature-detail' },
+  { path: '/privacy', name: 'privacy' },
   { path: '/app', name: 'dashboard' },
   { path: '/app/disk', name: 'disk' },
   { path: '/app/cleanup', name: 'cleanup' },
