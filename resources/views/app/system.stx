@@ -1,4 +1,5 @@
 @extends('layouts/app')
+@section('nav', 'system')
 @section('body')
 
 <style>

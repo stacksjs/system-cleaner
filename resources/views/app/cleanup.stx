@@ -4,6 +4,7 @@ function esc(str) { return escapeHtml(str || '') }
 </script>
 
 @extends('layouts/app')
+@section('nav', 'cleanup')
 @section('body')
 
 <div x-data="{

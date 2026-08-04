@@ -1,4 +1,5 @@
 @extends('layouts/app')
+@section('nav', 'extensions')
 @section('body')
 
 <div x-data="{

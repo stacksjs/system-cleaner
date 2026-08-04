@@ -1,0 +1,90 @@
+<script server>
+// Icon rail. Labels live in tooltips rather than in the row, so the rail
+// costs 76px instead of 234px and the content column gets the difference.
+//
+// `active` is passed by each view so a cold page load paints the correct
+// selection with no flash. SPA navigations only swap `[data-stx-content]`,
+// which leaves this rail mounted, so the client block below re-syncs the
+// selection on every route change.
+export const active = $props.active || ''
+
+export const groups = [
+  [
+    { id: 'dashboard', label: 'Dashboard', icon: 'i-f7-square-grid-2x2-fill', href: '/app' },
+  ],
+  [
+    { id: 'startup', label: 'Startup Items', icon: 'i-f7-bolt-fill', href: '/app/startup' },
+    { id: 'extensions', label: 'Extensions', icon: 'i-f7-square-stack-3d-up-fill', href: '/app/extensions' },
+    { id: 'processes', label: 'Processes', icon: 'i-f7-chart-bar-alt-fill', href: '/app/processes' },
+  ],
+  [
+    { id: 'disk', label: 'Disk Usage', icon: 'i-f7-chart-pie-fill', href: '/app/disk' },
+    { id: 'system', label: 'System', icon: 'i-f7-desktopcomputer', href: '/app/system' },
+  ],
+  [
+    { id: 'updates', label: 'Updates', icon: 'i-f7-arrow-down-circle-fill', href: '/app/updates' },
+    { id: 'cleanup', label: 'Quick Clean', icon: 'i-f7-sparkles', href: '/app/cleanup' },
+  ],
+]
+</script>
+
+<script client>
+function syncActive(): void {
+  const path = useRoute().path
+  const items = Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-rail-item]'))
+
+  // Longest matching href wins, so `/app/disk` does not also light up `/app`.
+  let best: HTMLAnchorElement | null = null
+  for (const item of items) {
+    const href = item.getAttribute('href') || ''
+    const matches = path === href || path.startsWith(`${href}/`)
+    if (matches && (!best || href.length > (best.getAttribute('href') || '').length))
+      best = item
+  }
+
+  for (const item of items) {
+    const selected = item === best
+    item.toggleAttribute('data-active', selected)
+    if (selected)
+      item.setAttribute('aria-current', 'page')
+    else
+      item.removeAttribute('aria-current')
+  }
+}
+
+useEventListener('stx:navigate', syncActive)
+useEventListener('stx:load', syncActive)
+</script>
+
+<nav class="rail" aria-label="SystemCleaner sections">
+  <a class="rail-brand" href="/app" data-stx-link aria-label="SystemCleaner dashboard">
+    <img src="/images/systemcleaner-mark.svg" width="30" height="30" alt="" />
+  </a>
+
+  <div class="rail-groups">
+    @foreach (groups as group)
+      <div class="rail-group">
+        @foreach (group as item)
+          <a
+            class="rail-item"
+            data-rail-item
+            href="{{ item.href }}"
+            data-stx-link
+            aria-label="{{ item.label }}"
+            @if(active === item.id)data-active aria-current="page"@endif
+          >
+            <span class="rail-icon {{ item.icon }}" aria-hidden="true"></span>
+            <span class="rail-tip" role="tooltip">{{ item.label }}</span>
+          </a>
+        @endforeach
+      </div>
+    @endforeach
+  </div>
+
+  <div class="rail-foot">
+    <span class="rail-badge rail-item" aria-label="All processing happens on this Mac">
+      <span class="i-f7-lock-shield-fill rail-icon" aria-hidden="true"></span>
+      <span class="rail-tip" role="tooltip">Local only</span>
+    </span>
+  </div>
+</nav>

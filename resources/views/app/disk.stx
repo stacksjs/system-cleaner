@@ -18,6 +18,7 @@ const fDiskFreeLabel = formatBytes(dFree)
 </script>
 
 @extends('layouts/app')
+@section('nav', 'disk')
 @section('body')
 
 <div class='main-content' style='padding: 0; height: 100%;'>
