@@ -28,7 +28,7 @@
     "@stacksjs/bun-router": "^0.0.21",
     "@stacksjs/stx": "^0.2.151",
     "@stacksjs/ts-cache": "^0.1.5",
-    "@stacksjs/ts-cloud": "^0.7.94",
+    "@stacksjs/ts-cloud": "^0.7.95",
     "@system-cleaner/clean": "workspace:*",
     "@system-cleaner/core": "workspace:*",
     "@system-cleaner/disk": "workspace:*",
