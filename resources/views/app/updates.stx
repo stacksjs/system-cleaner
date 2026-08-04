@@ -28,7 +28,7 @@
 </div>
 <div class='main-content'>
 
-<div x-show='loading' style='text-align: center; padding: 60px 16px; color: #6c6c70; font-size: 13px;'>
+<div x-show='loading' style='text-align: center; padding: 60px 16px; color: var(--tertiary); font-size: 13px;'>
   Checking for updates...
 </div>
 
