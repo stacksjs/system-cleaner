@@ -38,7 +38,7 @@
     "@ts-charts/scale": "^0.2.6",
     "@ts-charts/shape": "^0.2.6",
     "bun-plugin-stx": "^0.2.151",
-    "stacks": "^0.70.257",
+    "stacks": "^0.70.258",
     "stx-router": "^0.2.151",
     "ts-broadcasting": "^0.0.9"
   },
