@@ -5,9 +5,12 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
-  npm:
-    name: npm
+  release:
+    name: Release
     runs-on: ubuntu-latest
 
     steps:
@@ -31,24 +34,20 @@ jobs:
       - name: Install Dependencies
         run: bun install
 
-      - name: Publish to npm
-        run: ./scripts/publish.sh
-        env:
-          BUN_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
+      # Every workspace package is `private: true`, so there is nothing to
+      # publish to npm. The release artifact is the compiled CLI.
+      - name: Build binaries
+        run: bun run build:binaries
 
       - name: Create GitHub release
         run: bunx changelogithub
         env:
-          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Attach Binaries
+      - name: Attach binaries
         uses: stacksjs/action-releaser@v1.1.0
         with:
           files: |
-            packages/cli/bin/system-cleaner-linux-x64.zip
-            packages/cli/bin/system-cleaner-linux-arm64.zip
-            packages/cli/bin/system-cleaner-windows-x64.zip
-            packages/cli/bin/system-cleaner-darwin-x64.zip
             packages/cli/bin/system-cleaner-darwin-arm64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
