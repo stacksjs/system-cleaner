@@ -1,0 +1,28 @@
+<script server>
+import { DOWNLOAD_URL, MAC_APP_STORE_URL, SYSTEM_REQUIREMENT } from '~/app/Support/Marketing/distribution'
+
+export const downloadUrl = DOWNLOAD_URL
+export const macAppStoreUrl = MAC_APP_STORE_URL
+export const requirement = SYSTEM_REQUIREMENT
+</script>
+
+<section class="download-band" aria-labelledby="download-title">
+  <div class="download-inner site-container">
+    <h2 id="download-title">Get SystemCleaner</h2>
+    <p>Free, open source, and local. Install it, run one scan, and decide for yourself what leaves your Mac.</p>
+    <div class="download-actions">
+      <a class="button button-lg button-primary" href="{{ downloadUrl }}" rel="noreferrer">
+        <span class="h-[18px] w-[18px] i-f7-cloud-download-fill" aria-hidden="true"></span>
+        Download for Mac
+      </a>
+      <a class="store-button" href="{{ macAppStoreUrl }}" rel="noreferrer">
+        <span class="i-f7-logo-apple store-glyph" aria-hidden="true"></span>
+        <span>
+          <small>Also on the</small>
+          <strong>Mac App Store</strong>
+        </span>
+      </a>
+    </div>
+    <p class="download-note">{{ requirement }}</p>
+  </div>
+</section>

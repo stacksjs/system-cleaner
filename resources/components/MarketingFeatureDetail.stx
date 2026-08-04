@@ -1,8 +1,10 @@
 <script server>
 import { FEATURES, featureBySlug } from '~/app/Support/Marketing/catalog'
+import { DOWNLOAD_URL } from '~/app/Support/Marketing/distribution'
 
 const feature = featureBySlug($props.slug) || FEATURES[0]
 const related = FEATURES.filter(item => item.slug !== feature.slug).slice(0, 4)
+const downloadUrl = DOWNLOAD_URL
 </script>
 
 <article class="site-container">
@@ -11,7 +13,10 @@ const related = FEATURES.filter(item => item.slug !== feature.slug).slice(0, 4)
     <h1>{{ feature.name }}</h1>
     <p>{{ feature.description }}</p>
     <div class="hero-actions">
-      <a class="button button-primary" href="/app" data-stx-link>Open SystemCleaner</a>
+      <a class="button button-primary" href="{{ downloadUrl }}" rel="noreferrer">
+        <span class="h-4 w-4 i-f7-cloud-download-fill" aria-hidden="true"></span>
+        Download for Mac
+      </a>
       <a class="button button-secondary" href="/features" data-stx-link>All features</a>
     </div>
   </header>
@@ -23,14 +28,14 @@ const related = FEATURES.filter(item => item.slug !== feature.slug).slice(0, 4)
       <p>SystemCleaner keeps the interaction close to macOS conventions, uses guarded paths for sensitive actions, and moves expensive work away from the interface.</p>
     </div>
     <aside class="feature-fact">
-      <span class="h-7 w-7 text-[color:var(--accent)] i-hugeicons-{{ feature.icon }}" aria-hidden="true"></span>
+      <span class="h-7 w-7 text-[color:var(--accent)] i-f7-{{ feature.icon }}" aria-hidden="true"></span>
       <strong>{{ feature.metric }}</strong>
       <span>{{ feature.detail }}</span>
     </aside>
   </section>
 
   <section aria-labelledby="more-features-title">
-    <h2 id="more-features-title" class="mb-6 text-2xl tracking-tight">More ways to care for your Mac</h2>
+    <h2 id="more-features-title" class="text-2xl tracking-tight">More ways to care for your Mac</h2>
     <ul class="feature-list">
       @foreach (related as item)
         <li>
@@ -39,10 +44,12 @@ const related = FEATURES.filter(item => item.slug !== feature.slug).slice(0, 4)
               <strong>{{ item.name }}</strong>
               <span class="block mt-1 text-[13px] text-[color:var(--muted)]">{{ item.metric }}</span>
             </span>
-            <span class="h-5 w-5 i-hugeicons-arrow-right-01" aria-hidden="true"></span>
+            <span class="h-5 w-5 i-f7-arrow-right" aria-hidden="true"></span>
           </a>
         </li>
       @endforeach
     </ul>
   </section>
 </article>
+
+<MarketingDownload />

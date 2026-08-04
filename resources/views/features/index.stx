@@ -25,10 +25,12 @@ const features = FEATURES
               <strong>{{ feature.name }}</strong>
               <span class="block mt-1 text-[13px] text-[color:var(--muted)]">{{ feature.summary }}</span>
             </span>
-            <span class="h-5 w-5 i-hugeicons-arrow-right-01" aria-hidden="true"></span>
+            <span class="h-5 w-5 i-f7-arrow-right" aria-hidden="true"></span>
           </a>
         </li>
       @endforeach
     </ul>
   </article>
+
+  <MarketingDownload />
 @endsection

@@ -1,11 +1,14 @@
 <script server>
+// The first cell is the 2x2 lead tile and carries a product visual; the rest
+// are text tiles. Index-derived classes keep the grid placement in CSS.
 export const features = ($props.features || []).map((feature, index) => ({
   ...feature,
   layoutClass: `feature-cell-${index + 1}`,
+  isLead: index === 0,
 }))
 </script>
 
-<section class="section feature-section site-container" aria-labelledby="features-title">
+<section class="section site-container" aria-labelledby="features-title">
   <div class="section-heading">
     <h2 id="features-title">The useful parts of Mac maintenance, together.</h2>
     <p class="section-intro">Move from “what changed?” to the right action without bouncing between utilities or sending system data away.</p>
@@ -15,11 +18,17 @@ export const features = ($props.features || []).map((feature, index) => ({
     @foreach (features as feature)
       <article class="feature-cell {{ feature.layoutClass }}">
         <a href="/features/{{ feature.slug }}" data-stx-link>
-          <span class="feature-icon"><span class="i-hugeicons-{{ feature.icon }}" aria-hidden="true"></span></span>
-          <div>
+          <span class="feature-icon"><span class="i-f7-{{ feature.icon }}" aria-hidden="true"></span></span>
+          <div class="feature-copy">
             <h3>{{ feature.name }}</h3>
             <p>{{ feature.summary }}</p>
           </div>
+          @if(feature.isLead)
+            <picture class="feature-visual">
+              <source media="(prefers-color-scheme: dark)" srcset="/images/showcase/cleanup-dark.png" />
+              <img src="/images/showcase/cleanup-light.png" width="1400" height="900" loading="lazy" alt="" />
+            </picture>
+          @endif
           <span class="feature-arrow i-f7-arrow-up-right" aria-hidden="true"></span>
         </a>
       </article>

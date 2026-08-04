@@ -1,33 +1,61 @@
 <script server>
-export const layout = $props.layout || 'editorial-showcase'
+import { DOWNLOAD_URL, MAC_APP_STORE_URL } from '~/app/Support/Marketing/distribution'
+
+export const downloadUrl = DOWNLOAD_URL
+export const macAppStoreUrl = MAC_APP_STORE_URL
 </script>
 
-<section class="hero site-container hero-{{ layout }}">
+<section class="hero site-container">
   <div class="hero-copy">
     <p class="eyebrow">A private Mac utility</p>
-    <h1>
-      <span>See your Mac clearly.</span>
-      <span>Keep it that way.</span>
-    </h1>
-    <p>SystemCleaner turns storage, startup activity, processes, and safe cleanup into one calm native workspace. Every scan stays on your Mac.</p>
+    <h1>See your Mac clearly. Keep it that way.</h1>
+    <p>Storage, startup activity, processes, and safe cleanup in one native workspace. Every scan stays local.</p>
     <div class="hero-actions">
-      <a class="button button-primary" href="/app" data-stx-link>Open SystemCleaner</a>
-      <a class="button button-secondary" href="#app-tour">See the app</a>
+      <a class="button button-lg button-primary" href="{{ downloadUrl }}" rel="noreferrer">
+        <span class="h-[18px] w-[18px] i-f7-cloud-download-fill" aria-hidden="true"></span>
+        Download for Mac
+      </a>
+      <a class="store-button" href="{{ macAppStoreUrl }}" rel="noreferrer">
+        <span class="i-f7-logo-apple store-glyph" aria-hidden="true"></span>
+        <span>
+          <small>Also on the</small>
+          <strong>Mac App Store</strong>
+        </span>
+      </a>
     </div>
-    <dl class="hero-facts" aria-label="SystemCleaner product facts">
-      <div><dt>Local</dt><dd>No cloud scan</dd></div>
-      <div><dt>Native</dt><dd>Built for macOS</dd></div>
-      <div><dt>Focused</dt><dd>One clear workspace</dd></div>
-    </dl>
   </div>
 
   <div class="hero-visual">
-    <figure class="app-window app-window-hero">
+    <figure class="app-window">
       <figcaption class="app-window-bar">
         <span class="traffic-lights" aria-hidden="true"><i></i><i></i><i></i></span>
         <span>SystemCleaner</span>
       </figcaption>
-      <img src="/images/showcase/dashboard.png" width="1400" height="900" alt="SystemCleaner dashboard showing storage, memory, CPU, battery, and cleanup recommendations" fetchpriority="high" />
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="/images/showcase/dashboard-dark.png" />
+        <img src="/images/showcase/dashboard-light.png" width="1400" height="900" alt="SystemCleaner dashboard showing a system health score, memory and disk usage, live CPU and memory history, and the busiest processes" fetchpriority="high" />
+      </picture>
     </figure>
+  </div>
+</section>
+
+<section class="spec-band">
+  <div class="site-container spec-row">
+    <div>
+      <span class="i-f7-desktopcomputer" aria-hidden="true"></span>
+      <p><b>macOS 14 or later</b><br>Apple silicon and Intel</p>
+    </div>
+    <div>
+      <span class="i-f7-lock-shield-fill" aria-hidden="true"></span>
+      <p><b>No account needed</b><br>Nothing to sign up for</p>
+    </div>
+    <div>
+      <span class="i-f7-wifi-slash" aria-hidden="true"></span>
+      <p><b>Works offline</b><br>No cloud scan, ever</p>
+    </div>
+    <div>
+      <span class="i-f7-chevron-left-slash-chevron-right" aria-hidden="true"></span>
+      <p><b>Open source</b><br>Read every scan path</p>
+    </div>
   </div>
 </section>

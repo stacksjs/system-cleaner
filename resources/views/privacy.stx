@@ -1,0 +1,44 @@
+@extends('layouts/marketing')
+
+@section('title', 'Privacy - SystemCleaner')
+@section('description', 'SystemCleaner runs entirely on your Mac. No account, no cloud scan, no analytics pipeline. Read exactly what the app reads and what it never sends.')
+@section('canonical', 'https://system-cleaner.app/privacy')
+
+@section('content')
+  <article class="site-container">
+    <header class="feature-hero">
+      <p class="eyebrow">Privacy</p>
+      <h1>Your Mac stays your business.</h1>
+      <p>SystemCleaner is a local utility. It reads your system to show you what is there, and it sends none of it anywhere.</p>
+    </header>
+
+    <div class="prose">
+      <h2>What runs on your Mac</h2>
+      <p>Every scan happens on the machine you are sitting at. Disk analysis, process sampling, startup item discovery, extension inventory, and cleanup all read the local filesystem and local system APIs. There is no remote scanning service and no upload step.</p>
+
+      <h2>What the app reads</h2>
+      <ul>
+        <li><strong>Storage.</strong> File and folder sizes under your home directory and the paths you open, so the disk map can be drawn.</li>
+        <li><strong>Processes.</strong> Process names, owners, CPU, and memory, refreshed while a process view is open.</li>
+        <li><strong>Startup items.</strong> Launch agents and daemons in the standard user, system, and daemon locations.</li>
+        <li><strong>Browser extensions.</strong> Extension manifests inside the browser profiles already on the machine.</li>
+        <li><strong>Update availability.</strong> Versions reported by macOS, Homebrew, and Pantry when you open the Updates view.</li>
+      </ul>
+
+      <h2>What never leaves</h2>
+      <p>None of the above is transmitted, logged remotely, or written to any service. There is no telemetry, no crash reporter, no analytics script, and no advertising identifier. The app does not require an account, so there is nothing to attach a profile to.</p>
+
+      <h2>When the app talks to the network</h2>
+      <p>SystemCleaner reaches the network in exactly two situations, both started by you: checking for available software updates, and downloading a new version of the app itself. Those requests carry no identifying information about your Mac or its contents.</p>
+
+      <h2>The marketing site</h2>
+      <p>This website sets no tracking cookies and runs no analytics. If you subscribe to release notes, your email address is stored for that mailing list and used for nothing else. Unsubscribe links are in every message.</p>
+
+      <h2>Verifying any of this</h2>
+      <p>The app is open source. Every scan path, every network call, and every delete operation is readable in the repository, and the cleanup code lists its target directories explicitly rather than globbing your disk.</p>
+      <p><a class="tour-link" href="https://github.com/stacksjs/system-cleaner" rel="noreferrer">Read the source <span class="i-f7-arrow-up-right" aria-hidden="true"></span></a></p>
+    </div>
+  </article>
+
+  <MarketingDownload />
+@endsection
