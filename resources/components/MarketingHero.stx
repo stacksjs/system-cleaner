@@ -1,0 +1,33 @@
+<script server>
+export const layout = $props.layout || 'editorial-showcase'
+</script>
+
+<section class="hero site-container hero-{{ layout }}">
+  <div class="hero-copy">
+    <p class="eyebrow">A private Mac utility</p>
+    <h1>
+      <span>See your Mac clearly.</span>
+      <span>Keep it that way.</span>
+    </h1>
+    <p>SystemCleaner turns storage, startup activity, processes, and safe cleanup into one calm native workspace. Every scan stays on your Mac.</p>
+    <div class="hero-actions">
+      <a class="button button-primary" href="/app" data-stx-link>Open SystemCleaner</a>
+      <a class="button button-secondary" href="#app-tour">See the app</a>
+    </div>
+    <dl class="hero-facts" aria-label="SystemCleaner product facts">
+      <div><dt>Local</dt><dd>No cloud scan</dd></div>
+      <div><dt>Native</dt><dd>Built for macOS</dd></div>
+      <div><dt>Focused</dt><dd>One clear workspace</dd></div>
+    </dl>
+  </div>
+
+  <div class="hero-visual">
+    <figure class="app-window app-window-hero">
+      <figcaption class="app-window-bar">
+        <span class="traffic-lights" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span>SystemCleaner</span>
+      </figcaption>
+      <img src="/images/showcase/dashboard.png" width="1400" height="900" alt="SystemCleaner dashboard showing storage, memory, CPU, battery, and cleanup recommendations" fetchpriority="high" />
+    </figure>
+  </div>
+</section>

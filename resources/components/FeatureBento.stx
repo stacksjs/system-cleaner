@@ -1,0 +1,28 @@
+<script server>
+export const features = ($props.features || []).map((feature, index) => ({
+  ...feature,
+  layoutClass: `feature-cell-${index + 1}`,
+}))
+</script>
+
+<section class="section feature-section site-container" aria-labelledby="features-title">
+  <div class="section-heading">
+    <h2 id="features-title">The useful parts of Mac maintenance, together.</h2>
+    <p class="section-intro">Move from “what changed?” to the right action without bouncing between utilities or sending system data away.</p>
+  </div>
+
+  <div class="feature-grid">
+    @foreach (features as feature)
+      <article class="feature-cell {{ feature.layoutClass }}">
+        <a href="/features/{{ feature.slug }}" data-stx-link>
+          <span class="feature-icon"><span class="i-hugeicons-{{ feature.icon }}" aria-hidden="true"></span></span>
+          <div>
+            <h3>{{ feature.name }}</h3>
+            <p>{{ feature.summary }}</p>
+          </div>
+          <span class="feature-arrow i-f7-arrow-up-right" aria-hidden="true"></span>
+        </a>
+      </article>
+    @endforeach
+  </div>
+</section>

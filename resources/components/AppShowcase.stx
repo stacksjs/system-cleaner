@@ -1,0 +1,49 @@
+<script server>
+export const views = [
+  {
+    name: 'Dashboard',
+    copy: 'Start with a compact health readout and the maintenance items that deserve attention now.',
+    image: '/images/showcase/dashboard.png',
+    href: '/app',
+  },
+  {
+    name: 'Live Processes',
+    copy: 'See CPU and memory pressure in context, then filter the process list without losing the system-wide picture.',
+    image: '/images/showcase/processes.png',
+    href: '/app/processes',
+  },
+  {
+    name: 'Quick Clean',
+    copy: 'Review safe categories, keep control of every selection, and reclaim space in one pass.',
+    image: '/images/showcase/cleanup.png',
+    href: '/app/cleanup',
+  },
+]
+</script>
+
+<section id="app-tour" class="section app-tour" aria-labelledby="app-tour-title">
+  <div class="site-container app-tour-heading">
+    <p class="eyebrow">Inside the app</p>
+    <h2 id="app-tour-title">One source list. Three clear jobs.</h2>
+    <p>Every view keeps the same native navigation, information density, and local-first posture.</p>
+  </div>
+
+  <div class="site-container app-tour-grid">
+    @foreach (views as view)
+      <article class="tour-card">
+        <div class="tour-copy">
+          <h3>{{ view.name }}</h3>
+          <p>{{ view.copy }}</p>
+          <a href="{{ view.href }}" data-stx-link>Open {{ view.name }} <span class="i-f7-arrow-right" aria-hidden="true"></span></a>
+        </div>
+        <figure class="app-window">
+          <figcaption class="app-window-bar">
+            <span class="traffic-lights" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span>{{ view.name }}</span>
+          </figcaption>
+          <img src="{{ view.image }}" width="1400" height="900" loading="lazy" alt="SystemCleaner {{ view.name }} view" />
+        </figure>
+      </article>
+    @endforeach
+  </div>
+</section>

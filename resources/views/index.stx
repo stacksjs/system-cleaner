@@ -2,6 +2,11 @@
 import { FEATURES } from '~/app/Support/Marketing/catalog'
 
 const features = FEATURES
+const seed = 'SystemCleaner'.length
+const heroLayouts = ['cinematic-center', 'editorial-showcase', 'artistic-asymmetry']
+const typographyStacks = ['outfit', 'satoshi', 'cabinet-grotesk', 'geist']
+const selectedHeroLayout = heroLayouts[seed % heroLayouts.length]
+const selectedTypography = typographyStacks[(seed * 7) % typographyStacks.length]
 </script>
 
 @extends('layouts/marketing')
@@ -11,47 +16,19 @@ const features = FEATURES
 @section('canonical', 'https://system-cleaner.app/')
 
 @section('content')
-  <section class="hero site-container">
-    <div class="hero-copy">
-      <p class="eyebrow">Built for macOS</p>
-      <h1>See what your Mac is carrying.</h1>
-      <p>Understand what uses space, remove what is safe, and keep your Mac responsive without sending a byte away.</p>
-      <div class="hero-actions">
-        <a class="button button-primary" href="/app" data-stx-link>Open SystemCleaner</a>
-        <a class="button button-secondary" href="/features" data-stx-link>Explore features</a>
-      </div>
-    </div>
-
-    <div class="hero-visual" aria-label="SystemCleaner app icon">
-      <div class="hero-product">
-        <div class="hero-icon-stage">
-          <img src="/images/systemcleaner-icon.png" width="512" height="512" alt="SystemCleaner icon with a silver and blue cleaning sweep" fetchpriority="high" />
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="section site-container" aria-labelledby="features-title">
-    <h2 id="features-title">The useful parts of maintenance, together.</h2>
-    <p class="section-intro">A focused set of tools for the moments when your Mac feels full, slow, noisy, or unfamiliar.</p>
-
-    <div class="feature-grid">
-      @foreach (features as feature)
-        <article class="feature-cell">
-          <a href="/features/{{ feature.slug }}" data-stx-link>
-            <span class="icon i-hugeicons-{{ feature.icon }}" aria-hidden="true"></span>
-            <h3>{{ feature.name }}</h3>
-            <p>{{ feature.summary }}</p>
-          </a>
-        </article>
-      @endforeach
-    </div>
-  </section>
+  <div class="type-{{ selectedTypography }}">
+    <MarketingHero :layout="selectedHeroLayout" />
+    <FeatureBento :features="features" />
+    <AppShowcase />
+  </div>
 
   <section id="privacy" class="section site-container">
     <div class="privacy-band">
-      <h2>Your Mac stays your business.</h2>
-      <p>Scans, health readings, process data, and cleanup decisions stay local. SystemCleaner has no account requirement and no analytics pipeline.</p>
+      <div>
+        <span class="privacy-icon i-f7-lock-shield-fill" aria-hidden="true"></span>
+        <h2>Your Mac stays your business.</h2>
+      </div>
+      <p>Scans, health readings, process data, and cleanup decisions stay local. SystemCleaner has no account requirement, cloud scan, or analytics pipeline.</p>
     </div>
   </section>
 @endsection
