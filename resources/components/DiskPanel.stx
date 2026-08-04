@@ -6,12 +6,20 @@
   Everything else (folder sidebar, scan totals, inspector card) is bound
   reactively, and the imperative scan code talks to the scope via _exec().
 -->
-<div class='disk-layout' x-data="{
+<!--
+  Server values arrive via data attributes, not via `{{ }}` inside `x-data`.
+  Interpolating into the x-data object literal JSON-encodes the string, so the
+  scan total rendered as `"463.2 GB"` with the quotes visible on screen.
+-->
+<div class='disk-layout'
+  data-scan-total='{{ scanTotalFormatted }}'
+  data-scan-root='{{ scanBasename }}'
+  x-data="{
   scanInfo: null,
-  scanTotalLabel: '{{ scanTotalFormatted }}',
-  rootName: '{{ scanBasename }}',
-  defaultSize: '{{ scanTotalFormatted }}',
-  defaultName: '{{ scanBasename }}',
+  scanTotalLabel: '',
+  rootName: '',
+  defaultSize: '',
+  defaultName: '',
   topItems: [],
   hovered: null,
   scanState: 'idle',
@@ -22,7 +30,7 @@
     if (this.scanInfo) return this.scanInfo.folderCount + ' folders · ' + this.scanInfo.fileCount + ' files · ' + this.scanInfo.scanTime + (this.scanInfo.cached ? ' (cached)' : '');
     return 'Click Scan Disk to analyze';
   },
-}" x-init='queueMicrotask(function(){ typeof diskPanelMount === "function" && diskPanelMount() })'>
+}" x-init='scanTotalLabel = defaultSize = $el.dataset.scanTotal; rootName = defaultName = $el.dataset.scanRoot; queueMicrotask(function(){ typeof diskPanelMount === "function" && diskPanelMount() })'>
 
   <!-- Disk sidebar -->
   <div class='disk-sidebar'>
@@ -32,7 +40,7 @@
           <div style='width: 30px; height: 30px; background: linear-gradient(135deg, #3a3a3c, #48484a); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #98989d;'>HD</div>
           <div>
             <div style='font-size: 12px; font-weight: 600;'>Macintosh HD</div>
-            <div style='font-size: 10px; color: #6c6c70;'>{{ fDiskTotalLabel }} total</div>
+            <div style='font-size: 10px; color: var(--tertiary);'>{{ fDiskTotalLabel }} total</div>
           </div>
         </div>
         <div class='disk-usage-bar'>
@@ -46,13 +54,13 @@
     </div>
 
     <div class='disk-sidebar-section'>
-      <div style='font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: #6c6c70; margin-bottom: 8px;' x-text="'Home: ' + rootName">Home: {{ scanBasename }}</div>
+      <div style='font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--tertiary); margin-bottom: 8px;' x-text="'Home: ' + rootName">Home: {{ scanBasename }}</div>
       <div style='font-size: 18px; font-weight: 700; margin-bottom: 2px;' x-text="scanTotalLabel">{{ scanTotalFormatted }}</div>
-      <div style='font-size: 10px; color: #6c6c70;' x-text="metaText()">Click 'Scan Disk' to analyze</div>
+      <div style='font-size: 10px; color: var(--tertiary);' x-text="metaText()">Click 'Scan Disk' to analyze</div>
     </div>
 
     <div class='disk-sidebar-section' style='padding-bottom: 4px;'>
-      <div style='font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: #6c6c70;'>Largest Items</div>
+      <div style='font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--tertiary);'>Largest Items</div>
     </div>
     <div class='folder-list'>
       <template x-for="item in topItems" :key="item.idx">
@@ -72,8 +80,10 @@
 
   <!-- Sunburst chart -->
   <div class='disk-chart'>
-    <div id='disk-loading' x-show="scanState !== 'done'" style='position: relative; z-index: 1; text-align: center; color: #6c6c70; font-size: 13px;'>
-      <div :style="scanState === 'scanning' ? 'margin-bottom: 12px; font-size: 24px; animation: pulse 1.5s ease-in-out infinite;' : 'margin-bottom: 12px; font-size: 24px;'">&#x1F4BE;</div>
+    <div id='disk-loading' x-show="scanState !== 'done'" style='position: relative; z-index: 1; text-align: center; color: var(--tertiary); font-size: 13px;'>
+      <div class='disk-empty-glyph' :class="scanState === 'scanning' ? 'is-scanning' : ''">
+        <span class='i-f7-chart-pie-fill' aria-hidden='true'></span>
+      </div>
       <div x-show="scanState === 'idle'">
         <div style='margin-bottom: 12px;'>Analyze disk usage with an interactive sunburst chart</div>
         <button class='btn' onclick='startDiskScan()' style='padding: 8px 20px; font-size: 13px;'>Scan Disk</button>
@@ -82,9 +92,9 @@
       <div x-show="scanState === 'scanning'">Scanning disk&hellip;</div>
     </div>
     <svg class='sunburst-svg' id='sunburst' viewBox='-320 -320 640 640' x-show="scanState === 'done'" x-cloak>
-      <circle cx='0' cy='0' r='115' fill='none' stroke='rgba(255,255,255,0.03)' stroke-width='0.5' />
-      <circle cx='0' cy='0' r='170' fill='none' stroke='rgba(255,255,255,0.03)' stroke-width='0.5' />
-      <circle cx='0' cy='0' r='225' fill='none' stroke='rgba(255,255,255,0.03)' stroke-width='0.5' />
+      <circle cx='0' cy='0' r='115' fill='none' stroke='var(--line-soft)' stroke-width='0.5' />
+      <circle cx='0' cy='0' r='170' fill='none' stroke='var(--line-soft)' stroke-width='0.5' />
+      <circle cx='0' cy='0' r='225' fill='none' stroke='var(--line-soft)' stroke-width='0.5' />
       <g id='segments-group'></g>
       <circle cx='0' cy='0' r='57' class='center-bg' />
       <circle cx='0' cy='0' r='57' class='center-ring' />
@@ -141,4 +151,8 @@
 
 <style>
 @keyframes pulse { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+.disk-empty-glyph { margin-bottom: 14px; color: var(--tertiary); }
+.disk-empty-glyph span { display: inline-block; width: 30px; height: 30px; }
+.disk-empty-glyph.is-scanning { animation: pulse 1.5s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .disk-empty-glyph.is-scanning { animation: none; } }
 </style>
