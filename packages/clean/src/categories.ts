@@ -56,6 +56,7 @@ export const CLEAN_TARGETS: CleanTarget[] = [
   t('yarn-cache', 'Yarn Cache', `${HOME}/Library/Caches/Yarn`, '🧶', 'developer', 'Yarn package manager cache', true),
   t('pnpm-store', 'pnpm Store', `${HOME}/Library/pnpm/store`, '📦', 'developer', 'pnpm content-addressable store', true),
   t('bun-cache', 'Bun Cache', `${HOME}/.bun/install/cache`, '🥟', 'developer', 'Bun package manager cache', true),
+  t('deno-cache', 'Deno Cache', `${HOME}/Library/Caches/deno`, '🦕', 'developer', 'Deno module and build cache', true),
   t('turbo-cache', 'Turbo Cache', `${HOME}/.turbo/cache`, '⚡', 'developer', 'Turborepo build cache', true),
   t('vite-cache', 'Vite Cache', `${HOME}/.cache/vite`, '⚡', 'developer', 'Vite bundler cache', true),
   t('webpack-cache', 'Webpack Cache', `${HOME}/.cache/webpack`, '📦', 'developer', 'Webpack bundler cache', true),
@@ -81,6 +82,7 @@ export const CLEAN_TARGETS: CleanTarget[] = [
   t('simulator-caches', 'Simulator Caches', `${HOME}/Library/Developer/CoreSimulator/Caches`, '📱', 'developer', 'CoreSimulator cache', true),
   t('simulator-logs', 'Simulator Logs', `${HOME}/Library/Logs/CoreSimulator`, '📱', 'developer', 'CoreSimulator logs', true),
   t('cocoapods-cache', 'CocoaPods Cache', `${HOME}/Library/Caches/CocoaPods`, '📦', 'developer', 'CocoaPods dependency cache', true),
+  t('swiftpm-cache', 'Swift Package Manager Cache', `${HOME}/Library/Caches/org.swift.swiftpm`, '🐦', 'developer', 'Swift Package Manager dependency cache', true),
 
   // ═══════════════════════════════════════════════════════════════
   // DEVELOPER — Python ecosystem
@@ -100,13 +102,20 @@ export const CLEAN_TARGETS: CleanTarget[] = [
   t('wandb-cache', 'Weights & Biases', `${HOME}/.cache/wandb`, '📊', 'developer', 'Weights & Biases experiment cache', true),
 
   // ═══════════════════════════════════════════════════════════════
-  // DEVELOPER — Go, Rust, Java
+  // DEVELOPER — Go, Rust, Zig, Java
   // ═══════════════════════════════════════════════════════════════
   t('go-modcache', 'Go Module Cache', `${HOME}/go/pkg/mod`, '🐹', 'developer', 'Go module download cache', true),
   t('go-buildcache', 'Go Build Cache', `${HOME}/Library/Caches/go-build`, '🐹', 'developer', 'Go compiler build cache', true),
   t('cargo-registry', 'Cargo Registry', `${HOME}/.cargo/registry/cache`, '🦀', 'developer', 'Rust cargo package registry cache', true),
+  t('cargo-registry-src', 'Cargo Crate Sources', `${HOME}/.cargo/registry/src`, '🦀', 'developer', 'Unpacked crate sources (re-extracted from the registry cache)', true),
   t('cargo-git', 'Cargo Git Cache', `${HOME}/.cargo/git`, '🦀', 'developer', 'Cargo git dependency cache', true),
   t('rustup-downloads', 'Rustup Downloads', `${HOME}/.rustup/downloads`, '🦀', 'developer', 'Rust toolchain download cache', true),
+  t('sccache', 'sccache', `${HOME}/Library/Caches/Mozilla.sccache`, '🦀', 'developer', 'Shared compilation cache for Rust and C/C++', true),
+  // Zig keeps a global cache next to the local `.zig-cache` each project owns.
+  // The XDG path is used by zig itself, the Library path by Homebrew builds.
+  t('zig-global-cache', 'Zig Global Cache', `${HOME}/.cache/zig`, '⚡', 'developer', 'Zig global build cache (rebuilt on next `zig build`)', true),
+  t('zig-library-cache', 'Zig Cache (Library)', `${HOME}/Library/Caches/zig`, '⚡', 'developer', 'Zig cache written under Library/Caches', true),
+  t('zls-cache', 'ZLS Cache', `${HOME}/.cache/zls`, '⚡', 'developer', 'Zig Language Server build cache', true),
   t('gradle-cache', 'Gradle Cache', `${HOME}/.gradle/caches`, '🐘', 'developer', 'Gradle build system cache', true),
   t('maven-cache', 'Maven Repository', `${HOME}/.m2/repository`, '🏗️', 'developer', 'Maven local repository cache', true),
 

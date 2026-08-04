@@ -124,6 +124,9 @@ export function getAllCategories(): CategoryDefinition[] {
 const PROJECT_ARTIFACT_PATTERNS: { dirName: string, type: string, label: string }[] = [
   { dirName: 'node_modules', type: 'JavaScript', label: 'Node.js dependencies' },
   { dirName: 'target', type: 'Rust/Java', label: 'Compiled output' },
+  { dirName: '.zig-cache', type: 'Zig', label: 'Zig build cache' },
+  { dirName: 'zig-cache', type: 'Zig', label: 'Zig build cache (legacy layout)' },
+  { dirName: 'zig-out', type: 'Zig', label: 'Zig build output' },
   { dirName: 'build', type: 'Generic', label: 'Build output' },
   { dirName: 'dist', type: 'Generic', label: 'Distribution output' },
   { dirName: '.next', type: 'Next.js', label: 'Next.js build cache' },

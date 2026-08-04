@@ -29,7 +29,8 @@ const FOLDED_DIRS = new Set([
   'node_modules', '.git', '__pycache__', '.cache', 'vendor', 'DerivedData',
   '.Spotlight-V100', '.fseventsd', 'CachedData', 'GPUCache', 'ShaderCache',
   '.npm', '.bun', '.Trash', '.next', '.nuxt', '.turbo',
-  '.parcel-cache', 'target', '.gradle', 'Pods', '.dart_tool', '.venv',
+  '.parcel-cache', 'target', '.zig-cache', 'zig-cache', 'zig-out',
+  '.gradle', 'Pods', '.dart_tool', '.venv',
   'venv', '.tox', '.mypy_cache', '.pytest_cache', 'dist', 'build',
   '.angular', '.svelte-kit', 'coverage', '.nyc_output', '.stx',
 ])
