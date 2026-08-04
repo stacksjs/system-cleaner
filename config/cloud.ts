@@ -37,7 +37,7 @@ export const tsCloud: TsCloudConfig = {
         'mkdir -p storage/framework/runtime/production',
         'bun build --production --target=bun --packages=external app/ProductionServer.ts --outfile storage/framework/runtime/production/serve.js',
         'mkdir -p /var/www/system-cleaner-shared/database',
-        'bun node_modules/@stacksjs/buddy/dist/cli.js migrate --force',
+        `DB_CONNECTION=sqlite DB_DATABASE_PATH=${SHARED_DATABASE} APP_ENV=production NODE_ENV=production bun node_modules/@stacksjs/buddy/dist/cli.js migrate --force`,
       ],
       env: {
         PORT: '3080',
