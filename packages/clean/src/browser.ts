@@ -14,7 +14,7 @@ export function detectBrowserProfiles(): BrowserProfile[] {
     for (const profile of findChromeProfiles(chromeBase)) {
       profiles.push({
         browser: 'Chrome',
-        browserIcon: '🌐',
+        browserIcon: 'i-f7-globe',
         profilePath: profile,
         cachePaths: [
           path.join(HOME, 'Library/Caches/Google/Chrome'),
@@ -38,7 +38,7 @@ export function detectBrowserProfiles(): BrowserProfile[] {
       const profilePath = path.join(firefoxProfiles, profile)
       profiles.push({
         browser: 'Firefox',
-        browserIcon: '🦊',
+        browserIcon: 'i-f7-flame-fill',
         profilePath,
         cachePaths: [
           path.join(HOME, 'Library/Caches/Firefox'),
@@ -59,7 +59,7 @@ export function detectBrowserProfiles(): BrowserProfile[] {
   if (pathExists(safariPath)) {
     profiles.push({
       browser: 'Safari',
-      browserIcon: '🧭',
+      browserIcon: 'i-f7-compass-fill',
       profilePath: safariPath,
       cachePaths: [
         path.join(HOME, 'Library/Caches/com.apple.Safari'),
@@ -80,7 +80,7 @@ export function detectBrowserProfiles(): BrowserProfile[] {
     for (const profile of findChromeProfiles(edgeBase)) {
       profiles.push({
         browser: 'Edge',
-        browserIcon: '🔷',
+        browserIcon: 'i-f7-app-fill',
         profilePath: profile,
         cachePaths: [
           path.join(HOME, 'Library/Caches/Microsoft Edge'),
@@ -102,7 +102,7 @@ export function detectBrowserProfiles(): BrowserProfile[] {
     for (const profile of findChromeProfiles(braveBase)) {
       profiles.push({
         browser: 'Brave',
-        browserIcon: '🦁',
+        browserIcon: 'i-f7-shield-lefthalf-fill',
         profilePath: profile,
         cachePaths: [
           path.join(HOME, 'Library/Caches/BraveSoftware/Brave-Browser'),
@@ -126,7 +126,7 @@ export function detectBrowserProfiles(): BrowserProfile[] {
       for (const profile of findChromeProfiles(arcUser)) {
         profiles.push({
           browser: 'Arc',
-          browserIcon: '🌈',
+          browserIcon: 'i-f7-circle-grid-hex-fill',
           profilePath: profile,
           cachePaths: [
             path.join(HOME, 'Library/Caches/company.thebrowser.Browser'),
@@ -153,10 +153,10 @@ export function scanChromeExtensions(): ExtensionInfo[] {
   const extensions: ExtensionInfo[] = []
 
   const chromeBases = [
-    { base: path.join(HOME, 'Library/Application Support/Google/Chrome'), browser: 'Chrome', icon: '🌐' },
-    { base: path.join(HOME, 'Library/Application Support/Microsoft Edge'), browser: 'Edge', icon: '🔷' },
-    { base: path.join(HOME, 'Library/Application Support/BraveSoftware/Brave-Browser'), browser: 'Brave', icon: '🦁' },
-    { base: path.join(HOME, 'Library/Application Support/Arc/User Data'), browser: 'Arc', icon: '🌈' },
+    { base: path.join(HOME, 'Library/Application Support/Google/Chrome'), browser: 'Chrome', icon: 'i-f7-globe' },
+    { base: path.join(HOME, 'Library/Application Support/Microsoft Edge'), browser: 'Edge', icon: 'i-f7-app-fill' },
+    { base: path.join(HOME, 'Library/Application Support/BraveSoftware/Brave-Browser'), browser: 'Brave', icon: 'i-f7-shield-lefthalf-fill' },
+    { base: path.join(HOME, 'Library/Application Support/Arc/User Data'), browser: 'Arc', icon: 'i-f7-circle-grid-hex-fill' },
   ]
 
   for (const { base, browser, icon } of chromeBases) {
@@ -244,7 +244,7 @@ export function scanFirefoxExtensions(): ExtensionInfo[] {
           version: addon.version || '—',
           description: (addon.defaultLocale?.description || '').slice(0, 120),
           browser: 'Firefox',
-          browserIcon: '🦊',
+          browserIcon: 'i-f7-flame-fill',
           extId: addon.id,
           permissions: 0,
           hostPermissions: 0,

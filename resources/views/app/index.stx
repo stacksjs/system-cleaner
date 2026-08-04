@@ -44,7 +44,7 @@ const healthDasharray = String(2 * Math.PI * 40)
         <div class='card-value' style='color: #ff9f0a;'>{{ pendingUpdates }}</div>
         <div class='card-detail'>System, Homebrew, and app updates available</div>
       </div>
-      <span style='font-size: 13px; color: #0a84ff;'>View →</span>
+      <span class='view-link'>View <span class='i-f7-arrow-right' aria-hidden='true'></span></span>
     </a>
   </div>
 

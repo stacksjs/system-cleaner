@@ -96,25 +96,31 @@ const AGENT_DIRS = [
   { path: '/Library/LaunchDaemons', scope: 'system' as const, type: 'daemon' as const },
 ]
 
+/**
+ * `icon` is an Iconify Framework7 class, not an emoji. The UI renders this
+ * value straight into a `class` attribute, so emoji here shipped literal
+ * glyphs into the startup list and broke the app's single-collection,
+ * single-tint iconography.
+ */
 const VENDOR_MAP: Record<string, { vendor: string, category: StartupItem['category'], icon: string }> = {
-  'com.apple': { vendor: 'Apple', category: 'system', icon: '' },
-  'com.microsoft': { vendor: 'Microsoft', category: 'vendor', icon: '🪟' },
-  google: { vendor: 'Google', category: 'vendor', icon: '🔍' },
-  adobe: { vendor: 'Adobe', category: 'vendor', icon: '🎨' },
-  spotify: { vendor: 'Spotify', category: 'vendor', icon: '🎵' },
-  dropbox: { vendor: 'Dropbox', category: 'vendor', icon: '📦' },
-  docker: { vendor: 'Docker', category: 'dev', icon: '🐳' },
-  homebrew: { vendor: 'Homebrew', category: 'dev', icon: '🍺' },
-  slack: { vendor: 'Slack', category: 'vendor', icon: '💬' },
-  zoom: { vendor: 'Zoom', category: 'vendor', icon: '📹' },
-  '1password': { vendor: '1Password', category: 'vendor', icon: '🔐' },
-  raycast: { vendor: 'Raycast', category: 'vendor', icon: '🚀' },
-  steam: { vendor: 'Steam', category: 'vendor', icon: '🎮' },
-  jetbrains: { vendor: 'JetBrains', category: 'dev', icon: '🧠' },
-  github: { vendor: 'GitHub', category: 'dev', icon: '🐙' },
-  figma: { vendor: 'Figma', category: 'vendor', icon: '🎨' },
-  linear: { vendor: 'Linear', category: 'vendor', icon: '📋' },
-  notion: { vendor: 'Notion', category: 'vendor', icon: '📝' },
+  'com.apple': { vendor: 'Apple', category: 'system', icon: 'i-f7-logo-apple' },
+  'com.microsoft': { vendor: 'Microsoft', category: 'vendor', icon: 'i-f7-logo-windows' },
+  google: { vendor: 'Google', category: 'vendor', icon: 'i-f7-logo-google' },
+  adobe: { vendor: 'Adobe', category: 'vendor', icon: 'i-f7-paintbrush-fill' },
+  spotify: { vendor: 'Spotify', category: 'vendor', icon: 'i-f7-music-note-2' },
+  dropbox: { vendor: 'Dropbox', category: 'vendor', icon: 'i-f7-cube-box-fill' },
+  docker: { vendor: 'Docker', category: 'dev', icon: 'i-f7-cube-fill' },
+  homebrew: { vendor: 'Homebrew', category: 'dev', icon: 'i-f7-wrench-fill' },
+  slack: { vendor: 'Slack', category: 'vendor', icon: 'i-f7-number' },
+  zoom: { vendor: 'Zoom', category: 'vendor', icon: 'i-f7-videocam-fill' },
+  '1password': { vendor: '1Password', category: 'vendor', icon: 'i-f7-lock-fill' },
+  raycast: { vendor: 'Raycast', category: 'vendor', icon: 'i-f7-bolt-fill' },
+  steam: { vendor: 'Steam', category: 'vendor', icon: 'i-f7-gamecontroller-fill' },
+  jetbrains: { vendor: 'JetBrains', category: 'dev', icon: 'i-f7-chevron-left-slash-chevron-right' },
+  github: { vendor: 'GitHub', category: 'dev', icon: 'i-f7-logo-github' },
+  figma: { vendor: 'Figma', category: 'vendor', icon: 'i-f7-paintbrush-fill' },
+  linear: { vendor: 'Linear', category: 'vendor', icon: 'i-f7-list-bullet' },
+  notion: { vendor: 'Notion', category: 'vendor', icon: 'i-f7-doc-text-fill' },
 }
 
 function categorizeAgent(label: string): { vendor: string, category: StartupItem['category'], icon: string } {
@@ -124,7 +130,7 @@ function categorizeAgent(label: string): { vendor: string, category: StartupItem
     if (lower.includes(key))
       return value
   }
-  return { vendor: 'Third-party', category: 'other', icon: '⚙️' }
+  return { vendor: 'Third-party', category: 'other', icon: 'i-f7-gear-alt-fill' }
 }
 
 /**

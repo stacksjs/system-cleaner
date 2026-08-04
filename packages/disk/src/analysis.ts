@@ -49,7 +49,7 @@ export function analyzeByCategory(tree: DiskEntry): DiskUsageByCategory[] {
     result.push({
       category: 'other',
       label: 'Other Files',
-      icon: '📁',
+      icon: 'i-f7-folder-fill',
       sizeBytes: otherData.size,
       sizeFormatted: formatBytes(otherData.size),
       fileCount: otherData.count,

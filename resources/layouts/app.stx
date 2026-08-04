@@ -154,6 +154,11 @@
     .btn-danger { border-color: color-mix(in srgb, var(--red) 25%, transparent); background: color-mix(in srgb, var(--red) 10%, transparent); color: var(--red); }
     .btn-danger:hover { background: color-mix(in srgb, var(--red) 18%, transparent); }
     .btn-sm { padding: 2px 8px; font-size: 10px; }
+    .btn-icon { display: inline-flex; align-items: center; gap: 5px; }
+    .btn-icon > span[class*='i-f7-'] { width: 12px; height: 12px; }
+    .toast-glyph { width: 14px; height: 14px; flex-shrink: 0; }
+    .view-link { display: inline-flex; align-items: center; gap: 5px; color: var(--accent); font-size: 13px; }
+    .view-link > span { width: 13px; height: 13px; }
     .btn-active { border-color: color-mix(in srgb, var(--accent) 32%, transparent); background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
 
     .cpu-bar { display: flex; align-items: center; gap: 6px; }
@@ -163,6 +168,9 @@
     .dim, .item-sub, .ring-label { color: var(--secondary); }
     .item-name { font-weight: 500; }
     .item-sub { font-size: 10px; }
+    .item-row { display: flex; align-items: center; gap: 6px; }
+    .item-glyph { width: 14px; height: 14px; flex-shrink: 0; color: var(--accent); }
+    .run-at-load { display: inline-block; width: 13px; height: 13px; color: var(--green); }
     .item-path { max-width: 220px; overflow: hidden; color: var(--tertiary); font: 10px 'SF Mono', Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
     .check { width: 14px; height: 14px; accent-color: var(--accent); cursor: pointer; }
     .empty-state { padding: 40px 16px; color: var(--tertiary); font-size: 13px; text-align: center; }

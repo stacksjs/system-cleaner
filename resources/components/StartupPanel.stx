@@ -2,12 +2,12 @@
 <div class='card-row'>
   <div class='card'>
     <div class='card-label'>Active</div>
-    <div class='card-value' style='color: #ff9f0a;'>{{ enabledStartup.length }}</div>
+    <div class='card-value' style='color: #ff9f0a;'>{{ enabledStartup().length }}</div>
     <div class='card-detail'>Running at startup</div>
   </div>
   <div class='card'>
     <div class='card-label'>Disabled</div>
-    <div class='card-value dim'>{{ disabledStartup.length }}</div>
+    <div class='card-value dim'>{{ disabledStartup().length }}</div>
     <div class='card-detail'>Not running</div>
   </div>
   <div class='card'>
@@ -24,7 +24,7 @@
 
 <div class='tabs'>
   <button class='tab' :class="{ active: startupFilter === 'all' }" @click="setFilter('all')">All (<span>{{ startupItems.length }}</span>)</button>
-  <button class='tab' :class="{ active: startupFilter === 'enabled' }" @click="setFilter('enabled')">Enabled (<span>{{ enabledStartup.length }}</span>)</button>
+  <button class='tab' :class="{ active: startupFilter === 'enabled' }" @click="setFilter('enabled')">Enabled (<span>{{ enabledStartup().length }}</span>)</button>
   <button class='tab' :class="{ active: startupFilter === 'vendor' }" @click="setFilter('vendor')">Third-party</button>
   <button class='tab' :class="{ active: startupFilter === 'system' }" @click="setFilter('system')">Apple</button>
 </div>
@@ -41,7 +41,7 @@
   <table>
     <thead>
       <tr>
-        <th style='width: 28px;'><input type="checkbox" class="check" @click="allOn(enabledIds)" /></th>
+        <th style='width: 28px;'><input type="checkbox" class="check" @click="allOn(enabledIds())" /></th>
         <th>Name</th>
         <th>Scope</th>
         <th>Status</th>
@@ -54,8 +54,8 @@
         <tr x-show="!isRemoved(item.id) && rowVisible(item)" :data-item-id="item.id">
           <td><input type="checkbox" class="check" :checked="isOn(item.id)" @click="toggle(item.id)" /></td>
           <td>
-            <div><span style='margin-right: 4px;'>{{ item.icon }}</span><span class='item-name'>{{ item.name }}</span></div>
-            <div class='item-sub'>{{ item.vendor }}</div>
+            <div class='item-row'><span class='item-glyph' :class="item.icon" aria-hidden="true"></span><span class='item-name' x-text="item.name"></span></div>
+            <div class='item-sub' x-text="item.vendor"></div>
           </td>
           <td>
             <span class='badge badge-green' x-show="item.scope === 'user'">User</span>
@@ -66,8 +66,8 @@
             <span x-show="isDisabled(item.id)" x-cloak class="badge badge-gray">Disabled</span>
           </td>
           <td>
-            <span x-show='item.runAtLoad' style='color: #30d158;'>✓</span>
-            <span x-show='!item.runAtLoad' x-cloak class='dim'>—</span>
+            <span x-show='item.runAtLoad' class='i-f7-checkmark-alt run-at-load' aria-label='Runs at login'></span>
+            <span x-show='!item.runAtLoad' x-cloak class='dim'>-</span>
           </td>
           <td>
             <span x-show="item.category === 'system'" class='dim' style='font-size: 10px;'>Apple</span>

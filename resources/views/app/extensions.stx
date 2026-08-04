@@ -26,7 +26,7 @@
   toggle(id) { const i = this.selected.indexOf(id); if (i === -1) this.selected.push(id); else this.selected.splice(i, 1); },
   isOn(id) { return this.selected.includes(id); },
   allOn(ids) { if (ids.every(id => this.selected.includes(id))) this.selected = this.selected.filter(id => !ids.includes(id)); else ids.forEach(id => { if (!this.selected.includes(id)) this.selected.push(id); }); },
-  toast(msg, type) { var d = document.createElement('div'); d.className='toast'; d.innerHTML='<span>'+(type==='success'?'✓':type==='error'?'✕':'⚠')+'</span> '+msg; var area = document.querySelector('.toast-area'); if(!area){area=document.createElement('div');area.className='toast-area';document.body.appendChild(area);} area.appendChild(d); setTimeout(function(){d.remove()},4000); }
+  toast(msg, type) { var d = document.createElement('div'); d.className='toast'; var glyph = type==='success'?'i-f7-checkmark-alt-circle-fill':type==='error'?'i-f7-xmark-circle-fill':'i-f7-exclamationmark-triangle-fill'; d.innerHTML='<span class="toast-glyph '+glyph+'" aria-hidden="true"></span><span>'+msg+'</span>'; var area = document.querySelector('.toast-area'); if(!area){area=document.createElement('div');area.className='toast-area';document.body.appendChild(area);} area.appendChild(d); setTimeout(function(){d.remove()},4000); }
 }">
 <div class='toast-area'></div>
 <div class='main-header'>

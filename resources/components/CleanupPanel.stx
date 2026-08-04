@@ -20,11 +20,13 @@
     <button class='btn btn-danger' x-cloak x-show='selected.length > 0' onclick='doCleanSelected()'>
       Clean Selected (<span x-text='selected.length'>0</span>)
     </button>
-    <button class='btn' onclick='doEmptyTrash()'>
-      🗑️ Empty Trash
+    <button class='btn btn-icon' onclick='doEmptyTrash()'>
+      <span class='i-f7-trash-fill' aria-hidden='true'></span>
+      Empty Trash
     </button>
-    <button class='btn btn-sm' style='margin-left: auto;' onclick='scanCleanupSizes(true)'>
-      ↻ Rescan
+    <button class='btn btn-icon btn-sm' style='margin-left: auto;' onclick='scanCleanupSizes(true)'>
+      <span class='i-f7-arrow-clockwise' aria-hidden='true'></span>
+      Rescan
     </button>
   </div>
 
@@ -50,7 +52,7 @@
           <tr :data-clean-id="cat.id" :data-clean-path="cat.path">
             <td><input type='checkbox' class='check' :checked="isOn(cat.id)" @click="toggle(cat.id)" /></td>
             <td>
-              <div><span style='margin-right: 4px;'>{{ cat.icon }}</span><span class='item-name'>{{ cat.name }}</span></div>
+              <div class='item-row'><span class='item-glyph' :class="cat.icon" aria-hidden='true'></span><span class='item-name' x-text='cat.name'></span></div>
               <div class='item-sub'>{{ cat.desc }}</div>
             </td>
             <td class='clean-size' style='font-weight: 600; font-variant-numeric: tabular-nums; color: var(--tertiary);'>...</td>

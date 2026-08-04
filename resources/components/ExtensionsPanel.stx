@@ -7,7 +7,7 @@
   </div>
   <div class='card'>
     <div class='card-label'>Total Size</div>
-    <div class='card-value'>—</div>
+    <div class='card-value'>-</div>
     <div class='card-detail'>Disk space used</div>
   </div>
   <div class='card'>
@@ -48,8 +48,8 @@
           <tr>
             <td><input type='checkbox' class='check' :checked="isOn(ext.id)" @click="toggle(ext.id)" /></td>
             <td>
-              <div class='item-name'><span>{{ ext.browserIcon }}</span> <span>{{ ext.name }}</span></div>
-              <div class='item-sub' x-show='ext.description'>{{ ext.description }}</div>
+              <div class='item-row'><span class='item-glyph' :class="ext.browserIcon" aria-hidden='true'></span><span class='item-name' x-text='ext.name'></span></div>
+              <div class='item-sub' x-show='ext.description' x-text='ext.description'></div>
             </td>
             <td><span class='badge badge-purple'>{{ ext.browser }}</span></td>
             <td class='dim mono' style='font-size: 11px;'>{{ ext.version }}</td>
@@ -60,7 +60,7 @@
               <span class='badge badge-gray' x-show="(ext.permissions + ext.hostPermissions) === 0">None</span>
             </td>
             <td>
-              <span class='dim' style='font-size: 11px;'>—</span>
+              <span class='dim' style='font-size: 11px;'>-</span>
             </td>
           </tr>
         </template>
