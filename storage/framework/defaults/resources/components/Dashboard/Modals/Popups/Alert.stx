@@ -1,0 +1,123 @@
+@import('../../UI/Button')
+
+<script client>
+type AlertType = 'info' | 'warning' | 'danger' | 'success' | 'error'
+
+const liveTitle = useReactiveProp('title', '')
+const liveDescription = useReactiveProp('description', '')
+const liveType = useReactiveProp('type', 'info' as AlertType)
+const liveConfirmationText = useReactiveProp('confirmationText', 'Confirm')
+const liveAbortText = useReactiveProp('abortText', 'Cancel')
+const liveShow = useReactiveProp('show', true)
+const emit = defineEmits()
+const titleId = useId('alert-title')
+
+const normalizedType = derived(() => liveType() === 'danger' ? 'error' : liveType())
+const iconClass = derived(() => ({
+  info: 'i-hugeicons-information-circle text-blue-600',
+  warning: 'i-hugeicons-alert-02 text-yellow-600',
+  success: 'i-hugeicons-checkmark-circle-02 text-green-600',
+  error: 'i-hugeicons-cancel-circle text-red-600',
+})[normalizedType()] || 'i-hugeicons-information-circle text-blue-600')
+const iconWrapperClass = derived(() => ({
+  info: 'bg-blue-100',
+  warning: 'bg-yellow-100',
+  success: 'bg-green-100',
+  error: 'bg-red-100',
+})[normalizedType()] || 'bg-blue-100')
+function dismiss(event: 'close' | 'cancel' | 'confirm'): void {
+  liveShow.set(false)
+  emit('update:show', false)
+  emit(event)
+}
+</script>
+
+<div :if="liveShow()" class="flex fixed inset-0 z-50 items-end justify-center sm:items-center pb-6 px-4 sm:p-0 dashboard-modal-layer">
+  <button
+    type="button"
+    class="fixed inset-0 bg-gray-500/75 transition-opacity"
+    aria-label="Close alert"
+    @click="dismiss('close')"
+  ></button>
+
+  <div
+    class="overflow-y-auto relative pb-4 pt-5 px-4 sm:p-6 max-h-[32rem] max-w-md w-full md:max-w-xl bg-white dark:bg-neutral-700 rounded-lg shadow-xl transition-all"
+    role="alertdialog"
+    aria-modal="true"
+    :aria-labelledby="titleId"
+  >
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      iconOnly
+      class="absolute right-4 top-4"
+      ariaLabel="Close alert"
+      @click="dismiss('close')"
+    >
+      <span aria-hidden="true" class="h-6 w-6 i-hugeicons-cancel-01"></span>
+    </Button>
+
+    <div class="sm:flex sm:items-start">
+      <div
+        class="flex items-center justify-center shrink-0 mx-auto sm:mx-0 h-12 w-12 sm:h-10 sm:w-10 rounded-full"
+        :class="iconWrapperClass()"
+      >
+        <span aria-hidden="true" class="h-6 w-6" :class="iconClass()"></span>
+      </div>
+
+      <div class="mt-3 sm:ml-4 sm:mt-0 text-center sm:text-left">
+        <h3 :id="titleId" class="font-medium leading-6 text-gray-900 text-lg dark:text-neutral-100" :text="liveTitle()"></h3>
+        <p :if="liveDescription()" class="mt-2 text-gray-500 text-sm dark:text-neutral-400" :text="liveDescription()"></p>
+      </div>
+    </div>
+
+    <div class="sm:flex sm:flex-row-reverse mt-5 space-y-4 sm:mt-4 md:space-y-0">
+      <Button
+        :if="normalizedType() === 'info'"
+        type="button"
+        variant="primary"
+        @click="dismiss('confirm')"
+      >
+        <span :text="liveConfirmationText()"></span>
+      </Button>
+
+      <Button
+        :if="normalizedType() === 'warning'"
+        type="button"
+        variant="warning"
+        @click="dismiss('confirm')"
+      >
+        <span :text="liveConfirmationText()"></span>
+      </Button>
+
+      <Button
+        :if="normalizedType() === 'success'"
+        type="button"
+        variant="success"
+        @click="dismiss('confirm')"
+      >
+        <span :text="liveConfirmationText()"></span>
+      </Button>
+
+      <Button
+        :if="normalizedType() === 'error'"
+        type="button"
+        variant="danger"
+        @click="dismiss('confirm')"
+      >
+        <span :text="liveConfirmationText()"></span>
+      </Button>
+
+      <Button
+        :if="liveAbortText()"
+        type="button"
+        variant="secondary"
+        class="mr-4"
+        @click="dismiss('cancel')"
+      >
+        {{ liveAbortText() }}
+      </Button>
+    </div>
+  </div>
+</div>

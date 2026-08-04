@@ -1,4 +1,5 @@
 {
+  "extends": "./storage/framework/tsconfig.app.json",
   "compilerOptions": {
     "target": "ESNext",
     "module": "ESNext",
@@ -22,7 +23,11 @@
       "@system-cleaner/uninstall": ["./packages/uninstall/src/index.ts"],
       "@system-cleaner/disk": ["./packages/disk/src/index.ts"],
       "@system-cleaner/monitor": ["./packages/monitor/src/index.ts"],
-      "@stacksjs/stx": ["./node_modules/.bun/node_modules/@stacksjs/stx/dist/index.d.ts"]
+      "@stacksjs/stx": ["./node_modules/@stacksjs/stx/dist/index.d.ts"],
+      "Actions/*": ["./app/Actions/*"],
+      "Models/*": ["./app/Models/*"],
+      "~/*": ["./*"],
+      "@/*": ["./resources/*"]
     }
   },
   "include": [
@@ -32,14 +37,16 @@
     "routes/**/*.ts",
     "workers/**/*.ts",
     "channels.ts",
-    "config/stx.ts",
+    "config/**/*.ts",
+    "app/**/*.ts",
+    "resources/**/*.ts",
     "scripts/**/*.ts",
     "test/**/*.ts"
   ],
   "exclude": [
     "node_modules",
     "pantry",
-    ".stx",
+    "storage/framework/stx",
     "dist"
   ]
 }

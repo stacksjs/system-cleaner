@@ -1,0 +1,105 @@
+<script client>
+import type { CommerceCustomerRecord } from '../../../../app/Actions/Dashboard/Commerce/commerce-customer-records'
+
+const open = useReactiveProp('open', false)
+const mode = useReactiveProp('mode', 'add')
+const record = useReactiveProp('record', null as CommerceCustomerRecord | null)
+const currency = useReactiveProp('currency', 'USD')
+const busy = useReactiveProp('busy', false)
+const errors = useReactiveProp('errors', {} as Record<string, string>)
+const emit = defineEmits()
+const name = state('')
+const email = state('')
+const phone = state('')
+const totalSpent = state('0')
+const lastOrder = state('')
+const status = state<'Active' | 'Inactive'>('Active')
+const avatar = state('')
+let hydrationKey = ''
+
+effect(() => {
+  if (!open()) {
+    hydrationKey = ''
+    return
+  }
+  const current = record()
+  const key = `${mode()}:${current?.id || 'new'}`
+  if (hydrationKey === key)
+    return
+  hydrationKey = key
+  name.set(current?.name || '')
+  email.set(current?.email || '')
+  phone.set(current?.phone || '')
+  totalSpent.set(String(current?.totalSpent ?? 0))
+  lastOrder.set(current?.lastOrder.slice(0, 10) || '')
+  status.set(current?.status === 'Inactive' ? 'Inactive' : 'Active')
+  avatar.set(current?.avatar || '')
+})
+
+function validAvatar(): boolean {
+  try {
+    const result = new URL(avatar().trim())
+    return result.protocol === 'https:' || result.protocol === 'http:'
+  }
+  catch {
+    return false
+  }
+}
+
+function valid(): boolean {
+  const spend = Number(totalSpent())
+  return Boolean(
+    name().trim().length >= 2
+    && email().trim()
+    && Number.isFinite(spend)
+    && spend >= 0
+    && validAvatar()
+  )
+}
+
+function submit(): void {
+  if (!valid())
+    return
+  emit('submit', {
+    name: name().trim(),
+    email: email().trim(),
+    phone: phone().trim(),
+    totalSpent: Number(totalSpent()),
+    lastOrder: lastOrder() || undefined,
+    status: status(),
+    avatar: avatar().trim(),
+  })
+}
+
+function errorMessages(): string[] {
+  return Object.entries(errors()).map(([field, message]) => {
+    const label = field.replace(/([a-z])([A-Z])/g, '$1 $2').replaceAll('_', ' ')
+    return `${label.charAt(0).toUpperCase()}${label.slice(1)}: ${message}`
+  })
+}
+</script>
+
+<div :if="open()" class="flex fixed inset-0 z-50 items-center justify-center p-4 dashboard-modal-layer">
+  <button type="button" aria-label="Close customer dialog" class="absolute inset-0 bg-black/45" @click="emit('close')"></button>
+  <section role="dialog" aria-modal="true" aria-labelledby="customer-dialog-title" class="overflow-y-auto relative max-h-[90dvh] max-w-2xl w-full bg-white dark:bg-neutral-800 border border-gray-200 rounded-xl dark:border-neutral-700 shadow-xl">
+    <form @submit.prevent="submit">
+      <div class="p-6">
+        <h2 id="customer-dialog-title" class="font-semibold text-gray-900 text-lg dark:text-white">{{ mode() === 'edit' ? 'Edit customer' : 'Add customer' }}</h2>
+        <p class="mt-1 text-gray-500 text-sm dark:text-neutral-400">Store fields declared by the native Customer model.</p>
+        <ul :if="errorMessages().length > 0" class="mt-5 p-3 space-y-1 text-red-700 text-sm dark:text-red-300 bg-red-50 dark:bg-red-950/30 border border-red-200 rounded-lg dark:border-red-900">
+          <template :for="message in errorMessages()" :key="message"><li>{{ message }}</li></template>
+        </ul>
+        <div class="grid gap-4 grid-cols-1 sm:grid-cols-2 mt-5">
+          <label class="block"><span class="font-medium text-gray-700 text-sm dark:text-neutral-200">Name</span><input x-model="name" type="text" minlength="2" maxlength="255" required class="mt-1 px-3 py-2 w-full text-gray-900 text-sm dark:text-white bg-white dark:bg-neutral-900 border border-gray-300 rounded-md dark:border-neutral-700" /></label>
+          <label class="block"><span class="font-medium text-gray-700 text-sm dark:text-neutral-200">Email</span><input x-model="email" type="email" required class="mt-1 px-3 py-2 w-full text-gray-900 text-sm dark:text-white bg-white dark:bg-neutral-900 border border-gray-300 rounded-md dark:border-neutral-700" /></label>
+          <label class="block"><span class="font-medium text-gray-700 text-sm dark:text-neutral-200">Phone <span class="font-normal text-gray-400 dark:text-neutral-500">(optional)</span></span><input x-model="phone" type="tel" maxlength="50" class="mt-1 px-3 py-2 w-full text-gray-900 text-sm dark:text-white bg-white dark:bg-neutral-900 border border-gray-300 rounded-md dark:border-neutral-700" /></label>
+          <label class="block"><span class="font-medium text-gray-700 text-sm dark:text-neutral-200">Status</span><select x-model="status" class="mt-1 px-3 py-2 w-full text-gray-900 text-sm dark:text-white bg-white dark:bg-neutral-900 border border-gray-300 rounded-md dark:border-neutral-700"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></label>
+          <label class="block"><span class="font-medium text-gray-700 text-sm dark:text-neutral-200">Recorded spend ({{ currency() }})</span><input x-model="totalSpent" type="number" min="0" step="0.01" required class="mt-1 px-3 py-2 w-full text-gray-900 text-sm dark:text-white bg-white dark:bg-neutral-900 border border-gray-300 rounded-md dark:border-neutral-700" /></label>
+          <label class="block"><span class="font-medium text-gray-700 text-sm dark:text-neutral-200">Last order</span><input x-model="lastOrder" type="date" class="mt-1 px-3 py-2 w-full text-gray-900 text-sm dark:text-white bg-white dark:bg-neutral-900 border border-gray-300 rounded-md dark:border-neutral-700" /></label>
+          <label class="block sm:col-span-2"><span class="font-medium text-gray-700 text-sm dark:text-neutral-200">Avatar URL</span><input x-model="avatar" type="url" placeholder="https://cdn.example.com/customers/avatar.jpg" required class="mt-1 px-3 py-2 w-full text-gray-900 text-sm dark:text-white bg-white dark:bg-neutral-900 border border-gray-300 rounded-md dark:border-neutral-700" /><span class="block mt-1 text-gray-400 text-xs dark:text-neutral-500">Use a persisted HTTP asset URL. The dashboard uses initials when rendering the table.</span></label>
+        </div>
+      </div>
+      <footer class="flex gap-2 justify-end px-6 py-4 bg-gray-50 dark:bg-neutral-900/50 border-gray-200 border-t dark:border-neutral-700"><Button variant="secondary" :disabled="busy()" @click="emit('close')">Cancel</Button><Button type="submit" :loading="busy()" :disabled="!valid()">{{ mode() === 'edit' ? 'Save customer' : 'Add customer' }}</Button></footer>
+    </form>
+  </section>
+</div>

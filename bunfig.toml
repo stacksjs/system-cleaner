@@ -1,1 +1,19 @@
+preload = [
+  "@stacksjs/env/plugin.js",
+  "./storage/framework/defaults/resources/plugins/preloader.ts",
+]
+
+[test]
+preload = [
+  "@stacksjs/env/plugin.js",
+]
+coverage = false
+
+[run]
+bun = true
+
+[serve.static]
+plugins = ["bun-plugin-stx"]
+
+[install]
 linker = "hoisted"

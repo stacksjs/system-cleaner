@@ -1,0 +1,7 @@
+<script>
+const { t } = useI18n()
+</script>
+
+<div>
+  {{ t('not-found') }}
+</div>

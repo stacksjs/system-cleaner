@@ -10,3 +10,43 @@ pantry
 dist/
 **/dist/
 /.screenshots
+# Local environment and decryption keys
+.env
+.env.local
+.env.keys
+.env.development
+.env.staging
+
+# Production values are encrypted and safe to deploy from source
+!.env.production
+
+# Runtime databases and build state
+database/stacks.sqlite
+database/stacks_testing.sqlite
+database/*.sqlite-wal
+database/*.sqlite-shm
+storage/framework/stx/
+storage/framework/.cache/
+storage/framework/auto-imports/*
+!storage/framework/auto-imports/.gitkeep
+storage/framework/runtime/
+storage/cloud/
+storage/framework/cache/
+storage/logs/
+/storage/framework/frontend-dist
+/storage/framework/desktop-dist
+
+# Local AI-client projections; Buddy rebuilds these from framework defaults
+/.claude
+/.codex
+/.gemini
+/CLAUDE.md
+/GEMINI.md
+/.github/copilot-instructions.md
+
+# Local framework pointers and update state
+/.framework
+/.stacks
+/.stacks-channel
+/.stacks-version
+/.tmp-upgrade/

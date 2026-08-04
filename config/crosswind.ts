@@ -21,10 +21,9 @@ const config = {
   // "Built 0 classes" precisely because of this. Include every place we
   // write JSX/STX/TS markup so server-rendered classes are picked up.
   content: [
-    './app.stx',
-    './layouts/**/*.stx',
-    './pages/**/*.stx',
-    './components/**/*.stx',
+    './resources/**/*.{stx,ts,html}',
+    './storage/framework/defaults/**/*.{stx,ts,html}',
+    './node_modules/@stacksjs/components/src/**/*.{stx,ts}',
   ],
   theme: {
     extend: {
@@ -69,7 +68,7 @@ const config = {
         toast: '0 8px 32px rgba(0, 0, 0, 0.4)',
       },
       fontFamily: {
-        sans: ['Inter', '-apple-system', 'SF Pro Display', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
+        sans: ['-apple-system', 'SF Pro Display', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
         mono: ['SF Mono', 'Menlo', 'ui-monospace', 'monospace'],
       },
     },
