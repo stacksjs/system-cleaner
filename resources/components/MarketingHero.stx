@@ -43,7 +43,7 @@ export const macAppStoreUrl = MAC_APP_STORE_URL
   <div class="site-container spec-row">
     <div>
       <span class="i-f7-desktopcomputer" aria-hidden="true"></span>
-      <p><b>macOS 14 or later</b><br>Apple silicon and Intel</p>
+      <p><b>macOS 14 or later</b><br>Built for Apple silicon</p>
     </div>
     <div>
       <span class="i-f7-lock-shield-fill" aria-hidden="true"></span>

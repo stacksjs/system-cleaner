@@ -288,7 +288,7 @@ export const USE_CASES: MarketingUseCase[] = [
         items: [
           'Browser extensions across every profile and browser',
           'Launch agents and daemons, split by user, system, and daemon location',
-          'Login items that apps added without asking',
+          'Every launch item disabled or removed one at a time, never in bulk',
           'Processes currently running, with owner and resource use',
         ],
       },

@@ -73,7 +73,7 @@ useIntervalFn(refreshActivity, 5000)
       <p class="activity-caption">Percent of capacity, sampled every 5 seconds</p>
     </div>
     <div class="activity-legend" aria-label="Current activity">
-      <span><i class="legend-swatch cpu"></i>CPU <b>{{ history().cpuLabel }}</b></span>
+      <span><i class="cpu legend-swatch"></i>CPU <b>{{ history().cpuLabel }}</b></span>
       <span><i class="legend-swatch memory"></i>Memory <b>{{ history().memoryLabel }}</b></span>
     </div>
   </div>
@@ -105,10 +105,10 @@ useIntervalFn(refreshActivity, 5000)
       <g class="axis-x">
         <line :x1="history().plot.left" :x2="history().plot.right"
           :y1="history().plot.bottom" :y2="history().plot.bottom" class="axis-line" />
-        <line :for="tick in history().xTicks" :key="tick.label"
+        <line :for="tick in history().xTicks" :key="tick.offset"
           :x1="tick.offset" :x2="tick.offset"
           :y1="history().plot.bottom" :y2="history().plot.bottom + 4" class="axis-line" />
-        <text :for="tick in history().xTicks" :key="tick.label"
+        <text :for="tick in history().xTicks" :key="tick.offset"
           :x="tick.offset" :y="history().plot.bottom + 17"
           x-text="tick.label" class="axis-label axis-label-x"></text>
       </g>

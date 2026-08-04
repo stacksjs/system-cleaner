@@ -20,5 +20,9 @@ export const MAC_APP_STORE_URL = 'https://apps.apple.com/search?term=SystemClean
 /** Public repository, used by the "View source" action. */
 export const SOURCE_URL = 'https://github.com/stacksjs/system-cleaner'
 
-/** Shown under the download actions so the requirement is stated before the click. */
-export const SYSTEM_REQUIREMENT = 'macOS 14 Sonoma or later. Apple silicon and Intel.'
+/**
+ * Shown under the download actions so the requirement is stated before the
+ * click. Apple silicon only, matching what `scripts/build-binaries.ts` can
+ * actually produce: Bun stopped shipping a darwin-x64 runtime in 1.4.
+ */
+export const SYSTEM_REQUIREMENT = 'macOS 14 Sonoma or later. Apple silicon.'
