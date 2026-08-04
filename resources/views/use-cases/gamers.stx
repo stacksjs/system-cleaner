@@ -1,0 +1,7 @@
+@extends('layouts/marketing')
+@section('title', 'SystemCleaner for gamers - clear launcher and shader caches')
+@section('description', 'Recover space from Steam, Epic, and Battle.net caches, compiled shader caches, and leftovers from games you already uninstalled.')
+@section('canonical', 'https://system-cleaner.app/use-cases/gamers')
+@section('content')
+  <MarketingUseCaseDetail slug="gamers" />
+@endsection

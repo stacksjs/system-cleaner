@@ -1,0 +1,7 @@
+@extends('layouts/marketing')
+@section('title', 'SystemCleaner for developers - reclaim build and package caches')
+@section('description', 'Reclaim Cargo crates, Zig caches, node_modules, Xcode DerivedData, Go, Gradle, Python, and Docker storage on macOS with a review-first cleanup.')
+@section('canonical', 'https://system-cleaner.app/use-cases/developers')
+@section('content')
+  <MarketingUseCaseDetail slug="developers" />
+@endsection

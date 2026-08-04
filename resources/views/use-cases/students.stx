@@ -1,0 +1,7 @@
+@extends('layouts/marketing')
+@section('title', 'SystemCleaner for students - free space on a small SSD')
+@section('description', 'Find out what "Other" storage really is, clear the caches macOS rebuilds anyway, and keep a 256 GB MacBook usable. Free, local, no account.')
+@section('canonical', 'https://system-cleaner.app/use-cases/students')
+@section('content')
+  <MarketingUseCaseDetail slug="students" />
+@endsection

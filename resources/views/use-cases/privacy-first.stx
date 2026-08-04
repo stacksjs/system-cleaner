@@ -1,0 +1,7 @@
+@extends('layouts/marketing')
+@section('title', 'SystemCleaner for privacy-first users - a cleaner with no telemetry')
+@section('description', 'Audit browser extensions, launch agents, and daemons on a Mac utility that has no account, no analytics, and no upload step.')
+@section('canonical', 'https://system-cleaner.app/use-cases/privacy-first')
+@section('content')
+  <MarketingUseCaseDetail slug="privacy-first" />
+@endsection

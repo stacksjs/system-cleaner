@@ -1,0 +1,37 @@
+<script server>
+import { USE_CASES } from '~/app/Support/Marketing/use-cases'
+
+const useCases = USE_CASES
+</script>
+
+@extends('layouts/marketing')
+
+@section('title', 'Use cases - SystemCleaner')
+@section('description', 'How developers, creative pros, gamers, students, and privacy-first Mac users get space and clarity back with SystemCleaner.')
+@section('canonical', 'https://system-cleaner.app/use-cases')
+
+@section('content')
+  <article class="site-container">
+    <header class="feature-hero">
+      <p class="eyebrow">Use cases</p>
+      <h1>Same Mac, very different mess.</h1>
+      <p>A toolchain fills a disk differently than a video library does. Pick the one that sounds like your machine and see exactly what SystemCleaner reclaims.</p>
+    </header>
+    <ul class="usecase-list">
+      @foreach (useCases as useCase)
+        <li>
+          <a href="/use-cases/{{ useCase.slug }}" data-stx-link>
+            <span class="usecase-icon"><span class="i-f7-{{ useCase.icon }}" aria-hidden="true"></span></span>
+            <span class="usecase-copy">
+              <strong>{{ useCase.name }}</strong>
+              <span>{{ useCase.summary }}</span>
+            </span>
+            <span class="i-f7-arrow-right usecase-arrow" aria-hidden="true"></span>
+          </a>
+        </li>
+      @endforeach
+    </ul>
+  </article>
+
+  <MarketingDownload />
+@endsection

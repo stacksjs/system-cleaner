@@ -1,0 +1,7 @@
+@extends('layouts/marketing')
+@section('title', 'SystemCleaner for creative pros - clear render and media caches')
+@section('description', 'Clear Final Cut, DaVinci Resolve, Adobe, Figma, Sketch, and Blender caches between projects, and find the folders eating your scratch disk.')
+@section('canonical', 'https://system-cleaner.app/use-cases/creative-pros')
+@section('content')
+  <MarketingUseCaseDetail slug="creative-pros" />
+@endsection
