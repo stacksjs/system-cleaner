@@ -3,29 +3,29 @@
 @section('body')
 
 <style>
-.system-layout { display: flex; height: 100%; min-height: 520px; }
+.system-layout { display: flex; height: 100%; min-height: 0; }
 
 /* ── App list sidebar ───────────────────────────── */
 .app-list {
-  width: 320px; min-width: 320px; border-right: 0.5px solid rgba(255,255,255,0.06);
+  width: 320px; min-width: 320px; border-right: 0.5px solid var(--line-soft);
   display: flex; flex-direction: column; overflow: hidden;
 }
 .app-list-header {
-  padding: 16px; border-bottom: 0.5px solid rgba(255,255,255,0.06);
+  padding: 16px; border-bottom: 0.5px solid var(--line-soft);
 }
 .app-search {
   width: 100%; padding: 7px 10px; border-radius: 6px;
-  background: rgba(255,255,255,0.06); border: 0.5px solid rgba(255,255,255,0.08);
-  color: #f5f5f7; font-size: 12px; font-family: inherit; outline: none;
+  background: var(--surface-soft); border: 0.5px solid var(--line);
+  color: var(--ink); font-size: 12px; font-family: inherit; outline: none;
 }
-.app-search::placeholder { color: #6c6c70; }
-.app-search:focus { border-color: rgba(10,132,255,0.5); }
+.app-search::placeholder { color: var(--tertiary); }
+.app-search:focus { border-color: var(--accent); }
 .app-list-meta {
-  padding: 10px 16px 6px; font-size: 11px; color: #6c6c70; font-weight: 600;
+  padding: 10px 16px 6px; font-size: 11px; color: var(--tertiary); font-weight: 600;
   display: flex; align-items: center; gap: 6px;
 }
 .app-list-meta .count {
-  background: rgba(255,255,255,0.08); padding: 1px 7px; border-radius: 8px;
+  background: var(--surface-soft); padding: 1px 7px; border-radius: 8px;
   font-size: 10px; font-weight: 500;
 }
 .app-list-scroll {
@@ -36,34 +36,41 @@
   padding: 8px 10px; border-radius: 8px; cursor: default;
   transition: background 0.1s;
 }
-.app-row:hover { background: rgba(255,255,255,0.04); }
+.app-row:hover { background: var(--hover); }
 .app-row-name { font-size: 13px; font-weight: 450; }
-.app-row-size { font-size: 12px; color: #6c6c70; font-family: 'SF Mono', Menlo, monospace; white-space: nowrap; }
+.app-row-size { font-size: 12px; color: var(--tertiary); font-family: 'SF Mono', Menlo, monospace; white-space: nowrap; }
+
+.app-empty { padding: 20px; color: var(--tertiary); font-size: 12px; text-align: center; }
+/* The page owns the full remaining height so both columns scroll internally
+   rather than the whole pane scrolling as one. */
+.system-content { padding: 0; height: calc(100vh - 74px); }
 
 /* ── Main panel ─────────────────────────────────── */
+/* Top-aligned. Centering a single card in the full pane left the volume
+   readout floating in the middle of an otherwise empty column. */
 .system-main {
-  flex: 1; display: flex; align-items: center; justify-content: center;
-  padding: 32px;
+  flex: 1; min-width: 0; display: flex; align-items: flex-start; justify-content: flex-start;
+  padding: 24px 28px; overflow-y: auto;
 }
 .disk-card {
-  background: rgba(255,255,255,0.04); border: 0.5px solid rgba(255,255,255,0.08);
-  border-radius: 14px; padding: 24px 28px; width: 100%; max-width: 480px;
+  background: var(--surface); border: 0.5px solid var(--line);
+  border-radius: 16px; padding: 24px 28px; width: 100%; max-width: 560px;
 }
 .disk-card-header {
   display: flex; justify-content: space-between; align-items: flex-start;
   margin-bottom: 16px;
 }
 .disk-card-title { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
-.disk-card-pct { font-size: 13px; font-weight: 500; color: #6c6c70; }
+.disk-card-pct { font-size: 13px; font-weight: 500; color: var(--tertiary); }
 .disk-card-meta { display: flex; flex-direction: column; gap: 4px; margin-bottom: 20px; }
-.disk-card-row { font-size: 12px; color: #8e8e93; }
-.disk-card-row strong { color: #f5f5f7; font-weight: 600; }
+.disk-card-row { font-size: 12px; color: var(--secondary); }
+.disk-card-row strong { color: var(--ink); font-weight: 600; }
 .disk-bar-wrap {
   display: flex; align-items: center; gap: 10px;
 }
-.disk-bar-label { font-size: 11px; color: #6c6c70; white-space: nowrap; font-family: 'SF Mono', Menlo, monospace; }
+.disk-bar-label { font-size: 11px; color: var(--tertiary); white-space: nowrap; font-family: 'SF Mono', Menlo, monospace; }
 .disk-bar-track {
-  flex: 1; height: 8px; background: rgba(255,255,255,0.06);
+  flex: 1; height: 8px; background: var(--track);
   border-radius: 4px; overflow: hidden;
 }
 .disk-bar-fill {
@@ -72,11 +79,11 @@
   transition: width 0.6s ease;
 }
 .disk-card-footer {
-  margin-top: 16px; padding-top: 12px; border-top: 0.5px solid rgba(255,255,255,0.06);
+  margin-top: 16px; padding-top: 12px; border-top: 0.5px solid var(--line-soft);
 }
 .disk-card-stat-row { display: flex; gap: 20px; }
-.disk-card-stat { font-size: 11px; color: #6c6c70; }
-.disk-card-stat strong { color: #f5f5f7; }
+.disk-card-stat { font-size: 11px; color: var(--tertiary); }
+.disk-card-stat strong { color: var(--ink); }
 </style>
 
 <div x-data="{
@@ -124,7 +131,7 @@
     return bytes + ' B';
   },
 
-  get filteredApps() {
+  filteredApps: function() {
     if (!this.search) return this.apps;
     var q = this.search.toLowerCase();
     return this.apps.filter(function(a) { return a.name.toLowerCase().includes(q); });
@@ -142,7 +149,7 @@
     </span>
   </div>
 </div>
-<div class='main-content' style='padding: 0; height: calc(100% - 60px);'>
+<div class='main-content system-content'>
   <div class='system-layout'>
 
     <!-- ── App list ──────────────────────────────── -->
@@ -155,13 +162,20 @@
         <span class='count' x-text="loading ? '...' : apps.length">...</span>
       </div>
       <div class='app-list-scroll'>
-        <div x-show='loading' style='padding: 20px; text-align: center; color: #6c6c70; font-size: 12px;'>Scanning apps...</div>
-        <template x-for='app in filteredApps' :key='app.name'>
+        <div x-show='loading' style='padding: 20px; text-align: center; color: var(--tertiary); font-size: 12px;'>Scanning apps...</div>
+        <!--
+          Bind with x-text, not `{{ }}`. Interpolation inside an x-for body
+          gets an `x-cloak` wrapper injected for the pre-hydration pass, and
+          cloned rows never have it removed, so every row rendered but stayed
+          `display: none`.
+        -->
+        <template x-for='app in filteredApps()' :key='app.name'>
           <div class='app-row'>
-            <span class='app-row-name'>{{ app.name }}</span>
-            <span class='app-row-size'>{{ fmtSize(app.sizeBytes) }}</span>
+            <span class='app-row-name' x-text='app.name'></span>
+            <span class='app-row-size' x-text='fmtSize(app.sizeBytes)'></span>
           </div>
         </template>
+        <div x-show='!loading && filteredApps().length === 0' class='app-empty'>No apps match that search.</div>
       </div>
     </div>
 
