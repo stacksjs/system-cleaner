@@ -504,15 +504,21 @@ export default async function (router: Router) {
     const memPercent = Math.round(((os.default.totalmem() - os.default.freemem()) / os.default.totalmem()) * 100);
     const cpuAvgPercent = cpuCores > 0 ? Math.round(totalCPU / cpuCores) : 0;
 
+    // Read the boot volume once, in bytes, and derive every label from it.
+    // `df -h`'s own "Used" column is not usable here: on APFS the root
+    // volume is the read-only system snapshot (~12Gi) while "Avail" reports
+    // the shared container, so the two columns describe different things.
     let dUsedPct = 0;
+    let diskTotalBytes = 0;
+    let diskFreeBytes = 0;
     try {
       const { execSync } = await import('@system-cleaner/core');
       const dfOut = execSync('df -k / 2>/dev/null');
       const parts = dfOut.split('\n')[1]?.split(/\s+/);
       if (parts) {
-        const total = Number.parseInt(parts[1], 10) * 1024;
-        const free = Number.parseInt(parts[3], 10) * 1024;
-        dUsedPct = total > 0 ? Math.round((1 - free / total) * 100) : 0;
+        diskTotalBytes = Number.parseInt(parts[1], 10) * 1024;
+        diskFreeBytes = Number.parseInt(parts[3], 10) * 1024;
+        dUsedPct = diskTotalBytes > 0 ? Math.round((1 - diskFreeBytes / diskTotalBytes) * 100) : 0;
       }
     }
     catch {}
@@ -527,20 +533,11 @@ export default async function (router: Router) {
     if (base.enabledStartup > 20) healthDeductions += Math.min(5, Math.floor((base.enabledStartup - 20) / 10));
     const healthScore = Math.max(0, Math.min(100, 100 - healthDeductions));
 
-    let diskTotal = '—';
-    let diskUsed = '—';
-    let diskAvail = '—';
-    let diskPercent = 0;
-    try {
-      const { execSync } = await import('@system-cleaner/core');
-      const dfLine = execSync('df -h / | tail -1');
-      const dfParts = dfLine.split(/\s+/);
-      diskTotal = dfParts[1] || '—';
-      diskUsed = dfParts[2] || '—';
-      diskAvail = dfParts[3] || '—';
-      diskPercent = Number.parseInt(dfParts[4]) || 0;
-    }
-    catch {}
+    const { formatBytes } = await import('@system-cleaner/core');
+    const diskTotal = diskTotalBytes > 0 ? formatBytes(diskTotalBytes) : '-';
+    const diskUsed = diskTotalBytes > 0 ? formatBytes(diskTotalBytes - diskFreeBytes) : '-';
+    const diskAvail = diskTotalBytes > 0 ? formatBytes(diskFreeBytes) : '-';
+    const diskPercent = dUsedPct;
 
     const payload = {
       ...base,
