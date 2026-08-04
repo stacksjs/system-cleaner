@@ -17,6 +17,10 @@ const fDiskUsedLabel = formatBytes(dTotal - dFree)
 const fDiskFreeLabel = formatBytes(dFree)
 </script>
 
+@extends('layouts/app')
+@section('body')
+
 <div class='main-content' style='padding: 0; height: 100%;'>
   @include('DiskPanel')
 </div>
+@endsection

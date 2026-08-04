@@ -1,0 +1,34 @@
+<script server>
+import { FEATURES } from '~/app/Support/Marketing/catalog'
+
+const features = FEATURES
+</script>
+
+@extends('layouts/marketing')
+
+@section('title', 'Features - SystemCleaner')
+@section('description', 'Explore SystemCleaner tools for disk analysis, safe cleanup, startup items, processes, extensions, updates, and Mac health.')
+@section('canonical', 'https://system-cleaner.app/features')
+
+@section('content')
+  <article class="site-container">
+    <header class="feature-hero">
+      <p class="eyebrow">Features</p>
+      <h1>One calm place to understand your Mac.</h1>
+      <p>Each tool answers a specific maintenance question, with local data and review-first actions.</p>
+    </header>
+    <ul class="feature-list">
+      @foreach (features as feature)
+        <li>
+          <a href="/features/{{ feature.slug }}" data-stx-link>
+            <span>
+              <strong>{{ feature.name }}</strong>
+              <span class="block mt-1 text-[13px] text-[color:var(--muted)]">{{ feature.summary }}</span>
+            </span>
+            <span class="h-5 w-5 i-hugeicons-arrow-right-01" aria-hidden="true"></span>
+          </a>
+        </li>
+      @endforeach
+    </ul>
+  </article>
+@endsection

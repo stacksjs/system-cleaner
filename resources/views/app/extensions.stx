@@ -1,3 +1,6 @@
+@extends('layouts/app')
+@section('body')
+
 <div x-data="{
   selected: [],
   browserExtensions: [],
@@ -36,3 +39,4 @@
   </div>
 </div>
 </div>
+@endsection

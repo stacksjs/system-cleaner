@@ -1,3 +1,6 @@
+@extends('layouts/app')
+@section('body')
+
 <style>
 .live-indicator {
   display: inline-flex;
@@ -186,3 +189,4 @@ if (!window._execFlushBound) {
   connect();
 })();
 </script>
+@endsection

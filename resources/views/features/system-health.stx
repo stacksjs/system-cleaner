@@ -1,0 +1,7 @@
+@extends('layouts/marketing')
+@section('title', 'System Health - SystemCleaner')
+@section('description', 'Read Mac CPU, memory, battery, network, GPU, and disk health signals in one calm overview.')
+@section('canonical', 'https://system-cleaner.app/features/system-health')
+@section('content')
+  <MarketingFeatureDetail slug="system-health" />
+@endsection

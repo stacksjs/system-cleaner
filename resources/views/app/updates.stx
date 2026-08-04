@@ -1,3 +1,6 @@
+@extends('layouts/app')
+@section('body')
+
 <script src='/updates-xdata.js'></script>
 <div x-data='updatesXData()'>
 
@@ -310,3 +313,4 @@
 </div>
 </div>
 </div>
+@endsection

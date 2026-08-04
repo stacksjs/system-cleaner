@@ -3,6 +3,9 @@ const { escapeHtml } = require('@system-cleaner/core')
 function esc(str) { return escapeHtml(str || '') }
 </script>
 
+@extends('layouts/app')
+@section('body')
+
 <div x-data="{
   selected: [],
   cleaning: {},
@@ -236,3 +239,4 @@ function scanCleanupSizes(force) {
 
 // Load after targets render (init() triggers scanCleanupSizes).
 </script>
+@endsection

@@ -1,0 +1,14 @@
+<footer class="site-footer">
+  <div class="footer-inner site-container">
+    <a class="brand" href="/">
+      <img src="/images/systemcleaner-icon.png" width="30" height="30" alt="" />
+      <span>SystemCleaner</span>
+    </a>
+    <nav class="footer-links" aria-label="Footer navigation">
+      <a href="/features" data-stx-link>Features</a>
+      <a href="/app" data-stx-link>Open app</a>
+      <a href="https://github.com/stacksjs/system-cleaner">GitHub</a>
+      <a href="https://stacksjs.com">Built with Stacks</a>
+    </nav>
+  </div>
+</footer>

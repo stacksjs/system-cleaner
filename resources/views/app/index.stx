@@ -15,12 +15,14 @@ const uptimeRemHours = uptimeHours % 24
 const uptimeStr = uptimeDays > 0 ? `${uptimeDays}d ${uptimeRemHours}h` : `${uptimeHours}h`
 const hostname = sysInfo.hostname
 
-const sMemPercent = String(memPercent)
 const memBarStyle = 'width: ' + memPercent + '%; background: ' + (memPercent > 80 ? '#ff453a' : memPercent > 60 ? '#ff9f0a' : '#30d158') + ';'
 const memDotColor = memPercent > 80 ? '#ff453a' : memPercent > 60 ? '#ff9f0a' : '#30d158'
 const cpuLabel = cpuModel.split(' ').slice(0, 3).join(' ')
 const healthDasharray = String(2 * Math.PI * 40)
 </script>
+
+@extends('layouts/app')
+@section('body')
 
 <script src='/dashboard-xdata.js'></script>
 <div x-data='dashboardXData()'>
@@ -32,8 +34,10 @@ const healthDasharray = String(2 * Math.PI * 40)
 <div class='main-content'>
   @include('DashboardCards')
 
+  <SystemActivityChart />
+
   <div x-show='pendingUpdates != null && pendingUpdates' x-cloak style='margin-bottom: 20px;'>
-    <a href='/updates' data-stx-link class='card' style='display: flex; align-items: center; justify-content: space-between; text-decoration: none; color: inherit; border-color: rgba(255,159,10,0.25);'>
+    <a href='/app/updates' data-stx-link class='card' style='display: flex; align-items: center; justify-content: space-between; text-decoration: none; color: inherit; border-color: rgba(255,159,10,0.25);'>
       <div>
         <div class='card-label'>Pending Updates</div>
         <div class='card-value' style='color: #ff9f0a;'>{{ pendingUpdates }}</div>
@@ -49,7 +53,7 @@ const healthDasharray = String(2 * Math.PI * 40)
         <span class='font-semibold text-sm'>Top Processes</span>
         <span class='ml-2 text-[11px] text-text-dim'>by CPU usage</span>
       </div>
-      <a class='no-underline btn btn-sm' href='/processes' data-stx-link>View All</a>
+      <a class='no-underline btn btn-sm' href='/app/processes' data-stx-link>View All</a>
     </div>
     <table>
       <thead>
@@ -89,3 +93,4 @@ const healthDasharray = String(2 * Math.PI * 40)
   </div>
 </div>
 </div>
+@endsection

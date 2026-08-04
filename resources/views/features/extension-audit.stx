@@ -1,0 +1,7 @@
+@extends('layouts/marketing')
+@section('title', 'Extension Audit - SystemCleaner')
+@section('description', 'Find browser extensions across Mac profiles and understand where each installation came from.')
+@section('canonical', 'https://system-cleaner.app/features/extension-audit')
+@section('content')
+  <MarketingFeatureDetail slug="extension-audit" />
+@endsection

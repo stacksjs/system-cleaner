@@ -1,3 +1,5 @@
+@extends('layouts/app')
+@section('body')
 
 <style>
 .system-layout { display: flex; height: 100%; min-height: 520px; }
@@ -196,3 +198,4 @@
   </div>
 </div>
 </div>
+@endsection

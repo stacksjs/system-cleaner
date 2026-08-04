@@ -19,7 +19,7 @@
       <div style='flex: 1;'>
         <div style='display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px;'>
           <span class='statusbar-dot' style='background: {{ memDotColor }}'></span>
-          Memory: {{ usedMemGB }} / {{ totalMemGB }} GB (<span>{{ stats ? stats.memPercent : {{ sMemPercent }} }}</span>%)
+          Memory: {{ usedMemGB }} / {{ totalMemGB }} GB (<span>{{ stats ? stats.memPercent : '…' }}</span>%)
         </div>
         <div style='display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px;' x-show='stats' x-cloak>
           <span class='statusbar-dot' :style="diskDotStyle(stats.dUsedPct)"></span>

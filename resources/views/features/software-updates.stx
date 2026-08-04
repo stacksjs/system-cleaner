@@ -1,0 +1,7 @@
+@extends('layouts/marketing')
+@section('title', 'Software Updates - SystemCleaner')
+@section('description', 'Check macOS, Homebrew, and Pantry updates without blocking the SystemCleaner interface.')
+@section('canonical', 'https://system-cleaner.app/features/software-updates')
+@section('content')
+  <MarketingFeatureDetail slug="software-updates" />
+@endsection

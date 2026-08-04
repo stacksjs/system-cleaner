@@ -12,7 +12,7 @@
       <span class='font-semibold text-sm'>Top Processes</span>
       <span class='ml-2 text-[11px] text-text-dim'>by CPU usage</span>
     </div>
-    <a class='no-underline btn btn-sm' href='/processes' data-stx-link>View All</a>
+    <a class='no-underline btn btn-sm' href='/app/processes' data-stx-link>View All</a>
   </div>
   <table>
     <thead>

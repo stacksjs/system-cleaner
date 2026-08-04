@@ -30,6 +30,7 @@ import {
 } from '@system-cleaner/uninstall';
 import { scanDirectory } from '@system-cleaner/disk';
 import { getTopProcesses, summarizeProcesses } from '@system-cleaner/monitor';
+import { recordSystemActivity } from '../app/Support/System/activity-chart';
 
 /**
  * Safely parse a JSON request body. Returns the parsed object or `null`
@@ -486,7 +487,14 @@ export default async function (router: Router) {
 
   await router.post('/dashboard-stats', async () => {
     const cached = dashboardStatsCache.get('stats');
-    if (cached) return Response.json({ success: true, ...cached, cached: true });
+    if (cached) {
+      return Response.json({
+        success: true,
+        ...cached,
+        systemHistory: recordSystemActivity(Number(cached.cpuAvgPercent), Number(cached.memPercent)),
+        cached: true,
+      });
+    }
 
     const os = await import('node:os');
     const procs = await getTopProcesses(8);
@@ -557,7 +565,11 @@ export default async function (router: Router) {
       cached: false,
     };
     dashboardStatsCache.set('stats', payload);
-    return Response.json({ success: true, ...payload });
+    return Response.json({
+      success: true,
+      ...payload,
+      systemHistory: recordSystemActivity(cpuAvgPercent, memPercent),
+    });
   });
 
   await router.post('/startup-items', async () => {

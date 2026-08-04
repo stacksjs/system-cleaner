@@ -1,0 +1,7 @@
+@extends('layouts/marketing')
+@section('title', 'Startup Items - SystemCleaner')
+@section('description', 'Inspect, disable, and remove known macOS launch agents and daemons with guarded actions.')
+@section('canonical', 'https://system-cleaner.app/features/startup-items')
+@section('content')
+  <MarketingFeatureDetail slug="startup-items" />
+@endsection

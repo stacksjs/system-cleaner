@@ -1,0 +1,7 @@
+@extends('layouts/marketing')
+@section('title', 'Process Monitor - SystemCleaner')
+@section('description', 'Track Mac CPU and memory use in a focused live process view with guarded controls.')
+@section('canonical', 'https://system-cleaner.app/features/process-monitor')
+@section('content')
+  <MarketingFeatureDetail slug="process-monitor" />
+@endsection

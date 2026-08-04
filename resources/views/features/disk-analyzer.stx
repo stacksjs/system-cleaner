@@ -1,0 +1,7 @@
+@extends('layouts/marketing')
+@section('title', 'Disk Analyzer - SystemCleaner')
+@section('description', 'Map Mac disk usage with a responsive worker-backed scan and inspect large folders in context.')
+@section('canonical', 'https://system-cleaner.app/features/disk-analyzer')
+@section('content')
+  <MarketingFeatureDetail slug="disk-analyzer" />
+@endsection

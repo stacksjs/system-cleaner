@@ -1,0 +1,7 @@
+@extends('layouts/marketing')
+@section('title', 'Quick Clean - SystemCleaner')
+@section('description', 'Review and clear safe macOS caches, logs, browser data, and stale files with SystemCleaner.')
+@section('canonical', 'https://system-cleaner.app/features/quick-clean')
+@section('content')
+  <MarketingFeatureDetail slug="quick-clean" />
+@endsection

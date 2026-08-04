@@ -1,0 +1,55 @@
+<script server>
+import { FEATURES } from '~/app/Support/Marketing/catalog'
+
+const features = FEATURES
+</script>
+
+<header class="site-nav-wrap">
+  <nav class="site-nav site-container" aria-label="Primary navigation">
+    <a class="brand" href="/" aria-label="SystemCleaner home">
+      <img src="/images/systemcleaner-icon.png" width="34" height="34" alt="" />
+      <span>SystemCleaner</span>
+    </a>
+
+    <div class="desktop-nav">
+      <div class="mega-root">
+        <a class="nav-link" href="/features" data-stx-link>
+          Features
+          <span class="h-4 w-4 i-hugeicons-arrow-down-01" aria-hidden="true"></span>
+        </a>
+        <div class="mega-panel">
+          <div class="mega-grid site-container">
+            @foreach (features as feature)
+              <a class="mega-item" href="/features/{{ feature.slug }}" data-stx-link>
+                <span class="mega-icon h-5 w-5 i-hugeicons-{{ feature.icon }}" aria-hidden="true"></span>
+                <span>
+                  <strong>{{ feature.name }}</strong>
+                  <span>{{ feature.summary }}</span>
+                </span>
+              </a>
+            @endforeach
+          </div>
+        </div>
+      </div>
+      <a class="nav-link" href="#privacy">Privacy</a>
+      <a class="nav-link" href="https://github.com/stacksjs/system-cleaner">GitHub</a>
+    </div>
+
+    <div class="nav-actions">
+      <a class="button button-secondary" href="https://github.com/stacksjs/system-cleaner">View source</a>
+      <a class="button button-primary" href="/app" data-stx-link>Open app</a>
+    </div>
+  </nav>
+
+  <details class="mobile-nav">
+    <summary class="site-container">
+      Browse features
+      <span class="h-4 w-4 i-hugeicons-arrow-down-01" aria-hidden="true"></span>
+    </summary>
+    <div class="mobile-links site-container">
+      @foreach (features as feature)
+        <a class="nav-link" href="/features/{{ feature.slug }}" data-stx-link>{{ feature.shortName }}</a>
+      @endforeach
+    </div>
+  </details>
+</header>

@@ -1,0 +1,89 @@
+<script client>
+interface DashboardStats {
+  success: boolean
+  cpuAvgPercent: number
+  memPercent: number
+  systemHistory: SystemHistory
+}
+
+interface SystemHistory {
+  cpuPath: string
+  memoryPath: string
+  cpuLabel: string
+  memoryLabel: string
+  sampleCount: number
+}
+
+const history = state<SystemHistory>({ cpuPath: '', memoryPath: '', cpuLabel: '0%', memoryLabel: '0%', sampleCount: 0 })
+const available = state(true)
+const loading = state(true)
+
+async function refreshActivity(): Promise<void> {
+  try {
+    const response = await fetch('/api/dashboard-stats', { method: 'POST' })
+    const data = await response.json() as DashboardStats
+    if (!response.ok || !data.success)
+      throw new Error('System activity is unavailable')
+
+    history.set(data.systemHistory)
+    available.set(true)
+  }
+  catch {
+    available.set(false)
+  }
+  finally {
+    loading.set(false)
+  }
+}
+
+void refreshActivity()
+useIntervalFn(refreshActivity, 5000)
+</script>
+
+<section class="activity-chart card" aria-labelledby="activity-heading">
+  <div class="activity-header">
+    <div>
+      <div class="card-label">Live activity</div>
+      <h2 id="activity-heading">System history</h2>
+    </div>
+    <div class="activity-legend" aria-label="Current activity">
+      <span><i class="legend-dot cpu"></i>CPU {{ history().cpuLabel }}</span>
+      <span><i class="legend-dot memory"></i>Memory {{ history().memoryLabel }}</span>
+    </div>
+  </div>
+
+  <div :if="available() && history().sampleCount > 1" class="activity-plot">
+    <svg viewBox="0 0 720 168" role="img" aria-label="CPU and memory activity over the last two minutes" preserveAspectRatio="none">
+      <line x1="0" y1="42" x2="720" y2="42" class="grid-line" />
+      <line x1="0" y1="84" x2="720" y2="84" class="grid-line" />
+      <line x1="0" y1="126" x2="720" y2="126" class="grid-line" />
+      <path :d="history().memoryPath" class="activity-line memory" />
+      <path :d="history().cpuPath" class="activity-line cpu" />
+    </svg>
+  </div>
+  <p :if="loading()" class="activity-state">Reading this Mac...</p>
+  <p :if="!loading() && history().sampleCount < 2 && available()" class="activity-state">Collecting the next sample...</p>
+  <p :if="!available()" class="activity-state">Live activity is temporarily unavailable.</p>
+</section>
+
+<style>
+.activity-chart { margin-bottom: 20px; overflow: hidden; }
+.activity-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 18px 20px 10px; }
+.activity-header h2 { margin: 4px 0 0; font-size: 15px; font-weight: 600; }
+.activity-legend { display: flex; gap: 14px; color: var(--text-dim, #8e8e93); font-size: 11px; }
+.activity-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend-dot { width: 7px; height: 7px; border-radius: 50%; }
+.legend-dot.cpu { background: #0a84ff; }
+.legend-dot.memory { background: #64d2ff; }
+.activity-plot { height: 168px; padding: 6px 20px 20px; }
+.activity-plot svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.grid-line { stroke: rgba(142, 142, 147, .18); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.activity-line { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.activity-line.cpu { stroke: #0a84ff; }
+.activity-line.memory { stroke: #64d2ff; }
+.activity-state { min-height: 168px; display: grid; place-items: center; margin: 0; color: var(--text-dim, #8e8e93); font-size: 12px; }
+@media (max-width: 720px) {
+  .activity-header { align-items: stretch; flex-direction: column; gap: 10px; }
+  .activity-legend { justify-content: space-between; }
+}
+</style>

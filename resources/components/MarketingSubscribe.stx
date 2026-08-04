@@ -1,0 +1,57 @@
+<script client>
+const email = state('')
+const message = state('')
+const tone = state('idle')
+const busy = state(false)
+
+async function subscribe(): Promise<void> {
+  const value = email().trim()
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    tone.set('error')
+    message.set('Enter a valid email address.')
+    return
+  }
+
+  busy.set(true)
+  message.set('')
+  tone.set('idle')
+
+  try {
+    const body = new FormData()
+    body.set('email', value)
+    body.set('source', 'system-cleaner-marketing')
+    const response = await fetch('/api/email/subscribe', { method: 'POST', body })
+    const payload = await response.json()
+    if (!response.ok || payload.success === false)
+      throw new Error(payload.message || 'Subscription failed. Please try again.')
+
+    tone.set('success')
+    message.set(payload.message === 'Already subscribed' ? 'You are already on the list.' : 'You are on the list.')
+    email.set('')
+  }
+  catch (error) {
+    tone.set('error')
+    message.set(error instanceof Error ? error.message : 'Subscription failed. Please try again.')
+  }
+  finally {
+    busy.set(false)
+  }
+}
+</script>
+
+<section class="subscribe" aria-labelledby="subscribe-title">
+  <div class="subscribe-inner site-container">
+    <div>
+      <h2 id="subscribe-title">A cleaner Mac, without the noise.</h2>
+      <p class="subscribe-copy">Get occasional release notes and practical macOS maintenance updates. No tracking pixels and no drip campaign.</p>
+    </div>
+    <form class="subscribe-form" @submit.prevent="subscribe()" novalidate>
+      <div class="field">
+        <label for="subscriber-email">Email address</label>
+        <input id="subscriber-email" x-model.trim="email" type="email" name="email" autocomplete="email" placeholder="you@example.com" :disabled="busy()" required />
+      </div>
+      <button class="button button-primary" type="submit" :disabled="busy()">{{ busy() ? 'Adding...' : 'Keep me posted' }}</button>
+      <p class="subscribe-status" :data-tone="tone()" role="status" aria-live="polite">{{ message() }}</p>
+    </form>
+  </div>
+</section>

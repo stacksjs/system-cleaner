@@ -1,0 +1,48 @@
+<script server>
+import { FEATURES, featureBySlug } from '~/app/Support/Marketing/catalog'
+
+const feature = featureBySlug($props.slug) || FEATURES[0]
+const related = FEATURES.filter(item => item.slug !== feature.slug).slice(0, 4)
+</script>
+
+<article class="site-container">
+  <header class="feature-hero">
+    <p class="eyebrow">SystemCleaner feature</p>
+    <h1>{{ feature.name }}</h1>
+    <p>{{ feature.description }}</p>
+    <div class="hero-actions">
+      <a class="button button-primary" href="/app" data-stx-link>Open SystemCleaner</a>
+      <a class="button button-secondary" href="/features" data-stx-link>All features</a>
+    </div>
+  </header>
+
+  <section class="feature-layout" aria-labelledby="feature-detail-title">
+    <div>
+      <h2 id="feature-detail-title">Built for a quick, informed decision.</h2>
+      <p>{{ feature.summary }}</p>
+      <p>SystemCleaner keeps the interaction close to macOS conventions, uses guarded paths for sensitive actions, and moves expensive work away from the interface.</p>
+    </div>
+    <aside class="feature-fact">
+      <span class="h-7 w-7 text-[color:var(--accent)] i-hugeicons-{{ feature.icon }}" aria-hidden="true"></span>
+      <strong>{{ feature.metric }}</strong>
+      <span>{{ feature.detail }}</span>
+    </aside>
+  </section>
+
+  <section aria-labelledby="more-features-title">
+    <h2 id="more-features-title" class="mb-6 text-2xl tracking-tight">More ways to care for your Mac</h2>
+    <ul class="feature-list">
+      @foreach (related as item)
+        <li>
+          <a href="/features/{{ item.slug }}" data-stx-link>
+            <span>
+              <strong>{{ item.name }}</strong>
+              <span class="block mt-1 text-[13px] text-[color:var(--muted)]">{{ item.metric }}</span>
+            </span>
+            <span class="h-5 w-5 i-hugeicons-arrow-right-01" aria-hidden="true"></span>
+          </a>
+        </li>
+      @endforeach
+    </ul>
+  </section>
+</article>
