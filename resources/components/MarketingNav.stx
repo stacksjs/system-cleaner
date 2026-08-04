@@ -7,7 +7,7 @@ const features = FEATURES
 <header class="site-nav-wrap">
   <nav class="site-nav site-container" aria-label="Primary navigation">
     <a class="brand" href="/" aria-label="SystemCleaner home">
-      <img src="/images/systemcleaner-icon.png" width="34" height="34" alt="" />
+      <img src="/images/systemcleaner-mark.svg" width="34" height="34" alt="" />
       <span>SystemCleaner</span>
     </a>
 
