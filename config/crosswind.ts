@@ -1,4 +1,5 @@
 import type { CrosswindOptions } from '@cwcss/crosswind'
+import { RUNTIME_ICON_CLASSES } from '../app/Support/UI/runtime-icons'
 
 /**
  * Crosswind config for SystemCleaner.
@@ -24,6 +25,13 @@ const config = {
     './resources/**/*.{stx,ts,html}',
     './storage/framework/defaults/**/*.{stx,ts,html}',
     './node_modules/@stacksjs/components/src/**/*.{stx,ts}',
+    // Icon classes for clean targets, disk categories, browser profiles, and
+    // startup vendors are declared in the workspace packages and bound with
+    // `:class`, so the scanner never sees them in a template. Without these
+    // globs those utilities are absent from the build and the rows render
+    // with a blank space where the glyph should be.
+    './packages/*/src/**/*.ts',
+    './app/**/*.ts',
   ],
   theme: {
     extend: {
@@ -73,6 +81,9 @@ const config = {
       },
     },
   },
+  // Utilities bound at runtime via `:class`, which the content scanner cannot
+  // see. See app/Support/UI/runtime-icons.ts.
+  safelist: RUNTIME_ICON_CLASSES,
 } satisfies Partial<CrosswindOptions>
 
 export default config as Partial<CrosswindOptions>
