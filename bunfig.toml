@@ -4,6 +4,12 @@ preload = [
 ]
 
 [test]
+# Without an explicit root, `bun test` walks the whole workspace and runs the
+# test suites vendored inside `pantry/` (zod, pino, ...), which fail on their
+# own missing devDependencies. A bare path argument does not help: bun treats
+# it as a substring filter, so `bun test tests/` still matches
+# `pantry/zod/src/v4/classic/tests/`.
+root = "tests"
 preload = [
   "@stacksjs/env/plugin.js",
 ]

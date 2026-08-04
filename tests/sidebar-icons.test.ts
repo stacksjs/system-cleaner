@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'bun:test'
 import f7 from '@iconify-json/f7/icons.json'
 
-const sourceFiles = new Bun.Glob('resources/**/*.{stx,ts,js}')
+// `packages/` is included because clean targets, browser profiles, and startup
+// vendors all supply icon classes that the views render straight into a
+// `class` attribute.
+const sourceFiles = new Bun.Glob('{resources,app,packages}/**/*.{stx,ts,js}')
+
+// Emoji presentation ranges. Excludes the arrows and dingbats blocks that
+// legitimately appear in box-drawing comment separators.
+const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE0F}]/u
 
 describe('Framework7 icons', () => {
   it('only references glyphs that ship in the installed Framework7 collection', async () => {
@@ -11,10 +18,38 @@ describe('Framework7 icons', () => {
       const source = await Bun.file(file).text()
       for (const match of source.matchAll(/i-f7-([a-z0-9-]+)/g)) {
         const name = match[1]
-        if (!f7.icons[name]) missing.add(name)
+        if (!(f7.icons as Record<string, unknown>)[name])
+          missing.add(`${name} (${file})`)
       }
     }
 
     expect([...missing]).toEqual([])
+  })
+
+  // The project rule is Iconify classes only. Emoji used to reach the UI
+  // through clean-target icons, browser profile icons, and startup vendor
+  // icons, which all render into a `class` attribute.
+  //
+  // `packages/cli` is exempt: it writes to a terminal, where an Iconify class
+  // name would print as literal text and a glyph is the correct output.
+  it('ships no emoji in icon or label values', async () => {
+    const offenders: string[] = []
+
+    for await (const file of sourceFiles.scan('.')) {
+      if (file.startsWith('packages/cli/'))
+        continue
+      const source = await Bun.file(file).text()
+      for (const [index, line] of source.split('\n').entries()) {
+        if (!EMOJI.test(line))
+          continue
+        // Comments are prose, not rendered output.
+        const trimmed = line.trim()
+        if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*'))
+          continue
+        offenders.push(`${file}:${index + 1}`)
+      }
+    }
+
+    expect(offenders).toEqual([])
   })
 })
