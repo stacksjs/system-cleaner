@@ -32,7 +32,7 @@ const healthDasharray = String(2 * Math.PI * 40)
   <div class='main-subtitle'>System overview for {{ hostname }}</div>
 </div>
 <div class='main-content'>
-  @include('DashboardCards')
+  <DashboardCards />
 
   <SystemActivityChart />
 

@@ -51,8 +51,11 @@
       </tr>
     </thead>
     <tbody>
-      <template x-if="processes.length === 0">
+      <template x-if="!feedConnected">
         <tr><td colspan="7" class="empty-state">Loading processes&hellip;</td></tr>
+      </template>
+      <template x-if="feedConnected && processes.length === 0">
+        <tr><td colspan="7" class="empty-state">No notable processes</td></tr>
       </template>
       <template x-for="p in processes.filter(p => !killedPids.includes(p.pid))" :key="p.pid">
         <tr>

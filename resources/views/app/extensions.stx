@@ -35,7 +35,7 @@
 <div class='main-content'>
   <div x-show='loading' class='empty-state'>Scanning extensions...</div>
   <div x-show='!loading' x-cloak>
-    @include('ExtensionsPanel')
+    <ExtensionsPanel />
   </div>
 </div>
 </div>

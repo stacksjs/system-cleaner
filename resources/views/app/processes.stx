@@ -89,9 +89,9 @@
 
 <!-- Reactive toast container -->
 <div class='toast-area'>
-  @for(let i = 0; i < 5; i++)
-    <div class='toast' x-show='toasts[{{ i }}]' x-text="toasts[{{ i }}] ? (toasts[{{ i }}].type === 'success' ? '✓' : toasts[{{ i }}].type === 'error' ? '✕' : '⚠') + ' ' + toasts[{{ i }}].msg : ''"></div>
-  @endfor
+  <template x-for='toast in toasts' :key='toast.id'>
+    <div class='toast' x-text="(toast.type === 'success' ? '✓' : toast.type === 'error' ? '✕' : '⚠') + ' ' + toast.msg"></div>
+  </template>
 </div>
 
 <div class='main-header'>
@@ -99,7 +99,7 @@
   <div class='main-subtitle'>Active processes using notable CPU or memory</div>
 </div>
 <div class='main-content'>
-  @include('ProcessesPanel')
+  <ProcessesPanel />
 </div>
 </div>
 
