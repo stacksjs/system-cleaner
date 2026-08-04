@@ -1,4 +1,22 @@
 <script client>
+interface ChartTick {
+  label: string
+  offset: number
+}
+
+interface SystemHistory {
+  cpuPath: string
+  cpuArea: string
+  memoryPath: string
+  memoryArea: string
+  cpuLabel: string
+  memoryLabel: string
+  yTicks: ChartTick[]
+  xTicks: ChartTick[]
+  plot: { left: number, right: number, top: number, bottom: number }
+  sampleCount: number
+}
+
 interface DashboardStats {
   success: boolean
   cpuAvgPercent: number
@@ -6,17 +24,24 @@ interface DashboardStats {
   systemHistory: SystemHistory
 }
 
-interface SystemHistory {
-  cpuPath: string
-  memoryPath: string
-  cpuLabel: string
-  memoryLabel: string
-  sampleCount: number
+const EMPTY: SystemHistory = {
+  cpuPath: '',
+  cpuArea: '',
+  memoryPath: '',
+  memoryArea: '',
+  cpuLabel: '0%',
+  memoryLabel: '0%',
+  yTicks: [],
+  xTicks: [],
+  plot: { left: 40, right: 948, top: 12, bottom: 174 },
+  sampleCount: 0,
 }
 
-const history = state<SystemHistory>({ cpuPath: '', memoryPath: '', cpuLabel: '0%', memoryLabel: '0%', sampleCount: 0 })
+const history = state<SystemHistory>(EMPTY)
 const available = state(true)
 const loading = state(true)
+
+const plotted = derived(() => history().sampleCount > 1 && available())
 
 async function refreshActivity(): Promise<void> {
   try {
@@ -45,22 +70,56 @@ useIntervalFn(refreshActivity, 5000)
     <div>
       <div class="card-label">Live activity</div>
       <h2 id="activity-heading">System history</h2>
+      <p class="activity-caption">Percent of capacity, sampled every 5 seconds</p>
     </div>
     <div class="activity-legend" aria-label="Current activity">
-      <span><i class="legend-dot cpu"></i>CPU {{ history().cpuLabel }}</span>
-      <span><i class="legend-dot memory"></i>Memory {{ history().memoryLabel }}</span>
+      <span><i class="legend-swatch cpu"></i>CPU <b>{{ history().cpuLabel }}</b></span>
+      <span><i class="legend-swatch memory"></i>Memory <b>{{ history().memoryLabel }}</b></span>
     </div>
   </div>
 
-  <div :if="available() && history().sampleCount > 1" class="activity-plot">
-    <svg viewBox="0 0 720 168" role="img" aria-label="CPU and memory activity over the last two minutes" preserveAspectRatio="none">
-      <line x1="0" y1="42" x2="720" y2="42" class="grid-line" />
-      <line x1="0" y1="84" x2="720" y2="84" class="grid-line" />
-      <line x1="0" y1="126" x2="720" y2="126" class="grid-line" />
+  <div :if="plotted()" class="activity-plot">
+    <svg viewBox="0 0 960 200" role="img" aria-label="CPU and memory usage over the recent sampling window, as a percentage">
+      <defs>
+        <linearGradient id="activity-fill-cpu" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#0a84ff" stop-opacity=".3" />
+          <stop offset="100%" stop-color="#0a84ff" stop-opacity="0" />
+        </linearGradient>
+        <linearGradient id="activity-fill-memory" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#64d2ff" stop-opacity=".24" />
+          <stop offset="100%" stop-color="#64d2ff" stop-opacity="0" />
+        </linearGradient>
+      </defs>
+
+      <!-- Y axis: one rule + one label per 25% step -->
+      <g class="axis-y">
+        <line :for="tick in history().yTicks" :key="tick.label"
+          :x1="history().plot.left" :x2="history().plot.right"
+          :y1="tick.offset" :y2="tick.offset" class="grid-line" />
+        <text :for="tick in history().yTicks" :key="tick.label"
+          :x="history().plot.left - 8" :y="tick.offset"
+          x-text="tick.label" class="axis-label axis-label-y"></text>
+      </g>
+
+      <!-- X axis: elapsed time behind the newest sample -->
+      <g class="axis-x">
+        <line :x1="history().plot.left" :x2="history().plot.right"
+          :y1="history().plot.bottom" :y2="history().plot.bottom" class="axis-line" />
+        <line :for="tick in history().xTicks" :key="tick.label"
+          :x1="tick.offset" :x2="tick.offset"
+          :y1="history().plot.bottom" :y2="history().plot.bottom + 4" class="axis-line" />
+        <text :for="tick in history().xTicks" :key="tick.label"
+          :x="tick.offset" :y="history().plot.bottom + 17"
+          x-text="tick.label" class="axis-label axis-label-x"></text>
+      </g>
+
+      <path :d="history().memoryArea" class="activity-area memory" />
+      <path :d="history().cpuArea" class="activity-area cpu" />
       <path :d="history().memoryPath" class="activity-line memory" />
       <path :d="history().cpuPath" class="activity-line cpu" />
     </svg>
   </div>
+
   <p :if="loading()" class="activity-state">Reading this Mac...</p>
   <p :if="!loading() && history().sampleCount < 2 && available()" class="activity-state">Collecting the next sample...</p>
   <p :if="!available()" class="activity-state">Live activity is temporarily unavailable.</p>
@@ -68,20 +127,28 @@ useIntervalFn(refreshActivity, 5000)
 
 <style>
 .activity-chart { margin-bottom: 20px; overflow: hidden; }
-.activity-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 18px 20px 10px; }
+.activity-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 18px 20px 4px; }
 .activity-header h2 { margin: 4px 0 0; font-size: 15px; font-weight: 600; }
-.activity-legend { display: flex; gap: 14px; color: var(--text-dim, #8e8e93); font-size: 11px; }
-.activity-legend span { display: inline-flex; align-items: center; gap: 5px; }
-.legend-dot { width: 7px; height: 7px; border-radius: 50%; }
-.legend-dot.cpu { background: #0a84ff; }
-.legend-dot.memory { background: #64d2ff; }
-.activity-plot { height: 168px; padding: 6px 20px 20px; }
-.activity-plot svg { display: block; width: 100%; height: 100%; overflow: visible; }
-.grid-line { stroke: rgba(142, 142, 147, .18); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.activity-line { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.activity-caption { margin: 3px 0 0; color: var(--secondary, #8e8e93); font-size: 11px; }
+.activity-legend { display: flex; gap: 16px; color: var(--secondary, #8e8e93); font-size: 11px; }
+.activity-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.activity-legend b { color: var(--ink, #f5f5f7); font-weight: 600; font-variant-numeric: tabular-nums; }
+.legend-swatch { width: 10px; height: 3px; border-radius: 2px; }
+.legend-swatch.cpu { background: #0a84ff; }
+.legend-swatch.memory { background: #64d2ff; }
+.activity-plot { padding: 4px 20px 16px; }
+.activity-plot svg { display: block; width: 100%; height: auto; }
+.grid-line { stroke: color-mix(in srgb, var(--secondary, #8e8e93) 26%, transparent); stroke-width: 1; }
+.axis-line { stroke: color-mix(in srgb, var(--secondary, #8e8e93) 52%, transparent); stroke-width: 1; }
+.axis-label { fill: var(--secondary, #8e8e93); font-size: 10px; font-variant-numeric: tabular-nums; }
+.axis-label-y { text-anchor: end; dominant-baseline: middle; }
+.axis-label-x { text-anchor: middle; }
+.activity-area.cpu { fill: url(#activity-fill-cpu); }
+.activity-area.memory { fill: url(#activity-fill-memory); }
+.activity-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .activity-line.cpu { stroke: #0a84ff; }
 .activity-line.memory { stroke: #64d2ff; }
-.activity-state { min-height: 168px; display: grid; place-items: center; margin: 0; color: var(--text-dim, #8e8e93); font-size: 12px; }
+.activity-state { min-height: 180px; display: grid; place-items: center; margin: 0; color: var(--secondary, #8e8e93); font-size: 12px; }
 @media (max-width: 720px) {
   .activity-header { align-items: stretch; flex-direction: column; gap: 10px; }
   .activity-legend { justify-content: space-between; }
