@@ -1,8 +1,16 @@
-<!-- Health score + stat cards -->
-<div class='card-row'>
-  <div class='card' style='grid-column: span 2;'>
+<!--
+  Health score + stat cards.
+
+  One 4x2 grid rather than two auto-fill rows: auto-fill sized the tracks
+  from a 200px minimum, so the health card's `span 2` left two dead columns
+  on wide windows. Fixed tracks make the block gapless at every width, and
+  the extension count moved into the health signal list to keep the cell
+  count exact.
+-->
+<div class='dash-grid'>
+  <div class='card dash-health'>
     <div class='card-label'>System Health</div>
-    <div style='display: flex; align-items: center; gap: 20px;'>
+    <div class='dash-health-body'>
       <div class='health-ring'>
         <svg viewBox='0 0 100 100'>
           <circle class='ring-bg' cx='50' cy='50' r='40' />
@@ -16,49 +24,53 @@
           <span class='ring-label'>{{ healthLabel }}</span>
         </div>
       </div>
-      <div style='flex: 1;'>
-        <div style='display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px;'>
+      <ul class='dash-signals'>
+        <li>
           <span class='statusbar-dot' style='background: {{ memDotColor }}'></span>
-          Memory: {{ usedMemGB }} / {{ totalMemGB }} GB (<span>{{ stats ? stats.memPercent : '…' }}</span>%)
-        </div>
-        <div style='display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px;' x-show='stats' x-cloak>
+          Memory <b>{{ usedMemGB }} / {{ totalMemGB }} GB</b> (<span>{{ stats ? stats.memPercent : '…' }}</span>%)
+        </li>
+        <li x-show='stats' x-cloak>
           <span class='statusbar-dot' :style="diskDotStyle(stats.dUsedPct)"></span>
-          Disk: <span>{{ stats.diskUsed }}</span> / <span>{{ stats.diskTotal }}</span> (<span>{{ stats.diskAvail }}</span> free)
-        </div>
-        <div style='display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px;' x-show='!stats'>
+          Disk <b>{{ stats.diskUsed }} / {{ stats.diskTotal }}</b> (<span>{{ stats.diskAvail }}</span> free)
+        </li>
+        <li x-show='!stats'>
           <span class='statusbar-dot' style='background: #6c6c70'></span>
-          Disk: loading...
-        </div>
-        <div style='display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px;' x-show='stats' x-cloak>
+          Disk <b>loading...</b>
+        </li>
+        <li x-show='stats' x-cloak>
           <span class='statusbar-dot' :style="startupDotStyle(stats.enabledStartup)"></span>
-          <span>{{ stats.enabledStartup + ' startup items active' }}</span>
-        </div>
-        <div style='display: flex; align-items: center; gap: 6px; font-size: 12px;'>
+          Startup <b>{{ stats.enabledStartup }}</b> enabled of <b>{{ stats.totalStartup }}</b>
+        </li>
+        <li x-show='stats' x-cloak>
+          <span class='statusbar-dot' style='background: #0a84ff'></span>
+          Extensions <b>{{ stats.extensions }}</b> installed
+        </li>
+        <li>
           <span class='statusbar-dot' style='background: #30d158'></span>
-          Uptime: {{ uptimeStr }}
-        </div>
-      </div>
+          Uptime <b>{{ uptimeStr }}</b>
+        </li>
+      </ul>
     </div>
   </div>
+
   <div class='card'>
     <div class='card-label'>CPU</div>
     <div class='card-value' style='font-size: 16px;'>{{ cpuLabel }}</div>
     <div class='card-detail'>{{ cpuCores }} cores · <span>{{ stats ? stats.cpuAvgPercent + '% avg load' : '...' }}</span></div>
   </div>
-</div>
 
-<div class='card-row'>
   <div class='card'>
     <div class='card-label'>Memory</div>
-    <div class='card-value'>{{ usedMemGB }} <span style='font-size: 14px; color: #6c6c70;'>/ {{ totalMemGB }} GB</span></div>
+    <div class='card-value'>{{ usedMemGB }} <span class='card-value-unit'>/ {{ totalMemGB }} GB</span></div>
     <div class='progress'>
       <div class='progress-fill' style='{{ memBarStyle }}'></div>
     </div>
     <div class='card-detail'>{{ freeMemGB }} GB available</div>
   </div>
+
   <div class='card' x-show='stats' x-cloak>
     <div class='card-label'>Disk</div>
-    <div class='card-value'><span>{{ stats.diskUsed }}</span> <span style='font-size: 14px; color: #6c6c70;'>/ <span>{{ stats.diskTotal }}</span></span></div>
+    <div class='card-value'><span>{{ stats.diskUsed }}</span> <span class='card-value-unit'>/ <span>{{ stats.diskTotal }}</span></span></div>
     <div class='progress'>
       <div class='progress-fill' :style="diskProgressStyle(stats.dUsedPct)"></div>
     </div>
@@ -68,14 +80,32 @@
     <div class='card-label'>Disk</div>
     <div class='card-value dim'>...</div>
   </div>
+
   <div class='card'>
     <div class='card-label'>Startup Items</div>
-    <div class='card-value' style='color: #ff9f0a;'>{{ stats ? stats.enabledStartup : '...' }}</div>
+    <div class='card-value'>{{ stats ? stats.enabledStartup : '...' }}</div>
     <div class='card-detail'><span>{{ stats ? stats.disabledStartup + ' disabled · ' + stats.totalStartup + ' total' : 'loading...' }}</span></div>
   </div>
-  <div class='card'>
-    <div class='card-label'>Extensions</div>
-    <div class='card-value' style='color: #bf5af2;'>{{ stats ? stats.extensions : '...' }}</div>
-    <div class='card-detail'>browser extensions</div>
-  </div>
 </div>
+
+<style>
+.dash-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+.dash-health { grid-column: span 2; grid-row: span 2; }
+.dash-health-body { display: flex; align-items: center; gap: 26px; height: 100%; padding: 4px 0; }
+.dash-health .health-ring, .dash-health .health-ring svg { width: 108px; height: 108px; }
+.dash-health .ring-score { font-size: 26px; }
+.dash-health .ring-label { font-size: 10px; }
+.dash-signals { display: flex; flex: 1; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.dash-signals li { display: flex; align-items: center; gap: 7px; font-size: 12px; }
+.dash-signals b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.card-value-unit { color: var(--secondary); font-size: 14px; }
+@media (max-width: 1100px) {
+  .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dash-health { grid-row: auto; }
+}
+@media (max-width: 640px) {
+  .dash-grid { grid-template-columns: minmax(0, 1fr); }
+  .dash-health { grid-column: auto; }
+  .dash-health-body { align-items: flex-start; flex-direction: column; gap: 14px; }
+}
+</style>
