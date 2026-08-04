@@ -20,6 +20,8 @@ const PAGES = [
   { path: '/', name: 'home' },
   { path: '/features', name: 'features' },
   { path: '/features/quick-clean', name: 'feature-detail' },
+  { path: '/use-cases', name: 'use-cases' },
+  { path: '/use-cases/developers', name: 'use-case-detail' },
   { path: '/privacy', name: 'privacy' },
   { path: '/app', name: 'dashboard' },
   { path: '/app/disk', name: 'disk' },
