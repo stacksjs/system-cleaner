@@ -208,7 +208,10 @@ export default async function (router: Router) {
     if (pid === null) return badRequest('Invalid PID');
 
     const result = await killProcess(pid);
-    return Response.json({ ...result, pid });
+    // A refused kill (someone else's process, a protected daemon) is a 403,
+    // not a 200 carrying `success: false`. Every other guarded endpoint here
+    // answers with a status code, and the client's error handling keys off it.
+    return Response.json({ ...result, pid }, { status: result.success ? 200 : 403 });
   });
 
   await router.post('/toggle-startup', async (req: Request) => {

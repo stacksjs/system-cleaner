@@ -69,8 +69,13 @@
       body: JSON.stringify({ pid: p.pid }),
     })
       .then(r => {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
+        // A refused kill answers 403 with the reason in the body, so read the
+        // body first and only fall back to a status-code message when there
+        // is nothing useful to show.
+        return r.json().catch(() => null).then(data => {
+          if (data && typeof data.success === 'boolean') return data;
+          throw new Error('HTTP ' + r.status);
+        });
       })
       .then(r => {
         const next = { ...this.killing }; delete next[p.pid]; this.killing = next;
@@ -91,7 +96,7 @@
 <!-- Reactive toast container -->
 <div class='toast-area'>
   <template x-for='toast in toasts' :key='toast.id'>
-    <div class='toast' x-text="(toast.type === 'success' ? '✓' : toast.type === 'error' ? '✕' : '⚠') + ' ' + toast.msg"></div>
+    <div class=toast><span class=toast-glyph :class="toast.type === success ? i-f7-checkmark-alt-circle-fill : toast.type === error ? i-f7-xmark-circle-fill : i-f7-exclamationmark-triangle-fill" aria-hidden="true"></span><span x-text="toast.msg"></span></div>
   </template>
 </div>
 
