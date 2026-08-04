@@ -2,11 +2,6 @@
 import { FEATURES } from '~/app/Support/Marketing/catalog'
 
 const features = FEATURES
-const seed = 'SystemCleaner'.length
-const heroLayouts = ['cinematic-center', 'editorial-showcase', 'artistic-asymmetry']
-const typographyStacks = ['outfit', 'satoshi', 'cabinet-grotesk', 'geist']
-const selectedHeroLayout = heroLayouts[seed % heroLayouts.length]
-const selectedTypography = typographyStacks[(seed * 7) % typographyStacks.length]
 </script>
 
 @extends('layouts/marketing')
@@ -16,19 +11,23 @@ const selectedTypography = typographyStacks[(seed * 7) % typographyStacks.length
 @section('canonical', 'https://system-cleaner.app/')
 
 @section('content')
-  <div class="type-{{ selectedTypography }}">
-    <MarketingHero :layout="selectedHeroLayout" />
-    <FeatureBento :features="features" />
-    <AppShowcase />
-  </div>
+  <MarketingHero />
+  <FeatureBento :features="features" />
+  <AppShowcase />
+  <UseCaseStrip />
 
-  <section id="privacy" class="section site-container">
+  <section class="section site-container" aria-labelledby="privacy-teaser-title">
     <div class="privacy-band">
       <div>
-        <span class="privacy-icon i-f7-lock-shield-fill" aria-hidden="true"></span>
-        <h2>Your Mac stays your business.</h2>
+        <span class="i-f7-lock-shield-fill privacy-icon" aria-hidden="true"></span>
+        <h2 id="privacy-teaser-title">Nothing leaves your Mac.</h2>
       </div>
-      <p>Scans, health readings, process data, and cleanup decisions stay local. SystemCleaner has no account requirement, cloud scan, or analytics pipeline.</p>
+      <div>
+        <p>Scans, health readings, process data, and cleanup decisions stay local. There is no account requirement, no cloud scan, and no analytics pipeline.</p>
+        <a class="tour-link" href="/privacy" data-stx-link>Read the privacy page <span class="i-f7-arrow-right" aria-hidden="true"></span></a>
+      </div>
     </div>
   </section>
+
+  <MarketingDownload />
 @endsection

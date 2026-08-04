@@ -1,0 +1,28 @@
+<script server>
+import { USE_CASES } from '~/app/Support/Marketing/use-cases'
+
+export const useCases = USE_CASES
+</script>
+
+<section class="section site-container" aria-labelledby="use-cases-title">
+  <div class="section-heading">
+    <h2 id="use-cases-title">A toolchain and a photo library fill a disk differently.</h2>
+    <p class="section-intro">SystemCleaner knows where each one hides its weight. Start from the machine you actually have.</p>
+  </div>
+
+  <div class="usecase-strip">
+    @foreach (useCases as useCase)
+      <a class="usecase-tile" href="/use-cases/{{ useCase.slug }}" data-stx-link>
+        <span class="usecase-icon"><span class="i-f7-{{ useCase.icon }}" aria-hidden="true"></span></span>
+        <h3>{{ useCase.name }}</h3>
+        <p>{{ useCase.summary }}</p>
+      </a>
+    @endforeach
+    <a class="usecase-tile usecase-tile-all" href="/use-cases" data-stx-link>
+      <span class="usecase-icon"><span class="i-f7-person-2-fill" aria-hidden="true"></span></span>
+      <h3>All use cases</h3>
+      <p>Compare every angle in one index.</p>
+      <span class="i-f7-arrow-right usecase-arrow" aria-hidden="true"></span>
+    </a>
+  </div>
+</section>
