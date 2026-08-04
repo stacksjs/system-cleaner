@@ -35,11 +35,12 @@
 }
 </style>
 
-<div x-data="{
+<div id='processes-scope' x-data="{
   processes: [],
   totalCPU: 0,
   totalMemUsed: 0,
-  wsConnected: false,
+  feedConnected: false,
+  feedLabel: 'Loading',
   selected: [],
   killedPids: [],
   killing: {},
@@ -89,7 +90,7 @@
 <!-- Reactive toast container -->
 <div class='toast-area'>
   @for(let i = 0; i < 5; i++)
-    <div class='toast' x-show='toasts[{{ i }}]'>{{ toasts[{{ i }}] ? (toasts[{{ i }}].type === 'success' ? '✓' : toasts[{{ i }}].type === 'error' ? '✕' : '⚠') + ' ' + toasts[{{ i }}].msg : '' }}</div>
+    <div class='toast' x-show='toasts[{{ i }}]' x-text="toasts[{{ i }}] ? (toasts[{{ i }}].type === 'success' ? '✓' : toasts[{{ i }}].type === 'error' ? '✕' : '⚠') + ' ' + toasts[{{ i }}].msg : ''"></div>
   @endfor
 </div>
 
@@ -103,87 +104,87 @@
 </div>
 
 <script data-stx-scoped>
-// Helper to push a reactive update from outside the scope (e.g. WebSocket
-// callbacks). Exists because the WS lives on `window` to survive SPA nav.
-//
-// Queues statements when the scope isn't registered yet — STX initialization
-// is async on first paint, and WS data can land before the reactive scope is
-// ready. The queue is flushed on `stx:load` and on the next successful call.
-window._execQueue = window._execQueue || [];
-window._exec = function(stmt) {
-  var el = document.querySelector('[data-stx-scope]');
-  if (el && el.__stx_execute) {
-    while (window._execQueue.length) el.__stx_execute(window._execQueue.shift());
-    el.__stx_execute(stmt);
-  } else {
-    window._execQueue.push(stmt);
-  }
-};
-if (!window._execFlushBound) {
-  window._execFlushBound = true;
-  window.addEventListener('stx:load', function() {
-    var el = document.querySelector('[data-stx-scope]');
-    if (el && el.__stx_execute) {
-      while (window._execQueue.length) el.__stx_execute(window._execQueue.shift());
-    }
-  });
-}
-
-// ── ts-broadcasting WebSocket connection ──────────────────────
-// Single global connection — survives SPA navigations, reconnects if dropped
+// ── Process feed ──────────────────────────────────────────────
+// The same-origin API works in development and through the production TLS
+// gateway. A ts-broadcasting socket is used only when the host explicitly
+// exposes one through `window.__broadcastUrl` or `window.__broadcastPort`.
 
 (function() {
-  // Don't create duplicate connections on SPA re-navigation
+  function applySnapshot(snapshot, label) {
+    if (!snapshot || !Array.isArray(snapshot.processes)) return;
+    window.__latestProcs = snapshot;
+    window.__procFeedLabel = label;
+
+    var scope = document.getElementById('processes-scope');
+    if (scope && scope.__stx_execute) {
+      scope.__stx_execute('processes = window.__latestProcs.processes; totalCPU = window.__latestProcs.totalCPU; totalMemUsed = window.__latestProcs.totalMemUsed; feedConnected = true; feedLabel = window.__procFeedLabel');
+    }
+  }
+
+  function markUnavailable() {
+    var scope = document.getElementById('processes-scope');
+    if (scope && scope.__stx_execute) {
+      scope.__stx_execute("feedConnected = false; feedLabel = 'Unavailable'");
+    }
+  }
+
+  async function poll() {
+    if (!document.getElementById('processes-scope')) return;
+    try {
+      var response = await fetch('/api/live-processes', { method: 'POST' });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      applySnapshot(await response.json(), 'Auto refresh');
+    } catch (error) {
+      markUnavailable();
+    }
+  }
+
+  // Keep one lightweight timer across STX navigations and refresh immediately
+  // whenever this panel is mounted again.
+  poll();
+  if (!window.__procPollTimer) {
+    window.__procPollTimer = setInterval(poll, 5000);
+  }
+  window.addEventListener('stx:load', function() {
+    if (window.__latestProcs) applySnapshot(window.__latestProcs, window.__procFeedLabel || 'Auto refresh');
+    else poll();
+  }, { once: true });
+
+  var configuredUrl = typeof window.__broadcastUrl === 'string' ? window.__broadcastUrl : '';
+  var configuredPort = window.__broadcastPort;
+  if (!configuredUrl && configuredPort == null) return;
   if (window.__procWs && window.__procWs.readyState <= 1) return;
 
-  var ws = null;
-  var timer = null;
-
+  var retryTimer = null;
   function connect() {
-    if (timer) { clearTimeout(timer); timer = null; }
+    if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+    var ws = null;
     try {
-      // Broadcasting port is configurable on the server side; the client
-      // expects it under the same host. Use the page's protocol family
-      // (ws/wss) so reverse-proxied / TLS deployments work.
       var wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      var wsPort = (window.__broadcastPort != null ? window.__broadcastPort : 6001);
-      ws = new WebSocket(wsProto + '//' + window.location.hostname + ':' + wsPort + '/ws');
-    } catch(e) {
-      timer = setTimeout(connect, 3000);
+      var wsUrl = configuredUrl || (wsProto + '//' + window.location.hostname + ':' + configuredPort + '/ws');
+      ws = new WebSocket(wsUrl);
+    } catch (error) {
+      retryTimer = setTimeout(connect, 3000);
       return;
     }
 
     window.__procWs = ws;
-
-    ws.onmessage = function(e) {
+    ws.onmessage = function(event) {
       try {
-        var msg = JSON.parse(e.data);
-
-        if (msg.event === 'connection_established') {
+        var message = JSON.parse(event.data);
+        if (message.event === 'connection_established') {
           ws.send(JSON.stringify({ event: 'subscribe', channel: 'processes' }));
-          return;
+        } else if (message.event === 'subscription_succeeded' && message.channel === 'processes') {
+          if (window.__latestProcs) applySnapshot(window.__latestProcs, 'Live');
+        } else if (message.event === 'processes.updated' && message.channel === 'processes') {
+          applySnapshot(message.data, 'Live');
         }
-
-        if (msg.event === 'subscription_succeeded' && msg.channel === 'processes') {
-          _exec('wsConnected = true');
-          return;
-        }
-
-        if (msg.event === 'processes.updated' && msg.channel === 'processes') {
-          window.__latestProcs = msg.data;
-          _exec('processes = window.__latestProcs.processes; totalCPU = window.__latestProcs.totalCPU; totalMemUsed = window.__latestProcs.totalMemUsed');
-        }
-      } catch(err) {}
+      } catch (error) {}
     };
-
     ws.onclose = function() {
-      ws = null;
       window.__procWs = null;
-      _exec('wsConnected = false');
-      timer = setTimeout(connect, 2000);
+      retryTimer = setTimeout(connect, 3000);
     };
-
-    ws.onerror = function() {};
   }
 
   connect();

@@ -1,4 +1,5 @@
-<!-- Background processes panel — live via ts-broadcasting WebSocket -->
+<!-- Background processes panel — refreshed through the same-origin API, with
+     an optional ts-broadcasting WebSocket when one is explicitly configured. -->
 <div class='card-row'>
   <div class='card'>
     <div class='card-label'>Processes</div>
@@ -27,9 +28,9 @@
     <div>
       <span class='tbl-title'>Running Processes</span>
       <span class='tbl-count'>sorted by CPU</span>
-      <span class='live-indicator' :class="wsConnected ? 'connected' : 'disconnected'">
+      <span class='live-indicator' :class="feedConnected ? 'connected' : 'disconnected'">
         <span class='live-dot'></span>
-        <span>{{ wsConnected ? 'Live' : 'Reconnecting' }}</span>
+        <span>{{ feedLabel }}</span>
       </span>
     </div>
     <!-- Bulk kill is hidden until it's wired to /api/kill-process for each
