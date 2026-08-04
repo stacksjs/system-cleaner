@@ -1,55 +1,101 @@
 <script server>
 import { FEATURES } from '~/app/Support/Marketing/catalog'
+import { USE_CASES } from '~/app/Support/Marketing/use-cases'
+import { DOWNLOAD_URL, SOURCE_URL } from '~/app/Support/Marketing/distribution'
 
-const features = FEATURES
+export const features = FEATURES
+export const useCases = USE_CASES
+export const downloadUrl = DOWNLOAD_URL
+export const sourceUrl = SOURCE_URL
+</script>
+
+<script client>
+// Same dismissal contract as the mega panel: the sheet has to close when the
+// route changes, otherwise tapping a link on a phone leaves the overlay
+// covering the page it just loaded.
+const sheetOpen = state(false)
+
+function closeSheet(): void {
+  sheetOpen.set(false)
+}
+
+function toggleSheet(): void {
+  sheetOpen.update(value => !value)
+}
+
+useEventListener('stx:navigate', closeSheet)
+useEventListener('stx:load', closeSheet)
+
+useEventListener('keydown', (event) => {
+  if ((event as KeyboardEvent).key === 'Escape')
+    closeSheet()
+})
 </script>
 
 <header class="site-nav-wrap">
-  <nav class="site-nav site-container" aria-label="Primary navigation">
-    <a class="brand" href="/" aria-label="SystemCleaner home">
-      <img src="/images/systemcleaner-mark.svg" width="34" height="34" alt="" />
+  <nav class="site-container site-nav" aria-label="Primary navigation">
+    <a class="brand" href="/" data-stx-link aria-label="SystemCleaner home">
+      <img src="/images/systemcleaner-mark.svg" width="32" height="32" alt="" />
       <span>SystemCleaner</span>
     </a>
 
     <div class="desktop-nav">
-      <div class="mega-root">
-        <a class="nav-link" href="/features" data-stx-link>
-          Features
-          <span class="h-4 w-4 i-hugeicons-arrow-down-01" aria-hidden="true"></span>
-        </a>
-        <div class="mega-panel">
-          <div class="mega-grid site-container">
-            @foreach (features as feature)
-              <a class="mega-item" href="/features/{{ feature.slug }}" data-stx-link>
-                <span class="mega-icon h-5 w-5 i-hugeicons-{{ feature.icon }}" aria-hidden="true"></span>
-                <span>
-                  <strong>{{ feature.name }}</strong>
-                  <span>{{ feature.summary }}</span>
-                </span>
-              </a>
-            @endforeach
-          </div>
-        </div>
-      </div>
-      <a class="nav-link" href="#privacy">Privacy</a>
-      <a class="nav-link" href="https://github.com/stacksjs/system-cleaner">GitHub</a>
+      <MegaMenu />
+      <a class="nav-link" href="/privacy" data-stx-link>Privacy</a>
     </div>
 
     <div class="nav-actions">
-      <a class="button button-secondary" href="https://github.com/stacksjs/system-cleaner">View source</a>
-      <a class="button button-primary" href="/app" data-stx-link>Open app</a>
+      <a class="button button-secondary" href="{{ sourceUrl }}" rel="noreferrer">
+        <span class="h-4 w-4 i-f7-logo-github" aria-hidden="true"></span>
+        View source
+      </a>
+      <a class="button button-primary" href="{{ downloadUrl }}" rel="noreferrer">
+        <span class="h-4 w-4 i-f7-cloud-download-fill" aria-hidden="true"></span>
+        Download
+      </a>
     </div>
+
+    <button
+      type="button"
+      class="nav-burger"
+      aria-controls="mobile-sheet"
+      :aria-expanded="sheetOpen() ? 'true' : 'false'"
+      @click="toggleSheet()"
+    >
+      <span class="h-5 w-5" :class="sheetOpen() ? 'i-f7-xmark' : 'i-f7-line-horizontal-3'" aria-hidden="true"></span>
+      <span class="nav-burger-label">Menu</span>
+    </button>
   </nav>
 
-  <details class="mobile-nav">
-    <summary class="site-container">
-      Browse features
-      <span class="h-4 w-4 i-hugeicons-arrow-down-01" aria-hidden="true"></span>
-    </summary>
-    <div class="mobile-links site-container">
-      @foreach (features as feature)
-        <a class="nav-link" href="/features/{{ feature.slug }}" data-stx-link>{{ feature.shortName }}</a>
-      @endforeach
+  <div class="mobile-sheet" id="mobile-sheet" :data-open="sheetOpen() ? 'true' : 'false'" :aria-hidden="sheetOpen() ? 'false' : 'true'">
+    <div class="mobile-sheet-inner site-container">
+      <p class="mobile-sheet-label">Features</p>
+      <div class="mobile-links">
+        @foreach (features as feature)
+          <a class="nav-link" href="/features/{{ feature.slug }}" data-stx-link @click="closeSheet()">{{ feature.shortName }}</a>
+        @endforeach
+      </div>
+      <p class="mobile-sheet-label mobile-sheet-label-spaced">Use cases</p>
+      <div class="mobile-links">
+        @foreach (useCases as useCase)
+          <a class="nav-link" href="/use-cases/{{ useCase.slug }}" data-stx-link @click="closeSheet()">{{ useCase.shortName }}</a>
+        @endforeach
+      </div>
+      <div class="mobile-links mobile-links-wide">
+        <a class="nav-link" href="/features" data-stx-link @click="closeSheet()">All features</a>
+        <a class="nav-link" href="/use-cases" data-stx-link @click="closeSheet()">All use cases</a>
+        <a class="nav-link" href="/privacy" data-stx-link @click="closeSheet()">Privacy</a>
+      </div>
+      <div class="mobile-actions">
+        <a class="button button-secondary" href="{{ sourceUrl }}" rel="noreferrer">
+          <span class="h-4 w-4 i-f7-logo-github" aria-hidden="true"></span>
+          View source
+        </a>
+        <a class="button button-primary" href="{{ downloadUrl }}" rel="noreferrer">
+          <span class="h-4 w-4 i-f7-cloud-download-fill" aria-hidden="true"></span>
+          Download
+        </a>
+      </div>
     </div>
-  </details>
+  </div>
 </header>

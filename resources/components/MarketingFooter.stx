@@ -1,14 +1,51 @@
+<script server>
+import { DOWNLOAD_URL, MAC_APP_STORE_URL, SOURCE_URL } from '~/app/Support/Marketing/distribution'
+
+export const downloadUrl = DOWNLOAD_URL
+export const macAppStoreUrl = MAC_APP_STORE_URL
+export const sourceUrl = SOURCE_URL
+export const year = new Date().getFullYear()
+</script>
+
 <footer class="site-footer">
   <div class="footer-inner site-container">
-    <a class="brand" href="/">
-      <img src="/images/systemcleaner-mark.svg" width="30" height="30" alt="" />
-      <span>SystemCleaner</span>
-    </a>
-    <nav class="footer-links" aria-label="Footer navigation">
-      <a href="/features" data-stx-link>Features</a>
-      <a href="/app" data-stx-link>Open app</a>
-      <a href="https://github.com/stacksjs/system-cleaner">GitHub</a>
-      <a href="https://stacksjs.com">Built with Stacks</a>
-    </nav>
+    <div class="footer-brand">
+      <a class="brand" href="/" data-stx-link>
+        <img src="/images/systemcleaner-mark.svg" width="30" height="30" alt="" />
+        <span>SystemCleaner</span>
+      </a>
+      <p>A native macOS utility for understanding, cleaning, and maintaining your Mac. Nothing leaves the machine.</p>
+    </div>
+
+    <div class="footer-cols">
+      <div>
+        <h2>Product</h2>
+        <ul>
+          <li><a href="/features" data-stx-link>Features</a></li>
+          <li><a href="/use-cases" data-stx-link>Use cases</a></li>
+          <li><a href="{{ downloadUrl }}" rel="noreferrer">Download</a></li>
+          <li><a href="{{ macAppStoreUrl }}" rel="noreferrer">Mac App Store</a></li>
+        </ul>
+      </div>
+      <div>
+        <h2>Company</h2>
+        <ul>
+          <li><a href="/privacy" data-stx-link>Privacy</a></li>
+          <li><a href="https://stacksjs.com" rel="noreferrer">Built with Stacks</a></li>
+        </ul>
+      </div>
+      <div>
+        <h2>Source</h2>
+        <ul>
+          <li><a href="{{ sourceUrl }}" rel="noreferrer">GitHub</a></li>
+          <li><a href="{{ sourceUrl }}/issues" rel="noreferrer">Report an issue</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-base site-container">
+    <span>&copy; {{ year }} SystemCleaner</span>
+    <span>Made for macOS</span>
   </div>
 </footer>

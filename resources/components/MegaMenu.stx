@@ -1,0 +1,150 @@
+<script server>
+import { FEATURES } from '~/app/Support/Marketing/catalog'
+import { USE_CASES } from '~/app/Support/Marketing/use-cases'
+
+export const featureItems = FEATURES.map(feature => ({
+  href: `/features/${feature.slug}`,
+  name: feature.name,
+  summary: feature.summary,
+  icon: feature.icon,
+}))
+
+export const useCaseItems = USE_CASES.map(useCase => ({
+  href: `/use-cases/${useCase.slug}`,
+  name: useCase.name,
+  summary: useCase.summary,
+  icon: useCase.icon,
+}))
+</script>
+
+<script client>
+// One signal for both menus rather than one per menu: opening the second
+// trigger has to close the first, and two independent booleans would leave
+// both full-width panels stacked on top of each other.
+//
+// The panels are signal-driven rather than `:hover`-driven so that they can be
+// dismissed by things a CSS hover rule cannot observe: a route change, the
+// Escape key, or a pointer press elsewhere on the page. The previous
+// CSS-only panel stayed pinned open over whichever feature page the user
+// had just navigated to, because the cursor never left the nav.
+const openMenu = state('')
+const canHover = useMediaQuery('(hover: hover) and (pointer: fine)')
+
+function closeMenu(): void {
+  openMenu.set('')
+}
+
+function toggleMenu(id: string): void {
+  openMenu.update(current => (current === id ? '' : id))
+}
+
+function hoverOpen(id: string): void {
+  if (canHover())
+    openMenu.set(id)
+}
+
+function hoverClose(): void {
+  if (canHover())
+    closeMenu()
+}
+
+useEventListener('stx:navigate', closeMenu)
+useEventListener('stx:load', closeMenu)
+
+useEventListener('keydown', (event) => {
+  if ((event as KeyboardEvent).key === 'Escape')
+    closeMenu()
+})
+
+useEventListener('pointerdown', (event) => {
+  const target = event.target as Element | null
+  if (!target || !target.closest('[data-mega-root]'))
+    closeMenu()
+})
+</script>
+
+<div class="mega-bar" data-mega-root @mouseleave="hoverClose()">
+  <div class="mega-menu" @mouseenter="hoverOpen('features')">
+    <button
+      type="button"
+      class="mega-trigger nav-link"
+      id="mega-trigger-features"
+      aria-controls="mega-panel-features"
+      :aria-expanded="openMenu() === 'features' ? 'true' : 'false'"
+      @click="toggleMenu('features')"
+    >
+      Features
+      <span class="h-4 w-4 i-f7-chevron-down mega-chevron" aria-hidden="true"></span>
+    </button>
+
+    <div
+      class="mega-panel"
+      id="mega-panel-features"
+      role="region"
+      aria-labelledby="mega-trigger-features"
+      :data-open="openMenu() === 'features' ? 'true' : 'false'"
+      :aria-hidden="openMenu() === 'features' ? 'false' : 'true'"
+    >
+      <div class="mega-grid site-container">
+        @foreach (featureItems as item)
+          <a class="mega-item" href="{{ item.href }}" data-stx-link @click="closeMenu()">
+            <span class="i-f7-{{ item.icon }} mega-icon h-5 w-5" aria-hidden="true"></span>
+            <span>
+              <strong>{{ item.name }}</strong>
+              <span>{{ item.summary }}</span>
+            </span>
+          </a>
+        @endforeach
+        <a class="mega-item mega-item-all" href="/features" data-stx-link @click="closeMenu()">
+          <span class="h-5 w-5 i-f7-square-grid-2x2-fill mega-icon" aria-hidden="true"></span>
+          <span>
+            <strong>All features</strong>
+            <span>Every tool in one index.</span>
+          </span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="mega-menu" @mouseenter="hoverOpen('use-cases')">
+    <button
+      type="button"
+      class="mega-trigger nav-link"
+      id="mega-trigger-use-cases"
+      aria-controls="mega-panel-use-cases"
+      :aria-expanded="openMenu() === 'use-cases' ? 'true' : 'false'"
+      @click="toggleMenu('use-cases')"
+    >
+      Use cases
+      <span class="h-4 w-4 i-f7-chevron-down mega-chevron" aria-hidden="true"></span>
+    </button>
+
+    <div
+      class="mega-panel"
+      id="mega-panel-use-cases"
+      role="region"
+      aria-labelledby="mega-trigger-use-cases"
+      :data-open="openMenu() === 'use-cases' ? 'true' : 'false'"
+      :aria-hidden="openMenu() === 'use-cases' ? 'false' : 'true'"
+    >
+      <div class="mega-grid mega-grid-3 site-container">
+        @foreach (useCaseItems as item)
+          <a class="mega-item" href="{{ item.href }}" data-stx-link @click="closeMenu()">
+            <span class="i-f7-{{ item.icon }} mega-icon h-5 w-5" aria-hidden="true"></span>
+            <span>
+              <strong>{{ item.name }}</strong>
+              <span>{{ item.summary }}</span>
+            </span>
+          </a>
+        @endforeach
+        <a class="mega-item mega-item-all" href="/use-cases" data-stx-link @click="closeMenu()">
+          <span class="h-5 w-5 i-f7-person-2-fill mega-icon" aria-hidden="true"></span>
+          <span>
+            <strong>All use cases</strong>
+            <span>Every audience in one index.</span>
+          </span>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
