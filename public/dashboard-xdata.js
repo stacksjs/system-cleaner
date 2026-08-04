@@ -22,17 +22,20 @@ window.dashboardXData = function () {
         .catch(function () { self.pendingUpdates = 0 })
     },
 
-    get healthScore() { return this.stats ? this.stats.healthScore : 75 },
-    get healthLabel() {
-      var s = this.healthScore
+    // Methods, not 'get' accessors. The stx runtime does not preserve
+    // getters when it wires an x-data object into its reactive scope, so the
+    // ring rendered the fallback 75 forever instead of the scored value.
+    healthScore() { return this.stats ? this.stats.healthScore : 75 },
+    healthLabel() {
+      var s = this.healthScore()
       return s >= 90 ? 'Excellent' : s >= 75 ? 'Good' : s >= 60 ? 'Fair' : s >= 40 ? 'Poor' : 'Critical'
     },
-    get healthColor() {
-      var s = this.healthScore
+    healthColor() {
+      var s = this.healthScore()
       return s >= 90 ? '#34c759' : s >= 75 ? '#30d158' : s >= 60 ? '#ff9f0a' : '#ff453a'
     },
-    get healthDashoffset() {
-      return String(2 * Math.PI * 40 * (1 - this.healthScore / 100))
+    healthDashoffset() {
+      return String(2 * Math.PI * 40 * (1 - this.healthScore() / 100))
     },
 
     diskDotColor(pct) {
@@ -59,7 +62,7 @@ window.dashboardXData = function () {
       return 'width: ' + Math.min(100, cpu) + '%;'
     },
     healthScoreStyle() {
-      return 'color: ' + this.healthColor
+      return 'color: ' + this.healthColor()
     },
     diskDotStyle(pct) {
       return 'background: ' + this.diskDotColor(pct)

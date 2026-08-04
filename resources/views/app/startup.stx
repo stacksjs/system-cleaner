@@ -31,9 +31,12 @@ function esc(str) { return escapeHtml(str || '') }
       .catch(function() { self.loading = false; });
   },
 
-  get enabledStartup() { return this.startupItems.filter(function(i) { return !this.disabledItems.includes(i.id); }.bind(this)); },
-  get disabledStartup() { return this.startupItems.filter(function(i) { return this.disabledItems.includes(i.id); }.bind(this)); },
-  get enabledIds() { return this.enabledStartup.map(function(i) { return i.id; }); },
+  // Methods, not `get` accessors: the stx runtime does not evaluate getters
+  // declared on an x-data object literal, so every count rendered as 0 while
+  // the rows themselves (which call methods) showed the right state.
+  enabledStartup() { return this.startupItems.filter(function(i) { return !this.disabledItems.includes(i.id); }.bind(this)); },
+  disabledStartup() { return this.startupItems.filter(function(i) { return this.disabledItems.includes(i.id); }.bind(this)); },
+  enabledIds() { return this.enabledStartup().map(function(i) { return i.id; }); },
 
   toggle(id) { const i = this.selected.indexOf(id); if (i === -1) this.selected.push(id); else this.selected.splice(i, 1); },
   isOn(id) { return this.selected.includes(id); },
@@ -59,7 +62,7 @@ function esc(str) { return escapeHtml(str || '') }
 <!-- Reactive toast container -->
 <div class='toast-area'>
   <template x-for='toast in toasts' :key='toast.id'>
-    <div class='toast' x-text="(toast.type === 'success' ? '✓' : toast.type === 'error' ? '✕' : '⚠') + ' ' + toast.msg"></div>
+    <div class=toast><span class=toast-glyph :class="toast.type === success ? i-f7-checkmark-alt-circle-fill : toast.type === error ? i-f7-xmark-circle-fill : i-f7-exclamationmark-triangle-fill" aria-hidden="true"></span><span x-text="toast.msg"></span></div>
   </template>
 </div>
 
