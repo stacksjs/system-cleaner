@@ -118,7 +118,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Pantry
-        uses: home-lang/pantry/packages/action@main
+        uses: pantry-pm/pantry/packages/action@v0.11.12
 
       - name: Install Dependencies
         run: bun install

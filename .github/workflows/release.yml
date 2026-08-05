@@ -34,20 +34,21 @@ jobs:
       - name: Install Dependencies
         run: bun install
 
-      # Every workspace package is `private: true`, so there is nothing to
-      # publish to npm. The release artifact is the compiled CLI.
+      # The only build artifact. Every workspace package is `private: true`,
+      # so there is nothing to publish to npm.
       - name: Build binaries
         run: bun run build:binaries
 
-      - name: Create GitHub release
-        run: bunx changelogithub
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Attach binaries
-        uses: stacksjs/action-releaser@v1.1.0
+      # The Action owns the whole release: it creates the GitHub release,
+      # extracts this tag's section from CHANGELOG.md (written by
+      # `buddy release`), attaches the binaries, and generates checksums.
+      - name: Publish release
+        uses: pantry-pm/pantry/packages/action@v0.11.12
         with:
-          files: |
+          install: 'false'
+          release: 'true'
+          release-files: |
             packages/cli/bin/system-cleaner-darwin-arm64.zip
+          release-checksums: sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
