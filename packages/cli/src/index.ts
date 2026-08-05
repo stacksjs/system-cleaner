@@ -1,4 +1,7 @@
 import { cli } from '@stacksjs/clapp'
+// The root manifest is the version `buddy release` bumps. Hardcoding it here
+// meant every compiled binary reported 0.1.0 no matter which tag built it.
+import { version } from '../../../package.json'
 import { registerCleanCommand } from './commands/clean'
 import { registerUninstallCommand } from './commands/uninstall'
 import { registerDiskCommand } from './commands/disk'
@@ -12,7 +15,7 @@ import { registerTouchIdCommand } from './commands/touchid'
 
 export function createCLI() {
   const app = cli('system-cleaner')
-    .version('0.1.0')
+    .version(version)
     .help()
 
   // Register all commands
