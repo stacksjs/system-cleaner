@@ -1,5 +1,15 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.1.1...v0.1.2)
+
+## 💚 Continuous Integration
+
+- let the pantry action own the release ([674fc4b](https://github.com/stacksjs/system-cleaner/commit/674fc4b)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## Contributors
+
+- _Chris <chrisbreuer93@gmail.com>_
+
 ## v0.1.1
 
 ## ✨ Features
