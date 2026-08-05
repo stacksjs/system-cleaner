@@ -1,5 +1,15 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.1.2...v0.1.3)
+
+## 🐛 Bug Fixes
+
+- **cli**: report the released version ([ecc8bbf](https://github.com/stacksjs/system-cleaner/commit/ecc8bbf)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## Contributors
+
+- _Chris <chrisbreuer93@gmail.com>_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.1.1...v0.1.2)
 
 ## 💚 Continuous Integration
