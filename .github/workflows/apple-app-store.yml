@@ -1,0 +1,58 @@
+name: Publish Mac App Store
+
+# Tag pushes validate the signed package against App Store Connect without
+# uploading it, so a signing or entitlement regression surfaces on the release
+# that caused it. Uploading a build is a deliberate act: dispatch this workflow
+# with validate-only unchecked once the artifact has passed local launch and UI
+# QA. A Store build number is immutable, so an accidental upload cannot be
+# retracted and burns that number.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release-tag:
+        description: Git tag used for the GitHub release
+        required: true
+        type: string
+      validate-only:
+        description: Validate the signed package without uploading it
+        required: false
+        default: true
+        type: boolean
+      mirror-s3:
+        description: Mirror artifacts to the configured S3-compatible release registry
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  publish:
+    # Skips cleanly until the Apple identifiers are configured, so the CLI
+    # release in Releaser is never blocked by a half-configured Store setup.
+    # Repository variables are readable here; secrets are not.
+    if: ${{ vars.APPLE_BUNDLE_ID != '' }}
+    uses: stacksjs/stacks/.github/workflows/desktop-app-store.yml@main
+    with:
+      app-name: ${{ vars.APPLE_APP_NAME }}
+      bundle-id: ${{ vars.APPLE_BUNDLE_ID }}
+      team-id: ${{ vars.APPLE_TEAM_ID }}
+      desktop-url: ${{ vars.DESKTOP_URL }}
+      # Left empty on purpose: the reusable workflow derives the marketing
+      # version from the tag (minus the `v`), which is what `buddy release`
+      # bumped. Setting it here would let a stale variable outrank the tag.
+      app-version: ${{ vars.APPLE_APP_VERSION }}
+      # Both optional: the signing step defaults to the identities it imported.
+      app-signing-identity: ${{ vars.APPLE_APP_SIGNING_IDENTITY }}
+      installer-signing-identity: ${{ vars.APPLE_INSTALLER_SIGNING_IDENTITY }}
+      release-tag: ${{ inputs.release-tag || github.ref_name }}
+      validate-only: ${{ inputs.validate-only == null && true || inputs.validate-only }}
+      mirror-s3: ${{ inputs.mirror-s3 == true }}
+      s3-provider: ${{ vars.RELEASE_S3_PROVIDER || 'hetzner' }}
+      s3-bucket: ${{ vars.RELEASE_S3_BUCKET }}
+      s3-region: ${{ vars.RELEASE_S3_REGION }}
+      s3-endpoint: ${{ vars.RELEASE_S3_ENDPOINT }}
+      s3-prefix: ${{ vars.RELEASE_S3_PREFIX }}
+      s3-public-url: ${{ vars.RELEASE_S3_PUBLIC_URL }}
+    secrets: inherit
