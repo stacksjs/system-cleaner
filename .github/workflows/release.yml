@@ -43,7 +43,7 @@ jobs:
       # extracts this tag's section from CHANGELOG.md (written by
       # `buddy release`), attaches the binaries, and generates checksums.
       - name: Publish release
-        uses: pantry-pm/pantry/packages/action@v0.11.12
+        uses: pantry-pm/pantry/packages/action@v0.11.19
         with:
           install: 'false'
           release: 'true'
