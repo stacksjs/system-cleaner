@@ -1,5 +1,18 @@
 # Mac App Store releases
 
+::: warning The Store build is a reduced app
+Everything on this page describes a **sandboxed** build. The App Store requires
+`com.apple.security.app-sandbox`, and a sandboxed process cannot read
+`~/Library`, enumerate `/Applications`, signal other processes, or exec `brew` —
+which is most of what SystemCleaner does. Cleanup targets, startup items,
+extension audits, process control, and Homebrew updates are all unavailable in
+this build.
+
+The distributable app is the Developer ID one in
+[Desktop App](/guide/desktop-app). Keep this pipeline for a Store presence if
+you want one; do not treat it as the primary artifact.
+:::
+
 SystemCleaner ships two artifacts from one tag:
 
 | Artifact | Workflow | Runner |
@@ -94,4 +107,5 @@ at different steps; the provisioning profile has to match the team ID, bundle
 ID, and the entitlements the app requests.
 
 Store delivery is not notarization. Distributing outside the Store uses a
-Developer ID identity and `notarytool` instead.
+Developer ID identity and `notarytool` instead — see
+[Desktop App](/guide/desktop-app).

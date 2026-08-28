@@ -1,4 +1,4 @@
-import { execSync, HOME, TtlCache } from '@system-cleaner/core'
+import { execSync, TtlCache } from '@system-cleaner/core'
 import * as fs from 'node:fs'
 import { CLEAN_TARGETS, getAllExtensions } from '@system-cleaner/clean'
 import { discoverStartupItems } from '@system-cleaner/uninstall'

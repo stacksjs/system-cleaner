@@ -111,11 +111,59 @@ inject message HTML into the dashboard document.
 - `/deployments/{id}` - one persisted Deployment model record
 
 The deployment page composes `DeploymentList`, `DeploymentTable`,
-`DeployScript`, and `LiveTerminalOutput`. Script reads and atomic writes use
+`DeploymentPreviewDialog`, `DeployScript`, and `LiveTerminalOutput`. The
+Preview action first collects the environment and optional domain, then calls
+the guarded `POST /api/dashboard/deployments/preview` Action. That Action runs
+the native `buddy deploy --dry-run --json` planner and returns its versioned,
+non-mutating plan. The dialog renders the ordered operations and resolved sites
+before the user may continue to the separate real deployment confirmation.
+Script reads and atomic writes use
 `GET|PUT /api/dashboard/deployments/script`. The terminal uses
 `GET /api/dashboard/deployments/terminal` and pauses polling while the document
 is hidden. Do not create separate `/deployments/scripts` or
 `/deployments/live-terminal` pages.
+
+Deployment recovery uses `POST /api/dashboard/deployments/rollback/preview`
+followed by `POST /api/dashboard/deployments/rollback`. The preview must run
+the native `buddy deploy:rollback --dry-run` path successfully, and execution
+must re-run that preview, compare its revision, and require the typed target
+environment confirmation. Never implement rollback by editing release links,
+restarting services directly, or guessing a prior release from Deployment
+model rows. Deployment rows are application history. Preserved releases and
+activation are owned by ts-cloud.
+
+### Operations control plane
+
+The Operations sidebar entry deliberately remains one item. Section navigation
+lives in `Dashboard/Operations/OperationsNavigation.stx`:
+
+- `/operations/changes` - unified change review, active work, release approvals
+- `/operations/scheduler` - registered task runs and persisted pause state
+- `/operations/recovery` - destinations, policies, recovery points, restore drills
+- `/operations/migrations` - model diff, schema effects, ledger reconciliation
+- `/operations/incidents` - native alerts, health rules, ownership, silence state
+- `/operations/audit` - append-only operator events and correlations
+
+Operational state belongs in the ts-cloud control plane initialized by
+`Operations/control-plane.ts`. Use its stores for durable operations, events,
+releases, approvals, alerts, backups, actors, and environments. Do not create a
+parallel dashboard-only JSON file or duplicate those entities in application
+models. Application domain records still follow the normal `app/Models` and
+`useApi` convention. Use dashboard Actions for aggregate operational views and
+guard every route in `dashboard-api.ts`.
+
+Every mutating operator action must resolve the authenticated actor and append
+or correlate a control-plane event. Use `trackOperatorOperation()` for bounded
+synchronous work and the native durable queue for long-running backup, restore,
+or provider work. Empty states must reflect real absence of configuration or
+events. Never seed operational pages with sample incidents, releases, backups,
+or health data.
+
+Migration execution must start from `previewPendingMigrations()`, audit the
+ledger against live schema effects, hash the reviewed plan, and recheck it
+immediately before `buddy migrate`. Only `reconcileMigrationLedger()` may
+repair provable ledger drift. Partial and unverifiable migrations require human
+review and must not be silently recorded.
 
 ### Utilities
 - `/health`, `/insights`, `/logs` - operational health and logs
@@ -153,6 +201,9 @@ is hidden. Do not create separate `/deployments/scripts` or
 - Use `tag="a"` whenever `href` is reactive, for example
   `<Button tag="a" :href="detailsPath()">Open details</Button>`. Server rendering
   cannot infer an anchor from a client-only reactive URL.
+- When a submit action lives in a shared Modal footer, give the form a stable
+  `id` and associate the action with `<Button type="submit" form="form-id">`.
+  Do not duplicate the footer inside the form or use script-driven submission.
 - Prefer component events and named slots over string callback props or
   `data-action` markers. A `data-action` attribute is only valid when an active
   host integration consumes that exact action.
@@ -325,6 +376,7 @@ the canonical primary action style across the dashboard.
 </Button>
 
 <Button :loading="saving()" type="submit">Save changes</Button>
+<Button :loading="saving()" type="submit" form="settings-form">Save from modal footer</Button>
 <Button variant="secondary" @click="close">Cancel</Button>
 <Button :loading="deleting()" variant="danger" @click="destroy">Delete</Button>
 <Button tag="a" :href="exportHref()" :download="exportFilename()">Export</Button>
@@ -350,20 +402,19 @@ drawers must use the shared `dashboard-modal-layer` class so their interactive
 surface starts beside that sidebar and returns to `left: 0` on mobile and in
 the Craft native-sidebar shell.
 
-Use the shared `Dashboard/UI/Modal` and `Dashboard/UI/ConfirmDialog`
-components when possible. A custom overlay root must use this shape:
+Use `Dashboard/UI/Modal`, `Dashboard/UI/Drawer`, and
+`Dashboard/UI/ConfirmDialog` for page dialogs, inspectors, forms, and
+confirmations. They own native `<dialog>` behavior, scroll locking, focus
+restoration, Escape and backdrop handling, accessibility labels, and the
+sidebar-aware boundary. `Dashboard/Modals/BaseModal` and
+`Dashboard/Modals/Popups/Alert` are compatibility wrappers over that same
+primitive, not alternate overlay implementations.
 
-```html
-<div class="fixed inset-y-0 overflow-y-auto right-0 z-[55] dashboard-modal-layer">
-  <button class="absolute inset-0" aria-label="Close dialog"></button>
-  <!-- dialog panel -->
-</div>
-```
-
-Do not solve sidebar overlap by increasing z-index alone. That places the
-dialog above the sidebar without centering it in the available content area.
-Keep overlay children `absolute`, not `fixed`, so they remain bounded by the
-sidebar-aware root.
+Do not add a page-owned `fixed inset-0` overlay. A purpose-built application
+surface such as the global command palette or mobile navigation may own a
+custom layer only when the shared dialog or drawer semantics do not fit. It
+must still use `dashboard-modal-layer` and provide complete keyboard, focus,
+and ARIA behavior. Do not solve sidebar overlap by increasing z-index alone.
 
 ### Live dashboard audit
 
@@ -374,6 +425,9 @@ the project root:
 bun storage/framework/defaults/ai/skills/stacks-dashboard/scripts/audit.ts
 # Or target a non-default origin:
 bun storage/framework/defaults/ai/skills/stacks-dashboard/scripts/audit.ts --base-url http://127.0.0.1:3002
+
+# Exercise hydrated navigation, console errors, failed requests, and layout:
+bun storage/framework/defaults/ai/skills/stacks-browse/scripts/browse.ts crawl http://localhost:3002/ --max 500 --settle 350 --summary
 ```
 
 Pass a base URL as the first argument when the dashboard is not on
@@ -383,6 +437,13 @@ document and an `X-STX-Router` fragment, then crawls every registered GET
 dashboard API. It fails on missing page renders, invalid fragment contracts,
 empty or non-HTML pages, unresolved component tags, 5xx or method-mismatch
 APIs, HTML API fallbacks, invalid JSON, and HTTP-200 error payloads.
+
+The dependency-free browser crawl follows the rendered link graph in a real
+browser and fails on non-200 pages, console errors, failed subrequests, or
+horizontal overflow. Seed source-only routes with repeated `--path` flags,
+including optional or parameterized pages that the current data set does not
+link. The HTTP audit and browser crawl cover different boundaries, so run both
+for exhaustive dashboard work.
 
 Run this after dashboard route, Action, STX, model, migration, or dev-server
 changes. Record provider-backed or destructive success paths as explicit

@@ -35,7 +35,6 @@
     "packages/*/test/**/*.ts",
     "packages/cli/bin/**/*.ts",
     "routes/**/*.ts",
-    "workers/**/*.ts",
     "channels.ts",
     "config/**/*.ts",
     "app/**/*.ts",

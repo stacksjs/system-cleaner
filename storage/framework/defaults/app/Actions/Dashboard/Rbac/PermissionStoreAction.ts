@@ -1,6 +1,8 @@
+import type { RequestInstance } from '@stacksjs/types'
 import { Action } from '@stacksjs/actions'
 import { createPermission, findPermission } from '@stacksjs/auth'
 import { response } from '@stacksjs/router'
+import { rbacActionError } from './rbac-response'
 
 interface PermissionInput {
   name?: unknown
@@ -20,8 +22,8 @@ export default new Action({
   description: 'Create a new permission.',
   method: 'POST',
   apiResponse: true,
-  async handle(request) {
-    const body = (request as any).jsonBody as PermissionInput | undefined ?? {}
+  async handle(request: RequestInstance<PermissionInput>) {
+    const body = request.all()
 
     const name = typeof body.name === 'string' ? body.name.trim() : ''
     if (!name || name.length > 100) {
@@ -53,8 +55,7 @@ export default new Action({
       }
     }
     catch (err) {
-      console.error('[dashboard/rbac] PermissionStoreAction failed:', err)
-      return response.json({ error: err instanceof Error ? err.message : 'unknown error' }, 500)
+      return rbacActionError(err, 'The permission could not be created.', 'PermissionStoreAction')
     }
   },
 })

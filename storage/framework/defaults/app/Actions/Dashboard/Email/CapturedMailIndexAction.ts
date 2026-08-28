@@ -1,5 +1,5 @@
 import { Action } from '@stacksjs/actions'
-import { response } from '@stacksjs/router'
+import { dashboardOperationalError } from '../dashboard-response'
 import { listCapturedMail } from './captured-mail'
 
 export default new Action({
@@ -10,18 +10,22 @@ export default new Action({
 
   async handle() {
     try {
-      const messages = await listCapturedMail()
+      // `problems` carries the captures that could not be parsed. They are
+      // reported rather than thrown so one stale file cannot 503 the inbox,
+      // and reported rather than dropped so the operator can still see that
+      // something in the capture directory needs attention.
+      const { messages, problems } = await listCapturedMail()
       return {
         captureDriver: 'log',
         activeDriver: process.env.MAIL_MAILER || 'log',
         total: messages.length,
         messages,
+        unreadable: problems.length,
+        problems,
       }
     }
     catch (error) {
-      return response.json({
-        message: error instanceof Error ? error.message : 'Captured emails could not be loaded.',
-      }, 503)
+      return dashboardOperationalError(error, 'Captured emails could not be loaded.', 'CapturedMailIndexAction')
     }
   },
 })

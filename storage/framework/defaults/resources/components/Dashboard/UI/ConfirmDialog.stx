@@ -8,6 +8,9 @@ const confirmLabel = useReactiveProp('confirmLabel', 'Delete')
 const cancelLabel = useReactiveProp('cancelLabel', 'Cancel')
 const variant = useReactiveProp('variant', 'danger' as ConfirmVariant)
 const busy = useReactiveProp('busy', false)
+const disabled = useReactiveProp('disabled', false)
+const warning = useReactiveProp('warning', '')
+const error = useReactiveProp('error', '')
 const emit = defineEmits()
 
 function close(): void {
@@ -16,7 +19,7 @@ function close(): void {
 }
 
 function confirm(): void {
-  if (!busy())
+  if (!busy() && !disabled())
     emit('confirm')
 }
 
@@ -32,57 +35,56 @@ function iconName(): string {
 
 </script>
 
-<template :if="open()">
-  <div class="fixed inset-0 overflow-y-auto z-[55] dashboard-modal-layer" @keydown.escape="close">
-    <button type="button" class="fixed inset-0 w-full bg-black/50 backdrop-blur-sm cursor-default" aria-label="Close confirmation dialog" @click="close"></button>
-
-    <div class="flex relative items-center justify-center p-4 min-h-full">
-      <section
-        role="alertdialog"
-        aria-modal="true"
-        :aria-label="title()"
-        class="relative p-6 max-w-md w-full bg-white dark:bg-neutral-900 rounded-xl shadow-2xl"
-      >
-        <div class="flex gap-4 items-start">
-          <div class="shrink-0 p-2.5 rounded-lg" :class="iconClass()">
-            <span class="block h-5 w-5" :class="iconName()"></span>
-          </div>
-          <div class="flex-1 min-w-0">
-            <h3 class="font-semibold text-lg text-neutral-900 dark:text-white">
-              {{ title() }}
-            </h3>
-            <p class="mt-1 text-neutral-500 text-sm dark:text-neutral-400">
-              {{ description() }}
-            </p>
-          </div>
-        </div>
-
-        <div class="flex gap-2 items-center justify-end mt-6">
-          <Button
-            variant="secondary"
-            :disabled="busy()"
-            @click="close"
-          >
-            {{ cancelLabel() }}
-          </Button>
-          <Button
-            :if="variant() === 'warning'"
-            variant="warning"
-            :loading="busy()"
-            @click="confirm"
-          >
-            {{ confirmLabel() }}
-          </Button>
-          <Button
-            :if="variant() !== 'warning'"
-            variant="danger"
-            :loading="busy()"
-            @click="confirm"
-          >
-            {{ confirmLabel() }}
-          </Button>
-        </div>
-      </section>
+<Modal
+  :isOpen="open()"
+  :title="title()"
+  :description="description()"
+  :closable="!busy()"
+  role="alertdialog"
+  size="sm"
+  @close="close"
+>
+  <template #header-leading>
+    <div class="shrink-0 p-2.5 rounded-lg" :class="iconClass()">
+      <span class="block h-5 w-5" :class="iconName()"></span>
     </div>
-  </div>
-</template>
+  </template>
+
+  <template #footer>
+    <div class="w-full">
+      <div :if="warning()" role="note" class="mb-4 p-3 text-amber-800 text-sm dark:text-amber-200 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 rounded-lg dark:border-amber-900">
+        {{ warning() }}
+      </div>
+      <div :if="error()" role="alert" class="mb-4 p-3 text-red-700 text-sm dark:text-red-300 bg-red-50 dark:bg-red-950/30 border border-red-200 rounded-lg dark:border-red-900">
+        {{ error() }}
+      </div>
+      <div class="flex gap-2 items-center justify-end">
+        <Button
+          variant="secondary"
+          :disabled="busy()"
+          @click="close"
+        >
+          {{ cancelLabel() }}
+        </Button>
+        <Button
+          :if="variant() === 'warning'"
+          variant="warning"
+          :loading="busy()"
+          :disabled="disabled()"
+          @click="confirm"
+        >
+          {{ confirmLabel() }}
+        </Button>
+        <Button
+          :if="variant() !== 'warning'"
+          variant="danger"
+          :loading="busy()"
+          :disabled="disabled()"
+          @click="confirm"
+        >
+          {{ confirmLabel() }}
+        </Button>
+      </div>
+    </div>
+  </template>
+</Modal>

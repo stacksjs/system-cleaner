@@ -161,3 +161,18 @@ export function isProjectArtifact(dirName: string): { isArtifact: boolean, type?
 export function getProjectArtifactPatterns(): typeof PROJECT_ARTIFACT_PATTERNS {
   return PROJECT_ARTIFACT_PATTERNS
 }
+
+/**
+ * Presentation for a category, including the `other` bucket.
+ *
+ * `getCategoryInfo` returns `undefined` for `other` because there is no
+ * definition for it — every caller then reinvented the same fallback label,
+ * glyph, and colour. This is that fallback, in one place.
+ */
+export function categoryPresentation(category: FileCategory): { label: string, icon: string, color: string } {
+  const info = getCategoryInfo(category)
+  if (info)
+    return { label: info.label, icon: info.icon, color: info.color }
+
+  return { label: 'Other Files', icon: 'i-f7-folder-fill', color: '#98989d' }
+}

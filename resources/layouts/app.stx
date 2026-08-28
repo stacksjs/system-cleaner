@@ -1,3 +1,12 @@
+<script server>
+// The app shell is a control plane for the Mac this process runs on. The same
+// STX application also serves the public marketing site, where there is no
+// such Mac — so off-agent the shell renders a download prompt instead of a
+// dashboard built from a shared web server's disk.
+const { isLocalAgent } = require('~/app/Support/Runtime/local-agent')
+const localAgent = isLocalAgent()
+</script>
+
 <!DOCTYPE html>
 <html lang='en'>
 <head>
@@ -262,16 +271,36 @@
     @media (max-width: 1000px) { .disk-inspector { display: none; } }
     @media (max-width: 700px) { .disk-sidebar, .sidebar { display: none; } }
 
+    .offsite-shell { display: flex; height: 100%; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 40px; text-align: center; }
+    .offsite-shell h1 { font-size: 19px; font-weight: 600; }
+    .offsite-shell p { max-width: 46ch; color: var(--secondary); font-size: 13px; line-height: 1.5; }
+    .offsite-shell .btn { margin-top: 6px; padding: 8px 20px; font-size: 13px; text-decoration: none; }
+
     @yield('styles')
   </style>
 </head>
 <body>
 <div class='app-chrome'>
   <div class='app-body'>
-    <AppRail active="@yield('nav')" />
-    <main class='main' data-stx-content>
-      @yield('body')
-    </main>
+    @if (localAgent)
+      <AppRail active="@yield('nav')" />
+      <main class='main' data-stx-content>
+        @yield('body')
+      </main>
+    @else
+      <main class='main' data-stx-content>
+        <div class='offsite-shell'>
+          <img src='/images/systemcleaner-mark.svg' width='52' height='52' alt='' />
+          <h1>SystemCleaner runs on your Mac</h1>
+          <p>
+            This screen is the app's interface. It reads disks, processes, and
+            login items on the machine it is installed on, so there is nothing
+            for it to show from a web server.
+          </p>
+          <a class='btn' href='/#download'>Download for macOS</a>
+        </div>
+      </main>
+    @endif
   </div>
 </div>
 </body>

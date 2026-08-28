@@ -1,9 +1,10 @@
+import type { RequestInstance } from '@stacksjs/types'
 import { Action } from '@stacksjs/actions'
 import { db } from '@stacksjs/database'
-import { kanbanError } from './kanban-response'
+import { kanbanActionError, kanbanError } from './kanban-response'
 
 /**
- * `DELETE /api/dashboard/kanban/labels/:id` (stacksjs/stacks#1846 Phase 3).
+ * `DELETE /api/dashboard/kanban/labels/:id`.
  *
  * Removes a label and detaches it from every card that carries it.
  * The label row goes from the `labels` table; every pivot row in
@@ -15,9 +16,8 @@ export default new Action({
   description: 'Hard-deletes a label and its card_labels pivot rows.',
   method: 'DELETE',
   apiResponse: true,
-  async handle(request) {
-    const rawId = (request as any)?.params?.id ?? (request as any)?.param?.('id') ?? null
-    const id = Number(rawId)
+  async handle(request: RequestInstance) {
+    const id = Number(request.getParam('id'))
     if (!Number.isFinite(id) || id <= 0)
       return kanbanError('Invalid label id', 400)
 
@@ -30,8 +30,7 @@ export default new Action({
       return { deleted: true, id }
     }
     catch (err) {
-      console.error('[dashboard/kanban] LabelDestroyAction failed:', err)
-      return kanbanError(err instanceof Error ? err.message : 'unknown error', 500)
+      return kanbanActionError(err, 'LabelDestroyAction')
     }
   },
 })

@@ -104,8 +104,8 @@ export default defineModel({
       required: true,
       unique: false,
       validation: {
-        rule: schema.string().maxLength(100),
-        message: { maxLength: 'Name is too long' }
+        rule: schema.string().max(100),
+        message: { max: 'Name is too long' }
       },
       factory: (faker) => faker.lorem.word()
     },
@@ -195,6 +195,12 @@ await createUser('Alice', 'alice@example.com') // auto-wrapped
 ```
 
 Both `transaction()` and `savepoint()` delegate to `db.transaction()` and `db.savepoint()` from `@stacksjs/database`.
+
+### Transaction executor boundary
+
+Every query that must commit or roll back together must use the callback handle (`tx` or `sp`), including validation reads, pivot writes, and the final readback. Do not mix `Model.find()`, `Model.create()`, instance `update()` / `delete()`, or instance relation calls into a raw query-builder transaction. The model executor is a separate execution surface and is not rebound to the callback handle. On SQLite it may use a separate connection, so it cannot observe an uncommitted row written through `tx`.
+
+`runInTransactionScope()` buffers supported side effects until commit, but it does not rebind model queries. For a transaction-backed custom action, use the model definition as the schema and relationship source of truth, then execute the complete persistence workflow through `tx`. Read the created or updated row through `tx` before returning so a readback failure also rolls back the mutation.
 
 ## Trait Methods (traits/)
 

@@ -26,8 +26,8 @@
       </div>
       <ul class='dash-signals'>
         <li>
-          <span class='statusbar-dot' style='background: {{ memDotColor }}'></span>
-          Memory <b>{{ usedMemGB }} / {{ totalMemGB }} GB</b> (<span>{{ stats ? stats.memPercent : '…' }}</span>%)
+          <span class='statusbar-dot' :style="memDotStyle()" style='background: {{ memDotColor }}'></span>
+          Memory <b>{{ stats ? stats.usedMemGB : usedMemGB }} / {{ stats ? stats.totalMemGB : totalMemGB }} GB</b> (<span>{{ stats ? stats.memPercent : '…' }}</span>%)
         </li>
         <li x-show='stats' x-cloak>
           <span class='statusbar-dot' :style="diskDotStyle(stats.dUsedPct)"></span>
@@ -47,7 +47,7 @@
         </li>
         <li>
           <span class='statusbar-dot' style='background: #30d158'></span>
-          Uptime <b>{{ uptimeStr }}</b>
+          Uptime <b>{{ stats ? stats.uptimeStr : uptimeStr }}</b>
         </li>
       </ul>
     </div>
@@ -55,17 +55,17 @@
 
   <div class='card'>
     <div class='card-label'>CPU</div>
-    <div class='card-value' style='font-size: 16px;'>{{ cpuLabel }}</div>
-    <div class='card-detail'>{{ cpuCores }} cores · <span>{{ stats ? stats.cpuAvgPercent + '% avg load' : '...' }}</span></div>
+    <div class='card-value' style='font-size: 16px;'>{{ stats ? stats.cpuLabel : cpuLabel }}</div>
+    <div class='card-detail'>{{ stats ? stats.cpuCores : cpuCores }} cores · <span>{{ stats ? stats.cpuAvgPercent + '% avg load' : '...' }}</span></div>
   </div>
 
   <div class='card'>
     <div class='card-label'>Memory</div>
-    <div class='card-value'>{{ usedMemGB }} <span class='card-value-unit'>/ {{ totalMemGB }} GB</span></div>
+    <div class='card-value'>{{ stats ? stats.usedMemGB : usedMemGB }} <span class='card-value-unit'>/ {{ stats ? stats.totalMemGB : totalMemGB }} GB</span></div>
     <div class='progress'>
-      <div class='progress-fill' style='{{ memBarStyle }}'></div>
+      <div class='progress-fill' :style="memFillStyle()" style='{{ memBarStyle }}'></div>
     </div>
-    <div class='card-detail'>{{ freeMemGB }} GB available</div>
+    <div class='card-detail'>{{ stats ? stats.freeMemGB : freeMemGB }} GB available</div>
   </div>
 
   <div class='card' x-show='stats' x-cloak>

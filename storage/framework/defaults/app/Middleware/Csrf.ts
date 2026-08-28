@@ -1,6 +1,7 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { Buffer } from 'node:buffer'
 import { HttpError } from '@stacksjs/error-handling'
+import type { EnhancedRequest } from '@stacksjs/bun-router'
 import { Middleware } from '@stacksjs/router'
 
 /**
@@ -77,7 +78,9 @@ export function generateCsrfToken(): string {
 
 /**
  * Seed the CSRF cookie on the outgoing response if the incoming request
- * didn't already carry one. Used by the router as a post-response step
+ * didn't already carry one, or with the token the router minted before
+ * rendering (`minted`) so a server-rendered page's forms and the browser's
+ * cookie hold the same string. Used by the router as a post-response step
  * on safe-method (GET/HEAD/OPTIONS) responses so SPAs get a usable
  * cookie value before they ever submit an unsafe request.
  *
@@ -95,13 +98,50 @@ export function generateCsrfToken(): string {
  * - 2-hour `Max-Age` — short enough to limit replay if leaked, long
  *   enough that idle tabs don't constantly re-fetch tokens
  */
-export function seedCsrfCookieIfMissing(req: Request, response: Response): Response {
+/**
+ * Whether a response is already handing the browser a CSRF token.
+ *
+ * `getSetCookie` is the only way to read multiple `Set-Cookie` headers back;
+ * `get` joins them into one string, which is not something a cookie value can
+ * be parsed out of reliably. Older runtimes without it fall back to the joined
+ * form, where a substring match is still correct for the question being asked.
+ */
+function responseAlreadySeeds(response: Response): boolean {
+  const headers = response.headers as Headers & { getSetCookie?: () => string[] }
+  const cookies = typeof headers.getSetCookie === 'function'
+    ? headers.getSetCookie()
+    : [headers.get('set-cookie') || '']
+
+  return cookies.some(cookie =>
+    cookie.startsWith(`${CSRF_COOKIE_NAME}=`)
+    || cookie.startsWith('csrf-token=')
+    || cookie.includes(`, ${CSRF_COOKIE_NAME}=`)
+    || cookie.includes(', csrf-token='),
+  )
+}
+
+export function seedCsrfCookieIfMissing(req: Request, response: Response, minted?: string): Response {
   const cookieHeader = req.headers.get('cookie') || ''
-  if (cookieHeader.includes(`${CSRF_COOKIE_NAME}=`) || cookieHeader.includes('csrf-token=')) {
+
+  // A token the router minted before rendering wins over "the header already
+  // has one", because it put that value in the header itself - and the page
+  // has already embedded it in every form it drew. Generating a second token
+  // here would store one string in the browser while the page carries another,
+  // which fails in a way indistinguishable from having no token at all.
+  if (!minted && (cookieHeader.includes(`${CSRF_COOKIE_NAME}=`) || cookieHeader.includes('csrf-token='))) {
     return response
   }
 
-  const token = generateCsrfToken()
+  // A token already on its way to the browser counts as present, exactly like
+  // one in the request. Something upstream can mint before the render - the
+  // stx dev server does, so a page's forms carry a token on a first visit -
+  // and appending a second here would leave the browser storing the last
+  // Set-Cookie while the page embedded the first. Two tokens fail the same way
+  // no token does, and are far harder to see.
+  if (responseAlreadySeeds(response))
+    return response
+
+  const token = minted || generateCsrfToken()
   const isSecure = req.url.startsWith('https://')
   const cookie = [
     `${CSRF_COOKIE_NAME}=${token}`,
@@ -179,7 +219,7 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
  * the router, such as the local dashboard config editor, can enforce the same
  * double-submit and bearer-token rules without duplicating security logic.
  */
-export async function validateCsrfRequest(request: Request): Promise<void> {
+export async function validateCsrfRequest(request: Request | EnhancedRequest): Promise<void> {
   const method = request.method.toUpperCase()
 
   // Safe methods don't mutate state — no token check needed.
@@ -197,15 +237,20 @@ export async function validateCsrfRequest(request: Request): Promise<void> {
   // (webhooks, third-party callbacks). The router stamps a hint on
   // the request when it resolves such an action; if that hint is
   // present, skip enforcement.
-  if (request._skipCsrf === true) return
+  const enhanced = request as EnhancedRequest
+  if (enhanced._skipCsrf === true) return
 
   // Look up the submitted token. Header is the SPA path; body field
   // is the traditional form-post path. We accept either.
   const headerToken = request.headers.get(CSRF_HEADER_NAME)
     || request.headers.get('X-CSRF-Token')
     || request.headers.get('X-Csrf-Token')
-  const body = request.jsonBody || request.formBody || {}
-  const bodyToken: string | undefined = body?._token ?? body?.csrf_token
+  const body = enhanced.jsonBody || enhanced.formBody || {}
+  // A parsed body is `unknown`-valued: the token is validated as a string
+  // two lines down, so read it as one rather than asserting it is one.
+  const rawBodyToken = (body as Record<string, unknown> | undefined)?._token
+    ?? (body as Record<string, unknown> | undefined)?.csrf_token
+  const bodyToken: string | undefined = typeof rawBodyToken === 'string' ? rawBodyToken : undefined
 
   const submitted = (typeof headerToken === 'string' && headerToken)
     || (typeof bodyToken === 'string' && bodyToken)

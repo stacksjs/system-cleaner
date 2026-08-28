@@ -1,6 +1,8 @@
+import type { RequestInstance } from '@stacksjs/types'
 import { Action } from '@stacksjs/actions'
 import { getRolePermissions, findRole, syncRolePermissions } from '@stacksjs/auth'
 import { response } from '@stacksjs/router'
+import { rbacActionError } from './rbac-response'
 
 interface SyncInput {
   permissions?: unknown
@@ -19,13 +21,13 @@ export default new Action({
   description: 'Replace the permission set attached to one role.',
   method: 'POST',
   apiResponse: true,
-  async handle(request) {
-    const roleName = String((request as any)?.params?.name ?? '').trim()
+  async handle(request: RequestInstance<SyncInput>) {
+    const roleName = request.getParam('name').trim()
     if (!roleName) {
       return response.json({ error: '`name` route param is required.' }, 400)
     }
 
-    const body = (request as any).jsonBody as SyncInput | undefined ?? {}
+    const body = request.all()
     if (!Array.isArray(body.permissions)) {
       return response.json({ error: '`permissions` must be an array of permission names (possibly empty).' }, 400)
     }
@@ -56,12 +58,7 @@ export default new Action({
       }
     }
     catch (err) {
-      const msg = err instanceof Error ? err.message : 'unknown error'
-      if (msg.includes('not found')) {
-        return response.json({ error: msg }, 400)
-      }
-      console.error('[dashboard/rbac] RolePermissionsSyncAction failed:', err)
-      return response.json({ error: msg }, 500)
+      return rbacActionError(err, 'Role permissions could not be updated.', 'RolePermissionsSyncAction')
     }
   },
 })

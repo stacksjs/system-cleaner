@@ -1,7 +1,8 @@
+import type { RequestInstance } from '@stacksjs/types'
 import { Action } from '@stacksjs/actions'
 import { Board } from '@stacksjs/orm'
 import { modelBoolean, modelNullableString, modelNumber, modelString, refreshModel } from './kanban-model'
-import { kanbanError } from './kanban-response'
+import { kanbanActionError, kanbanError } from './kanban-response'
 
 interface BoardInput {
   name?: unknown
@@ -12,7 +13,7 @@ interface BoardInput {
 }
 
 /**
- * `PATCH /api/dashboard/kanban/boards/:id` (stacksjs/stacks#1846 Phase 2).
+ * `PATCH /api/dashboard/kanban/boards/:id`.
  *
  * Partial update — only the fields present in the body are written.
  * Omitting `archived` does NOT change the archive flag; passing
@@ -30,14 +31,13 @@ export default new Action({
   description: 'Partial update of a kanban board.',
   method: 'PATCH',
   apiResponse: true,
-  async handle(request) {
-    const rawId = (request as any)?.params?.id ?? (request as any)?.param?.('id') ?? null
-    const id = Number(rawId)
+  async handle(request: RequestInstance<BoardInput>) {
+    const id = Number(request.getParam('id'))
     if (!Number.isFinite(id) || id <= 0) {
       return kanbanError('Invalid board id', 400)
     }
 
-    const body = (request as any).jsonBody as BoardInput | undefined ?? {}
+    const body = request.all()
     const set: Record<string, unknown> = {}
 
     if (typeof body.name === 'string') {
@@ -83,8 +83,7 @@ export default new Action({
       }
     }
     catch (err) {
-      console.error('[dashboard/kanban] BoardUpdateAction failed:', err)
-      return kanbanError(err instanceof Error ? err.message : 'unknown error', 500)
+      return kanbanActionError(err, 'BoardUpdateAction')
     }
   },
 })

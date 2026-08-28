@@ -8,6 +8,28 @@
       "category": "data"
     },
     {
+      "id": "auction",
+      "name": "Auction",
+      "icon": "i-hugeicons-auction",
+      "hasDedicatedPage": false,
+      "category": "commerce",
+      "dashboard": {
+        "icon": "i-hugeicons-auction",
+        "label": "Auctions"
+      }
+    },
+    {
+      "id": "auction-item",
+      "name": "AuctionItem",
+      "icon": "i-hugeicons-package",
+      "hasDedicatedPage": false,
+      "category": "commerce",
+      "dashboard": {
+        "icon": "i-hugeicons-package",
+        "label": "Lots"
+      }
+    },
+    {
       "id": "author",
       "name": "Author",
       "icon": "person.text.rectangle.fill",
@@ -15,6 +37,17 @@
       "category": "content",
       "dashboard": {
         "highlight": true
+      }
+    },
+    {
+      "id": "bid",
+      "name": "Bid",
+      "icon": "i-hugeicons-hand-pointing-right-01",
+      "hasDedicatedPage": false,
+      "category": "commerce",
+      "dashboard": {
+        "icon": "i-hugeicons-hand-pointing-right-01",
+        "label": "Bids"
       }
     },
     {
@@ -139,6 +172,16 @@
       }
     },
     {
+      "id": "delivery-stop",
+      "name": "DeliveryStop",
+      "icon": "tablecells.fill",
+      "hasDedicatedPage": false,
+      "category": "commerce",
+      "dashboard": {
+        "highlight": true
+      }
+    },
+    {
       "id": "deployment",
       "name": "Deployment",
       "icon": "tablecells.fill",
@@ -169,6 +212,23 @@
       }
     },
     {
+      "id": "driver-ping",
+      "name": "DriverPing",
+      "icon": "tablecells.fill",
+      "hasDedicatedPage": false,
+      "category": "commerce"
+    },
+    {
+      "id": "email-idempotency",
+      "name": "EmailIdempotency",
+      "icon": "tablecells.fill",
+      "hasDedicatedPage": false,
+      "category": "data",
+      "dashboard": {
+        "enabled": false
+      }
+    },
+    {
       "id": "email-list",
       "name": "EmailList",
       "icon": "envelope.badge.person.crop",
@@ -181,6 +241,26 @@
       "icon": "tablecells.fill",
       "hasDedicatedPage": false,
       "category": "data"
+    },
+    {
+      "id": "email-suppression",
+      "name": "EmailSuppression",
+      "icon": "tablecells.fill",
+      "hasDedicatedPage": false,
+      "category": "data",
+      "dashboard": {
+        "enabled": false
+      }
+    },
+    {
+      "id": "email-webhook-event",
+      "name": "EmailWebhookEvent",
+      "icon": "tablecells.fill",
+      "hasDedicatedPage": false,
+      "category": "data",
+      "dashboard": {
+        "enabled": false
+      }
     },
     {
       "id": "gift-card",
@@ -343,6 +423,17 @@
       "category": "commerce"
     },
     {
+      "id": "pledge",
+      "name": "Pledge",
+      "icon": "i-hugeicons-give-blood",
+      "hasDedicatedPage": false,
+      "category": "commerce",
+      "dashboard": {
+        "icon": "i-hugeicons-give-blood",
+        "label": "Pledges"
+      }
+    },
+    {
       "id": "post",
       "name": "Post",
       "icon": "doc.text.fill",
@@ -455,6 +546,13 @@
       "dashboard": {
         "highlight": true
       }
+    },
+    {
+      "id": "social-account",
+      "name": "SocialAccount",
+      "icon": "tablecells.fill",
+      "hasDedicatedPage": false,
+      "category": "data"
     },
     {
       "id": "social-post",
@@ -596,5 +694,6 @@
       "subscribers": true,
       "allModels": true
     }
-  }
+  },
+  "nav": []
 }

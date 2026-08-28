@@ -30,12 +30,14 @@ export const tsCloud: TsCloudConfig = {
       root: '.',
       path: '/',
       domain: 'system-cleaner.app',
-      start: 'bun storage/framework/runtime/production/serve.js',
+      // `buddy serve` is the framework's production entrypoint (STX views +
+      // /api proxy + coming-soon/maintenance gate). There is nothing for this
+      // app to add on top of it, so it runs the command rather than compiling
+      // a bespoke server bundle.
+      start: 'bun node_modules/@stacksjs/buddy/dist/cli.js serve --port 3080',
       port: 3080,
       preStart: [
         'bun install --frozen-lockfile',
-        'mkdir -p storage/framework/runtime/production',
-        'bun build --production --target=bun --packages=external app/ProductionServer.ts --outfile storage/framework/runtime/production/serve.js',
         'mkdir -p /var/www/system-cleaner-shared/database',
         `DB_CONNECTION=sqlite DB_DATABASE_PATH=${SHARED_DATABASE} APP_ENV=production NODE_ENV=production bun node_modules/@stacksjs/buddy/dist/cli.js migrate --force`,
       ],

@@ -38,6 +38,19 @@ window.dashboardXData = function () {
       return String(2 * Math.PI * 40 * (1 - this.healthScore() / 100))
     },
 
+    // Memory colour is derived here rather than baked into the HTML: the
+    // packaged app serves prerendered pages, so a server-rendered colour would
+    // describe the build machine's memory forever.
+    memColor() {
+      var p = this.stats ? this.stats.memPercent : 0
+      return p > 80 ? '#ff453a' : p > 60 ? '#ff9f0a' : '#30d158'
+    },
+    memDotStyle() { return 'background: ' + this.memColor() },
+    memFillStyle() {
+      var p = this.stats ? this.stats.memPercent : 0
+      return 'width: ' + p + '%; background: ' + this.memColor() + ';'
+    },
+
     diskDotColor(pct) {
       if (pct > 90) return '#ff453a'
       if (pct > 75) return '#ff9f0a'

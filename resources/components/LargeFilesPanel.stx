@@ -1,0 +1,197 @@
+<!--
+  Large Files — find the biggest items on disk and clear many of them in one
+  pass.
+
+  Every piece of state (scan results, selection, filters, sort) lives in the
+  view's `x-data`, so this file stays markup. The one thing worth calling out
+  is that selection is keyed by path rather than row index: the list re-sorts
+  and re-filters underneath the user, and an index-keyed selection would
+  silently retarget itself when it did.
+-->
+<div class='card-row'>
+  <div class='card'>
+    <div class='card-label'>Selected</div>
+    <div class='card-value' :style="selected.length ? 'color: var(--accent);' : ''" x-text='fmtBytes(selectedBytes())'>0 B</div>
+    <div class='card-detail'><span x-text='selected.length'>0</span> of <span x-text='visible().length'>0</span> shown</div>
+  </div>
+  <div class='card'>
+    <div class='card-label'>Found</div>
+    <div class='card-value' x-text='fmtBytes(totalBytes)'>-</div>
+    <div class='card-detail'>
+      <span x-text='matched'>0</span> items over <span x-text='minSizeMB'>100</span> MB
+      <span x-show='truncated' class='badge badge-orange' style='margin-left: 6px;'>partial scan</span>
+    </div>
+  </div>
+  <div class='card'>
+    <div class='card-label'>Reclaimed All Time</div>
+    <div class='card-value' style='color: var(--green);' x-text='lifetimeFreed'>0 B</div>
+    <div class='card-detail'>across <span x-text='runCount'>0</span> cleanups</div>
+  </div>
+</div>
+
+<!-- Scan controls -->
+<div class='lf-controls'>
+  <label class='lf-field'>
+    <span class='lf-field-label'>Search in</span>
+    <select class='lf-input' x-model='scanRoot' @change='rescanIfScanned()'>
+      <option value=''>Home folder</option>
+      <option value='Downloads'>Downloads</option>
+      <option value='Desktop'>Desktop</option>
+      <option value='Documents'>Documents</option>
+      <option value='Movies'>Movies</option>
+      <option value='Music'>Music</option>
+      <option value='Pictures'>Pictures</option>
+      <option value='Library'>Library</option>
+    </select>
+  </label>
+
+  <label class='lf-field'>
+    <span class='lf-field-label'>Minimum size</span>
+    <select class='lf-input' x-model.number='minSizeMB' @change='rescanIfScanned()'>
+      <option value='10'>10 MB</option>
+      <option value='50'>50 MB</option>
+      <option value='100'>100 MB</option>
+      <option value='500'>500 MB</option>
+      <option value='1024'>1 GB</option>
+      <option value='5120'>5 GB</option>
+    </select>
+  </label>
+
+  <label class='lf-field lf-field-grow'>
+    <span class='lf-field-label'>Filter</span>
+    <input class='lf-input' type='search' placeholder='Filter by name or path' x-model='filter' />
+  </label>
+
+  <button class='btn btn-icon' @click='scan()' :disabled='scanning'>
+    <span class='i-f7-search' aria-hidden='true'></span>
+    <span x-text="scanning ? 'Scanning…' : (scanned ? 'Rescan' : 'Find Large Files')">Find Large Files</span>
+  </button>
+</div>
+
+<!-- Category chips -->
+<div class='lf-chips' x-show='files.length > 0' x-cloak>
+  <button class='tab' :class="activeCategory === '' ? 'btn-active' : ''" @click="activeCategory = ''">
+    All (<span x-text='files.length'>0</span>)
+  </button>
+  <template x-for='group in categoryGroups()' :key='group.category'>
+    <button class='tab' :class="activeCategory === group.category ? 'btn-active' : ''" @click='activeCategory = group.category'>
+      <span x-text='group.label'>Category</span> (<span x-text='group.count'>0</span>)
+    </button>
+  </template>
+</div>
+
+<!-- Bulk action bar. Present only with a selection, so the destructive
+     buttons are never a stray click away from an empty intent. -->
+<div class='lf-bulkbar' x-show='selected.length > 0' x-cloak>
+  <div class='lf-bulk-summary'>
+    <strong x-text='selected.length'>0</strong> selected ·
+    <strong x-text='fmtBytes(selectedBytes())'>0 B</strong>
+  </div>
+  <button class='btn btn-sm' @click='clearSelection()'>Clear</button>
+  <button class='btn btn-sm btn-icon' @click='protectSelected()' :disabled='deleting'>
+    <span class='i-f7-lock-fill' aria-hidden='true'></span>
+    Protect
+  </button>
+  <button class='btn btn-danger btn-sm btn-icon' @click="remove('trash')" :disabled='deleting'>
+    <span class='i-f7-trash-fill' aria-hidden='true'></span>
+    <span x-text="deleting ? 'Working…' : 'Move to Trash'">Move to Trash</span>
+  </button>
+  <button class='btn btn-danger btn-sm' @click="remove('permanent')" :disabled='deleting'>
+    Delete Permanently
+  </button>
+</div>
+
+<div class='lf-partial' x-show='truncated && !scanning' x-cloak>
+  This scan hit its time limit before reaching every folder, so the list is the
+  largest items found so far. Narrowing <strong>Search in</strong> to a single
+  folder covers it completely and finishes much faster.
+</div>
+
+<div class='tbl-wrap' x-show='scanned || scanning' x-cloak>
+  <div class='tbl-bar'>
+    <div>
+      <span class='tbl-title'>Largest Items</span>
+      <span class='tbl-count' x-text='tableCaption()'>scanning…</span>
+    </div>
+    <button class='btn btn-sm' x-show='visible().length > 0' @click='toggleAllVisible()'
+      x-text="allVisibleSelected() ? 'Deselect All' : 'Select All'">Select All</button>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style='width: 28px;'>
+          <input type='checkbox' class='check' :checked='allVisibleSelected()' @click='toggleAllVisible()'
+            aria-label='Select every listed item' />
+        </th>
+        <th>Name</th>
+        <th style='width: 96px;'>Size</th>
+        <th style='width: 108px;'>Modified</th>
+        <th style='width: 128px;'>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <template x-for='file in visible()' :key='file.path'>
+        <tr :class="isOn(file.path) ? 'lf-row-on' : ''">
+          <td>
+            <input type='checkbox' class='check' :checked='isOn(file.path)' @click='toggle(file.path)'
+              :disabled='file.protected' :aria-label="'Select ' + file.name" />
+          </td>
+          <td>
+            <div class='item-row'>
+              <span class='item-glyph' :class='file.icon' :style="'color:' + file.color" aria-hidden='true'></span>
+              <span class='item-name' x-text='file.name'></span>
+              <span class='badge badge-purple' x-show='file.isBundle'>bundle</span>
+              <span class='badge badge-green' x-show='file.protected'>protected</span>
+            </div>
+            <div class='item-path' :title='file.path' x-text='shortPath(file.path)'></div>
+          </td>
+          <td style='font-weight: 600; font-variant-numeric: tabular-nums;' x-text='file.sizeFormatted'></td>
+          <td class='dim' x-text='fmtDate(file.modifiedAt)'></td>
+          <td class='action-cell'>
+            <button class='btn btn-sm' @click='reveal(file.path)'>Reveal</button>
+            <button class='btn btn-sm' @click='toggleProtect(file)'
+              x-text="file.protected ? 'Unprotect' : 'Protect'">Protect</button>
+          </td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+
+  <div class='empty-state' x-show='scanning'>
+    Walking the disk — large scans can take up to two minutes.
+  </div>
+  <div class='empty-state' x-show='scanned && !scanning && visible().length === 0'>
+    Nothing over <span x-text='minSizeMB'>100</span> MB matched. Try a smaller minimum size.
+  </div>
+</div>
+
+<div class='tbl-wrap' x-show='!scanned && !scanning'>
+  <div class='empty-state'>
+    Find the biggest files and document bundles in your home folder, then clear
+    as many as you like in one pass. Nothing is deleted until you say so, and
+    &ldquo;Move to Trash&rdquo; stays recoverable from Finder.
+  </div>
+</div>
+
+<div class='lf-note' x-show='scanned' x-cloak>
+  Bundles such as <strong>.app</strong>, <strong>.photoslibrary</strong>, and
+  <strong>.sparsebundle</strong> are listed as a single item — deleting one
+  removes everything inside it. Files inside sensitive directories (keys,
+  credentials) are never offered for deletion.
+</div>
+
+<style>
+.lf-controls { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.lf-field { display: flex; flex-direction: column; gap: 4px; }
+.lf-field-grow { flex: 1; min-width: 180px; }
+.lf-field-label { color: var(--secondary); font-size: 10px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; }
+.lf-input { height: 28px; padding: 0 8px; border: .5px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: 12px; font-family: inherit; }
+.lf-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.lf-chips { display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; padding-bottom: 2px; }
+.lf-bulkbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 8px 12px; border: .5px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+.lf-bulk-summary { margin-right: auto; font-size: 12px; font-variant-numeric: tabular-nums; }
+.lf-row-on { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.lf-partial { margin-bottom: 12px; padding: 10px 14px; border: .5px solid color-mix(in srgb, var(--orange) 32%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--orange) 10%, var(--surface)); color: var(--secondary); font-size: 11px; line-height: 1.5; }
+.lf-note { margin-top: 12px; padding: 12px 16px; border: .5px solid var(--line); border-radius: 8px; background: var(--surface-soft); color: var(--tertiary); font-size: 11px; line-height: 1.5; }
+</style>

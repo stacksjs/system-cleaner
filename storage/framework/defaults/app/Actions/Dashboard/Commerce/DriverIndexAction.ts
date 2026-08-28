@@ -1,6 +1,6 @@
 import { Action } from '@stacksjs/actions'
 import { Driver, User } from '@stacksjs/orm'
-import { response } from '@stacksjs/router'
+import { dashboardOperationalError } from '../dashboard-response'
 import { indexDriverUsers, normalizeDriverRecord } from './driver-records'
 
 export default new Action({
@@ -13,14 +13,12 @@ export default new Action({
     try {
       const drivers = await Driver.orderBy('name', 'asc').limit(500).get()
       const userIds = [...new Set(drivers.map(driver => driver.get('user_id')).filter(Boolean))]
-      const users = userIds.length ? await User.where('id', 'in', userIds).get() : []
+      const users = userIds.length ? await User.whereIn('id', userIds).get() : []
       const usersById = indexDriverUsers(users)
       return drivers.map(driver => normalizeDriverRecord(driver, usersById))
     }
     catch (error) {
-      return response.json({
-        message: error instanceof Error ? error.message : 'Driver records could not be read.',
-      }, 503)
+      return dashboardOperationalError(error, 'Driver records could not be read.', 'DriverIndexAction')
     }
   },
 })

@@ -2,7 +2,8 @@ import type { RequestInstance } from '@stacksjs/types'
 import { Action } from '@stacksjs/actions'
 import { db } from '@stacksjs/database'
 import { formatDate, PrintDevice } from '@stacksjs/orm'
-import { request as routerRequest, response } from '@stacksjs/router'
+import { dashboardOperationalError } from '../dashboard-response'
+import { dashboardRequestValue } from '../dashboard-request'
 import {
   commerceEnum,
   commerceIdentifier,
@@ -24,9 +25,7 @@ const SORTS = {
 type PrintLogSort = keyof typeof SORTS
 
 function queryValue(request: RequestInstance, key: string): string {
-  const query = ((routerRequest as any).query || {}) as Record<string, string | string[] | undefined>
-  const value = query[key]
-  return String((Array.isArray(value) ? value[0] : value) || request.get(key) || '').trim()
+  return dashboardRequestValue(request, key)
 }
 
 function selectedSort(value: string): PrintLogSort {
@@ -94,7 +93,7 @@ export default new Action({
       const printDeviceIds = new Set(printDevices.map(device =>
         commerceIdentifier(commerceValue(device, 'id', 'uuid'), 'PrintDevice'),
       ))
-      const records = rows.map(row => normalizePrintLogRecord(row, printDeviceIds))
+      const records = rows.map((row: Record<string, unknown>) => normalizePrintLogRecord(row, printDeviceIds))
 
       return {
         records,
@@ -116,9 +115,7 @@ export default new Action({
       }
     }
     catch (error) {
-      return response.json({
-        message: error instanceof Error ? error.message : 'Print log records could not be read.',
-      }, 503)
+      return dashboardOperationalError(error, 'Print log records could not be read.', 'CommercePrintLogsAction')
     }
   },
 })

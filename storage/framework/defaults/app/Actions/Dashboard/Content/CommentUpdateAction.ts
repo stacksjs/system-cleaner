@@ -1,7 +1,9 @@
 import type { RequestInstance } from '@stacksjs/types'
 import { Action } from '@stacksjs/actions'
 import { db } from '@stacksjs/database'
+import { transaction } from '@stacksjs/orm'
 import { response } from '@stacksjs/router'
+import { dashboardOperationalError } from '../dashboard-response'
 import { COMMENT_STATUSES, parseCommentStatus } from './comment-input'
 import { findRow, rowExists, rowId, timestamp } from './content-input'
 
@@ -30,19 +32,35 @@ export default new Action({
     if (!status)
       return response.json({ message: `Status must be one of: ${COMMENT_STATUSES.join(', ')}.` }, 422)
 
-    if (!await rowExists('comments', id))
-      return response.json({ message: 'Comment not found.' }, 404)
+    try {
+      const comment = await transaction(async (rawTrx) => {
+        const trx = rawTrx as unknown as typeof db
+        if (!await rowExists('comments', id, trx))
+          return null
 
-    await db
-      .updateTable('comments')
-      .set({
-        status,
-        is_approved: status === 'approved' ? 1 : 0,
-        updated_at: timestamp(),
-      } as any)
-      .where('id', '=', id)
-      .execute()
+        await trx
+          .updateTable('comments')
+          .set({
+            status,
+            is_approved: status === 'approved' ? 1 : 0,
+            updated_at: timestamp(),
+          } as any)
+          .where('id', '=', id)
+          .execute()
 
-    return response.json(await findRow('comments', id))
+        const updated = await findRow('comments', id, trx)
+        if (!updated)
+          throw new Error('Updated comment could not be loaded.')
+        return updated
+      })
+
+      if (!comment)
+        return response.json({ message: 'Comment not found.' }, 404)
+
+      return response.json(comment)
+    }
+    catch (error) {
+      return dashboardOperationalError(error, 'Comment could not be updated.', 'CommentUpdateAction', 500)
+    }
   },
 })

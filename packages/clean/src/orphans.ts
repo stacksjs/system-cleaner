@@ -1,5 +1,5 @@
 import * as path from 'node:path'
-import { HOME, exec, macPaths, pathExists, safeReadDir, safeStat, shellEscape, readAppInfoPlist } from '@system-cleaner/core'
+import { exec, macPaths, pathExists, safeReadDir, safeStat, shellEscape, readAppInfoPlist } from '@system-cleaner/core'
 
 export interface OrphanedItem {
   path: string

@@ -1,5 +1,5 @@
 import type { CLI } from '@stacksjs/clapp'
-import { exec, formatBytes, formatPercent, getSystemInfo, checkSoftwareUpdates } from '@system-cleaner/core'
+import { exec, formatBytes, formatPercent, checkSoftwareUpdates } from '@system-cleaner/core'
 import { getMemoryMetrics } from '@system-cleaner/monitor'
 
 interface CheckResult {

@@ -19,6 +19,7 @@ export const groups = [
   ],
   [
     { id: 'disk', label: 'Disk Usage', icon: 'i-f7-chart-pie-fill', href: '/app/disk' },
+    { id: 'large-files', label: 'Large Files', icon: 'i-f7-doc-on-doc-fill', href: '/app/large-files' },
     { id: 'system', label: 'System', icon: 'i-f7-desktopcomputer', href: '/app/system' },
   ],
   [

@@ -5,7 +5,6 @@ import {
   isPathSafe,
   getDirSize,
   HOME,
-  exec,
   sanitizePackageName,
   sanitizePid,
   sanitizeStringArray,
@@ -20,17 +19,28 @@ import {
   getDashboardStatsCached,
   invalidateStartupCache,
 } from './data-service';
-import { runDiskScan } from '../workers/disk-worker-pool';
-import { listApplicationEntries } from '@system-cleaner/core';
+import { runDiskScan, runLargeFileScan } from '../app/Workers/scan-pool';
+import { getSystemInfoSync, listApplicationEntries } from '@system-cleaner/core';
+import * as nodeOs from 'node:os';
 import { cleanDirectory, emptyTrash } from '@system-cleaner/clean';
 import {
   killProcess,
   toggleStartupItem,
   removeStartupItem,
 } from '@system-cleaner/uninstall';
-import { scanDirectory } from '@system-cleaner/disk';
+import { categoryPresentation } from '@system-cleaner/disk';
 import { getTopProcesses, summarizeProcesses } from '@system-cleaner/monitor';
 import { recordSystemActivity } from '../app/Support/System/activity-chart';
+import { isLocalAgent } from '../app/Support/Runtime/local-agent';
+import {
+  bulkDelete,
+  cleanupHistory,
+  listProtectedPaths,
+  protectPath,
+  protectedPathSet,
+  unprotectPath,
+  MAX_BULK_PATHS,
+} from '../app/Support/Cleanup/bulk-delete';
 
 /**
  * Safely parse a JSON request body. Returns the parsed object or `null`
@@ -79,6 +89,13 @@ const dirSizesCache = new TtlCache<Record<string, number>>(5 * 60_000);
  * So router.post('/disk-scan', ...) becomes POST /api/disk-scan
  */
 export default async function (router: Router) {
+  // Every route below acts on the machine this process runs on. On the public
+  // system-cleaner.app deployment that machine is a shared web server, so the
+  // control plane is simply not registered there — an unregistered route 404s,
+  // which is a stronger guarantee than a handler that remembers to check.
+  if (!isLocalAgent())
+    return;
+
   // ── System info (lightweight, for shell sidebar) ─────────────
 
   await router.get('/system-info', async () => {
@@ -294,6 +311,163 @@ export default async function (router: Router) {
     });
   });
 
+  // ── Large files: find, protect, bulk-delete ──────────────────
+
+  /**
+   * Single-flight gate, same reasoning as `/disk-scan`: one full-home walk at
+   * a time is plenty, and the two share a worker anyway.
+   */
+  let largeFileScanInFlight = false;
+
+  await router.post('/large-files', async (req: Request) => {
+    if (largeFileScanInFlight) {
+      return Response.json(
+        { success: false, error: 'A scan is already in progress' },
+        { status: 409 },
+      );
+    }
+
+    const body = await readJsonBody<{
+      path?: unknown
+      minSizeMB?: unknown
+      limit?: unknown
+      categories?: unknown
+    }>(req);
+    if (body === null) return badJson();
+
+    // A relative path is resolved against HOME rather than the server's CWD,
+    // so the UI can send 'Downloads' without knowing where home is.
+    let root = HOME;
+    if (typeof body.path === 'string' && body.path) {
+      const resolved = path.isAbsolute(body.path)
+        ? path.resolve(body.path)
+        : path.resolve(HOME, body.path);
+      if (resolved === HOME || resolved.startsWith(`${HOME}/`) || resolved.startsWith('/Volumes/')) {
+        root = resolved;
+      }
+      else {
+        return badRequest('Scan root must be your home directory or an external volume', 403);
+      }
+    }
+
+    // Floor of 1 MB: below that the walk returns tens of thousands of rows the
+    // UI cannot usefully render and the user cannot usefully review.
+    const minSizeMB = typeof body.minSizeMB === 'number' && body.minSizeMB >= 1 && body.minSizeMB <= 1_000_000
+      ? body.minSizeMB
+      : 100;
+    const limit = typeof body.limit === 'number' && body.limit >= 10 && body.limit <= 1000
+      ? Math.floor(body.limit)
+      : 200;
+    const categories = sanitizeStringArray(body.categories, 32) ?? undefined;
+
+    // The worker gets 45s to walk and return whatever it found; the pool waits
+    // 60s before terminating it outright. The gap matters: a `readdirSync` on a
+    // dataless cloud placeholder blocks in the kernel, where the scan's own
+    // deadline cannot reach it, and terminating the worker is the only way back.
+    const HARD_TIMEOUT_MS = 60_000;
+    const WORKER_TIMEOUT_MS = 45_000;
+
+    largeFileScanInFlight = true;
+    try {
+      const [result, protectedPaths] = await Promise.all([
+        runLargeFileScan(
+          {
+            roots: [root],
+            minSizeBytes: Math.round(minSizeMB * 1024 * 1024),
+            limit,
+            timeoutMs: WORKER_TIMEOUT_MS,
+            categories,
+          },
+          HARD_TIMEOUT_MS,
+        ),
+        protectedPathSet(),
+      ]);
+
+      if (!result.success) {
+        return Response.json({ success: false, error: result.error || 'Scan failed' });
+      }
+
+      return Response.json({
+        success: true,
+        root,
+        minSizeMB,
+        scanned: result.scanned,
+        matched: result.matched,
+        totalBytes: result.totalBytes,
+        truncated: result.truncated,
+        scanTime: result.scanTime,
+        // The protected flag is joined here rather than in the worker: the
+        // worker has no database, and the list is small enough that a set
+        // lookup per row costs nothing.
+        files: (result.files ?? []).map(file => ({
+          ...file,
+          ...categoryPresentation(file.category),
+          protected: protectedPaths.has(file.path),
+        })),
+      });
+    }
+    catch (err: any) {
+      // A terminated worker has no partial result to hand back, so the message
+      // has to carry the next step rather than just the failure.
+      const message = /exceeded/.test(err?.message ?? '')
+        ? `${err.message}. Pick a single folder under "Search in" to scan it completely.`
+        : err?.message || 'Scan failed';
+      return Response.json({ success: false, error: message });
+    }
+    finally {
+      largeFileScanInFlight = false;
+    }
+  });
+
+  await router.post('/bulk-delete', async (req: Request) => {
+    const body = await readJsonBody<{ paths: unknown; mode?: unknown; source?: unknown }>(req);
+    if (body === null) return badJson();
+
+    const paths = sanitizeStringArray(body.paths, MAX_BULK_PATHS);
+    if (paths === null)
+      return badRequest(`paths must be a non-empty string array (≤${MAX_BULK_PATHS})`);
+
+    // Permanent deletion has to be asked for by name. Defaulting to it would
+    // turn a mis-click into an unrecoverable one.
+    const mode = body.mode === 'permanent' ? 'permanent' : 'trash';
+    const source = typeof body.source === 'string' && /^[a-z-]{1,32}$/.test(body.source)
+      ? body.source
+      : 'large-files';
+
+    const result = await bulkDelete(paths, mode, source);
+    return Response.json({
+      success: result.failed.length === 0,
+      mode,
+      ...result,
+    });
+  });
+
+  await router.post('/protected-paths', async () => {
+    return Response.json({ success: true, paths: await listProtectedPaths() });
+  });
+
+  await router.post('/protect-path', async (req: Request) => {
+    const body = await readJsonBody<{ path: unknown; reason?: unknown }>(req);
+    if (body === null) return badJson();
+    if (typeof body.path !== 'string' || !body.path) return badRequest('No path provided');
+    if (!path.isAbsolute(body.path)) return badRequest('Path must be absolute');
+
+    const reason = typeof body.reason === 'string' ? body.reason.slice(0, 255) : undefined;
+    return Response.json({ success: true, ...await protectPath(body.path, reason) });
+  });
+
+  await router.post('/unprotect-path', async (req: Request) => {
+    const body = await readJsonBody<{ path: unknown }>(req);
+    if (body === null) return badJson();
+    if (typeof body.path !== 'string' || !body.path) return badRequest('No path provided');
+
+    return Response.json({ success: true, ...await unprotectPath(body.path) });
+  });
+
+  await router.post('/cleanup-history', async () => {
+    return Response.json({ success: true, ...await cleanupHistory() });
+  });
+
   // ── Live process data ───────────────────────────────────────
 
   await router.post('/live-processes', async () => {
@@ -488,6 +662,29 @@ export default async function (router: Router) {
 
   // ── Dashboard stats (cached, client-fetched) ─────────────────
 
+  /**
+   * Facts about this Mac that do not change often enough to recompute per
+   * request, but which the prerendered HTML cannot know.
+   */
+  function getHostSnapshot() {
+    const info = getSystemInfoSync();
+    const totalBytes = info.totalMemoryBytes;
+    const freeBytes = nodeOs.freemem();
+    const uptimeHours = Math.round(info.uptimeSeconds / 3600);
+    const uptimeDays = Math.floor(uptimeHours / 24);
+
+    return {
+      hostname: info.hostname,
+      macosVersion: info.macosVersion,
+      cpuLabel: info.cpuModel.split(' ').slice(0, 3).join(' '),
+      cpuCores: info.cpuCores,
+      totalMemGB: Math.round(totalBytes / 1e9),
+      usedMemGB: ((totalBytes - freeBytes) / 1e9).toFixed(1),
+      freeMemGB: (freeBytes / 1e9).toFixed(1),
+      uptimeStr: uptimeDays > 0 ? `${uptimeDays}d ${uptimeHours % 24}h` : `${uptimeHours}h`,
+    };
+  }
+
   await router.post('/dashboard-stats', async () => {
     const cached = dashboardStatsCache.get('stats');
     if (cached) {
@@ -502,6 +699,7 @@ export default async function (router: Router) {
     const os = await import('node:os');
     const procs = await getTopProcesses(8);
     const base = getDashboardStatsCached();
+    const host = getHostSnapshot();
     const totalCPU = procs.reduce((s, p) => s + p.cpuPercent, 0);
     const cpuCores = os.default.cpus().length;
     const memPercent = Math.round(((os.default.totalmem() - os.default.freemem()) / os.default.totalmem()) * 100);
@@ -544,6 +742,11 @@ export default async function (router: Router) {
 
     const payload = {
       ...base,
+      // Host facts travel with the stats rather than being rendered into the
+      // page. The packaged app ships prerendered HTML, so anything a
+      // `<script server>` block computed would be the *build machine's* CPU,
+      // memory, and uptime frozen at build time.
+      ...host,
       healthScore,
       memPercent,
       dUsedPct,

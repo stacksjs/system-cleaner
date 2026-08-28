@@ -1,7 +1,9 @@
+import type { RequestInstance } from '@stacksjs/types'
 import { Action } from '@stacksjs/actions'
 import { getUserRoles, syncRoles } from '@stacksjs/auth'
 import { User } from '@stacksjs/orm'
 import { response } from '@stacksjs/router'
+import { rbacActionError } from './rbac-response'
 
 interface SyncInput {
   roles?: unknown
@@ -24,14 +26,13 @@ export default new Action({
   description: 'Replace the role set attached to one user.',
   method: 'POST',
   apiResponse: true,
-  async handle(request) {
-    const rawId = (request as any)?.params?.id
-    const userId = Number(rawId)
+  async handle(request: RequestInstance<SyncInput>) {
+    const userId = Number(request.getParam('id'))
     if (!Number.isFinite(userId) || userId <= 0) {
       return response.json({ error: 'Invalid user id.' }, 400)
     }
 
-    const body = (request as any).jsonBody as SyncInput | undefined ?? {}
+    const body = request.all()
     if (!Array.isArray(body.roles)) {
       return response.json({ error: '`roles` must be an array of role names (possibly empty).' }, 400)
     }
@@ -60,15 +61,7 @@ export default new Action({
       }
     }
     catch (err) {
-      const msg = err instanceof Error ? err.message : 'unknown error'
-      // The facade throws "Role 'X' not found" — surface as 400 so
-      // the UI can show "this role doesn't exist anymore" rather
-      // than a 500.
-      if (msg.includes('not found')) {
-        return response.json({ error: msg }, 400)
-      }
-      console.error('[dashboard/rbac] UserRolesSyncAction failed:', err)
-      return response.json({ error: msg }, 500)
+      return rbacActionError(err, 'User roles could not be updated.', 'UserRolesSyncAction')
     }
   },
 })

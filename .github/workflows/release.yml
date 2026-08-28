@@ -52,3 +52,71 @@ jobs:
           release-checksums: sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The signed, notarized .dmg — the app people actually install. Needs a real
+  # Mac: the bundle carries the Craft runtime, `codesign`, and `notarytool`.
+  #
+  # Skipped entirely until `DESKTOP_SIGNING_IDENTITY_NAME` is set, so the CLI
+  # release above is never blocked by a half-configured signing setup. An
+  # unsigned .dmg is not worth attaching — Gatekeeper refuses it everywhere but
+  # the machine that built it.
+  desktop:
+    name: Desktop app
+    needs: release
+    if: ${{ vars.DESKTOP_SIGNING_IDENTITY_NAME != '' }}
+    runs-on: macos-15
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # Brings in the Craft runtime this project declares in deps.yaml, and
+      # imports the Developer ID identity into an ephemeral keychain that its
+      # post step deletes even if the job is cancelled.
+      - name: Setup Pantry
+        uses: pantry-pm/pantry/packages/action@v0.11.12
+        with:
+          apple-signing: 'true'
+        env:
+          APPLE_APP_CERTIFICATE_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+      - name: Install Dependencies
+        run: bun install
+
+      - name: Store notary credentials
+        run: |
+          xcrun notarytool store-credentials systemcleaner \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD"
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+
+      - name: Build, sign, and notarize
+        run: bun run build:app:dmg
+        env:
+          DESKTOP_SIGNING_IDENTITY: ${{ vars.DESKTOP_SIGNING_IDENTITY_NAME }}
+          NOTARY_PROFILE: systemcleaner
+
+      - name: Attach the DMG to the release
+        uses: pantry-pm/pantry/packages/action@v0.11.12
+        with:
+          install: 'false'
+          release: 'true'
+          release-files: |
+            storage/framework/desktop-dist/*.dmg
+          release-checksums: sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

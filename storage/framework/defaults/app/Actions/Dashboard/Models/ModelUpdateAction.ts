@@ -1,7 +1,13 @@
+import type { RequestInstance } from '@stacksjs/types'
 import { Action } from '@stacksjs/actions'
 import { toSnakeCaseKeys } from '@stacksjs/orm'
-import { request } from '@stacksjs/router'
+import { response } from '@stacksjs/router'
+import { dashboardOperationalError } from '../dashboard-response'
 import { parseRowId, prepareModelFields, resolveWritableModel } from './model-write'
+
+interface ModelWriteInput {
+  fields?: unknown
+}
 
 /**
  * `PATCH /api/dashboard/models/{slug}/{id}`.
@@ -16,18 +22,14 @@ export default new Action({
   description: 'Updates one row of a model from the dashboard model browser.',
   method: 'PATCH',
   apiResponse: true,
-  async handle(req: {
-    getParam?: (name: string) => unknown
-    all?: () => Record<string, unknown>
-    route?: { params?: { slug?: string, id?: string } }
-  }) {
-    const resolved = await resolveWritableModel(String(req?.getParam?.('slug') ?? req?.route?.params?.slug ?? ''), 'update')
+  async handle(request: RequestInstance<ModelWriteInput>) {
+    const resolved = await resolveWritableModel(request.getParam('slug'), 'update')
     if ('error' in resolved)
-      return { ok: false, error: resolved.error }
+      return response.json({ message: resolved.error }, resolved.status)
 
-    const id = parseRowId(req?.getParam?.('id') ?? req?.route?.params?.id)
+    const id = parseRowId(request.getParam('id'))
     if (id === null)
-      return { ok: false, error: 'A numeric row id is required.' }
+      return response.json({ message: 'A numeric row id is required.' }, 400)
 
     // Edits arrive nested under `fields`. The router's input bag merges the
     // body with route params and query, so a flat payload would silently
@@ -35,25 +37,25 @@ export default new Action({
     // columns — and `slug` is a real column on plenty of models, so it
     // cannot simply be blocklisted. One level of nesting keeps the two
     // namespaces apart.
-    const input = (req.all?.() ?? (request as any).all?.() ?? {}) as Record<string, unknown>
+    const input = request.all()
     const raw = input.fields
     const body = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw as Record<string, unknown> : {}
     const prepared = prepareModelFields(resolved.Model, body, true)
     if (Object.keys(prepared.errors).length > 0)
-      return { ok: false, error: 'Validation failed.', errors: prepared.errors }
+      return response.json({ message: 'Validation failed.', errors: prepared.errors }, 422)
     const changes = toSnakeCaseKeys(prepared.data)
     if (Object.keys(changes).length === 0)
-      return { ok: false, error: 'No writable fields in the request body.' }
+      return response.json({ message: 'No writable fields in the request body.' }, 422)
 
     try {
       const row = await resolved.Model.find(id)
       if (!row)
-        return { ok: false, error: `${resolved.modelName} ${id} not found.` }
+        return response.json({ message: `${resolved.modelName} ${id} not found.` }, 404)
       await resolved.Model.update(id, changes)
       return { ok: true, id, changed: Object.keys(changes) }
     }
-    catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    catch (error) {
+      return dashboardOperationalError(error, 'The model record could not be updated.', 'ModelUpdateAction', 500)
     }
   },
 })

@@ -1,6 +1,6 @@
 import { Action } from '@stacksjs/actions'
 import { ShippingMethod, ShippingZone } from '@stacksjs/orm'
-import { response } from '@stacksjs/router'
+import { dashboardOperationalError } from '../dashboard-response'
 import {
   indexShippingZoneMethods,
   normalizeShippingZoneRecord,
@@ -17,15 +17,13 @@ export default new Action({
       const zones = await ShippingZone.orderBy('name', 'asc').limit(500).get()
       const methodIds = [...new Set(zones.map(zone => zone.get('shipping_method_id')).filter(Boolean))]
       const methods = methodIds.length
-        ? await ShippingMethod.where('id', 'in', methodIds).get()
+        ? await ShippingMethod.whereIn('id', methodIds).get()
         : []
       const methodsById = indexShippingZoneMethods(methods)
       return zones.map(zone => normalizeShippingZoneRecord(zone, methodsById))
     }
     catch (error) {
-      return response.json({
-        message: error instanceof Error ? error.message : 'Shipping zone records could not be read.',
-      }, 503)
+      return dashboardOperationalError(error, 'Shipping zone records could not be read.', 'ShippingZoneIndexAction')
     }
   },
 })

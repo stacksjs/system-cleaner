@@ -1,6 +1,6 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { readAppInfoPlist, pathExists, execSync, shellEscape } from '@system-cleaner/core'
+import { readAppInfoPlist, pathExists, execSync } from '@system-cleaner/core'
 
 export interface BundleInfo {
   name: string

@@ -1,5 +1,6 @@
 import { Action } from '@stacksjs/actions'
 import { Customer, Order, Post, User } from '@stacksjs/orm'
+import { dashboardOperationalIssue } from './dashboard-response'
 
 interface DashboardStatDefinition {
   title: string
@@ -56,12 +57,19 @@ export default new Action({
     const results = await Promise.allSettled(definitions.map(definition => definition.count()))
     const stats = definitions.map((definition, index) => {
       const { count: _count, ...metadata } = definition
-      return formatDashboardStat(metadata, results[index])
+      // allSettled returns one result per input, but indexed access is typed
+      // as possibly missing; a rejected placeholder keeps the shape honest.
+      const result = results[index] ?? { status: 'rejected' as const, reason: new Error('missing result') }
+      return formatDashboardStat(metadata, result)
     })
     const issues = results.flatMap((result, index) => result.status === 'rejected'
       ? [{
-          source: definitions[index].title,
-          message: result.reason instanceof Error ? result.reason.message : 'Model query failed.',
+          source: definitions[index]?.title ?? 'Unknown',
+          message: dashboardOperationalIssue(
+            result.reason,
+            `${definitions[index]?.title ?? 'Dashboard'} data could not be loaded.`,
+            `DashboardStatsAction.${(definitions[index]?.title ?? 'unknown').toLowerCase().replaceAll(' ', '-')}`,
+          ),
         }]
       : [])
 

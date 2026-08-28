@@ -7,6 +7,18 @@ function esc(str) { return escapeHtml(str || '') }
 @section('nav', 'startup')
 @section('body')
 
+<!--
+  No comments inside the `x-data` literal below. STX collapses the attribute
+  onto one line before evaluating it, so a `//` comment swallows the rest of
+  the object and the whole block fails to parse — leaving every binding on the
+  page empty, with nothing in the console. `tests/xdata-parses.test.ts` guards
+  this.
+
+  The counts below are methods rather than `get` accessors: the stx runtime
+  does not evaluate getters declared on an x-data object literal, so every
+  count rendered as 0 while the rows themselves showed the right state.
+-->
+
 <div x-data="{
   selected: [],
   startupFilter: 'all',
@@ -31,18 +43,15 @@ function esc(str) { return escapeHtml(str || '') }
       .catch(function() { self.loading = false; });
   },
 
-  // Methods, not `get` accessors: the stx runtime does not evaluate getters
-  // declared on an x-data object literal, so every count rendered as 0 while
-  // the rows themselves (which call methods) showed the right state.
   enabledStartup() { return this.startupItems.filter(function(i) { return !this.disabledItems.includes(i.id); }.bind(this)); },
   disabledStartup() { return this.startupItems.filter(function(i) { return this.disabledItems.includes(i.id); }.bind(this)); },
   enabledIds() { return this.enabledStartup().map(function(i) { return i.id; }); },
 
-  toggle(id) { const i = this.selected.indexOf(id); if (i === -1) this.selected.push(id); else this.selected.splice(i, 1); },
+  toggle(id) { this.selected = this.selected.indexOf(id) === -1 ? this.selected.concat([id]) : this.selected.filter(function(x) { return x !== id; }); },
   isOn(id) { return this.selected.includes(id); },
   isDisabled(id) { return this.disabledItems.includes(id); },
   isRemoved(id) { return this.removedItems.includes(id); },
-  allOn(ids) { if (ids.every(id => this.selected.includes(id))) this.selected = this.selected.filter(id => !ids.includes(id)); else ids.forEach(id => { if (!this.selected.includes(id)) this.selected.push(id); }); },
+  allOn(ids) { const keep = this.selected.filter(id => !ids.includes(id)); this.selected = ids.every(id => this.selected.includes(id)) ? keep : keep.concat(ids); },
   setFilter(f) { this.startupFilter = f; },
   rowVisible(item) {
     if (this.startupFilter === 'all') return true;

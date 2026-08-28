@@ -27,9 +27,7 @@ async function handleRegister(credentials) {
     navigate(safeRedirect())
   }
   catch (err) {
-    error.set(err.message || 'An error occurred during registration')
-    // eslint-disable-next-line no-console
-    console.error(err)
+    error.set(err instanceof Error ? err.message : 'An error occurred during registration')
   }
   finally {
     isLoading.set(false)
@@ -43,5 +41,9 @@ async function handleRegister(credentials) {
     :isLoading="isLoading()"
     :error="error()"
     :data-auth-status="isLoading() ? 'loading' : 'ready'"
-  />
+  >
+    <!-- Forwarded so the page mounting this container can put social
+         sign-in inside the card. -->
+    <template #social><slot name="social" /></template>
+  </Register>
 </template>

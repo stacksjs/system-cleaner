@@ -11,6 +11,8 @@
     "dev": "./buddy dev",
     "build": "./buddy build views",
     "build:binaries": "bun ./scripts/build-binaries.ts",
+    "build:app": "bun ./scripts/build-desktop-app.ts",
+    "build:app:dmg": "bun ./scripts/build-desktop-app.ts --dmg",
     "release": "./buddy release",
     "release:patch": "./buddy release --bump patch --no-interaction",
     "release:minor": "./buddy release --bump minor --no-interaction",
@@ -43,7 +45,7 @@
   "devDependencies": {
     "@fontsource-variable/geist": "^5.3.0",
     "@iconify-json/f7": "^1.2.2",
-    "better-dx": "^0.2.22",
+    "better-dx": "^0.2.25",
     "puppeteer": "^24.42.0"
   }
 }

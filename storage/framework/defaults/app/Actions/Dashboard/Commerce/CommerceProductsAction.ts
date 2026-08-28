@@ -1,7 +1,7 @@
 import { Action } from '@stacksjs/actions'
 import { config } from '@stacksjs/config'
 import { Category, Manufacturer, Product, ProductUnit, ProductVariant, Review } from '@stacksjs/orm'
-import { response } from '@stacksjs/router'
+import { dashboardOperationalError } from '../dashboard-response'
 import {
   commerceRecordIdentifier,
   countProductRelations,
@@ -22,12 +22,14 @@ export default new Action({
     try {
       const products = await Product.orderByDesc('id').limit(500).get()
       const productIds = products.map(product => commerceRecordIdentifier(product, 'Product'))
+      // Identifiers normalize to strings; `product_id` is numeric.
+      const numericProductIds = productIds.map(Number).filter(Number.isSafeInteger)
       const [categories, manufacturers, variants, units, reviews] = await Promise.all([
         Category.orderBy('name', 'asc').limit(500).get(),
         Manufacturer.orderBy('manufacturer', 'asc').limit(500).get(),
-        productIds.length > 0 ? ProductVariant.where('product_id', 'in', productIds).get() : [],
-        productIds.length > 0 ? ProductUnit.where('product_id', 'in', productIds).get() : [],
-        productIds.length > 0 ? Review.where('product_id', 'in', productIds).get() : [],
+        numericProductIds.length > 0 ? ProductVariant.whereIn('product_id', numericProductIds).get() : [],
+        numericProductIds.length > 0 ? ProductUnit.whereIn('product_id', numericProductIds).get() : [],
+        numericProductIds.length > 0 ? Review.whereIn('product_id', numericProductIds).get() : [],
       ])
       const categoryOptions = categories.map(normalizeProductOption)
       const manufacturerOptions = manufacturers.map(normalizeManufacturerOption)
@@ -54,9 +56,7 @@ export default new Action({
       }
     }
     catch (error) {
-      return response.json({
-        message: error instanceof Error ? error.message : 'Product records could not be read.',
-      }, 503)
+      return dashboardOperationalError(error, 'Product records could not be read.', 'CommerceProductsAction')
     }
   },
 })

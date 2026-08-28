@@ -30,6 +30,23 @@ team (and every agent) sees the same rules.
 - Stacks ships no animation library. Use Crosswind transitions, CSS keyframes,
   scroll-driven animations, and the motion composables.
 
+### `x-data` blocks
+
+Three rules, each learned from a screen that silently rendered every binding
+empty with nothing in the console. `tests/xdata-parses.test.ts` enforces the
+first two.
+
+1. **No comments inside the literal.** STX collapses the attribute onto one
+   line before evaluating it, so a `//` comment swallows the rest of the object.
+   Put the commentary in an HTML comment above the element.
+2. **No `"` inside the literal.** The attribute is delimited by double quotes.
+   Generating markup with `class="..."` ends it early. Use single quotes.
+3. **Never mutate reactive state in place.** STX tracks assignment, not
+   `Array.prototype.push`/`splice` or a field written on a row object. Build a
+   new value and assign it — `this.selected = this.selected.concat([id])`, not
+   `this.selected.push(id)`. In-place mutation updates the state and leaves the
+   DOM showing the old one.
+
 ### Commits
 
 - Conventional commit messages (`fix:`, `feat:`, `chore:`, ...).
@@ -72,8 +89,23 @@ Add your own with `app/Skills/<name>/SKILL.md`, then re-run `buddy setup:ai`.
 
 ---
 
+## The desktop app
+
+`bun run build:app` (add `:dmg` for the disk image) packages a self-contained
+`.app` into `storage/framework/desktop-dist/`. It is **not** `buddy
+build:desktop`, which targets a hosted Stacks app and opens a window on a remote
+URL — see `docs/guide/desktop-app.md` for why, and `scripts/build-desktop-app.ts`
+for what it assembles.
+
+The bundle serves prerendered HTML, so **nothing machine-specific may come from
+a `<script server>` block** on an app view. Anything a server script computes is
+frozen at build time and will describe the build machine forever. Host facts
+travel on `/api/dashboard-stats` and are bound client-side.
+
 ## Before finishing
 
 - Lint: `./buddy lint` (fix with `./buddy lint:fix`)
 - Type check: `./buddy typecheck`
 - Test: `./buddy test`
+- Touching an app view or the API? Rebuild and launch the bundle:
+  `bun run build:app && open storage/framework/desktop-dist/SystemCleaner.app`

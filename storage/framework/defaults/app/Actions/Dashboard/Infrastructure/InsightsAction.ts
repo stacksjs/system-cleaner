@@ -6,6 +6,7 @@ import { cache } from '@stacksjs/cache'
 import { config } from '@stacksjs/config'
 import { db } from '@stacksjs/database'
 import { checkQueueHealth } from '@stacksjs/queue'
+import { dashboardOperationalIssue } from '../dashboard-response'
 import {
   compactSql,
   countValue,
@@ -23,14 +24,14 @@ interface SourceResult<T> {
   error: string
 }
 
-async function inspectSource<T>(work: Promise<T>, fallback: T): Promise<SourceResult<T>> {
+async function inspectSource<T>(work: Promise<T>, fallback: T, message: string, source: string): Promise<SourceResult<T>> {
   try {
     return { value: await work, error: '' }
   }
   catch (error) {
     return {
       value: fallback,
-      error: error instanceof Error ? error.message : 'The source could not be inspected.',
+      error: dashboardOperationalIssue(error, message, `InsightsAction.${source}`),
     }
   }
 }
@@ -56,20 +57,20 @@ export default new Action({
         db.fn.max('duration_ms').as('maximum'),
         db.fn.max('created_at').as('latest'),
       ])
-      .where('deleted_at', 'is', null)
+      .whereNull('deleted_at')
       .executeTakeFirst() as Promise<NumericSummaryRow | undefined>
 
     const requestSuccessQuery = db
       .selectFrom('requests')
       .select(db.fn.count('id').as('count'))
-      .where('deleted_at', 'is', null)
+      .whereNull('deleted_at')
       .where('status_code', '<', 400)
       .executeTakeFirst() as Promise<{ count: number | string } | undefined>
 
     const slowRequestsQuery = db
       .selectFrom('requests')
       .select(['id', 'method', 'path', 'status_code', 'duration_ms', 'created_at'])
-      .where('deleted_at', 'is', null)
+      .whereNull('deleted_at')
       .orderBy('duration_ms', 'desc')
       .orderBy('id', 'desc')
       .limit(5)
@@ -135,18 +136,18 @@ export default new Action({
       filesystem,
       databaseFile,
     ] = await Promise.all([
-      inspectSource(requestSummaryQuery, undefined),
-      inspectSource(requestSuccessQuery, undefined),
-      inspectSource(slowRequestsQuery, []),
-      inspectSource(querySummaryQuery, undefined),
-      inspectSource(queryStatusesQuery, []),
-      inspectSource(slowQueriesQuery, []),
-      inspectSource(errorSummaryQuery, undefined),
-      inspectSource(recentErrorsQuery, []),
-      inspectSource(checkQueueHealth(), null),
-      inspectSource(cache.getStats(), null),
-      inspectSource(filesystemQuery, null),
-      inspectSource(databaseFileQuery, null),
+      inspectSource(requestSummaryQuery, undefined, 'Request telemetry is unavailable.', 'requests.summary'),
+      inspectSource(requestSuccessQuery, undefined, 'Request telemetry is unavailable.', 'requests.success'),
+      inspectSource(slowRequestsQuery, [], 'Request telemetry is unavailable.', 'requests.slowest'),
+      inspectSource(querySummaryQuery, undefined, 'Query telemetry is unavailable.', 'queries.summary'),
+      inspectSource(queryStatusesQuery, [], 'Query telemetry is unavailable.', 'queries.statuses'),
+      inspectSource(slowQueriesQuery, [], 'Query telemetry is unavailable.', 'queries.slowest'),
+      inspectSource(errorSummaryQuery, undefined, 'Error telemetry is unavailable.', 'errors.summary'),
+      inspectSource(recentErrorsQuery, [], 'Error telemetry is unavailable.', 'errors.recent'),
+      inspectSource(checkQueueHealth(), null, 'Queue telemetry is unavailable.', 'queue'),
+      inspectSource(cache.getStats(), null, 'Cache telemetry is unavailable.', 'cache'),
+      inspectSource(filesystemQuery, null, 'Filesystem telemetry is unavailable.', 'filesystem'),
+      inspectSource(databaseFileQuery, null, 'Database file telemetry is unavailable.', 'database-file'),
     ])
 
     const requestTotal = countValue(requestSummary.value?.total)
@@ -180,7 +181,7 @@ export default new Action({
         averageDurationMs: finiteNumber(requestSummary.value?.average),
         maximumDurationMs: finiteNumber(requestSummary.value?.maximum),
         latestAt: requestSummary.value?.latest || '',
-        slowest: slowRequests.value.map(row => ({
+        slowest: slowRequests.value.map((row: Record<string, unknown>) => ({
           id: countValue(row.id),
           method: String(row.method || 'GET'),
           path: safeRequestPath(row.path),
@@ -199,7 +200,7 @@ export default new Action({
         averageDurationMs: finiteNumber(querySummary.value?.average),
         maximumDurationMs: finiteNumber(querySummary.value?.maximum),
         latestAt: querySummary.value?.latest || '',
-        slowest: slowQueries.value.map(row => ({
+        slowest: slowQueries.value.map((row: Record<string, unknown>) => ({
           id: countValue(row.id),
           query: compactSql(row.query),
           durationMs: finiteNumber(row.duration),
@@ -239,7 +240,7 @@ export default new Action({
       errors: {
         total: countValue(errorSummary.value?.total),
         latestAt: errorSummary.value?.latest || '',
-        recent: recentErrors.value.map(row => ({
+        recent: recentErrors.value.map((row: Record<string, unknown>) => ({
           id: countValue(row.id),
           type: String(row.type || 'Error'),
           message: String(row.message || ''),

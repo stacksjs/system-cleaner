@@ -6,6 +6,7 @@
  * persistence stay inside the component instead of being serialized as HTML.
  */
 import { existsSync, readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 
 type ModelCategory = 'userland' | 'data' | 'commerce' | 'content' | 'marketing' | 'system'
@@ -57,9 +58,24 @@ export interface DashboardSectionToggles {
   data: DataRowToggles
 }
 
+/** An application-defined sidebar row, from `config/dashboard.ts:nav`. */
+export interface AppNavItem {
+  label: string
+  href: string
+  icon?: string
+  roles?: string[]
+}
+
+export interface AppNavSection {
+  title: string
+  items: AppNavItem[]
+}
+
 export interface DiscoveredManifest {
   models: DiscoveredModel[]
   sections: DashboardSectionToggles
+  /** Sections this application declared. Empty for a project that declared none. */
+  nav: AppNavSection[]
 }
 
 export const DEFAULT_DATA_TOGGLES: DataRowToggles = {
@@ -103,7 +119,7 @@ export function loadDiscoveredManifest(
   manifestPath = resolve(process.cwd(), 'storage/framework/defaults/views/dashboard/.discovered-models.json'),
 ): DiscoveredManifest {
   if (!existsSync(manifestPath))
-    return { models: [], sections: defaultToggles() }
+    return { models: [], sections: defaultToggles(), nav: [] }
 
   try {
     return parseDiscoveredManifest(readFileSync(manifestPath, 'utf8'))
@@ -138,7 +154,33 @@ export function parseDiscoveredManifest(source: string): DiscoveredManifest {
   return {
     models,
     sections: normalizeManifestToggles(envelope.sections),
+    nav: normalizeManifestNav(envelope.nav),
   }
+}
+
+/**
+ * App-declared sections are validated at config load; this only has to survive
+ * a manifest written by an older framework version, which has no `nav` key.
+ */
+function normalizeManifestNav(value: unknown): AppNavSection[] {
+  if (value === undefined)
+    return []
+
+  if (!Array.isArray(value))
+    throw new TypeError('manifest nav must be an array')
+
+  return value.map((entry, index) => {
+    const section = objectValue(entry, `manifest nav[${index}]`)
+    if (typeof section.title !== 'string' || !section.title)
+      throw new TypeError(`manifest nav[${index}].title must be a non-empty string`)
+    if (!Array.isArray(section.items))
+      throw new TypeError(`manifest nav[${index}].items must be an array`)
+
+    return {
+      title: section.title,
+      items: section.items as AppNavItem[],
+    }
+  })
 }
 
 function normalizeManifestToggles(value: unknown): DashboardSectionToggles {
@@ -241,8 +283,24 @@ function categoryNavItems(
 export function buildNavSections(
   discoveredModels: DiscoveredModel[] = [],
   toggles: DashboardSectionToggles = DEFAULT_TOGGLES,
+  appNav: AppNavSection[] = [],
 ): Array<[string, string, NavItem[]]> {
   const sections: Array<[string, string, NavItem[]]> = []
+
+  // Application sections come first. An app that declares its own pages is
+  // saying those are the product; the framework's operational surfaces
+  // (queue, logs, deployments) are support and belong below them.
+  for (const [index, section] of appNav.entries()) {
+    if (section.items.length === 0)
+      continue
+
+    sections.push([`app-nav-${index}`, section.title, section.items.map(item => ({
+      to: item.href,
+      icon: item.icon ?? 'circle',
+      text: item.label,
+      ...(item.roles && item.roles.length > 0 ? { roles: item.roles } : {}),
+    }))])
+  }
 
   // Library section: the established views live at the project root
   // (`/functions`, `/packages`, `/releases`). Components use the explicit
@@ -281,6 +339,7 @@ export function buildNavSections(
   // (`/notifications/dashboard`); the bare `/notifications` redirects.
   sections.push(['app', 'app', [
     { to: '/deployments', icon: 'rocket', text: 'Deployments' },
+    { to: '/operations/scheduler', icon: 'calendar-03', text: 'Operations' },
     { to: '/requests', icon: 'api', text: 'Requests' },
     { to: '/realtime', icon: 'link', text: 'Realtime' },
     { to: '/actions', icon: 'bolt', text: 'Actions' },
@@ -428,11 +487,11 @@ export function buildNavSections(
       // The layout's role map hides the row from client-role viewers.
       { to: '/kanban', icon: 'table', text: 'Kanban', roles: ['admin', 'dev'] },
     ]
-    // CI tracking (stacksjs/stacks#1844) — opt-in via `ci.enabled` in
-    // config/dashboard.ts. The page additionally checks `useRole().isDev()`
-    // (stub for #1843) before rendering.
+    // CI tracking (stacksjs/stacks#1844) - opt-in via `ci.enabled` in
+    // config/dashboard.ts. Keep the row gate aligned with the page's
+    // `useRole().isDev()` check so client-only viewers never get a dead link.
     if (toggles.ci)
-      managementItems.push({ to: '/ci', icon: 'check-circle', text: 'CI' })
+      managementItems.push({ to: '/ci', icon: 'check-circle', text: 'CI', roles: ['dev'] })
     sections.push(['management', 'management', managementItems])
   }
 
@@ -548,9 +607,57 @@ function titleCase(label: string): string {
  * discovered-models manifest synchronously (stx server-script friendly)
  * and applies the shared section and toggle logic.
  */
+/**
+ * Framework sections name their icons from the map above. App-declared rows
+ * may instead give a full iconify class, which is passed through untouched -
+ * an application should not be limited to the icons the framework happened to
+ * name, and `i-hugeicons-champion` is the spelling its own templates use.
+ */
+function resolveNavIcon(icon: string): string {
+  if (icon.startsWith('i-'))
+    return icon
+
+  return NAV_ICON_CLASSES[icon] ?? NAV_ICON_CLASSES.file!
+}
+
+/**
+ * Read app-declared sections straight from `config/dashboard.ts`.
+ *
+ * The manifest is the primary source, but it is written by the dashboard dev
+ * command - so an app running a published framework older than the `nav` key
+ * would get a manifest without one, and its own pages would stay unreachable.
+ * Reading the config directly also means editing it shows up on the next
+ * reload rather than on the next manifest write.
+ *
+ * `require` rather than `import`: this module is called synchronously from STX
+ * server-script context, and Bun transpiles the TS config on the way in.
+ */
+function loadAppNavFromConfig(configPath = resolve(process.cwd(), 'config/dashboard.ts')): AppNavSection[] {
+  if (!existsSync(configPath))
+    return []
+
+  let config: unknown
+  try {
+    const requireFrom = createRequire(import.meta.url)
+    const loaded = requireFrom(configPath) as { default?: unknown }
+    config = loaded?.default ?? loaded
+  }
+  catch {
+    // An unreadable config is the dashboard's problem elsewhere, not the
+    // sidebar's: fall back to the framework sections rather than blanking the
+    // whole navigation.
+    return []
+  }
+
+  // Validation deliberately outside the catch - a malformed `nav` is an
+  // authoring mistake and should say so, not silently render nothing.
+  return normalizeManifestNav((config as { nav?: unknown } | undefined)?.nav)
+}
+
 export function buildWebSidebarSections(): WebSidebarSection[] {
   const manifest = loadDiscoveredManifest()
-  const sections = buildNavSections(manifest.models, manifest.sections)
+  const appNav = manifest.nav.length > 0 ? manifest.nav : loadAppNavFromConfig()
+  const sections = buildNavSections(manifest.models, manifest.sections, appNav)
 
   return [
     {
@@ -564,7 +671,7 @@ export function buildWebSidebarSections(): WebSidebarSection[] {
       items: items.map(item => ({
         id: navItemId(item.to),
         label: item.text,
-        icon: NAV_ICON_CLASSES[item.icon] ?? NAV_ICON_CLASSES.file,
+        icon: resolveNavIcon(item.icon),
         iconColor: 'blue',
         href: item.to,
         ...(item.roles && item.roles.length > 0 ? { roles: item.roles } : {}),

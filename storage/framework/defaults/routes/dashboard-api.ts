@@ -161,6 +161,9 @@ route.group({ prefix: '/api/dashboard', apiResponse: true }, () => {
   guard(route.delete('/commerce/print-logs/{id}', 'Actions/Commerce/ReceiptDestroyAction'))
   guard(route.get('/deployments', 'Actions/Dashboard/Deployments/GetDeployments'))
   guard(route.post('/deployments', 'Actions/Dashboard/Deployments/CreateDeployment'))
+  guard(route.post('/deployments/preview', 'Actions/Dashboard/Deployments/PreviewDeployment'))
+  guard(route.post('/deployments/rollback/preview', 'Actions/Dashboard/Deployments/PreviewDeploymentRollback'))
+  guard(route.post('/deployments/rollback', 'Actions/Dashboard/Deployments/CreateDeploymentRollback'))
   guard(route.get('/deployments/count', 'Actions/Dashboard/Deployments/GetDeploymentCount'))
   guard(route.get('/deployments/recent', 'Actions/Dashboard/Deployments/GetRecentDeployments'))
   guard(route.get('/deployments/avg-time', 'Actions/Dashboard/Deployments/GetAverageDeploymentTime'))
@@ -168,6 +171,26 @@ route.group({ prefix: '/api/dashboard', apiResponse: true }, () => {
   guard(route.put('/deployments/script', 'Actions/Dashboard/Deployments/UpdateDeployScript'))
   guard(route.get('/deployments/terminal', 'Actions/Dashboard/Deployments/GetDeploymentLiveTerminalOutput'))
   guard(route.get('/deployments/{id}', 'Actions/Dashboard/Deployments/GetDeployment'))
+  guard(route.get('/operations/scheduler', 'Actions/Dashboard/Operations/SchedulerIndexAction'))
+  guard(route.post('/operations/scheduler/{name}/run', 'Actions/Dashboard/Operations/SchedulerRunAction'))
+  guard(route.patch('/operations/scheduler/{name}', 'Actions/Dashboard/Operations/SchedulerToggleAction'))
+  guard(route.get('/operations/recovery', 'Actions/Dashboard/Operations/RecoveryIndexAction'))
+  guard(route.post('/operations/recovery/destinations', 'Actions/Dashboard/Operations/RecoveryDestinationStoreAction'))
+  guard(route.post('/operations/recovery/destinations/{id}/test', 'Actions/Dashboard/Operations/RecoveryDestinationTestAction'))
+  guard(route.post('/operations/recovery/policies', 'Actions/Dashboard/Operations/RecoveryPolicyStoreAction'))
+  guard(route.post('/operations/recovery/policies/{id}/run', 'Actions/Dashboard/Operations/RecoveryRunAction'))
+  guard(route.post('/operations/recovery/points/{id}/verify', 'Actions/Dashboard/Operations/RecoveryVerifyAction'))
+  guard(route.post('/operations/recovery/points/{id}/restore', 'Actions/Dashboard/Operations/RecoveryRestoreAction'))
+  guard(route.patch('/operations/recovery/points/{id}/protection', 'Actions/Dashboard/Operations/RecoveryProtectAction'))
+  guard(route.post('/operations/recovery/retention', 'Actions/Dashboard/Operations/RecoveryRetentionAction'))
+  guard(route.get('/operations/migrations', 'Actions/Dashboard/Operations/MigrationIndexAction'))
+  guard(route.post('/operations/migrations/apply', 'Actions/Dashboard/Operations/MigrationApplyAction'))
+  guard(route.post('/operations/migrations/reconcile', 'Actions/Dashboard/Operations/MigrationReconcileAction'))
+  guard(route.get('/operations/changes', 'Actions/Dashboard/Operations/ChangeIndexAction'))
+  guard(route.post('/operations/changes/releases/{id}/decision', 'Actions/Dashboard/Operations/ChangeApprovalAction'))
+  guard(route.get('/operations/incidents', 'Actions/Dashboard/Operations/IncidentIndexAction'))
+  guard(route.patch('/operations/incidents/{id}', 'Actions/Dashboard/Operations/IncidentUpdateAction'))
+  guard(route.get('/operations/audit', 'Actions/Dashboard/Operations/AuditIndexAction'))
   guard(route.get('/data/activity', 'Actions/Dashboard/Data/ActivityIndexAction'))
   guard(route.get('/data/users', 'Actions/Dashboard/Data/UserIndexAction'))
   guard(route.get('/data/teams', 'Actions/Dashboard/Data/TeamIndexAction'))
@@ -264,28 +287,15 @@ route.group({ prefix: '/api/dashboard', apiResponse: true }, () => {
   // requests — see the action for the soft-fallback shape.
   route.get('/auth/me', 'Actions/Dashboard/Auth/MeAction')
 
-  // Kanban surface (stacksjs/stacks#1846). Phase 1: read-only.
-  //
-  // Phase 2 lands write endpoints under the same prefix:
-  //   POST   /kanban/boards           — store
-  //   PATCH  /kanban/boards/{id}      — update
-  //   DELETE /kanban/boards/{id}      — destroy
-  //   POST   /kanban/boards/reorder   — bulk position update
-  //   POST   /kanban/columns          — store
-  //   PATCH  /kanban/columns/{id}     — update
-  //   POST   /kanban/columns/reorder  — bulk position update
-  //   POST   /kanban/cards            — store
-  //   PATCH  /kanban/cards/{id}       — update (incl. column move)
-  //   POST   /kanban/cards/reorder    — bulk position update
-  //
+  // Kanban reads and mutations share the guarded dashboard surface.
   // Kanban data is local-only without authentication. Outside local
   // environments every read and write uses the same auth + admin guard as
   // the other operational dashboard surfaces.
-  // Reads (Phase 1)
+  // Reads
   guard(route.get('/kanban/boards', 'Actions/Dashboard/Kanban/BoardsIndexAction'))
   guard(route.get('/kanban/boards/{id}', 'Actions/Dashboard/Kanban/BoardShowAction'))
 
-  // Writes (Phase 2). The reorder endpoints are POST not PATCH because
+  // Writes. The reorder endpoints are POST not PATCH because
   // their semantics — "here's the full new state of this slice of the
   // board" — match the resource-replacement intent better than PATCH's
   // "apply this delta" verb. They also accept a body shape that PATCH
@@ -305,7 +315,7 @@ route.group({ prefix: '/api/dashboard', apiResponse: true }, () => {
   guard(route.delete('/kanban/cards/{id}', 'Actions/Dashboard/Kanban/CardDestroyAction'))
   guard(route.post('/kanban/cards/reorder', 'Actions/Dashboard/Kanban/CardsReorderAction'))
 
-  // Phase 3 — card detail + labels + assignees + comments.
+  // Card detail, labels, assignees, and comments.
   //
   // The card-show endpoint is the only "single card with everything"
   // read; the boards/{id} response already embeds labels + assignees
@@ -325,10 +335,10 @@ route.group({ prefix: '/api/dashboard', apiResponse: true }, () => {
   guard(route.post('/kanban/cards/{id}/labels', 'Actions/Dashboard/Kanban/CardLabelsSyncAction'))
   guard(route.post('/kanban/cards/{id}/assignees', 'Actions/Dashboard/Kanban/CardAssigneesSyncAction'))
 
-  // Comments. Append-only thread: store + destroy, no edit yet — the
-  // history-preservation argument outweighs the "fix a typo" argument
-  // until someone explicitly asks for editing.
+  // Card-scoped comment thread. Writes stay under the dashboard guard while
+  // the CardComment model also exposes its conventional generated API.
   guard(route.post('/kanban/cards/{id}/comments', 'Actions/Dashboard/Kanban/CardCommentStoreAction'))
+  guard(route.patch('/kanban/comments/{id}', 'Actions/Dashboard/Kanban/CardCommentUpdateAction'))
   guard(route.delete('/kanban/comments/{id}', 'Actions/Dashboard/Kanban/CardCommentDestroyAction'))
 
   // Lightweight user list for the assignee picker. Distinct from the
@@ -466,6 +476,7 @@ route.group({ prefix: '/api/dashboard', apiResponse: true }, () => {
   // the per-mailbox inbox.json index. Both are guarded outside local/dev
   // because they touch real mailbox state and PII.
   guard(route.get('/email/inbox', 'Actions/Dashboard/Email/InboxIndexAction'))
+  guard(route.get('/email/inbox/{id}/attachments/{attachmentId}', 'Actions/Dashboard/Email/InboxAttachmentDownloadAction'))
   guard(route.get('/email/inbox/{id}', 'Actions/Dashboard/Email/InboxShowAction'))
   guard(route.get('/email/stats', 'Actions/Dashboard/Email/InboxStatsAction'))
   guard(route.get('/email/activity', 'Actions/Dashboard/Email/InboxActivityAction'))

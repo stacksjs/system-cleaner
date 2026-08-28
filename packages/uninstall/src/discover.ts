@@ -1,5 +1,5 @@
 import * as path from 'node:path'
-import { HOME, appleScriptEscape, getDirSize, macPaths, pathExists, safeReadDir, safeStat, parsePlist, exec, shellEscape } from '@system-cleaner/core'
+import { HOME, appleScriptEscape, pathExists, safeReadDir, safeStat, parsePlist, exec, shellEscape } from '@system-cleaner/core'
 import { readBundleInfo } from './bundle'
 import type { AppInfo, StartupItem } from './types'
 

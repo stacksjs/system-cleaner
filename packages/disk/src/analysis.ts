@@ -1,6 +1,6 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { HOME, formatBytes, getDirSize, pathExists, safeReadDir } from '@system-cleaner/core'
+import { HOME, formatBytes, getDirSize, pathExists } from '@system-cleaner/core'
 import type { DiskEntry, DiskUsageByCategory, LargeFile, ProjectArtifact } from './types'
 import { categorizeFile, getAllCategories, getProjectArtifactPatterns } from './categories'
 import { flattenTree, scanDirectory } from './scanner'

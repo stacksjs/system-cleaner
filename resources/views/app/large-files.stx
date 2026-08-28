@@ -1,0 +1,280 @@
+@extends('layouts/app')
+@section('nav', 'large-files')
+@section('body')
+
+<!--
+  All page state lives in this `x-data` block, as it does on the other app
+  screens.
+
+  No comments inside it. STX flattens the attribute onto a single line before
+  the runtime evaluates it, which turns a `//` comment into one that swallows
+  the rest of the object — the block then fails to parse and every binding on
+  the page silently renders empty. Commentary that belongs to this state:
+
+  - `post()` treats 403 and 409 as real answers, not transport failures: both
+    carry a message the user needs (a scan already running, a root outside the
+    allowed scope).
+  - `scan()` drops selections for rows the new scan did not return, so a stale
+    path can never be carried into a delete.
+  - `remove()` reports skipped and failed separately. Merging them would tell
+    someone that the file they deliberately protected "failed to delete".
+  - Nothing here mutates an array or a row in place. STX's reactivity tracks
+    assignment, not `Array.prototype.push`, so `selected.push(path)` updated
+    the state and left the DOM showing the old one — the checkbox ticked while
+    the bulk bar stayed hidden. Always build a new value and assign it.
+-->
+<div x-data="{
+  files: [],
+  selected: [],
+  filter: '',
+  activeCategory: '',
+  minSizeMB: 100,
+  scanRoot: '',
+  matched: 0,
+  totalBytes: 0,
+  truncated: false,
+  scanTime: '',
+  scanning: false,
+  scanned: false,
+  deleting: false,
+  lifetimeFreed: '0 B',
+  runCount: 0,
+  toasts: [],
+  toastId: 0,
+
+  init() {
+    this.refreshHistory();
+  },
+
+  post(endpoint, data) {
+    return fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data || {}),
+    }).then(function(r) {
+      if (!r.ok && r.status !== 409 && r.status !== 403) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  },
+
+  refreshHistory() {
+    var self = this;
+    this.post('/api/cleanup-history').then(function(r) {
+      if (!r.success) return;
+      self.lifetimeFreed = r.lifetimeFreedFormatted;
+      self.runCount = r.runCount;
+    }).catch(function() {});
+  },
+
+  scan() {
+    if (this.scanning) return;
+    var self = this;
+    this.scanning = true;
+    this.post('/api/large-files', { minSizeMB: this.minSizeMB, path: this.scanRoot }).then(function(r) {
+      self.scanning = false;
+      if (!r.success) { self.toast(r.error || 'Scan failed', 'error'); return; }
+      self.files = r.files || [];
+      self.matched = r.matched || 0;
+      self.totalBytes = r.totalBytes || 0;
+      self.truncated = !!r.truncated;
+      self.scanTime = r.scanTime || '';
+      self.scanned = true;
+      var present = {};
+      self.files.forEach(function(f) { present[f.path] = true; });
+      self.selected = self.selected.filter(function(p) { return present[p]; });
+    }).catch(function(err) {
+      self.scanning = false;
+      self.toast('Scan failed: ' + (err && err.message ? err.message : 'network'), 'error');
+    });
+  },
+
+  rescanIfScanned() { if (this.scanned && !this.scanning) this.scan(); },
+
+  visible() {
+    var needle = this.filter.trim().toLowerCase();
+    var cat = this.activeCategory;
+    return this.files.filter(function(f) {
+      if (cat && f.category !== cat) return false;
+      if (!needle) return true;
+      return f.name.toLowerCase().indexOf(needle) !== -1
+        || f.path.toLowerCase().indexOf(needle) !== -1;
+    });
+  },
+
+  categoryGroups() {
+    var counts = {};
+    this.files.forEach(function(f) {
+      if (!counts[f.category]) counts[f.category] = { category: f.category, label: f.label, count: 0 };
+      counts[f.category].count++;
+    });
+    return Object.keys(counts).map(function(k) { return counts[k]; })
+      .sort(function(a, b) { return b.count - a.count; });
+  },
+
+  isOn(p) { return this.selected.indexOf(p) !== -1; },
+
+  toggle(p) {
+    this.selected = this.selected.indexOf(p) === -1
+      ? this.selected.concat([p])
+      : this.selected.filter(function(x) { return x !== p; });
+  },
+
+  selectableVisible() {
+    return this.visible().filter(function(f) { return !f.protected; });
+  },
+
+  allVisibleSelected() {
+    var rows = this.selectableVisible();
+    if (rows.length === 0) return false;
+    var self = this;
+    return rows.every(function(f) { return self.isOn(f.path); });
+  },
+
+  toggleAllVisible() {
+    var rows = this.selectableVisible();
+    var touched = {};
+    rows.forEach(function(f) { touched[f.path] = true; });
+    if (this.allVisibleSelected()) {
+      this.selected = this.selected.filter(function(p) { return !touched[p]; });
+      return;
+    }
+    var keep = this.selected.filter(function(p) { return !touched[p]; });
+    this.selected = keep.concat(rows.map(function(f) { return f.path; }));
+  },
+
+  clearSelection() { this.selected = []; },
+
+  selectedBytes() {
+    var chosen = {};
+    this.selected.forEach(function(p) { chosen[p] = true; });
+    return this.files.reduce(function(sum, f) { return chosen[f.path] ? sum + f.sizeBytes : sum; }, 0);
+  },
+
+  tableCaption() {
+    if (this.scanning) return 'scanning…';
+    var shown = this.visible().length;
+    var suffix = this.scanTime ? ' · ' + this.scanTime : '';
+    if (shown !== this.files.length) return shown + ' of ' + this.files.length + ' shown' + suffix;
+    return this.files.length + ' items' + suffix;
+  },
+
+  remove(mode) {
+    if (this.deleting || this.selected.length === 0) return;
+    var count = this.selected.length;
+    var size = this.fmtBytes(this.selectedBytes());
+    var question = mode === 'permanent'
+      ? 'Permanently delete ' + count + ' item(s), freeing ' + size + '? This cannot be undone.'
+      : 'Move ' + count + ' item(s) to the Trash, freeing ' + size + '? You can restore them from Finder.';
+    if (!confirm(question)) return;
+
+    var self = this;
+    this.deleting = true;
+    this.post('/api/bulk-delete', { paths: this.selected, mode: mode, source: 'large-files' })
+      .then(function(r) {
+        self.deleting = false;
+        var gone = {};
+        (r.succeeded || []).forEach(function(p) { gone[p] = true; });
+        self.files = self.files.filter(function(f) { return !gone[f.path]; });
+        self.selected = self.selected.filter(function(p) { return !gone[p]; });
+        self.matched = Math.max(0, self.matched - (r.succeeded || []).length);
+        self.totalBytes = Math.max(0, self.totalBytes - (r.freedBytes || 0));
+
+        if ((r.succeeded || []).length > 0)
+          self.toast('Removed ' + r.succeeded.length + ' item(s) · freed ' + r.freedFormatted, 'success');
+        if ((r.skipped || []).length > 0)
+          self.toast(r.skipped.length + ' item(s) skipped: ' + r.skipped[0].reason, 'info');
+        if ((r.failed || []).length > 0)
+          self.toast(r.failed.length + ' item(s) failed: ' + r.failed[0].error, 'error');
+
+        self.refreshHistory();
+      })
+      .catch(function(err) {
+        self.deleting = false;
+        self.toast('Delete failed: ' + (err && err.message ? err.message : 'network'), 'error');
+      });
+  },
+
+  toggleProtect(file) {
+    var self = this;
+    var endpoint = file.protected ? '/api/unprotect-path' : '/api/protect-path';
+    this.post(endpoint, { path: file.path, reason: 'Marked from Large Files' }).then(function(r) {
+      if (!r.success) { self.toast('Could not update protection', 'error'); return; }
+      var next = !file.protected;
+      self.files = self.files.map(function(f) {
+        return f.path === file.path ? Object.assign({}, f, { protected: next }) : f;
+      });
+      if (next) self.selected = self.selected.filter(function(p) { return p !== file.path; });
+      self.toast(next ? 'Protected ' + file.name : 'Unprotected ' + file.name, 'success');
+    }).catch(function() { self.toast('Could not update protection', 'error'); });
+  },
+
+  protectSelected() {
+    if (this.selected.length === 0) return;
+    var self = this;
+    var paths = this.selected.slice();
+    Promise.all(paths.map(function(p) {
+      return self.post('/api/protect-path', { path: p, reason: 'Marked from Large Files' });
+    })).then(function() {
+      var marked = {};
+      paths.forEach(function(p) { marked[p] = true; });
+      self.files = self.files.map(function(f) {
+        return marked[f.path] ? Object.assign({}, f, { protected: true }) : f;
+      });
+      self.selected = [];
+      self.toast('Protected ' + paths.length + ' item(s)', 'success');
+    }).catch(function() { self.toast('Could not protect every item', 'error'); });
+  },
+
+  reveal(p) {
+    this.post('/api/reveal-in-finder', { path: p }).catch(function() {});
+  },
+
+  shortPath(p) {
+    if (!p || p.indexOf('/Users/') !== 0) return p;
+    var rest = p.slice(7);
+    var slash = rest.indexOf('/');
+    return '~' + (slash >= 0 ? rest.slice(slash) : '');
+  },
+
+  fmtDate(value) {
+    if (!value) return '-';
+    var d = new Date(value);
+    if (isNaN(d.getTime())) return '-';
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  },
+
+  fmtBytes(b) {
+    if (!b) return '0 B';
+    if (b >= 1e12) return (b/1e12).toFixed(1)+' TB';
+    if (b >= 1e9) return (b/1e9).toFixed(1)+' GB';
+    if (b >= 1e6) return (b/1e6).toFixed(1)+' MB';
+    if (b >= 1e3) return (b/1e3).toFixed(1)+' KB';
+    return b+' B';
+  },
+
+  toast(msg, type) {
+    var id = ++this.toastId;
+    this.toasts = [...this.toasts, { id: id, msg: msg, type: type || 'info' }];
+    var self = this;
+    setTimeout(function() { self.toasts = self.toasts.filter(function(t) { return t.id !== id; }); }, 5000);
+  },
+}">
+
+<div class='toast-area'>
+  <template x-for='toast in toasts' :key='toast.id'>
+    <div class='toast'>
+      <span class='toast-glyph' :class="toast.type === 'success' ? 'i-f7-checkmark-alt-circle-fill' : toast.type === 'error' ? 'i-f7-xmark-circle-fill' : 'i-f7-exclamationmark-triangle-fill'" aria-hidden='true'></span>
+      <span x-text='toast.msg'></span>
+    </div>
+  </template>
+</div>
+
+<div class='main-header'>
+  <div class='main-title'>Large Files</div>
+  <div class='main-subtitle'>Find the biggest items on your Mac and clear many of them at once</div>
+</div>
+<div class='main-content'>
+  <LargeFilesPanel />
+</div>
+</div>
+@endsection

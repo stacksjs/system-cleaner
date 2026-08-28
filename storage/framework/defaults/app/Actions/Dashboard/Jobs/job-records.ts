@@ -1,9 +1,9 @@
+import type { ReadableRecord } from '@stacksjs/orm'
 export type JobRecordSource = 'job' | 'failed'
 export type DashboardJobStatus = 'queued' | 'processing' | 'failed'
 
-export interface ModelRecord {
-  get: (key: string) => unknown
-}
+/** The shared shape, kept under this name for the helpers below. */
+export type ModelRecord = ReadableRecord
 
 export interface NormalizedJob {
   id: string
@@ -98,7 +98,11 @@ function timestampValue(
     return undefined
 
   let time = Number.NaN
-  if (typeof value === 'number' && Number.isInteger(value) && value >= 0)
+  // Postgres and MySQL drivers return Date instances for timestamp columns;
+  // SQLite stores TEXT and returns strings.
+  if (value instanceof Date)
+    time = value.getTime()
+  else if (typeof value === 'number' && Number.isInteger(value) && value >= 0)
     time = value * 1000
   else if (typeof value === 'string' && value.trim())
     time = new Date(/^\d{4}-\d{2}-\d{2} \d/.test(value) ? `${value.replace(' ', 'T')}Z` : value).getTime()

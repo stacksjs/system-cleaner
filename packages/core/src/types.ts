@@ -158,6 +158,12 @@ export interface LargeFile {
   sizeFormatted: string
   modifiedAt: Date
   category: FileCategory
+  /**
+   * True when the entry is a directory macOS presents as one document (a
+   * `.app`, a `.photoslibrary`, a `.sparsebundle`). Deleting one removes the
+   * whole tree, so the UI has to say so before the user confirms.
+   */
+  isBundle?: boolean
 }
 
 export type FileCategory =

@@ -7,6 +7,8 @@
  * bypass every guarantee the ORM makes. Those rows stay read-only.
  */
 import { loadModelIfExists } from '../../../../resources/functions/dashboard/data'
+import { dashboardOperationalIssue } from '../dashboard-response'
+import { modelApiConfiguration } from './model-api'
 
 /** Never writable from a generic admin table, whatever the model declares. */
 export const PROTECTED_COLUMNS: ReadonlySet<string> = new Set([
@@ -39,6 +41,11 @@ export function isValidModelSlug(str: string): boolean {
 export interface ResolvedModel {
   Model: any
   modelName: string
+}
+
+export interface ModelResolutionError {
+  error: string
+  status: 400 | 404 | 405 | 500
 }
 
 export type ModelWriteOperation = 'store' | 'update' | 'destroy'
@@ -121,17 +128,8 @@ function isProtectedField(name: string): boolean {
   return PROTECTED_COLUMNS.has(name) || PROTECTED_COLUMNS.has(column)
 }
 
-function useApiRoutes(Model: any): string[] {
-  const useApi = Model?.traits?.useApi
-  if (!useApi)
-    return []
-  if (typeof useApi === 'object' && Array.isArray(useApi.routes))
-    return useApi.routes.map(String)
-  return ['index', 'store', 'show', 'update', 'destroy']
-}
-
 export function modelWriteCapabilities(Model: any): ModelWriteCapabilities {
-  const routes = useApiRoutes(Model)
+  const routes = modelApiConfiguration(Model).routes
   return {
     create: routes.includes('store'),
     update: routes.includes('update'),
@@ -204,6 +202,11 @@ export function modelCreateFields(Model: any): ModelCreateField[] {
     const rightOrder = attributes[right.name]?.order ?? Number.MAX_SAFE_INTEGER
     return leftOrder - rightOrder
   })
+}
+
+/** Physical database columns accepted by the model's generic update API. */
+export function modelWritableColumns(Model: any): string[] {
+  return modelCreateFields(Model).map(field => snakeCase(field.name))
 }
 
 function normalizeModelValue(type: ModelCreateField['type'], value: unknown): unknown {
@@ -293,19 +296,28 @@ export function prepareModelFields(
  * injects (the same object the rest of the dashboard queries, so scopes,
  * casts and observers all apply) over the path-map lookup.
  */
-export async function resolveWritableModel(slug: string, operation?: ModelWriteOperation): Promise<ResolvedModel | { error: string }> {
+export async function resolveWritableModel(slug: string, operation?: ModelWriteOperation): Promise<ResolvedModel | ModelResolutionError> {
   if (!isValidModelSlug(slug))
-    return { error: 'Model slug must be lowercase kebab-case.' }
+    return { error: 'Model slug must be lowercase kebab-case.', status: 400 }
 
   const modelName = slugToPascal(slug)
   const injected = (globalThis as Record<string, any>)[modelName]
-  const Model = (injected && typeof injected.where === 'function') ? injected : await loadModelIfExists(modelName)
+  let Model: any
+  try {
+    Model = (injected && typeof injected.where === 'function') ? injected : await loadModelIfExists(modelName)
+  }
+  catch (error) {
+    return {
+      error: dashboardOperationalIssue(error, `${modelName} could not be loaded.`, `resolveWritableModel.${operation || 'read'}`),
+      status: 500,
+    }
+  }
   if (!Model || typeof Model.find !== 'function')
-    return { error: `No ORM model named ${modelName}. Rows from tables without a model are read-only.` }
+    return { error: `No ORM model named ${modelName}. Rows from tables without a model are read-only.`, status: 404 }
   if (operation) {
     const capability = operation === 'store' ? 'create' : operation
     if (!modelWriteCapabilities(Model)[capability])
-      return { error: `${modelName} does not declare the ${operation} route in its useApi trait.` }
+      return { error: `${modelName} does not declare the ${operation} route in its useApi trait.`, status: 405 }
   }
   return { Model, modelName }
 }

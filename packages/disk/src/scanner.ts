@@ -1,6 +1,5 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { exec } from '@system-cleaner/core'
 import type { DiskEntry, ScanOptions, ScanResult } from './types'
 
 const DEFAULT_MAX_DEPTH = 6

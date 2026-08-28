@@ -1,6 +1,8 @@
+import type { RequestInstance } from '@stacksjs/types'
 import { Action } from '@stacksjs/actions'
 import { db } from '@stacksjs/database'
 import { response } from '@stacksjs/router'
+import { dashboardOperationalError } from '../dashboard-response'
 import { dashboardQueryColumns, mapDashboardQueryLog, type QueryLogSourceRow } from './query-dashboard'
 
 export default new Action({
@@ -24,12 +26,10 @@ export default new Action({
       if (!row)
         return response.json({ message: 'Query log not found.' }, 404)
 
-      return { query: mapDashboardQueryLog(row as QueryLogSourceRow) }
+      return { query: mapDashboardQueryLog(row as unknown as QueryLogSourceRow) }
     }
     catch (error) {
-      return response.json({
-        message: error instanceof Error ? error.message : 'Query log could not be loaded.',
-      }, 503)
+      return dashboardOperationalError(error, 'Query log could not be loaded.', 'QueryShowAction')
     }
   },
 })

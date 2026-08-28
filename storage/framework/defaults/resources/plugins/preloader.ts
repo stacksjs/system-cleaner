@@ -128,6 +128,81 @@ if (!isRepl && !isPostinstall) {
 // eslint-disable-next-line antfu/no-top-level-await
 // await import('bun-plugin-stx')
 
+/**
+ * Whether a bare `@stacksjs/*` specifier resolves to something belonging to
+ * THIS project, and is therefore safe to import.
+ *
+ * A bare specifier resolves through node_modules, and when that is missing or
+ * half-installed bun falls back to its GLOBAL install cache. So a project with
+ * a broken install did not fail. It silently booted against whatever published
+ * version happened to be sitting in ~/.bun/install/cache, which is worse than
+ * loading nothing and completely invisible.
+ *
+ * It also hung, and that is how it was found. On Linux the first such
+ * cache-resolved import never settles: no rejection, no active handles, the
+ * process simply stops, so every stage of the preloader after it is silently
+ * unreachable. Both callers wrap their import in a `catch` that assumes a bad
+ * specifier fails FAST. That holds for one that cannot be resolved at all. It
+ * does not hold for one that resolves to a stale copy.
+ *
+ * ## Why this is a directory probe and not `Bun.resolveSync`
+ *
+ * The first version of this guard asked `Bun.resolveSync`, which answers the
+ * question exactly but pays full module resolution to do it. Measured on a
+ * Linux CI runner, a specifier that is NOT in `node_modules` cost **0.9 to 2.0
+ * seconds per call**, because bun walks the entire tree and then scans a global
+ * cache the install had just filled with 600+ packages. Twenty of those is 20
+ * to 40 seconds, so the guard turned a hang into a crawl and the preloader test
+ * kept timing out, intermittently, depending on how loaded the runner was.
+ *
+ * Locating the `node_modules/@stacksjs` directory once and then asking
+ * `existsSync` per package is the same question answered with stat calls:
+ * microseconds, and it never touches the global cache. The walk is memoised
+ * because the answer cannot change within a process.
+ *
+ * Accepted: a package present in this project's `@stacksjs` scope directory,
+ * which covers a real install and a vendored checkout alike (the framework's
+ * own core packages are symlinked into it). Anchored on `import.meta.dir`
+ * rather than the cwd, so running a command from a subdirectory does not change
+ * what loads.
+ */
+let stacksScopeDir: string | null | undefined
+
+async function findStacksScopeDir(): Promise<string | null> {
+  if (stacksScopeDir !== undefined)
+    return stacksScopeDir
+
+  const { existsSync } = await import('node:fs')
+  const { dirname, join } = await import('node:path')
+
+  let dir = import.meta.dir
+  for (;;) {
+    const candidate = join(dir, 'node_modules', '@stacksjs')
+    if (existsSync(candidate)) {
+      stacksScopeDir = candidate
+      return candidate
+    }
+    const parent = dirname(dir)
+    if (parent === dir)
+      break
+    dir = parent
+  }
+
+  stacksScopeDir = null
+  return null
+}
+
+async function belongsToThisProject(specifier: string): Promise<boolean> {
+  const scopeDir = await findStacksScopeDir()
+  if (!scopeDir)
+    return false
+
+  const { existsSync } = await import('node:fs')
+  const { join } = await import('node:path')
+
+  return existsSync(join(scopeDir, specifier.slice('@stacksjs/'.length)))
+}
+
 // Auto-import ALL Stacks framework modules into globalThis
 // This allows using Action, response, Activity, etc. without ANY imports.
 // Exported so server entrypoints (e.g. `dev/api.ts`) can opt back in
@@ -190,6 +265,12 @@ export async function loadAutoImports() {
   ]
 
   for (const pkg of stacksPackages) {
+    // See `belongsToThisProject`. Skipping is what the `catch` below always
+    // meant to do; it just never got the chance for a specifier that resolves
+    // to a stale copy instead of failing.
+    if (!(await belongsToThisProject(pkg)))
+      continue
+
     try {
       const module = await import(pkg)
       for (const [name, value] of Object.entries(module)) {
@@ -347,12 +428,14 @@ if (!skipAutoImports) {
   await loadAutoImports()
 
   // Run package auto-discovery after all imports are loaded
-  try {
-    const actionsPackage = '@stacksjs/' + 'actions'
-    const { discoverPackages } = await import(actionsPackage)
-    await discoverPackages()
-  }
-  catch {
-    // Discovery may fail during early bootstrap — not critical
+  const actionsPackage = '@stacksjs/' + 'actions'
+  if (await belongsToThisProject(actionsPackage)) {
+    try {
+      const { discoverPackages } = await import(actionsPackage)
+      await discoverPackages()
+    }
+    catch {
+      // Discovery may fail during early bootstrap — not critical
+    }
   }
 }

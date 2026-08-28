@@ -36,6 +36,18 @@
 }
 </style>
 
+<!--
+  No comments inside the `x-data` literal below. STX collapses the attribute
+  onto one line before evaluating it, so a `//` comment swallows the rest of
+  the object and the whole block fails to parse — leaving every binding on the
+  page empty, with nothing in the console. `tests/xdata-parses.test.ts` guards
+  this.
+
+  Two things it used to say inline:
+  - `killing` is an in-flight guard so a double click cannot post twice.
+  - A refused kill answers 403 with the reason in the body, so the body is read
+    first and a status-code message is only the fallback.
+-->
 <div id='processes-scope' x-data="{
   processes: [],
   totalCPU: 0,
@@ -48,7 +60,7 @@
   toasts: [],
   toastId: 0,
 
-  toggle(id) { const i = this.selected.indexOf(id); if (i === -1) this.selected.push(id); else this.selected.splice(i, 1); },
+  toggle(id) { this.selected = this.selected.indexOf(id) === -1 ? this.selected.concat([id]) : this.selected.filter(function(x) { return x !== id; }); },
   isOn(id) { return this.selected.includes(id); },
   isKilled(pid) { return this.killedPids.includes(pid); },
 
@@ -60,7 +72,6 @@
 
   confirmKill(p) {
     if (!confirm('Kill ' + p.name + ' (PID ' + p.pid + ')?')) return;
-    // In-flight guard so a double click doesn't post twice.
     if (this.killing[p.pid]) return;
     this.killing = { ...this.killing, [p.pid]: true };
     fetch('/api/kill-process', {
@@ -69,9 +80,6 @@
       body: JSON.stringify({ pid: p.pid }),
     })
       .then(r => {
-        // A refused kill answers 403 with the reason in the body, so read the
-        // body first and only fall back to a status-code message when there
-        // is nothing useful to show.
         return r.json().catch(() => null).then(data => {
           if (data && typeof data.success === 'boolean') return data;
           throw new Error('HTTP ' + r.status);

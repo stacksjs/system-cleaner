@@ -1,7 +1,8 @@
+import type { RequestInstance } from '@stacksjs/types'
 import { Action } from '@stacksjs/actions'
 import { db } from '@stacksjs/database'
 import { BoardColumn, Card } from '@stacksjs/orm'
-import { kanbanError } from './kanban-response'
+import { kanbanActionError, kanbanError } from './kanban-response'
 
 interface CardInput {
   columnId?: unknown
@@ -11,7 +12,7 @@ interface CardInput {
 }
 
 /**
- * `POST /api/dashboard/kanban/cards` (stacksjs/stacks#1846 Phase 2).
+ * `POST /api/dashboard/kanban/cards`.
  *
  * Creates a card at the end of the target column. `boardId` is
  * resolved server-side from `column.board_id` (denormalised onto the
@@ -19,7 +20,7 @@ interface CardInput {
  * would invite drift if the column was moved between boards (which
  * isn't a feature, but still).
  *
- * Stamps `created_by_user_id` from `request.user` when the request is
+ * Stamps `created_by_user_id` from `request.user()` when the request is
  * authenticated; leaves it null for the no-auth dev dashboard so the
  * surface still works on localhost.
  */
@@ -28,8 +29,8 @@ export default new Action({
   description: 'Creates a new card in a column.',
   method: 'POST',
   apiResponse: true,
-  async handle(request) {
-    const body = (request as any).jsonBody as CardInput | undefined ?? {}
+  async handle(request: RequestInstance<CardInput>) {
+    const body = request.all()
 
     const columnId = Number(body.columnId)
     if (!Number.isFinite(columnId) || columnId <= 0) {
@@ -39,7 +40,9 @@ export default new Action({
     if (!title || title.length > 300) {
       return kanbanError('`title` is required and must be 1-300 characters.', 400)
     }
-    const description = typeof body.description === 'string' ? body.description.trim() : null
+    // `undefined` rather than `null`: the model treats the column as optional,
+    // and "no description was sent" is not the same as "set it to null".
+    const description = typeof body.description === 'string' ? body.description.trim() : undefined
     const dueDate = typeof body.dueDate === 'string' && body.dueDate ? body.dueDate : null
 
     try {
@@ -57,8 +60,8 @@ export default new Action({
       ).execute() as Array<{ m: number }>
       const nextPosition = (Number(maxRow?.[0]?.m ?? -1) + 1) || 0
 
-      const user = (request as any).user ?? (request as any)._authenticatedUser ?? null
-      const createdByUserId = user && typeof user.id === 'number' ? user.id : null
+      const user = await request.user()
+      const createdByUserId = user && Number.isInteger(Number(user.id)) ? Number(user.id) : null
 
       const card = await Card.create({
         columnId,
@@ -83,14 +86,13 @@ export default new Action({
           createdByUserId,
           dueDate,
           archived: false,
-          createdAt: card.get('createdAt') ?? card.get('created_at') ?? null,
-          updatedAt: card.get('updatedAt') ?? card.get('updated_at') ?? null,
+          createdAt: card.get('created_at') ?? null,
+          updatedAt: card.get('updated_at') ?? null,
         },
       }
     }
     catch (err) {
-      console.error('[dashboard/kanban] CardStoreAction failed:', err)
-      return kanbanError(err instanceof Error ? err.message : 'unknown error', 500)
+      return kanbanActionError(err, 'CardStoreAction')
     }
   },
 })

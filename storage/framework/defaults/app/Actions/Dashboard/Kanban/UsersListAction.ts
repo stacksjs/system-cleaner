@@ -1,9 +1,9 @@
 import { Action } from '@stacksjs/actions'
 import { db } from '@stacksjs/database'
-import { kanbanError } from './kanban-response'
+import { kanbanActionError } from './kanban-response'
 
 /**
- * `GET /api/dashboard/kanban/users` (stacksjs/stacks#1846 Phase 3).
+ * `GET /api/dashboard/kanban/users`.
  *
  * Lightweight user list for the assignee picker on the card detail
  * modal. Returns `{ id, name, email }` only — no roles, no profile,
@@ -30,8 +30,7 @@ export default new Action({
       }
     }
     catch (err) {
-      console.error('[dashboard/kanban] UsersListAction failed:', err)
-      return kanbanError(err instanceof Error ? err.message : 'unknown error', 500)
+      return kanbanActionError(err, 'UsersListAction')
     }
   },
 })

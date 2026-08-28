@@ -1,7 +1,6 @@
 import * as os from 'node:os'
 import type { DiskInfo, SystemInfo } from './types'
 import { exec, execSync, shellEscape } from './exec'
-import { HOME } from './paths'
 
 /**
  * Get comprehensive system information

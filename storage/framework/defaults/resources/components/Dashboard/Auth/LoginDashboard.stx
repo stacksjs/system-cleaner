@@ -27,7 +27,7 @@ async function handleLogin(credentials) {
     navigate(safeRedirect())
   }
   catch (err) {
-    error.set(err.message || 'An error occurred during login')
+    error.set(err instanceof Error ? err.message : 'An error occurred during login')
   }
   finally {
     isLoading.set(false)
@@ -41,5 +41,9 @@ async function handleLogin(credentials) {
     :isLoading="isLoading()"
     :error="error()"
     :data-auth-status="isLoading() ? 'loading' : 'ready'"
-  />
+  >
+    <!-- Forwarded so the page mounting this container can put social
+         sign-in inside the card. -->
+    <template #social><slot name="social" /></template>
+  </Login>
 </template>
