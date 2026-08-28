@@ -2,8 +2,8 @@
   Replica window controls, for chrome the page draws itself.
 
   They yield to the real thing. Wherever the platform already drew its own
-  close/minimise/zoom buttons — which on macOS is every Craft window that is not
-  frameless — rendering these as well puts six circles in the corner, three of
+  close/minimise/zoom buttons - which on macOS is every Craft window that is not
+  frameless - rendering these as well puts six circles in the corner, three of
   them the wrong shade, without hover glyphs, and dead to the keyboard. Craft
   says so by setting `--craft-window-controls-replicas: none` before the
   document is parsed, and both variants below read it as a fallback, so a
@@ -11,7 +11,8 @@
   JavaScript or can flash.
 
   Use them for a frameless window, where the page really does own its chrome,
-  and for a web dashboard that wants the look of one.
+  and for a web dashboard that wants the look of one. In both the variable is
+  unset, and these are what the viewer sees.
 -->
 <script client>
 import { useWindowControls } from '../../../../functions/craft'
