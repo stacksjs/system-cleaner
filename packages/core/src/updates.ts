@@ -12,6 +12,32 @@ export interface SoftwareUpdate {
   recommended: boolean
   restartRequired: boolean
   kind: SoftwareUpdateKind
+  /**
+   * Build this update installs, e.g. `26A5421a`.
+   *
+   * On a beta the marketing version does not move — 27.0 upgrades to 27.0 —
+   * so the build is the only thing that distinguishes "Beta 7 is available"
+   * from the beta already running.
+   */
+  buildVersion: string | null
+}
+
+/** The macOS release currently running. */
+export interface MacosRelease {
+  /** Marketing version, e.g. `27.0`. */
+  version: string
+  /** Build, e.g. `26A5416b`. */
+  build: string | null
+  /** True when the build number marks this as a pre-release. */
+  beta: boolean
+  /**
+   * What to show a person: `27.0 (26A5416b, beta)`.
+   *
+   * On a beta, the marketing version alone is actively misleading — every
+   * beta of 27.0 reports `27.0`, so "macOS 27.0 · 1 update available" gives
+   * no way to tell which beta is installed or which one is on offer.
+   */
+  label: string
 }
 
 export interface ClToolsInfo {
@@ -24,8 +50,48 @@ export interface SoftwareUpdateResult {
   updates: SoftwareUpdate[]
   clToolsInfo: ClToolsInfo
   macosVersion: string | null
+  macosRelease: MacosRelease | null
   scannedAt: string
   cached: boolean
+}
+
+/**
+ * Whether an Apple build number is a pre-release.
+ *
+ * Apple's builds read `<major><letter><number><suffix>` — `26A335` shipped,
+ * `26A5416b` did not. Pre-release builds take numbers from 5000 up, which is
+ * the only signal available locally: `sw_vers` has no "am I on a beta" flag,
+ * and the seeding preferences that used to answer it are gone.
+ */
+export function isBetaBuild(build: string | null | undefined): boolean {
+  if (!build) return false
+  const match = build.match(/^\d+[A-Z](\d+)/)
+  if (!match) return false
+  return Number.parseInt(match[1], 10) >= 5000
+}
+
+/** Build the human-facing label for a macOS release. */
+export function describeMacosRelease(version: string, build: string | null): MacosRelease {
+  const beta = isBetaBuild(build)
+  const parts = [build, beta ? 'beta' : null].filter(Boolean)
+  return {
+    version,
+    build,
+    beta,
+    label: parts.length > 0 ? `${version} (${parts.join(', ')})` : version,
+  }
+}
+
+/**
+ * Pull the build number out of a `softwareupdate` label.
+ *
+ * Labels look like `macOS 27 Beta 7-26A5421a`: the target build follows the
+ * final hyphen. Without it the updates screen can only say "macOS 27.0 →
+ * macOS 27.0", which is true and useless.
+ */
+export function parseUpdateBuild(label: string): string | null {
+  const match = label.match(/-(\d+[A-Z]\d+[a-z]?)$/)
+  return match ? match[1] : null
 }
 
 /** Compare dotted version strings; returns true when `latest` is newer than `current`. */
@@ -73,6 +139,7 @@ function finalizeUpdate(partial: Partial<SoftwareUpdate> & { label: string }): S
     recommended: partial.recommended ?? false,
     restartRequired: partial.restartRequired ?? false,
     kind: partial.kind || classifyUpdate(title),
+    buildVersion: parseUpdateBuild(partial.label),
   }
 }
 
@@ -151,19 +218,25 @@ export async function checkSoftwareUpdates(options: CheckSoftwareUpdatesOptions 
   const fullScan = options.fullScan ?? false
   const cmd = fullScan ? 'softwareupdate -l 2>&1' : 'softwareupdate -l --no-scan 2>&1'
 
-  const [updateResult, clToolsInfo, macosResult] = await Promise.all([
+  const [updateResult, clToolsInfo, macosResult, buildResult] = await Promise.all([
     exec(cmd, { timeout: fullScan ? 120_000 : 15_000 }),
     getClToolsInfo(),
     exec('sw_vers -productVersion 2>/dev/null', { timeout: 2000 }),
+    // The marketing version is the same for every beta of a release, so the
+    // build is what identifies which one is actually installed.
+    exec('sw_vers -buildVersion 2>/dev/null', { timeout: 2000 }),
   ])
 
   const output = `${updateResult.stdout}\n${updateResult.stderr || ''}`
   const updates = parseSoftwareUpdateList(output)
+  const macosVersion = macosResult.ok ? macosResult.stdout.trim() : null
+  const macosBuild = buildResult.ok && buildResult.stdout.trim() ? buildResult.stdout.trim() : null
 
   return {
     updates,
     clToolsInfo,
-    macosVersion: macosResult.ok ? macosResult.stdout.trim() : null,
+    macosVersion,
+    macosRelease: macosVersion ? describeMacosRelease(macosVersion, macosBuild) : null,
     scannedAt: new Date().toISOString(),
     cached: !fullScan,
   }

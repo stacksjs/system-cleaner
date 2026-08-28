@@ -271,6 +271,13 @@ const localAgent = isLocalAgent()
     @media (max-width: 1000px) { .disk-inspector { display: none; } }
     @media (max-width: 700px) { .disk-sidebar, .sidebar { display: none; } }
 
+    /* Real app icons, rendered from each bundle's .icns by /api/app-icon.
+       `app-icon-missing` is set by the img's onerror: a CLI-only package has
+       no .app and so no icon, and an empty box reads as a broken image rather
+       than as "this one has no icon". */
+    .app-icon { width: 18px; height: 18px; flex-shrink: 0; border-radius: 4px; object-fit: contain; }
+    .app-icon-missing { visibility: hidden; }
+
     .offsite-shell { display: flex; height: 100%; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 40px; text-align: center; }
     .offsite-shell h1 { font-size: 19px; font-weight: 600; }
     .offsite-shell p { max-width: 46ch; color: var(--secondary); font-size: 13px; line-height: 1.5; }

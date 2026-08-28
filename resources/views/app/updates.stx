@@ -39,7 +39,7 @@
     <div class='card-label'>System</div>
     <div class='card-value' :style="systemOutdatedCount() > 0 ? 'color: #ff9f0a' : 'color: #30d158'">{{ systemOutdatedCount() }}</div>
     <div class='card-detail'>
-      <span x-show='macosVersion'>{{ 'macOS ' + macosVersion }}</span>
+      <span x-show='macosVersion'>{{ 'macOS ' + installedLabel() }}</span>
       <span x-show='clToolsInfo.version'>{{ (macosVersion ? ' \u00B7 ' : '') + 'CLT ' + clToolsInfo.version }}</span>
       <span x-show='updateScanCached' style='display: block; margin-top: 2px;'>cached scan</span>
     </div>
@@ -87,9 +87,24 @@
       <tbody>
         <template x-for='upd in systemUpdates' :key='upd.label'>
           <tr>
-            <td><span class='item-name'>{{ upd.title }}</span></td>
+            <td>
+              <span class='item-name'>{{ upd.title }}</span>
+              <span class='badge badge-orange' style='margin-left: 4px; font-size: 9px;'
+                    x-show="upd.kind === 'macos' && isBetaRelease()">from beta</span>
+            </td>
             <td><span class='badge' :class="kindBadgeClass(upd.kind)">{{ kindLabel(upd.kind) }}</span></td>
-            <td class='mono' style='font-size: 11px; color: #30d158;'>{{ upd.version }}</td>
+            <td class='mono' style='font-size: 11px;'>
+              <template x-if="upd.kind === 'macos' && upd.buildVersion">
+                <span>
+                  <span class='dim'>{{ installedLabel() }}</span>
+                  <span class='dim' style='margin: 0 4px;'>&rarr;</span>
+                  <span style='color: #30d158;'>{{ upd.version + ' (' + upd.buildVersion + ')' }}</span>
+                </span>
+              </template>
+              <template x-if="!(upd.kind === 'macos' && upd.buildVersion)">
+                <span style='color: #30d158;'>{{ upd.version }}</span>
+              </template>
+            </td>
             <td class='dim mono' style='font-size: 11px;'>{{ upd.sizeLabel }}</td>
             <td>
               <span class='badge badge-orange' style='font-size: 9px; margin-right: 4px;' x-show='upd.restartRequired'>Restart</span>
@@ -261,8 +276,13 @@
       <template x-for='app in filteredDesktopApps()' :key='app.name'>
         <tr x-show="!isUpdated('app:' + app.name)" :style="app.updateAvailable ? '' : 'opacity: 0.7;'">
           <td>
-            <span class='item-name'>{{ app.name }}</span>
-            <span class='badge badge-gray' style='margin-left: 4px; font-size: 9px;' x-show='app.autoUpdates'>auto-updates</span>
+            <div class='item-row'>
+              <img class='app-icon' loading='lazy' alt=''
+                   :src="'/api/app-icon?size=64&name=' + encodeURIComponent(app.name)"
+                   onerror="this.classList.add('app-icon-missing')" />
+              <span class='item-name'>{{ app.name }}</span>
+              <span class='badge badge-gray' style='font-size: 9px;' x-show='app.autoUpdates'>auto-updates</span>
+            </div>
           </td>
           <td class='dim mono' style='font-size: 11px;'>{{ app.version }}</td>
           <td>

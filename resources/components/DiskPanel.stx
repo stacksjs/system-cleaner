@@ -7,35 +7,49 @@
   reactively, and the imperative scan code talks to the scope via _exec().
 -->
 <!--
-  Server values arrive via data attributes, not via `{{ }}` inside `x-data`.
-  Interpolating into the x-data object literal JSON-encodes the string, so the
-  scan total rendered as `"463.2 GB"` with the quotes visible on screen.
+  Volume figures come from `/api/system-disk-info` at runtime, not from a
+  `<script server>` block. The packaged app ships prerendered HTML, so anything
+  a server script computed would be frozen at build time — here it rendered as
+  nothing at all, leaving "Macintosh HD / total" and "used / free" with no
+  numbers beside them.
 -->
 <div class='disk-layout'
-  data-scan-total='{{ scanTotalFormatted }}'
-  data-scan-root='{{ scanBasename }}'
   x-data="{
   scanInfo: null,
   scanTotalLabel: '',
   rootName: '',
   defaultSize: '',
   defaultName: '',
+  volumeTotal: '-',
+  volumeUsed: '-',
+  volumeFree: '-',
+  volumePct: 0,
   init() {
-    var root = document.querySelector('[data-scan-total]');
-    if (root) {
-      this.scanTotalLabel = this.defaultSize = root.dataset.scanTotal || '';
-      this.rootName = this.defaultName = root.dataset.scanRoot || '';
-    }
+    var self = this;
+    fetch('/api/system-disk-info', { method: 'POST' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (!d.success) return;
+        self.volumeTotal = d.fDiskTotal;
+        self.volumeUsed = d.fDiskUsed;
+        self.volumeFree = d.fDiskFree;
+        self.volumePct = d.diskPct;
+        self.scanTotalLabel = self.defaultSize = d.fDiskUsed;
+        self.rootName = self.defaultName = d.homeName || '';
+      })
+      .catch(function() {});
     queueMicrotask(function() { typeof diskPanelMount === 'function' && diskPanelMount(); });
   },
   topItems: [],
   hovered: null,
   scanState: 'idle',
+  scanError: '',
   centerSize() { return this.hovered ? this.hovered.formattedSize : this.defaultSize; },
   centerName() { return this.hovered ? this.hovered.name : this.defaultName; },
   metaText() {
     if (this.scanState === 'scanning') return 'Scanning disk…';
-    if (this.scanInfo) return this.scanInfo.folderCount + ' folders · ' + this.scanInfo.fileCount + ' files · ' + this.scanInfo.scanTime + (this.scanInfo.cached ? ' (cached)' : '');
+    if (this.scanState === 'error') return this.scanError || 'Scan failed';
+    if (this.scanInfo) return this.scanInfo.folderCount + ' folders · ' + this.scanInfo.fileCount + ' files · ' + this.scanInfo.scanTime + (this.scanInfo.truncated ? ' · partial' : '') + (this.scanInfo.cached ? ' (cached)' : '');
     return 'Click Scan Disk to analyze';
   },
 }">
@@ -48,23 +62,33 @@
           <div style='width: 30px; height: 30px; background: linear-gradient(135deg, #3a3a3c, #48484a); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #98989d;'>HD</div>
           <div>
             <div style='font-size: 12px; font-weight: 600;'>Macintosh HD</div>
-            <div style='font-size: 10px; color: var(--tertiary);'>{{ fDiskTotalLabel }} total</div>
+            <div style='font-size: 10px; color: var(--tertiary);' x-text="volumeTotal + ' total'">- total</div>
           </div>
         </div>
         <div class='disk-usage-bar'>
-          <div class='disk-usage-fill' style='width: {{ sDUsedPct }}%'></div>
+          <div class='disk-usage-fill' :style="'width: ' + volumePct + '%'"></div>
         </div>
         <div class='disk-usage-text'>
-          <span>{{ fDiskUsedLabel }} used</span>
-          <span>{{ fDiskFreeLabel }} free</span>
+          <span x-text="volumeUsed + ' used'">- used</span>
+          <span x-text="volumeFree + ' free'">- free</span>
         </div>
       </div>
     </div>
 
     <div class='disk-sidebar-section'>
-      <div style='font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--tertiary); margin-bottom: 8px;' x-text="'Home: ' + rootName">Home: {{ scanBasename }}</div>
-      <div style='font-size: 18px; font-weight: 700; margin-bottom: 2px;' x-text="scanTotalLabel">{{ scanTotalFormatted }}</div>
+      <div style='font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--tertiary); margin-bottom: 8px;' x-text="'Home: ' + rootName">Home</div>
+      <div style='font-size: 18px; font-weight: 700; margin-bottom: 2px;' x-text="scanTotalLabel">-</div>
       <div style='font-size: 10px; color: var(--tertiary);' x-text="metaText()">Click 'Scan Disk' to analyze</div>
+    </div>
+
+    <!-- A tree that ran out of time is a real answer, but only if it says so:
+         52 GB of a 490 GB disk looks like the whole picture otherwise. -->
+    <div class='disk-sidebar-section' x-show='scanInfo && scanInfo.truncated' x-cloak
+         style='padding-top: 0;'>
+      <div style='padding: 8px 10px; border: .5px solid color-mix(in srgb, var(--orange) 30%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--orange) 10%, var(--surface)); color: var(--secondary); font-size: 10px; line-height: 1.45;'>
+        This scan hit its time limit, so the chart covers only the folders it
+        reached. Everything shown is real; there is simply more below it.
+      </div>
     </div>
 
     <div class='disk-sidebar-section' style='padding-bottom: 4px;'>
@@ -97,7 +121,17 @@
         <button class='btn' onclick='startDiskScan()' style='padding: 8px 20px; font-size: 13px;'>Scan Disk</button>
         <div style='margin-top: 8px; font-size: 10px; color: #48484a;'>Results are cached for 10 minutes</div>
       </div>
-      <div x-show="scanState === 'scanning'">Scanning disk&hellip;</div>
+      <div x-show="scanState === 'scanning'">
+        <div>Scanning disk&hellip;</div>
+        <div style='margin-top: 6px; font-size: 10px; color: var(--tertiary);'>A first scan of a large home folder can take up to a minute</div>
+      </div>
+      <!-- A failed scan used to drop straight back to the idle state, so the
+           button simply reappeared and the user was left to guess. -->
+      <div x-show="scanState === 'error'" x-cloak>
+        <div style='margin-bottom: 8px; color: var(--red); font-weight: 600;'>Scan failed</div>
+        <div style='margin-bottom: 12px; max-width: 42ch; color: var(--secondary);' x-text='scanError'></div>
+        <button class='btn' onclick='startDiskScan()' style='padding: 8px 20px; font-size: 13px;'>Try Again</button>
+      </div>
     </div>
     <svg class='sunburst-svg' id='sunburst' viewBox='-320 -320 640 640' x-show="scanState === 'done'" x-cloak>
       <circle cx='0' cy='0' r='115' fill='none' stroke='var(--line-soft)' stroke-width='0.5' />
@@ -106,8 +140,8 @@
       <g id='segments-group'></g>
       <circle cx='0' cy='0' r='57' class='center-bg' />
       <circle cx='0' cy='0' r='57' class='center-ring' />
-      <text x='0' y='-5' class='center-text-size' x-text="centerSize()">{{ scanTotalFormatted }}</text>
-      <text x='0' y='12' class='center-text-name' x-text="centerName()">{{ scanBasename }}</text>
+      <text x='0' y='-5' class='center-text-size' x-text="centerSize()"></text>
+      <text x='0' y='12' class='center-text-name' x-text="centerName()"></text>
       <text x='0' y='26' class='center-back' id='center-back'>Back</text>
     </svg>
   </div>

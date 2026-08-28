@@ -20,7 +20,7 @@ import {
   invalidateStartupCache,
 } from './data-service';
 import { runDiskScan, runLargeFileScan } from '../app/Workers/scan-pool';
-import { getSystemInfoSync, listApplicationEntries } from '@system-cleaner/core';
+import { findAppBundle, findAppBundleForCask, getSystemInfoSync, ICON_SIZES, listApplicationEntries, renderAppIcon } from '@system-cleaner/core';
 import * as nodeOs from 'node:os';
 import { cleanDirectory, emptyTrash } from '@system-cleaner/clean';
 import {
@@ -107,6 +107,49 @@ export default async function (router: Router) {
     });
   });
 
+  /**
+   * The real icon of an installed app, as a PNG.
+   *
+   * A GET with query parameters rather than the POST every other endpoint
+   * uses, because the browser fetches this through `<img src>`.
+   *
+   * `?cask=` looks the bundle up by Homebrew cask token; `?name=` by display
+   * name. A 404 is the expected answer for a package with no `.app` at all —
+   * a CLI formula, say — and the UI falls back to a glyph.
+   */
+  await router.get('/app-icon', async (req: Request) => {
+    const url = new URL(req.url);
+    const name = url.searchParams.get('name');
+    const cask = url.searchParams.get('cask');
+    const requested = Number.parseInt(url.searchParams.get('size') || '64', 10);
+
+    if (!name && !cask) return badRequest('name or cask is required');
+
+    // Only the sizes the UI asks for: an unbounded size would let a page ask
+    // for a 20000px render and spend the machine's CPU doing it.
+    const size = (ICON_SIZES as readonly number[]).includes(requested)
+      ? requested as typeof ICON_SIZES[number]
+      : 64;
+
+    // The lookup is by display name, and `findAppBundle` only ever returns a
+    // path it enumerated from /Applications itself — a caller cannot steer it
+    // at an arbitrary file.
+    const appPath = cask ? findAppBundleForCask(cask) : findAppBundle(name!);
+    if (!appPath) return new Response('No such app', { status: 404 });
+
+    const png = renderAppIcon(appPath, size);
+    if (!png) return new Response('No icon in bundle', { status: 404 });
+
+    return new Response(Bun.file(png), {
+      headers: {
+        'Content-Type': 'image/png',
+        // The cache key already includes the bundle's mtime, so a long-lived
+        // client cache cannot serve a stale icon after an app updates.
+        'Cache-Control': 'public, max-age=86400',
+      },
+    });
+  });
+
   await router.post('/disk-scan', async (req: Request) => {
     if (diskScanInFlight) {
       return Response.json(
@@ -130,8 +173,12 @@ export default async function (router: Router) {
       maxDepth = body.maxDepth;
     }
 
-    const HARD_TIMEOUT_MS = 60_000;
-    const WORKER_TIMEOUT_MS = 50_000;
+    // The gap is deliberate and wide: the scanner returns whatever tree it
+    // built when its own budget runs out, and killing it at the hard timeout
+    // throws that away. The hard timeout is the backstop for a scan wedged in
+    // a blocking syscall, not the normal path.
+    const HARD_TIMEOUT_MS = 75_000;
+    const WORKER_TIMEOUT_MS = 45_000;
 
     diskScanInFlight = true;
     try {

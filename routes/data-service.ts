@@ -1,5 +1,6 @@
-import { execSync, TtlCache } from '@system-cleaner/core'
+import { execSync, HOME, TtlCache } from '@system-cleaner/core'
 import * as fs from 'node:fs'
+import * as path from 'node:path'
 import { CLEAN_TARGETS, getAllExtensions } from '@system-cleaner/clean'
 import { discoverStartupItems } from '@system-cleaner/uninstall'
 
@@ -80,6 +81,11 @@ export function getSystemDiskInfoCached() {
   }
 
   const payload = {
+    // The disk view labels the scan root with this. It cannot come from a
+    // `<script server>` block: the packaged app serves prerendered HTML, so
+    // whatever a server script computed would be the build machine's home
+    // directory, frozen.
+    homeName: path.basename(HOME) || HOME,
     diskTotal,
     diskFree,
     diskUsed,

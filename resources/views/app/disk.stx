@@ -1,25 +1,15 @@
-<script server>
-const nodePath = require('node:path')
-const { formatBytes, HOME, execSync } = require('@system-cleaner/core')
-
-let dTotal = 0, dFree = 0, dUsedPct = 0
-try {
-  const dfOut = execSync('df -k / 2>/dev/null')
-  const dfLines = dfOut.split('\n')
-  if (dfLines.length >= 2) { const p = dfLines[1].split(/\s+/); dTotal = parseInt(p[1]) * 1024; dFree = parseInt(p[3]) * 1024; dUsedPct = Math.round((1 - dFree / dTotal) * 100) }
-} catch {}
-
-const scanTotalFormatted = formatBytes(dTotal - dFree)
-const scanBasename = nodePath.basename(HOME)
-const sDUsedPct = String(dUsedPct)
-const fDiskTotalLabel = formatBytes(dTotal)
-const fDiskUsedLabel = formatBytes(dTotal - dFree)
-const fDiskFreeLabel = formatBytes(dFree)
-</script>
-
 @extends('layouts/app')
 @section('nav', 'disk')
 @section('body')
+
+<!--
+  `/disk-panel.js` owns the sunburst: the arc maths, the scan request, drill-down,
+  and the reveal/delete actions. Without this tag `startDiskScan` is not defined
+  and the Scan Disk button does nothing at all — which is exactly how this screen
+  shipped. `tests/view-scripts.test.ts` now fails if a view calls into a global
+  it never loads.
+-->
+<script src='/disk-panel.js'></script>
 
 <div class='main-content' style='padding: 0; height: 100%;'>
   <DiskPanel />

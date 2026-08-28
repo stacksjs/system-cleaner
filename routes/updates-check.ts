@@ -32,6 +32,7 @@ export interface UpdatesCheckResult {
   systemUpdateCount: number
   clToolsInfo: import('@system-cleaner/core').ClToolsInfo
   macosVersion: string | null
+  macosRelease: import('@system-cleaner/core').MacosRelease | null
   updateScanCached: boolean
   updateScannedAt: string
   cached: boolean
@@ -323,6 +324,7 @@ async function performUpdatesCheck(fullScan: boolean, tier: UpdatesTier): Promis
       systemUpdateCount: systemOutdated.length,
       clToolsInfo: systemUpdates.clToolsInfo,
       macosVersion: systemUpdates.macosVersion,
+      macosRelease: systemUpdates.macosRelease,
       updateScanCached: systemUpdates.cached,
       updateScannedAt: systemUpdates.scannedAt,
       cached: false,
@@ -445,6 +447,7 @@ async function performUpdatesCheck(fullScan: boolean, tier: UpdatesTier): Promis
     systemUpdateCount: systemOutdated.length,
     clToolsInfo: systemUpdates.clToolsInfo,
     macosVersion: systemUpdates.macosVersion,
+    macosRelease: systemUpdates.macosRelease,
     updateScanCached: systemUpdates.cached,
     updateScannedAt: systemUpdates.scannedAt,
     cached: false,

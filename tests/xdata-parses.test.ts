@@ -14,7 +14,8 @@ import { describe, expect, it } from 'bun:test'
  * This catches it at the only point where it is cheap to catch.
  */
 
-const views = new Bun.Glob('resources/views/**/*.stx')
+// Components carry `x-data` too, and break in exactly the same way.
+const views = new Bun.Glob('resources/{views,components}/**/*.stx')
 
 /** Pull the value of every `x-data="..."` attribute out of a template. */
 function extractXData(source: string): string[] {

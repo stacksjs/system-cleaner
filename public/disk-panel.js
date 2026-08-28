@@ -101,6 +101,11 @@
   }
 
   function patchDiskScope(fields) {
+    // Any state change that is not an error clears the last one, so a retry
+    // does not run underneath a stale message.
+    if (Object.prototype.hasOwnProperty.call(fields, 'scanState') && fields.scanState !== 'error')
+      fields.scanError = '';
+
     var parts = [];
     for (var key in fields) {
       if (!Object.prototype.hasOwnProperty.call(fields, key)) continue;
@@ -234,6 +239,7 @@
       folderCount: data.folderCount,
       fileCount: data.fileCount,
       scanTime: data.scanTime,
+      truncated: !!data.truncated,
       cached: !!cached,
     };
     patchDiskScope({
@@ -260,7 +266,10 @@
       if (attempts >= 120) {
         stopDiskPoll();
         localStorage.removeItem(DISK_SCANNING_KEY);
-        patchDiskScope({ scanState: 'idle' });
+        patchDiskScope({
+          scanState: 'error',
+          scanError: 'Gave up waiting for a scan started elsewhere to finish',
+        });
       }
     }, 500);
   }
@@ -290,19 +299,26 @@
             window._diskScan.scanning = false;
             localStorage.removeItem(DISK_SCANNING_KEY);
             if (!data.success) {
+              // Reverting to idle told the user nothing: the button simply
+              // came back, indistinguishable from never having clicked it.
+              // A scan that times out has a reason, and the reason is the
+              // only thing that lets someone act on it.
               stopDiskPoll();
-              patchDiskScope({ scanState: 'idle' });
+              patchDiskScope({ scanState: 'error', scanError: data.error || 'Scan failed' });
               return;
             }
             data.tree = normalize(data.tree);
             try { localStorage.setItem(DISK_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data })); } catch (_) {}
             if (typeof window._diskScan.onComplete === 'function') window._diskScan.onComplete(data);
           })
-          .catch(function() {
+          .catch(function(err) {
             window._diskScan.scanning = false;
             localStorage.removeItem(DISK_SCANNING_KEY);
             stopDiskPoll();
-            patchDiskScope({ scanState: 'idle' });
+            patchDiskScope({
+              scanState: 'error',
+              scanError: (err && err.message) ? err.message : 'Could not reach the scanner',
+            });
           });
       },
       onComplete: null,

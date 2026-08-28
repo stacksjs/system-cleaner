@@ -4,6 +4,7 @@ import type { DiskEntry, ScanOptions, ScanResult } from './types'
 
 const DEFAULT_MAX_DEPTH = 6
 const DEFAULT_TIMEOUT_MS = 15_000
+/** How often `onProgress` is called, in entries. */
 const CHECK_INTERVAL = 200
 const MAX_HEAP_SIZE = 50
 
@@ -32,6 +33,18 @@ const FOLDED_DIRS = new Set([
   '.gradle', 'Pods', '.dart_tool', '.venv',
   'venv', '.tox', '.mypy_cache', '.pytest_cache', 'dist', 'build',
   '.angular', '.svelte-kit', 'coverage', '.nyc_output', '.stx',
+
+  // Cloud providers (iCloud Drive, Dropbox, OneDrive, Google Drive). Folded
+  // rather than skipped, because whatever has actually been downloaded does
+  // occupy the disk — and `du` reports allocated blocks, so a dataless
+  // placeholder correctly counts as nothing while `lstat` would report its
+  // full logical size.
+  //
+  // Recursing was worse than inaccurate: stat-ing a placeholder asks macOS to
+  // materialise it, and a walk through iCloud blocked in the kernel for minutes
+  // past the scan's own deadline. That is why Scan Disk could sit at
+  // "Scanning disk…" until the request timed out.
+  'CloudStorage', 'Mobile Documents',
 ])
 
 const SYSTEM_SKIP = new Set([
@@ -51,10 +64,11 @@ export function scanDirectory(rootPath: string, options: ScanOptions = {}): Scan
   const includeHidden = options.includeHidden ?? false
 
   const scanStart = Date.now()
+  const deadline = scanStart + timeoutMs
   let aborted = false
   let totalFiles = 0
   let totalFolders = 0
-  let checks = 0
+  let progressTick = 0
 
   // Min-heap tracking the top N largest entries for fast top-N retrieval
   const topEntries: DiskEntry[] = []
@@ -104,18 +118,15 @@ export function scanDirectory(rootPath: string, options: ScanOptions = {}): Scan
       return { name: baseName, path: dirPath, sizeBytes: 0, isDirectory: true, children: [] }
     }
 
-    checks++
-    if (checks % CHECK_INTERVAL === 0) {
-      if (Date.now() - scanStart > timeoutMs) {
-        aborted = true
-        return { name: baseName, path: dirPath, sizeBytes: 0, isDirectory: true, children: [] }
-      }
-      if (totalFiles + totalFolders > maxEntries) {
-        aborted = true
-        return { name: baseName, path: dirPath, sizeBytes: 0, isDirectory: true, children: [] }
-      }
-      options.onProgress?.(totalFiles + totalFolders, dirPath)
+    // Checked every time, not every Nth: `Date.now()` costs a fraction of the
+    // `readdir` that follows it, and sampling was why a scan given 50s ran for
+    // 60 and was killed — losing the perfectly good partial tree it had built.
+    if (Date.now() > deadline || totalFiles + totalFolders > maxEntries) {
+      aborted = true
+      return { name: baseName, path: dirPath, sizeBytes: 0, isDirectory: true, children: [] }
     }
+    if (++progressTick % CHECK_INTERVAL === 0)
+      options.onProgress?.(totalFiles + totalFolders, dirPath)
 
     let entries: fs.Dirent[]
     try {
@@ -136,18 +147,12 @@ export function scanDirectory(rootPath: string, options: ScanOptions = {}): Scan
       // millions of children (the depth-1 recursion cap doesn't reach
       // them). Same for wallclock — `readdirSync` can't yield, so we
       // check inside the entry loop.
-      checks++
-      if (checks % CHECK_INTERVAL === 0) {
-        if (Date.now() - scanStart > timeoutMs) {
-          aborted = true
-          break
-        }
-        if (totalFiles + totalFolders > maxEntries) {
-          aborted = true
-          break
-        }
-        options.onProgress?.(totalFiles + totalFolders, dirPath)
+      if (Date.now() > deadline || totalFiles + totalFolders > maxEntries) {
+        aborted = true
+        break
       }
+      if (++progressTick % CHECK_INTERVAL === 0)
+        options.onProgress?.(totalFiles + totalFolders, dirPath)
 
       if (!includeHidden && entry.name.startsWith('.') && depth > 0)
         continue
@@ -166,7 +171,13 @@ export function scanDirectory(rootPath: string, options: ScanOptions = {}): Scan
 
           // Folded directories: use `du` for fast size, don't recurse
           if (skipPatterns.has(entry.name) || depth >= maxDepth - 1) {
-            const size = getDirSizeSync(fullPath)
+            // `du` is the single most expensive thing this scan does, and a
+            // home directory with dozens of `node_modules` spends most of its
+            // budget here. Cap each call by what is left of that budget rather
+            // than a fixed 5s, so one slow directory cannot eat the deadline
+            // and leave the rest of the tree unwalked.
+            const remaining = deadline - Date.now()
+            const size = remaining > 250 ? getDirSizeSync(fullPath, Math.min(3000, remaining)) : 0
             const child: DiskEntry = {
               name: entry.name,
               path: fullPath,
@@ -293,14 +304,14 @@ export function flattenTree(tree: DiskEntry): DiskEntry[] {
  * Fast synchronous directory size using `du`.
  * Falls back to manual walk if `du` fails.
  */
-function getDirSizeSync(dirPath: string): number {
+function getDirSizeSync(dirPath: string, timeoutMs = 5_000): number {
   try {
     const { execSync: nodeExecSync } = require('node:child_process') as typeof import('node:child_process')
     // eslint-disable-next-line quotes -- string contains single quote, double quotes needed
     const safePath = dirPath.replace(/'/g, "'\\''")
     const out = nodeExecSync(`du -sk '${safePath}' 2>/dev/null | cut -f1`, {
       encoding: 'utf8',
-      timeout: 5_000,
+      timeout: timeoutMs,
     }).trim()
     return (Number.parseInt(out) || 0) * 1024
   }

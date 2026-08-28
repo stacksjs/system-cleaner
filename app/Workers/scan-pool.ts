@@ -36,6 +36,8 @@ export type TreeScanResult = {
   folderCount?: number
   fileCount?: number
   scanTime?: string
+  /** True when the walk ran out of time or entries before finishing. */
+  truncated?: boolean
   error?: string
 }
 
@@ -88,10 +90,15 @@ function resolveScanner(): string[] {
 let inFlight: Promise<unknown> = Promise.resolve()
 
 async function runScanner(request: ScanRequest, hardTimeoutMs: number): Promise<ScanResult> {
-  const proc = Bun.spawn(resolveScanner(), {
-    stdin: new TextEncoder().encode(JSON.stringify(request)),
+  // The request goes in argv, and stdin is closed outright: a scanner blocked
+  // on a pipe cannot notice that its parent has gone, and orphans accumulated
+  // one per app restart. `cwd` is the filesystem root so the compiled binary
+  // never picks up a `bunfig.toml` from wherever the app happened to start.
+  const proc = Bun.spawn([...resolveScanner(), JSON.stringify(request)], {
+    stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'ignore',
+    cwd: '/',
   })
 
   let timedOut = false
@@ -105,17 +112,20 @@ async function runScanner(request: ScanRequest, hardTimeoutMs: number): Promise<
     }
   }, hardTimeoutMs)
 
+  let resultFile = ''
   try {
-    const output = await new Response(proc.stdout).text()
+    // Stdout carries only the path of the result file — see the note at the
+    // top of ./disk-scan.ts for why the payload does not come through here.
+    resultFile = (await new Response(proc.stdout).text()).trim()
     await proc.exited
 
     if (timedOut)
       throw new Error(`Scan exceeded ${Math.round(hardTimeoutMs / 1000)}s`)
 
-    if (!output.trim())
+    if (!resultFile)
       throw new Error('Scan produced no result')
 
-    return JSON.parse(output) as ScanResult
+    return JSON.parse(fs.readFileSync(resultFile, 'utf8')) as ScanResult
   }
   catch (err) {
     if (timedOut)
@@ -124,6 +134,13 @@ async function runScanner(request: ScanRequest, hardTimeoutMs: number): Promise<
   }
   finally {
     clearTimeout(timer)
+    // The scanner cannot clean up after itself: it has exited by the time the
+    // file has been read. Its parent directory goes too, so a killed scan
+    // leaves at most one stray under the OS temp dir.
+    if (resultFile) {
+      try { fs.rmSync(path.dirname(resultFile), { recursive: true, force: true }) }
+      catch {}
+    }
   }
 }
 

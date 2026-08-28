@@ -12,6 +12,24 @@ window.updatesXData = function () {
     systemUpdates: [],
     clToolsInfo: { installed: false, version: null, installPath: null },
     macosVersion: null,
+    macosRelease: null,
+
+    // On a beta the marketing version never moves — 27.0 upgrades to 27.0 —
+    // so the build is the only thing that says which beta is installed and
+    // which one is on offer.
+    installedLabel() {
+      if (this.macosRelease && this.macosRelease.label) return this.macosRelease.label
+      return this.macosVersion || ''
+    },
+    isBetaRelease() {
+      return !!(this.macosRelease && this.macosRelease.beta)
+    },
+    upgradeLabel(upd) {
+      if (!upd || upd.kind !== 'macos') return upd && upd.version ? upd.version : ''
+      var to = upd.buildVersion ? upd.version + ' (' + upd.buildVersion + ')' : upd.version
+      var from = this.installedLabel()
+      return from ? from + '  \u2192  ' + to : to
+    },
     updateScanCached: true,
     updateScannedAt: null,
     selected: [],
@@ -68,6 +86,7 @@ window.updatesXData = function () {
       this.systemUpdates = data.systemUpdates || []
       this.clToolsInfo = data.clToolsInfo || { installed: false, version: null, installPath: null }
       this.macosVersion = data.macosVersion || null
+      this.macosRelease = data.macosRelease || null
       this.updateScanCached = data.updateScanCached !== false
       this.updateScannedAt = data.updateScannedAt || null
       this.syncUpdatesBadge()
@@ -148,6 +167,7 @@ window.updatesXData = function () {
                 systemUpdates: self.systemUpdates,
                 clToolsInfo: self.clToolsInfo,
                 macosVersion: self.macosVersion,
+                macosRelease: self.macosRelease,
                 updateScanCached: self.updateScanCached,
                 updateScannedAt: self.updateScannedAt,
               },

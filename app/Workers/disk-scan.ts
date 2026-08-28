@@ -1,8 +1,21 @@
 /**
  * Out-of-process disk scanner.
  *
- * Reads one JSON scan request on stdin, writes one JSON result on stdout, and
- * exits. `app/Workers/disk-worker-pool.ts` is the only caller.
+ * Takes one JSON scan request as its single argument, writes the result to a
+ * temp file, and prints that file's path on stdout. `app/Workers/scan-pool.ts`
+ * is the only caller, and deletes the file once it has read it.
+ *
+ * The request arrives in argv rather than on stdin so that this process never
+ * blocks on a pipe it does not control. Reading stdin left orphans — a scanner
+ * whose parent had exited sat at 0% CPU forever waiting for an EOF that was
+ * never coming, and every app restart added another.
+ *
+ * The result travels through the filesystem rather than the pipe because a
+ * full-home tree serialises to megabytes, and handing that much to stdout and
+ * immediately exiting does not survive: the scan completed, the JSON was
+ * correct, and the parent sat waiting on a stream that never closed until its
+ * hard timeout killed the child — which looked exactly like a scan that hangs.
+ * A path is a few dozen bytes and cannot run into that.
  *
  * This was a `Worker` until the desktop build needed it. `bun build --compile`
  * does not embed worker entrypoints — the compiled binary rewrites the URL to
@@ -14,6 +27,9 @@
  */
 
 import type { FileCategory } from '@system-cleaner/disk'
+import * as fs from 'node:fs'
+import * as os from 'node:os'
+import * as path from 'node:path'
 import process from 'node:process'
 import { scanDirectory, scanLargeFiles } from '@system-cleaner/disk'
 
@@ -121,32 +137,39 @@ export function runScan(request: ScanRequest): Record<string, unknown> {
     folderCount: result.totalFolders,
     fileCount: result.totalFiles,
     scanTime: formatDuration(result.scanTimeMs),
+    truncated: result.aborted,
   }
 }
 
+/** Write `payload` to a temp file and print its path. */
+async function emit(payload: Record<string, unknown>): Promise<never> {
+  const file = path.join(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'system-cleaner-scan-')),
+    'result.json',
+  )
+  fs.writeFileSync(file, JSON.stringify(payload))
+  await Bun.write(Bun.stdout, `${file}\n`)
+  process.exit(0)
+}
+
 if (import.meta.main) {
-  const input = await Bun.stdin.text()
+  const input = process.argv[2] ?? ''
 
   let parsed: unknown
   try {
     parsed = JSON.parse(input)
   }
   catch {
-    await Bun.write(Bun.stdout, JSON.stringify({ success: false, error: 'Invalid scan request' }))
-    process.exit(0)
+    await emit({ success: false, error: 'Invalid scan request' })
   }
 
-  if (!isValidRequest(parsed)) {
-    await Bun.write(Bun.stdout, JSON.stringify({ success: false, error: 'Invalid scan request' }))
-    process.exit(0)
-  }
+  if (!isValidRequest(parsed))
+    await emit({ success: false, error: 'Invalid scan request' })
 
   try {
-    await Bun.write(Bun.stdout, JSON.stringify(runScan(parsed)))
+    await emit(runScan(parsed as ScanRequest))
   }
   catch (e: any) {
-    await Bun.write(Bun.stdout, JSON.stringify({ success: false, error: e?.message || 'Scan failed' }))
+    await emit({ success: false, error: e?.message || 'Scan failed' })
   }
-
-  process.exit(0)
 }
