@@ -40,19 +40,31 @@ Application data lives in `~/Library/Application Support/SystemCleaner/`. The
 bundle in `/Applications` is read-only and is replaced wholesale on update, so
 cleanup history cannot live inside it.
 
-## Why not `buddy build:desktop`
+## Why not `buddy build:desktop` — for now
 
-`buddy build:desktop` and `buddy build:dmg` are the right tools for a *hosted*
-Stacks application. They compile the framework launcher, which opens a Craft
-window on `DESKTOP_URL`, and copy three files into the bundle
-(`stacks-desktop`, `craft-runtime`, `desktop.json`).
+`buddy build:desktop` and `buddy build:dmg` used to build only one shape of
+desktop app: the framework launcher opening a Craft window on `DESKTOP_URL`,
+with everything the window shows coming off the network. SystemCleaner has no
+server to point at — it reads the disks, processes, and login items of the Mac
+it is installed on — and `build:dmg` copied exactly three files into the bundle
+(`stacks-desktop`, `craft-runtime`, `desktop.json`), leaving nowhere to put the
+agent or the UI payload.
 
-SystemCleaner has no server to point at — it reads the disks, processes, and
-login items of the Mac it is installed on — and those three files leave nowhere
-to put the agent or the UI payload. `scripts/build-desktop-app.ts` does the
-packaging instead, and still defers to buddy for everything that is framework
-work: `buddy build:views` renders the UI, `buddy generate:app-icons` renders the
-icon set from `config/images.ts`, and `database/migrations/` is whatever
+Stacks has since gained the missing piece, and this app already sits on the
+contract it settled on: `app/Desktop/launcher.ts` overrides the framework
+launcher, `DESKTOP_URL` becomes optional, every file `build:desktop` emits is
+bundled, and `app/Desktop/Resources/` is copied into `Contents/Resources`.
+
+That is on the framework's `main` rather than in a release, so
+`scripts/build-desktop-app.ts` still does the packaging here. When a published
+Stacks carries it, the switch is: move the view build and the migrations under
+`app/Desktop/Resources/`, compile the agent and scanner into
+`storage/framework/desktop-dist`, run `buddy build:desktop && buddy build:dmg`,
+and delete the script.
+
+Either way the framework work goes through buddy: `buddy build:views` renders
+the UI, `buddy generate:app-icons` renders the icon set from
+`config/images.ts`, and `database/migrations/` is whatever
 `buddy migrate:regenerate` derived from `app/Models/`.
 
 ## Signing and notarizing

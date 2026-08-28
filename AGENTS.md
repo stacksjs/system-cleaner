@@ -92,10 +92,11 @@ Add your own with `app/Skills/<name>/SKILL.md`, then re-run `buddy setup:ai`.
 ## The desktop app
 
 `bun run build:app` (add `:dmg` for the disk image) packages a self-contained
-`.app` into `storage/framework/desktop-dist/`. It is **not** `buddy
-build:desktop`, which targets a hosted Stacks app and opens a window on a remote
-URL — see `docs/guide/desktop-app.md` for why, and `scripts/build-desktop-app.ts`
-for what it assembles.
+`.app` into `storage/framework/desktop-dist/`. It is not yet `buddy
+build:desktop`: that command could only build a window onto a remote URL, which
+this app does not have. Stacks now honours `app/Desktop/launcher.ts` — the
+layout this app already uses — but not in a released version, so the script
+stays until then. See `docs/guide/desktop-app.md` for the switch.
 
 The bundle serves prerendered HTML, so **nothing machine-specific may come from
 a `<script server>` block** on an app view. Anything a server script computes is

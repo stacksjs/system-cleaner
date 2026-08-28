@@ -43,7 +43,7 @@ jobs:
       # extracts this tag's section from CHANGELOG.md (written by
       # `buddy release`), attaches the binaries, and generates checksums.
       - name: Publish release
-        uses: pantry-pm/pantry/packages/action@v0.11.12
+        uses: pantry-pm/pantry/packages/action@v0.11.45
         with:
           install: 'false'
           release: 'true'
@@ -83,7 +83,7 @@ jobs:
       # imports the Developer ID identity into an ephemeral keychain that its
       # post step deletes even if the job is cancelled.
       - name: Setup Pantry
-        uses: pantry-pm/pantry/packages/action@v0.11.12
+        uses: pantry-pm/pantry/packages/action@v0.11.45
         with:
           apple-signing: 'true'
         env:
@@ -111,7 +111,7 @@ jobs:
           NOTARY_PROFILE: systemcleaner
 
       - name: Attach the DMG to the release
-        uses: pantry-pm/pantry/packages/action@v0.11.12
+        uses: pantry-pm/pantry/packages/action@v0.11.45
         with:
           install: 'false'
           release: 'true'
