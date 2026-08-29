@@ -151,6 +151,8 @@ async function runScanner(request: ScanRequest, hardTimeoutMs: number): Promise<
   })
 
   let timedOut = false
+  let escalation: ReturnType<typeof setTimeout> | undefined
+
   const timer = setTimeout(() => {
     timedOut = true
     try {
@@ -159,6 +161,19 @@ async function runScanner(request: ScanRequest, hardTimeoutMs: number): Promise<
     catch {
       // Already exited.
     }
+
+    // SIGTERM is a request, and a scan wedged in a syscall macOS will not
+    // return from cannot act on it — a walk given 180s was measured still
+    // running 87 minutes later, having visited 49 directories. Escalate, so a
+    // blocked scan does not leak a process per attempt.
+    escalation = setTimeout(() => {
+      try {
+        proc.kill(9)
+      }
+      catch {
+        // Already exited.
+      }
+    }, 2000)
   }, hardTimeoutMs)
 
   let resultFile = ''
@@ -186,6 +201,7 @@ async function runScanner(request: ScanRequest, hardTimeoutMs: number): Promise<
   }
   finally {
     clearTimeout(timer)
+    if (escalation) clearTimeout(escalation)
     running = null
     try { fs.rmSync(progressDir, { recursive: true, force: true }) }
     catch {}
