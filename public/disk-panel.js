@@ -576,13 +576,16 @@
     var native = window.craft && window.craft.nativeUI;
     if (native && typeof native.showContextMenu === 'function') {
       pendingMenuTarget = s;
+      // No accelerators: nothing here is bound to a key, and an accelerator the
+      // app does not honour is a promise it breaks. `cmd+delete` also rendered
+      // as ⌘D, which means something else entirely.
       var items = [
         { id: 'sc.reveal', title: 'Reveal in Finder', icon: 'folder' },
-        { id: 'sc.copy', title: 'Copy Path', icon: 'doc.on.doc', shortcut: 'cmd+c' },
+        { id: 'sc.copy', title: 'Copy Path', icon: 'doc.on.doc' },
       ];
       if (s.isDir && s.childCount)
         items.push({ id: 'sc.sep1', title: '', type: 'separator' }, { id: 'sc.drill', title: 'Open in Chart', icon: 'chart.pie' });
-      items.push({ id: 'sc.sep2', title: '', type: 'separator' }, { id: 'sc.trash', title: 'Move to Trash', icon: 'trash', shortcut: 'cmd+delete' });
+      items.push({ id: 'sc.sep2', title: '', type: 'separator' }, { id: 'sc.trash', title: 'Move to Trash', icon: 'trash' });
 
       try {
         native.showContextMenu({ targetId: s.fullPath, targetType: 'general', x: Math.round(x), y: Math.round(y), items: items });
