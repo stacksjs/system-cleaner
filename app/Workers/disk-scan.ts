@@ -2,7 +2,8 @@
  * Out-of-process disk scanner.
  *
  * Takes one JSON scan request as its single argument, writes the result to a
- * temp file, and prints that file's path on stdout. `app/Workers/scan-pool.ts`
+ * temp file, and prints that file's path on stdout. While it works it rewrites
+ * a small progress file the parent reads on demand. `app/Workers/scan-pool.ts`
  * is the only caller, and deletes the file once it has read it.
  *
  * The request arrives in argv rather than on stdin so that this process never
@@ -38,6 +39,8 @@ interface TreeScanRequest {
   home: string
   maxDepth?: number
   timeoutMs?: number
+  /** File to rewrite with `{ scanned, path }` as the walk runs. */
+  progressFile?: string
 }
 
 interface LargeFilesRequest {
@@ -47,6 +50,8 @@ interface LargeFilesRequest {
   limit?: number
   timeoutMs?: number
   categories?: string[]
+  /** File to rewrite with `{ scanned, path }` as the walk runs. */
+  progressFile?: string
 }
 
 export type ScanRequest = TreeScanRequest | LargeFilesRequest
@@ -74,6 +79,8 @@ export function isValidRequest(value: unknown): value is ScanRequest {
   const v = value as Record<string, unknown>
 
   if (!isOptionalDuration(v.timeoutMs))
+    return false
+  if (v.progressFile !== undefined && (typeof v.progressFile !== 'string' || v.progressFile.length === 0))
     return false
 
   if (v.kind === 'tree') {
@@ -105,7 +112,34 @@ function formatDuration(ms: number): string {
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
 }
 
+/**
+ * Report progress to the parent by rewriting a small file.
+ *
+ * A full-home walk runs for tens of seconds, and a spinner that never changes
+ * is indistinguishable from a hang — the Disk Usage screen sat on "Scanning
+ * disk…" for 45 seconds with nothing to show it was alive.
+ *
+ * Not over stdout: Bun buffers the pipe, so a few dozen short lines arrive only
+ * once the stream closes, which is to say once the scan is already over. A file
+ * the parent reads when asked is both simpler and actually live.
+ */
+function progressReporter(file: string | undefined): ((scanned: number, path: string) => void) | undefined {
+  if (!file) return undefined
+
+  return (scanned, currentPath) => {
+    try {
+      fs.writeFileSync(file, JSON.stringify({ scanned, path: currentPath }))
+    }
+    catch {
+      // Progress is decoration. A scan must never fail because it could not
+      // report how far it had got.
+    }
+  }
+}
+
 export function runScan(request: ScanRequest): Record<string, unknown> {
+  const onProgress = progressReporter(request.progressFile)
+
   if (request.kind === 'large-files') {
     const result = scanLargeFiles({
       roots: request.roots,
@@ -113,6 +147,7 @@ export function runScan(request: ScanRequest): Record<string, unknown> {
       limit: request.limit,
       timeoutMs: request.timeoutMs,
       categories: request.categories as FileCategory[] | undefined,
+      onProgress,
     })
 
     return {
@@ -129,6 +164,7 @@ export function runScan(request: ScanRequest): Record<string, unknown> {
   const result = scanDirectory(request.home, {
     maxDepth: request.maxDepth,
     timeoutMs: request.timeoutMs,
+    onProgress,
   })
 
   return {

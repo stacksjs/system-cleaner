@@ -159,7 +159,17 @@
   </table>
 
   <div class='empty-state' x-show='scanning'>
-    Walking the disk — large scans can take up to two minutes.
+    <div>Walking the disk&hellip;</div>
+    <div style='margin-top: 8px; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink);'
+         x-show='scanProgress' x-text='scanProgress'></div>
+    <div class='lf-scan-path' x-show='scanProgressPath' x-text='scanProgressPath'></div>
+    <!-- Counted nothing for eight seconds: macOS is holding the read until
+         someone answers, and waiting longer will not change that. -->
+    <div class='lf-blocked' x-show='scanStalled' x-cloak>
+      <strong>Waiting for permission to read your files.</strong>
+      If macOS asked, answer the prompt. Otherwise grant SystemCleaner Full Disk
+      Access in System Settings &rsaquo; Privacy &amp; Security.
+    </div>
   </div>
   <div class='empty-state' x-show='scanned && !scanning && visible().length === 0'>
     Nothing over <span x-text='minSizeMB'>100</span> MB matched. Try a smaller minimum size.
@@ -192,6 +202,9 @@
 .lf-bulkbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 8px 12px; border: .5px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
 .lf-bulk-summary { margin-right: auto; font-size: 12px; font-variant-numeric: tabular-nums; }
 .lf-row-on { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.lf-blocked { margin: 10px auto 0; max-width: 46ch; padding: 8px 12px; border: .5px solid color-mix(in srgb, var(--orange) 32%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--orange) 10%, var(--surface)); color: var(--secondary); font-size: 11px; line-height: 1.5; text-align: left; }
+.lf-blocked strong { display: block; margin-bottom: 2px; color: var(--ink); }
+.lf-scan-path { margin-top: 3px; max-width: 52ch; overflow: hidden; color: var(--tertiary); font: 10px/1.5 'SF Mono', Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .lf-partial { margin-bottom: 12px; padding: 10px 14px; border: .5px solid color-mix(in srgb, var(--orange) 32%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--orange) 10%, var(--surface)); color: var(--secondary); font-size: 11px; line-height: 1.5; }
 .lf-note { margin-top: 12px; padding: 12px 16px; border: .5px solid var(--line); border-radius: 8px; background: var(--surface-soft); color: var(--tertiary); font-size: 11px; line-height: 1.5; }
 </style>

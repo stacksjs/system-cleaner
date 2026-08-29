@@ -4,8 +4,15 @@ import type { DiskEntry, ScanOptions, ScanResult } from './types'
 
 const DEFAULT_MAX_DEPTH = 6
 const DEFAULT_TIMEOUT_MS = 15_000
-/** How often `onProgress` is called, in entries. */
-const CHECK_INTERVAL = 200
+/**
+ * How often progress is reported, in milliseconds.
+ *
+ * Throttled by wallclock rather than entry count: entries are visited at wildly
+ * different rates depending on the directory, so every-Nth-entry reporting goes
+ * quiet exactly where the user most wants to see movement — and floods the pipe
+ * where the walk is cheap.
+ */
+const PROGRESS_INTERVAL_MS = 250
 const MAX_HEAP_SIZE = 50
 
 /**
@@ -65,10 +72,17 @@ export function scanDirectory(rootPath: string, options: ScanOptions = {}): Scan
 
   const scanStart = Date.now()
   const deadline = scanStart + timeoutMs
+  const onProgress = options.onProgress
+  let nextProgressAt = onProgress ? scanStart + PROGRESS_INTERVAL_MS : Number.POSITIVE_INFINITY
   let aborted = false
   let totalFiles = 0
   let totalFolders = 0
-  let progressTick = 0
+
+  function report(now: number, dirPath: string): void {
+    if (now < nextProgressAt) return
+    nextProgressAt = now + PROGRESS_INTERVAL_MS
+    onProgress?.(totalFiles + totalFolders, dirPath)
+  }
 
   // Min-heap tracking the top N largest entries for fast top-N retrieval
   const topEntries: DiskEntry[] = []
@@ -121,12 +135,12 @@ export function scanDirectory(rootPath: string, options: ScanOptions = {}): Scan
     // Checked every time, not every Nth: `Date.now()` costs a fraction of the
     // `readdir` that follows it, and sampling was why a scan given 50s ran for
     // 60 and was killed — losing the perfectly good partial tree it had built.
-    if (Date.now() > deadline || totalFiles + totalFolders > maxEntries) {
+    const now = Date.now()
+    if (now > deadline || totalFiles + totalFolders > maxEntries) {
       aborted = true
       return { name: baseName, path: dirPath, sizeBytes: 0, isDirectory: true, children: [] }
     }
-    if (++progressTick % CHECK_INTERVAL === 0)
-      options.onProgress?.(totalFiles + totalFolders, dirPath)
+    report(now, dirPath)
 
     let entries: fs.Dirent[]
     try {
@@ -147,12 +161,12 @@ export function scanDirectory(rootPath: string, options: ScanOptions = {}): Scan
       // millions of children (the depth-1 recursion cap doesn't reach
       // them). Same for wallclock — `readdirSync` can't yield, so we
       // check inside the entry loop.
-      if (Date.now() > deadline || totalFiles + totalFolders > maxEntries) {
+      const tick = Date.now()
+      if (tick > deadline || totalFiles + totalFolders > maxEntries) {
         aborted = true
         break
       }
-      if (++progressTick % CHECK_INTERVAL === 0)
-        options.onProgress?.(totalFiles + totalFolders, dirPath)
+      report(tick, dirPath)
 
       if (!includeHidden && entry.name.startsWith('.') && depth > 0)
         continue

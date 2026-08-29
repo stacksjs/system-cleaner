@@ -19,7 +19,7 @@ import {
   getDashboardStatsCached,
   invalidateStartupCache,
 } from './data-service';
-import { runDiskScan, runLargeFileScan } from '../app/Workers/scan-pool';
+import { runDiskScan, runLargeFileScan, scanProgress } from '../app/Workers/scan-pool';
 import { findAppBundle, findAppBundleForCask, getSystemInfoSync, ICON_SIZES, listApplicationEntries, renderAppIcon } from '@system-cleaner/core';
 import * as nodeOs from 'node:os';
 import { cleanDirectory, emptyTrash } from '@system-cleaner/clean';
@@ -161,12 +161,21 @@ export default async function (router: Router) {
     const body = await readJsonBody<{ path?: string; maxDepth?: number }>(req);
     if (body === null) return badJson();
 
+    // A relative path resolves against HOME, not the process CWD — which for
+    // the packaged app is `/`, so `Code` became `/Code`, failed the check, and
+    // silently fell back to scanning the whole home directory. Same rule as
+    // `/large-files`, which the UI already relies on.
     let scanRoot = HOME;
     let maxDepth = 6;
     if (body.path && typeof body.path === 'string') {
-      const resolved = path.resolve(body.path);
-      if (resolved.startsWith(HOME) || resolved === '/' || resolved.startsWith('/Volumes')) {
+      const resolved = path.isAbsolute(body.path)
+        ? path.resolve(body.path)
+        : path.resolve(HOME, body.path);
+      if (resolved === HOME || resolved.startsWith(`${HOME}/`) || resolved === '/' || resolved.startsWith('/Volumes/')) {
         scanRoot = resolved;
+      }
+      else {
+        return badRequest('Scan root must be your home directory or an external volume', 403);
       }
     }
     if (typeof body.maxDepth === 'number' && body.maxDepth >= 2 && body.maxDepth <= 10) {
@@ -194,6 +203,28 @@ export default async function (router: Router) {
     finally {
       diskScanInFlight = false;
     }
+  });
+
+  /**
+   * How far the running scan has got.
+   *
+   * The Disk Usage and Large Files screens poll this while they wait. A
+   * full-home walk runs for tens of seconds, and a spinner that never moves is
+   * indistinguishable from a hang — which is exactly how the disk scan read
+   * before this existed.
+   */
+  await router.post('/scan-progress', async () => {
+    const progress = scanProgress();
+    if (!progress) return Response.json({ success: true, scanning: false });
+
+    return Response.json({
+      success: true,
+      scanning: true,
+      scanned: progress.scanned,
+      path: progress.path,
+      kind: progress.kind,
+      elapsedMs: Date.now() - progress.startedAt,
+    });
   });
 
   await router.post('/delete-path', async (req: Request) => {

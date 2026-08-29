@@ -9,6 +9,7 @@
 
 import type { LargeFile } from '@system-cleaner/disk'
 import * as fs from 'node:fs'
+import * as os from 'node:os'
 import * as path from 'node:path'
 import process from 'node:process'
 
@@ -17,6 +18,7 @@ type TreeScanRequest = {
   home: string
   maxDepth?: number
   timeoutMs?: number
+  progressFile?: string
 }
 
 type LargeFilesRequest = {
@@ -26,6 +28,7 @@ type LargeFilesRequest = {
   limit?: number
   timeoutMs?: number
   categories?: string[]
+  progressFile?: string
 }
 
 type ScanRequest = TreeScanRequest | LargeFilesRequest
@@ -61,6 +64,48 @@ type ScanResult = TreeScanResult | LargeFilesResult
  * `SYSTEM_CLEANER_SCANNER` at it. In development the source runs under `bun`.
  * Resolved once, because the answer cannot change within a process.
  */
+/**
+ * How far the running scan has got.
+ *
+ * Read by `/api/scan-progress`, which the Disk Usage screen polls while it
+ * waits. A full-home walk runs for tens of seconds; without this the UI can
+ * only show a spinner, and a spinner that never moves is indistinguishable
+ * from a hang.
+ */
+export interface ScanProgress {
+  scanned: number
+  path: string
+  startedAt: number
+  kind: ScanRequest['kind']
+}
+
+let running: { file: string, startedAt: number, kind: ScanRequest['kind'] } | null = null
+
+/**
+ * Progress of the scan running now, or null when nothing is running.
+ *
+ * Read off the scanner's progress file at the moment it is asked for. The
+ * scanner cannot push updates through stdout — Bun buffers the pipe, so a few
+ * dozen short lines arrive only once the stream closes, by which time the scan
+ * is over and the progress is worthless.
+ */
+export function scanProgress(): ScanProgress | null {
+  if (!running) return null
+
+  let scanned = 0
+  let path = ''
+  try {
+    const parsed = JSON.parse(fs.readFileSync(running.file, 'utf8')) as { scanned?: number, path?: string }
+    scanned = parsed.scanned ?? 0
+    path = parsed.path ?? ''
+  }
+  catch {
+    // Not written yet, or caught mid-write. Zero is the honest answer.
+  }
+
+  return { scanned, path, startedAt: running.startedAt, kind: running.kind }
+}
+
 let scannerCommand: string[] | null = null
 
 function resolveScanner(): string[] {
@@ -90,11 +135,15 @@ function resolveScanner(): string[] {
 let inFlight: Promise<unknown> = Promise.resolve()
 
 async function runScanner(request: ScanRequest, hardTimeoutMs: number): Promise<ScanResult> {
+  const progressDir = fs.mkdtempSync(path.join(os.tmpdir(), 'system-cleaner-progress-'))
+  const progressFile = path.join(progressDir, 'progress.json')
+  running = { file: progressFile, startedAt: Date.now(), kind: request.kind }
+
   // The request goes in argv, and stdin is closed outright: a scanner blocked
   // on a pipe cannot notice that its parent has gone, and orphans accumulated
   // one per app restart. `cwd` is the filesystem root so the compiled binary
   // never picks up a `bunfig.toml` from wherever the app happened to start.
-  const proc = Bun.spawn([...resolveScanner(), JSON.stringify(request)], {
+  const proc = Bun.spawn([...resolveScanner(), JSON.stringify({ ...request, progressFile })], {
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'ignore',
@@ -114,8 +163,11 @@ async function runScanner(request: ScanRequest, hardTimeoutMs: number): Promise<
 
   let resultFile = ''
   try {
-    // Stdout carries only the path of the result file — see the note at the
-    // top of ./disk-scan.ts for why the payload does not come through here.
+    // Stdout carries progress lines while the scan runs and, last, the path of
+    // the result file — see the note at the top of ./disk-scan.ts for why the
+    // payload itself does not come through here.
+    // Stdout carries only the path of the result file — see the note at the top
+    // of ./disk-scan.ts for why the payload does not come through here.
     resultFile = (await new Response(proc.stdout).text()).trim()
     await proc.exited
 
@@ -134,6 +186,9 @@ async function runScanner(request: ScanRequest, hardTimeoutMs: number): Promise<
   }
   finally {
     clearTimeout(timer)
+    running = null
+    try { fs.rmSync(progressDir, { recursive: true, force: true }) }
+    catch {}
     // The scanner cannot clean up after itself: it has exited by the time the
     // file has been read. Its parent directory goes too, so a killed scan
     // leaves at most one stray under the OS temp dir.

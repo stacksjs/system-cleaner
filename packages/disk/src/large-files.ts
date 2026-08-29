@@ -61,6 +61,9 @@ const BUNDLE_SUFFIXES = [
   '.theater', '.mpkg', '.docset', '.lproj',
 ]
 
+/** How often progress is reported while a scan runs. */
+const PROGRESS_INTERVAL_MS = 250
+
 /** Default floor for "large". Below this the list is noise, not signal. */
 const DEFAULT_MIN_SIZE = 100 * 1024 * 1024
 
@@ -87,6 +90,12 @@ export interface LargeFileScanOptions {
    * `DerivedData`, ...). Off by default — see {@link DEPENDENCY_DIRS}.
    */
   includeDependencies?: boolean
+  /**
+   * Called while the walk runs, at most a few times a second. A full-home scan
+   * takes tens of seconds, and a progress bar that never moves is
+   * indistinguishable from a hang.
+   */
+  onProgress?: (scanned: number, currentPath: string) => void
 }
 
 export interface LargeFileScanResult {
@@ -184,6 +193,11 @@ export function scanLargeFiles(options: LargeFileScanOptions = {}): LargeFileSca
   const started = Date.now()
   const deadline = started + timeoutMs
   const budget = { entries: maxEntries }
+  // Throttled by wallclock rather than entry count: entries are visited at
+  // wildly different rates depending on the directory, so every-Nth-entry
+  // reporting stalls exactly where the user most wants to see movement.
+  const onProgress = options.onProgress
+  let nextProgressAt = onProgress ? started + PROGRESS_INTERVAL_MS : Number.POSITIVE_INFINITY
   let scanned = 0
   let matched = 0
   let totalBytes = 0
@@ -262,10 +276,15 @@ export function scanLargeFiles(options: LargeFileScanOptions = {}): LargeFileSca
   // the `lstat` that follows it, and sampling was the reason a scan with a 20s
   // budget ran for 44s: one slow directory of network-backed files can burn
   // through a whole sampling window between checks.
-  function overBudget(): boolean {
-    if (Date.now() > deadline || budget.entries <= 0) {
+  function overBudget(currentPath?: string): boolean {
+    const now = Date.now()
+    if (now > deadline || budget.entries <= 0) {
       truncated = true
       return true
+    }
+    if (now >= nextProgressAt) {
+      nextProgressAt = now + PROGRESS_INTERVAL_MS
+      onProgress?.(scanned, currentPath ?? '')
     }
     return false
   }
@@ -292,7 +311,7 @@ export function scanLargeFiles(options: LargeFileScanOptions = {}): LargeFileSca
       continue
     visited.add(dir)
 
-    if (overBudget())
+    if (overBudget(dir))
       break
 
     let entries: fs.Dirent[]
@@ -304,7 +323,7 @@ export function scanLargeFiles(options: LargeFileScanOptions = {}): LargeFileSca
     }
 
     for (const entry of entries) {
-      if (overBudget())
+      if (overBudget(dir))
         break
 
       if (SKIP_DIRS.has(entry.name))

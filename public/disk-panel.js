@@ -105,6 +105,11 @@
     // does not run underneath a stale message.
     if (Object.prototype.hasOwnProperty.call(fields, 'scanState') && fields.scanState !== 'error')
       fields.scanError = '';
+    if (Object.prototype.hasOwnProperty.call(fields, 'scanState') && fields.scanState !== 'scanning') {
+      fields.scanProgress = '';
+      fields.scanProgressPath = '';
+      fields.scanStalled = false;
+    }
 
     var parts = [];
     for (var key in fields) {
@@ -242,6 +247,7 @@
       truncated: !!data.truncated,
       cached: !!cached,
     };
+    stopProgressPoll();
     patchDiskScope({
       scanInfo: window.__diskScanInfo,
       scanState: 'done',
@@ -304,6 +310,7 @@
               // A scan that times out has a reason, and the reason is the
               // only thing that lets someone act on it.
               stopDiskPoll();
+              stopProgressPoll();
               patchDiskScope({ scanState: 'error', scanError: data.error || 'Scan failed' });
               return;
             }
@@ -315,6 +322,7 @@
             window._diskScan.scanning = false;
             localStorage.removeItem(DISK_SCANNING_KEY);
             stopDiskPoll();
+            stopProgressPoll();
             patchDiskScope({
               scanState: 'error',
               scanError: (err && err.message) ? err.message : 'Could not reach the scanner',
@@ -361,8 +369,52 @@
     });
   }
 
+  var progressTimer = null;
+
+  function stopProgressPoll() {
+    if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
+  }
+
+  function fmtCount(n) {
+    return n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n);
+  }
+
+  function shortenPath(p) {
+    if (!p) return '';
+    var home = p.indexOf('/Users/');
+    var rel = home === 0 ? '~' + p.slice(p.indexOf('/', 7)) : p;
+    // Keep the tail: the leading directories are the same for every update,
+    // so the end of the path is the part that shows movement.
+    return rel.length > 46 ? '…' + rel.slice(-45) : rel;
+  }
+
+  // A scan runs for tens of seconds. Polling for its progress is what turns a
+  // motionless spinner into something a person can tell is alive — and what
+  // makes a slow scan tolerable rather than suspicious.
+  function startProgressPoll() {
+    stopProgressPoll();
+    progressTimer = setInterval(function() {
+      fetch('/api/scan-progress', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (!d || !d.scanning) return;
+          patchDiskScope({
+            scanProgress: fmtCount(d.scanned) + ' items · ' + Math.round(d.elapsedMs / 1000) + 's',
+            scanProgressPath: shortenPath(d.path),
+            // A walk that has counted nothing after several seconds is not
+            // slow, it is stopped — parked in a syscall macOS will not return
+            // from until someone answers a permission prompt. Saying so beats
+            // counting seconds up to a timeout the user cannot interpret.
+            scanStalled: d.scanned === 0 && d.elapsedMs > 8000,
+          });
+        })
+        .catch(function() {});
+    }, 400);
+  }
+
   window.startDiskScan = function() {
-    patchDiskScope({ scanState: 'scanning' });
+    patchDiskScope({ scanState: 'scanning', scanProgress: '', scanProgressPath: '', scanStalled: false });
+    startProgressPoll();
     window._diskScan.run();
   };
 

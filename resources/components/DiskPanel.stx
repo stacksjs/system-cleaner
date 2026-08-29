@@ -44,10 +44,13 @@
   hovered: null,
   scanState: 'idle',
   scanError: '',
+  scanProgress: '',
+  scanProgressPath: '',
+  scanStalled: false,
   centerSize() { return this.hovered ? this.hovered.formattedSize : this.defaultSize; },
   centerName() { return this.hovered ? this.hovered.name : this.defaultName; },
   metaText() {
-    if (this.scanState === 'scanning') return 'Scanning disk…';
+    if (this.scanState === 'scanning') return this.scanProgress || 'Scanning disk…';
     if (this.scanState === 'error') return this.scanError || 'Scan failed';
     if (this.scanInfo) return this.scanInfo.folderCount + ' folders · ' + this.scanInfo.fileCount + ' files · ' + this.scanInfo.scanTime + (this.scanInfo.truncated ? ' · partial' : '') + (this.scanInfo.cached ? ' (cached)' : '');
     return 'Click Scan Disk to analyze';
@@ -123,7 +126,19 @@
       </div>
       <div x-show="scanState === 'scanning'">
         <div>Scanning disk&hellip;</div>
-        <div style='margin-top: 6px; font-size: 10px; color: var(--tertiary);'>A first scan of a large home folder can take up to a minute</div>
+        <!-- The count and the current directory are what distinguish a slow
+             scan from a hung one. Both come from /api/scan-progress. -->
+        <div style='margin-top: 8px; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink);'
+             x-show='scanProgress' x-text='scanProgress'></div>
+        <div class='scan-path' x-show='scanProgressPath' x-text='scanProgressPath'></div>
+        <div style='margin-top: 8px; font-size: 10px; color: var(--tertiary);' x-show='!scanStalled'>A first scan of a large home folder can take up to a minute</div>
+        <!-- Counted nothing for eight seconds: macOS is holding the read until
+             someone answers, and no amount of waiting changes that. -->
+        <div class='scan-blocked' x-show='scanStalled' x-cloak>
+          <strong>Waiting for permission to read your files.</strong>
+          If macOS asked, answer the prompt. Otherwise grant SystemCleaner
+          Full Disk Access in System Settings &rsaquo; Privacy &amp; Security.
+        </div>
       </div>
       <!-- A failed scan used to drop straight back to the idle state, so the
            button simply reappeared and the user was left to guess. -->
@@ -196,5 +211,8 @@
 .disk-empty-glyph { margin-bottom: 14px; color: var(--tertiary); }
 .disk-empty-glyph span { display: inline-block; width: 30px; height: 30px; }
 .disk-empty-glyph.is-scanning { animation: pulse 1.5s ease-in-out infinite; }
+.scan-blocked { margin: 10px auto 0; max-width: 42ch; padding: 8px 12px; border: .5px solid color-mix(in srgb, var(--orange) 32%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--orange) 10%, var(--surface)); color: var(--secondary); font-size: 11px; line-height: 1.5; }
+.scan-blocked strong { display: block; margin-bottom: 2px; color: var(--ink); }
+.scan-path { margin-top: 3px; max-width: 46ch; overflow: hidden; color: var(--tertiary); font: 10px/1.5 'SF Mono', Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .disk-empty-glyph.is-scanning { animation: none; } }
 </style>
