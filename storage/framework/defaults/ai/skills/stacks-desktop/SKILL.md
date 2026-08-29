@@ -74,6 +74,81 @@ interface Desktop {
 }
 ```
 
+## Local-first apps: owning the launcher
+
+The launcher Stacks compiles opens a Craft window on the URL in `desktop.json`,
+which is what a hosted Stacks application wants. An app whose subject is the
+machine it runs on — a disk cleaner, a log viewer, a device tool — has no such
+URL: it starts something locally and opens a window on that, on a port it does
+not know until launch.
+
+Write `app/Desktop/launcher.ts` and `build:desktop` compiles that instead, the
+same way anything under `app/` overrides its framework default. `DESKTOP_URL`
+and `APP_URL` then become optional, because the launcher decides what to open.
+
+```ts
+// app/Desktop/launcher.ts — compiled to Contents/MacOS/<AppName>
+import { dirname, join } from 'node:path'
+
+const macos = dirname(process.execPath)          // siblings live here
+const server = Bun.spawn([join(macos, 'my-agent')], { stdout: 'pipe' })
+const port = await readPortFrom(server.stdout)   // the agent picks a free one
+
+const craft = Bun.spawn([
+  join(macos, 'craft-runtime'),
+  `http://127.0.0.1:${port}`,
+  '--title', 'My App',
+], { stdout: 'inherit' })
+
+process.exit(await craft.exited)
+```
+
+Two things follow from declaring your own launcher:
+
+- **Every file `build:desktop` leaves in `storage/framework/desktop-dist` is
+  copied into `Contents/MacOS`.** Compile the sibling binaries your launcher
+  spawns into that directory and they ship with it.
+- **`app/Desktop/Resources/` is copied into `Contents/Resources`.** A
+  prerendered UI, a schema, seed data — a local-first app has a payload, and
+  this is where it goes.
+
+`build:dmg` also narrows App Transport Security for these bundles: an exception
+for `127.0.0.1` rather than `NSAllowsArbitraryLoads`, which would additionally
+permit every unencrypted host on the internet.
+
+### Info.plist entries
+
+`app/Desktop/Info.plist.json` is merged into the generated `Info.plist`. The
+entries that matter most are the `NS*UsageDescription` strings — they are the
+sentences a person reads when macOS asks whether your app may look in their
+Downloads folder or drive Finder, and without them the prompt is generic or the
+request is refused outright.
+
+```json
+{
+  "LSApplicationCategoryType": "public.app-category.utilities",
+  "NSDownloadsFolderUsageDescription": "MyApp scans your Downloads for large files.",
+  "NSAppleEventsUsageDescription": "MyApp asks Finder to move items to the Trash so deletions stay recoverable."
+}
+```
+
+JSON, not XML: a malformed plist produces a bundle macOS silently refuses to
+launch, which surfaces long after the build reported success. Strings, numbers,
+booleans, arrays, and nested objects all render.
+
+Keys the bundle must own — `CFBundleIdentifier`, `CFBundleExecutable`,
+`CFBundleVersion`, and the rest of the identity — are ignored with a note.
+Rewriting those produces a bundle that does not match what was signed.
+
+Inside the bundle the launcher is named after the app, not `stacks-desktop`.
+macOS names the *process* in every permission prompt, so a launcher keeping the
+framework's build name asks "stacks-desktop would like to access files in your
+Downloads folder" — which reads like something to refuse.
+
+Application data belongs in `~/Library/Application Support/<AppName>`, never
+inside the bundle — `/Applications` is not writable by the user, and the bundle
+is replaced wholesale on update.
+
 ## CLI Commands
 
 ```bash

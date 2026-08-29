@@ -9,17 +9,16 @@ network: the bundle carries its own HTTP server, and the window points at
 `127.0.0.1`.
 
 ```bash
-bun run build:app        # SystemCleaner.app
-bun run build:app:dmg    # ...plus a .dmg beside it
+bun run build:app
 ```
 
-Both write to `storage/framework/desktop-dist/`.
+That writes `storage/framework/desktop-dmg/SystemCleaner-<version>.dmg`.
 
 ## What is inside the bundle
 
 ```
 SystemCleaner.app/Contents/
-  MacOS/SystemCleaner            launcher      (app/Desktop/launcher.ts)
+  MacOS/stacks-desktop           launcher      (app/Desktop/launcher.ts)
   MacOS/system-cleaner-agent     HTTP server   (app/Desktop/server.ts)
   MacOS/system-cleaner-scan      disk scanner  (app/Workers/disk-scan.ts)
   MacOS/craft-runtime            native window (pantry: craft-native.org)
@@ -40,32 +39,37 @@ Application data lives in `~/Library/Application Support/SystemCleaner/`. The
 bundle in `/Applications` is read-only and is replaced wholesale on update, so
 cleanup history cannot live inside it.
 
-## Why not `buddy build:desktop` — for now
+## How the build is split
 
-`buddy build:desktop` and `buddy build:dmg` used to build only one shape of
-desktop app: the framework launcher opening a Craft window on `DESKTOP_URL`,
-with everything the window shows coming off the network. SystemCleaner has no
-server to point at — it reads the disks, processes, and login items of the Mac
-it is installed on — and `build:dmg` copied exactly three files into the bundle
-(`stacks-desktop`, `craft-runtime`, `desktop.json`), leaving nowhere to put the
-agent or the UI payload.
+`buddy` does the framework work; `scripts/build-desktop-app.ts` does the three
+things only this app can know.
 
-Stacks has since gained the missing piece, and this app already sits on the
-contract it settled on: `app/Desktop/launcher.ts` overrides the framework
-launcher, `DESKTOP_URL` becomes optional, every file `build:desktop` emits is
-bundled, and `app/Desktop/Resources/` is copied into `Contents/Resources`.
+| Step | Owner |
+|---|---|
+| Render the UI as the local agent | `buddy build:views`, with `SYSTEM_CLEANER_AGENT=1` |
+| Stage the payload into `app/Desktop/Resources/` | this app |
+| Compile the launcher, bundle Craft, write the manifest | `buddy build:desktop` |
+| Compile the agent and scanner into `desktop-dist` | this app |
+| Assemble the bundle, build the icon, sign, image the DMG | `buddy build:dmg` |
 
-That is on the framework's `main` rather than in a release, so
-`scripts/build-desktop-app.ts` still does the packaging here. When a published
-Stacks carries it, the switch is: move the view build and the migrations under
-`app/Desktop/Resources/`, compile the agent and scanner into
-`storage/framework/desktop-dist`, run `buddy build:desktop && buddy build:dmg`,
-and delete the script.
+Four framework conventions make that possible, all added in Stacks 0.72.99 and
+0.72.100:
 
-Either way the framework work goes through buddy: `buddy build:views` renders
-the UI, `buddy generate:app-icons` renders the icon set from
-`config/images.ts`, and `database/migrations/` is whatever
-`buddy migrate:regenerate` derived from `app/Models/`.
+- **`app/Desktop/launcher.ts`** overrides the framework launcher, which would
+  otherwise open a Craft window on a remote `DESKTOP_URL`. SystemCleaner has no
+  such URL — it starts a server locally and opens a window on that, on a port
+  not known until launch.
+- **`DESKTOP_URL` is optional** once an app owns its launcher.
+- **Every file `build:desktop` emits is bundled** into `Contents/MacOS`, so the
+  sibling binaries the launcher spawns travel with it, and
+  **`app/Desktop/Resources/`** is copied into `Contents/Resources`.
+- **`app/Desktop/Info.plist.json`** supplies the `NS*UsageDescription` strings —
+  the sentences macOS shows when it asks to read your Downloads folder or drive
+  Finder.
+
+`build:dmg` also narrows App Transport Security for an app-owned launcher: an
+exception for `127.0.0.1` rather than `NSAllowsArbitraryLoads`, which would
+additionally permit every unencrypted host on the internet.
 
 ## Signing and notarizing
 
@@ -75,7 +79,7 @@ Gatekeeper refuses them. For distribution:
 ```bash
 DESKTOP_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
 NOTARY_PROFILE=systemcleaner \
-bun run build:app:dmg
+bun run build:app
 ```
 
 `NOTARY_PROFILE` names a keychain profile you create once:
@@ -85,9 +89,11 @@ xcrun notarytool store-credentials systemcleaner \
   --apple-id you@example.com --team-id TEAMID --password app-specific-password
 ```
 
-With the identity set, the script signs inside-out (nested executables first,
-the bundle last) and verifies the result. With the notary profile set, it
-submits the DMG, waits, and staples the ticket.
+With the identity set, `buddy build:dmg` signs inside-out — every nested
+executable, then the launcher, then the bundle — because signing the parent
+first invalidates its seal. With the notary profile set, the build script
+submits the DMG, waits, and staples the ticket; a signed but un-notarized DMG is
+still refused on a Mac that has never seen it.
 
 **Developer ID rather than the Mac App Store, deliberately.** The App Store
 requires `com.apple.security.app-sandbox`, and a sandboxed process cannot read
@@ -107,8 +113,9 @@ answers once:
 | Full Disk Access (System Settings) | reading `~/Library` caches and login items |
 | Automation → Finder | moving items to the Trash instead of deleting them |
 
-The reasons shown in each prompt come from the `NS*UsageDescription` keys in
-`Info.plist`, written by `scripts/build-desktop-app.ts`.
+The reasons shown in each prompt are the `NS*UsageDescription` strings in
+`app/Desktop/Info.plist.json`, which `buddy build:dmg` merges into the bundle's
+`Info.plist`.
 
 Until Automation is allowed, "Move to Trash" fails and reports why; "Delete
 Permanently" needs no Apple Events and works regardless.

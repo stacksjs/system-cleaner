@@ -91,12 +91,23 @@ Add your own with `app/Skills/<name>/SKILL.md`, then re-run `buddy setup:ai`.
 
 ## The desktop app
 
-`bun run build:app` (add `:dmg` for the disk image) packages a self-contained
-`.app` into `storage/framework/desktop-dist/`. It is not yet `buddy
-build:desktop`: that command could only build a window onto a remote URL, which
-this app does not have. Stacks now honours `app/Desktop/launcher.ts` — the
-layout this app already uses — but not in a released version, so the script
-stays until then. See `docs/guide/desktop-app.md` for the switch.
+`bun run build:app` produces the signed `.dmg` in
+`storage/framework/desktop-dmg/`. It drives buddy rather than replacing it:
+`buddy build:views` renders the UI, `buddy build:desktop` compiles the launcher
+and bundles Craft, `buddy build:dmg` assembles and images the bundle. The script
+does only what the framework cannot know — render the UI as the local agent,
+stage the payload, and compile the two binaries the launcher spawns.
+
+Four conventions carry the rest, all read by buddy:
+
+| Path | What it does |
+|---|---|
+| `app/Desktop/launcher.ts` | replaces the framework launcher, which opens a remote URL this app does not have |
+| `app/Desktop/server.ts` | the agent the launcher starts on loopback |
+| `app/Desktop/Resources/` | copied into `Contents/Resources` (generated; gitignored) |
+| `app/Desktop/Info.plist.json` | the `NS*UsageDescription` strings macOS shows in permission prompts |
+
+Requires Stacks >= 0.72.100. See `docs/guide/desktop-app.md`.
 
 The bundle serves prerendered HTML, so **nothing machine-specific may come from
 a `<script server>` block** on an app view. Anything a server script computes is

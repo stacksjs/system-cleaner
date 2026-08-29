@@ -1,0 +1,9 @@
+{
+  "LSApplicationCategoryType": "public.app-category.utilities",
+  "LSMinimumSystemVersion": "13.0",
+  "NSSystemAdministrationUsageDescription": "SystemCleaner needs access to your files to report what is using disk space and to remove what you choose to remove.",
+  "NSDesktopFolderUsageDescription": "SystemCleaner scans your Desktop for large files.",
+  "NSDocumentsFolderUsageDescription": "SystemCleaner scans your Documents for large files.",
+  "NSDownloadsFolderUsageDescription": "SystemCleaner scans your Downloads for large files.",
+  "NSAppleEventsUsageDescription": "SystemCleaner asks Finder to move items to the Trash so deletions stay recoverable."
+}

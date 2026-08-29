@@ -35,6 +35,11 @@ storage/framework/cache/
 storage/logs/
 /storage/framework/frontend-dist
 /storage/framework/desktop-dist
+/storage/framework/desktop-dmg
+
+# Staged into the .app by `buddy build:dmg`; both halves are build output
+# (the rendered UI, and the migrations generated from app/Models).
+/app/Desktop/Resources
 
 # Local AI-client projections; Buddy rebuilds these from framework defaults
 /.claude
