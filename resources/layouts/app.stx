@@ -275,6 +275,14 @@ const localAgent = isLocalAgent()
        `app-icon-missing` is set by the img's onerror: a CLI-only package has
        no .app and so no icon, and an empty box reads as a broken image rather
        than as "this one has no icon". */
+    /* Quick Clean: a size is dim until it is real, so a column of placeholders
+       reads as pending rather than as data. Same for the headline total, which
+       must not be green — the success colour — while it is still scanning. */
+    .clean-total.is-scanning { color: var(--secondary); }
+    .clean-total { color: var(--green); }
+    .clean-size { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .clean-size.is-pending { color: var(--tertiary); font-weight: 400; }
+
     .app-icon { width: 18px; height: 18px; flex-shrink: 0; border-radius: 4px; object-fit: contain; }
     .app-icon-missing { visibility: hidden; }
 

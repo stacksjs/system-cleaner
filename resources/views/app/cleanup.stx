@@ -188,10 +188,16 @@ function applySizes(sizes) {
     var bytes = sizes[p] || 0;
     total += bytes;
     var cell = row.querySelector('.clean-size');
-    if (cell) cell.textContent = bytes > 0 ? _fmtBytes(bytes) : '< 1 MB';
+    if (cell) {
+      cell.textContent = bytes > 0 ? _fmtBytes(bytes) : '< 1 MB';
+      cell.classList.remove('is-pending');
+    }
   });
   var totalEl = document.getElementById('total-cleanable');
-  if (totalEl) totalEl.textContent = total > 0 ? _fmtBytes(total) : '< 1 MB';
+  if (totalEl) {
+    totalEl.textContent = total > 0 ? _fmtBytes(total) : '< 1 MB';
+    totalEl.classList.remove('is-scanning');
+  }
   var labelEl = document.getElementById('cleanup-sort-label');
   if (labelEl) labelEl.textContent = 'sorted by size';
   // Sort rows by size (largest first)
@@ -232,7 +238,10 @@ function scanCleanupSizes(force) {
       }
     }).catch(function(err) {
       window._cleanupScanPromise = null;
-      if (totalEl) totalEl.textContent = '-';
+      if (totalEl) {
+        totalEl.textContent = '—';
+        totalEl.classList.remove('is-scanning');
+      }
       _exec("toast('Scan failed: " + (err && err.message || 'network').replace(/'/g, "\\'") + "', 'error')");
     });
   }
