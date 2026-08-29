@@ -367,43 +367,51 @@ const localAgent = isLocalAgent()
   </div>
 </div>
 
-<script>
-  /*
-   * The window has no titlebar, so the page has to move it.
-   *
-   * Craft's window buttons sit over this app's chrome, which is what a Mac app
-   * with a sidebar looks like — and it leaves the window with no handle of its
-   * own. The usual trick, `-webkit-app-region: drag`, is Chromium's and does
-   * nothing here: WebKit has never implemented it, and a WKWebView discards the
-   * declaration outright, which is worse than not supporting it — the
-   * stylesheet reads as though the window can be dragged while it cannot be
-   * moved at all. Craft's own answer is `startDrag()`, which hands the press to
-   * AppKit and runs a real window drag loop from it.
-   *
-   * The bands are the rail and the sticky page header: chrome by intent, and
-   * between them they cover the top of the window wherever the pointer lands.
-   * A press on anything interactive is left alone, and in a browser — the
-   * marketing site renders this same shell — there is no `craft` to call and
-   * this does nothing.
-   */
-  document.addEventListener('mousedown', (event) => {
-    if (event.button !== 0)
-      return
+<script client>
+/*
+ * The window has no titlebar, so the page has to move it.
+ *
+ * Craft's window buttons sit over this app's chrome, which is what a Mac app
+ * with a sidebar looks like — and it leaves the window with no handle of its
+ * own. The usual trick, `-webkit-app-region: drag`, is Chromium's and does
+ * nothing here: WebKit has never implemented it, and a WKWebView discards the
+ * declaration outright. That is worse than not supporting it, because the
+ * stylesheet then reads as though the window can be dragged while it cannot be
+ * moved at all. Craft's own answer is `startDrag()`, which hands the press to
+ * AppKit and runs a real window drag loop from it.
+ *
+ * The bands are the icon rail and the sticky page header: chrome by intent,
+ * and between them they cover the top of the window wherever the pointer
+ * lands. A press on anything interactive is left alone, and in a browser —
+ * the marketing site renders this same shell — there is no `craft` to call
+ * and this does nothing.
+ */
+interface CraftWindowDrag {
+  window?: { startDrag?: () => void }
+}
 
-    const drag = window.craft?.window?.startDrag
-    if (typeof drag !== 'function')
-      return
+function moveWindowFrom(event: Event): void {
+  const press = event as MouseEvent
+  if (press.button !== 0)
+    return
 
-    const target = event.target
-    if (!(target instanceof Element))
-      return
-    if (!target.closest('.rail, .main-header'))
-      return
-    if (target.closest('a, button, input, select, textarea, [role="button"], [data-rail-item]'))
-      return
+  const craft = (globalThis as { craft?: CraftWindowDrag }).craft
+  const drag = craft?.window?.startDrag
+  if (typeof drag !== 'function')
+    return
 
-    drag.call(window.craft.window)
-  })
+  const target = press.target
+  if (!(target instanceof Element))
+    return
+  if (!target.closest('.rail, .main-header'))
+    return
+  if (target.closest('a, button, input, select, textarea, [role="button"], [data-rail-item]'))
+    return
+
+  drag.call(craft.window)
+}
+
+useEventListener('mousedown', moveWindowFrom, { target: document })
 </script>
 </body>
 </html>

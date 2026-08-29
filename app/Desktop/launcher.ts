@@ -151,32 +151,68 @@ async function waitForHealth(port: number): Promise<void> {
 const port = await readPort()
 await waitForHealth(port)
 
-/*
- * `--titlebar-hidden` puts the window's own buttons over the page's top-left
- * corner, which is where this app's chrome belongs: the dashboard opens with a
- * sidebar, and every Mac app shaped like that — Finder, Mail, System Settings —
- * carries the close/minimise/zoom buttons over the sidebar rather than in a
- * strip above it. The dashboard layout has been built for that all along. Its
- * sidebar header is an empty 52pt strip marked `-webkit-app-region: drag`, so
- * it is both the room the buttons sit in and the handle the window is moved by,
- * which a titlebar-less window otherwise has none of.
+/**
+ * The first Craft release that can host this app's chrome.
  *
- * The buttons stay AppKit's. Nothing here draws its own: `SidebarHeader` is
- * passed `windowControls="native"`, and Craft publishes where it measured the
- * real ones so the header can leave them room.
+ * Hiding the titlebar puts the window's own buttons over the page's top-left
+ * corner, which is where this app's chrome belongs — every Mac app with a
+ * sidebar carries them there rather than in a strip above it. Two things have
+ * to be true of the runtime for that to work, and both arrived in 0.0.78:
  *
- * A runtime too old to publish that measurement degrades rather than breaks,
- * which is why this needs no version check. The strip is empty — no title, no
- * logo, nothing for the buttons to overlap — so the reserve it does not receive
- * is a reserve it has no use for, and an unmeasured header keeps its default
- * padding, making the strip taller than it needs to be rather than shorter.
+ *   1. It measures its window buttons and publishes where they are, so the
+ *      icon rail can start its first button below them instead of under them.
+ *   2. It serves `window.startDrag`, which is the only way the page can move a
+ *      window that has no titlebar. WebKit does not implement
+ *      `-webkit-app-region: drag` — a WKWebView discards the declaration — so
+ *      without `startDrag` a titlebar-less window cannot be moved at all.
+ *
+ * 0.0.37, which is what `pantry` serves for macOS today, has neither. Asking
+ * it for this window would produce an app that looks right and cannot be
+ * dragged anywhere, which is why this is a question rather than an assumption.
  */
+const CHROME_CAPABLE_CRAFT = [0, 0, 78]
+
+/**
+ * Whether the bundled runtime is one of those.
+ *
+ * A locally built Craft reports `0.0.0` — the release version is stamped in by
+ * the release build and a `zig build` leaves it unset — and is treated as
+ * capable, because a checkout is by definition newer than the last release.
+ * Anything unreadable is treated as incapable: a window with a titlebar is the
+ * wrong look, and a window that cannot be moved is a broken app.
+ */
+function runtimeCanHostChrome(): boolean {
+  let version: number[]
+  try {
+    const printed = Bun.spawnSync([craftBinary, '--version']).stdout.toString()
+    const parts = printed.match(/version\s+(\d+)\.(\d+)\.(\d+)/)
+    if (!parts)
+      return false
+
+    version = parts.slice(1, 4).map(Number)
+  }
+  catch {
+    return false
+  }
+
+  // A checkout is newer than the last release by definition.
+  if (version.every(part => part === 0))
+    return true
+
+  for (const [index, floor] of CHROME_CAPABLE_CRAFT.entries()) {
+    if (version[index] !== floor)
+      return version[index] > floor
+  }
+
+  return true
+}
+
 const craft = Bun.spawn([
   craftBinary,
   `http://127.0.0.1:${port}/app`,
   '--title',
   APP_NAME,
-  '--titlebar-hidden',
+  ...(runtimeCanHostChrome() ? ['--titlebar-hidden'] : []),
   '--width',
   '1400',
   '--height',
