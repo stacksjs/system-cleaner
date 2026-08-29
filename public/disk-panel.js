@@ -204,6 +204,15 @@
         patchDiskScope({ hovered: null });
       }
     });
+    // Right-click acts on whatever is under the pointer, the way a Finder
+    // window does — not on whatever happened to be selected last.
+    diskLayout.addEventListener('contextmenu', function(e) {
+      var seg = e.target.closest('.segment');
+      if (!seg) return;
+      e.preventDefault();
+      var s = segs[parseInt(seg.getAttribute('data-idx'))];
+      if (s) openSegmentMenu(s, e.clientX, e.clientY);
+    });
     diskLayout.addEventListener('click', function(e) {
       var seg = e.target.closest('.segment');
       if (seg) {
@@ -500,6 +509,150 @@
     startProgressPoll();
     window._diskScan.run();
   };
+
+  // ── Context menu ────────────────────────────────────────────────
+  // Built rather than borrowed: the window has no native menu to hang this off,
+  // so it imitates one — same metrics, same dismissal rules, same keyboard
+  // behaviour. Anything less reads as a web page pretending to be an app.
+  var menuEl = null;
+  var pendingMenuTarget = null;
+
+  // Picks come back on the same channel the menubar uses, so ids are prefixed.
+  if (!window._diskMenuBound) {
+    window._diskMenuBound = true;
+    window.addEventListener('craft:menu:action', function(e) {
+      var id = e && e.detail && e.detail.id;
+      var s = pendingMenuTarget;
+      if (!id || id.indexOf('sc.') !== 0 || !s) return;
+      pendingMenuTarget = null;
+
+      if (id === 'sc.reveal') window.diskRevealInFinder(s.fullPath);
+      else if (id === 'sc.copy' && navigator.clipboard) navigator.clipboard.writeText(s.fullPath).catch(function(){});
+      else if (id === 'sc.drill') drillInto(s);
+      else if (id === 'sc.trash') window.diskDeletePath(s.fullPath, s.name, s.size);
+    });
+  }
+
+  function drillInto(s) {
+    if (!s || !s.isDir || !s._node || !s._node.c || !s._node.c.length) return;
+    viewStack.push(currentRoot);
+    renderSegments(s._node);
+  }
+
+  function closeSegmentMenu() {
+    if (!menuEl) return;
+    menuEl.remove();
+    menuEl = null;
+    document.removeEventListener('mousedown', onMenuOutside, true);
+    document.removeEventListener('keydown', onMenuKey, true);
+    window.removeEventListener('blur', closeSegmentMenu);
+    window.removeEventListener('resize', closeSegmentMenu);
+    document.removeEventListener('scroll', closeSegmentMenu, true);
+  }
+
+  function onMenuOutside(e) {
+    if (menuEl && !menuEl.contains(e.target)) closeSegmentMenu();
+  }
+
+  function onMenuKey(e) {
+    if (!menuEl) return;
+    if (e.key === 'Escape') { e.preventDefault(); closeSegmentMenu(); return; }
+
+    var items = Array.prototype.slice.call(menuEl.querySelectorAll('.ctx-item:not([disabled])'));
+    if (!items.length) return;
+    var at = items.indexOf(document.activeElement);
+
+    if (e.key === 'ArrowDown') { e.preventDefault(); items[(at + 1) % items.length].focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); items[(at - 1 + items.length) % items.length].focus(); }
+    else if (e.key === 'Enter' && at >= 0) { e.preventDefault(); items[at].click(); }
+  }
+
+  // Native when the window can open one, the styled fallback otherwise.
+  // `@stacksjs/desktop`'s contextMenu.show() reports which happened, so this
+  // never has to guess — and a browser tab still gets a working right-click.
+  function openSegmentMenu(s, x, y) {
+    closeSegmentMenu();
+
+    var native = window.craft && window.craft.nativeUI;
+    if (native && typeof native.showContextMenu === 'function') {
+      pendingMenuTarget = s;
+      var items = [
+        { id: 'sc.reveal', title: 'Reveal in Finder', icon: 'folder' },
+        { id: 'sc.copy', title: 'Copy Path', icon: 'doc.on.doc', shortcut: 'cmd+c' },
+      ];
+      if (s.isDir && s.childCount)
+        items.push({ id: 'sc.sep1', title: '', type: 'separator' }, { id: 'sc.drill', title: 'Open in Chart', icon: 'chart.pie' });
+      items.push({ id: 'sc.sep2', title: '', type: 'separator' }, { id: 'sc.trash', title: 'Move to Trash', icon: 'trash', shortcut: 'cmd+delete' });
+
+      try {
+        native.showContextMenu({ targetId: s.fullPath, targetType: 'general', x: Math.round(x), y: Math.round(y), items: items });
+        return;
+      }
+      catch (_) {
+        // Fall through to the DOM menu below.
+        pendingMenuTarget = null;
+      }
+    }
+
+    menuEl = document.createElement('div');
+    menuEl.className = 'ctx-menu';
+    menuEl.setAttribute('role', 'menu');
+
+    var header = document.createElement('div');
+    header.className = 'ctx-header';
+    header.textContent = s.name;
+    menuEl.appendChild(header);
+
+    function addItem(label, danger, onPick) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ctx-item' + (danger ? ' is-danger' : '');
+      b.setAttribute('role', 'menuitem');
+      b.textContent = label;
+      b.addEventListener('click', function() { closeSegmentMenu(); onPick(); });
+      menuEl.appendChild(b);
+      return b;
+    }
+
+    function addSeparator() {
+      var sep = document.createElement('div');
+      sep.className = 'ctx-sep';
+      menuEl.appendChild(sep);
+    }
+
+    addItem('Reveal in Finder', false, function() { window.diskRevealInFinder(s.fullPath); });
+    addItem('Copy Path', false, function() {
+      if (navigator.clipboard) navigator.clipboard.writeText(s.fullPath).catch(function(){});
+    });
+
+    if (s.isDir && s.childCount) {
+      addSeparator();
+      addItem('Open in Chart', false, function() { drillInto(s); });
+    }
+
+    addSeparator();
+    addItem('Move to Trash…', true, function() {
+      window.diskDeletePath(s.fullPath, s.name, s.size);
+    });
+
+    // Offscreen first so it can be measured, then placed. Flipping rather than
+    // clamping keeps the corner nearest the pointer anchored, which is what
+    // macOS does when a menu meets an edge.
+    menuEl.style.visibility = 'hidden';
+    document.body.appendChild(menuEl);
+    var r = menuEl.getBoundingClientRect();
+    var left = x + r.width > window.innerWidth - 8 ? Math.max(8, x - r.width) : x;
+    var top = y + r.height > window.innerHeight - 8 ? Math.max(8, y - r.height) : y;
+    menuEl.style.left = left + 'px';
+    menuEl.style.top = top + 'px';
+    menuEl.style.visibility = '';
+
+    document.addEventListener('mousedown', onMenuOutside, true);
+    document.addEventListener('keydown', onMenuKey, true);
+    window.addEventListener('blur', closeSegmentMenu);
+    window.addEventListener('resize', closeSegmentMenu);
+    document.addEventListener('scroll', closeSegmentMenu, true);
+  }
 
   window.diskRevealInFinder = function(path) {
     fetch('/api/reveal-in-finder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: path }) }).catch(function(){});
