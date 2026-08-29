@@ -28,11 +28,14 @@
     <div>
       <span class='tbl-title'>Running Processes</span>
       <span class='tbl-count'>sorted by CPU</span>
-      <span class='live-indicator' :class="feedConnected ? 'connected' : 'disconnected'">
-        <span class='live-dot'></span>
-        <span>{{ feedLabel }}</span>
-      </span>
     </div>
+    <!-- A sibling of the title group, not a child of it: `.tbl-bar` is
+         space-between, and its only other child is the hidden button below, so
+         an indicator nested on the left had nothing pushing it right. -->
+    <span class='live-indicator' :class="feedConnected ? 'connected' : 'disconnected'">
+      <span class='live-dot'></span>
+      <span>{{ feedLabel }}</span>
+    </span>
     <!-- Bulk kill is hidden until it's wired to /api/kill-process for each
         pid; the previous "(demo)" toast was misleading because users
         assumed they had killed something. Per-row kill still works. -->

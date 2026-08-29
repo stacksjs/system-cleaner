@@ -84,10 +84,29 @@ const localAgent = isLocalAgent()
     /* No fill and no divider: the rail sits on the same surface as the
        content column so the two read as one canvas, and the only thing that
        draws a shape is the selected button. */
+    /*
+       The window has no titlebar, so its close/minimise/zoom buttons sit in
+       this rail's top-left corner — the arrangement every Mac app with a
+       sidebar uses. Two consequences, and neither of them is a number typed in
+       here:
+
+       1. The first rail button starts below them. Craft measures its own
+          window and publishes the buttons' bottom edge; the rail adds its own
+          breathing room to that. On macOS 27 the measurement is 23px, which
+          puts the brand mark at 31px — where 16px would have run it under the
+          buttons by seven. `max()` keeps the old 16px wherever nothing is
+          published: a browser, which has no window buttons, or a Craft old
+          enough not to say where its own are.
+       2. This rail is part of the window's drag handle, which the script at
+          the end of this file wires up. Not `-webkit-app-region: drag`: that
+          property is Chromium's, WebKit does not implement it, and a WKWebView
+          drops it on the floor — `style.setProperty('-webkit-app-region')`
+          reads back as the empty string. Written that way, the rail looks
+          draggable in the stylesheet and the window cannot be moved at all. */
     .rail {
       display: flex; width: 74px; min-width: 74px; height: 100%;
       flex-direction: column; align-items: center; gap: 22px;
-      padding: 16px 0 14px;
+      padding: max(16px, calc(var(--craft-window-controls-height, 0px) + 8px)) 0 14px;
       background: transparent;
     }
     .rail-brand { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 13px; }
@@ -105,6 +124,25 @@ const localAgent = isLocalAgent()
       transition: background .14s ease, color .14s ease, transform .14s ease;
     }
     .rail-item:hover { background: var(--hover); }
+
+    /* A scan keeps running after you leave its screen. The dot is the only
+       thing that says so from anywhere else in the app. */
+    .rail-item[data-scanning]::after {
+      content: '';
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      width: 6px;
+      height: 6px;
+      border: 1.5px solid var(--surface);
+      border-radius: 50%;
+      background: var(--accent);
+      animation: rail-scan-pulse 1.6s ease-in-out infinite;
+    }
+    @keyframes rail-scan-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+    @media (prefers-reduced-motion: reduce) {
+      .rail-item[data-scanning]::after { animation: none; }
+    }
     .rail-item:active { transform: scale(.95); }
     .rail-item[data-active] { background: var(--accent); color: #fff; box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 34%, transparent); }
     .rail-item[data-active]:hover { background: var(--accent); }
@@ -328,5 +366,44 @@ const localAgent = isLocalAgent()
     @endif
   </div>
 </div>
+
+<script>
+  /*
+   * The window has no titlebar, so the page has to move it.
+   *
+   * Craft's window buttons sit over this app's chrome, which is what a Mac app
+   * with a sidebar looks like — and it leaves the window with no handle of its
+   * own. The usual trick, `-webkit-app-region: drag`, is Chromium's and does
+   * nothing here: WebKit has never implemented it, and a WKWebView discards the
+   * declaration outright, which is worse than not supporting it — the
+   * stylesheet reads as though the window can be dragged while it cannot be
+   * moved at all. Craft's own answer is `startDrag()`, which hands the press to
+   * AppKit and runs a real window drag loop from it.
+   *
+   * The bands are the rail and the sticky page header: chrome by intent, and
+   * between them they cover the top of the window wherever the pointer lands.
+   * A press on anything interactive is left alone, and in a browser — the
+   * marketing site renders this same shell — there is no `craft` to call and
+   * this does nothing.
+   */
+  document.addEventListener('mousedown', (event) => {
+    if (event.button !== 0)
+      return
+
+    const drag = window.craft?.window?.startDrag
+    if (typeof drag !== 'function')
+      return
+
+    const target = event.target
+    if (!(target instanceof Element))
+      return
+    if (!target.closest('.rail, .main-header'))
+      return
+    if (target.closest('a, button, input, select, textarea, [role="button"], [data-rail-item]'))
+      return
+
+    drag.call(window.craft.window)
+  })
+</script>
 </body>
 </html>

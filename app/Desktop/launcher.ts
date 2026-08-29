@@ -151,11 +151,32 @@ async function waitForHealth(port: number): Promise<void> {
 const port = await readPort()
 await waitForHealth(port)
 
+/*
+ * `--titlebar-hidden` puts the window's own buttons over the page's top-left
+ * corner, which is where this app's chrome belongs: the dashboard opens with a
+ * sidebar, and every Mac app shaped like that — Finder, Mail, System Settings —
+ * carries the close/minimise/zoom buttons over the sidebar rather than in a
+ * strip above it. The dashboard layout has been built for that all along. Its
+ * sidebar header is an empty 52pt strip marked `-webkit-app-region: drag`, so
+ * it is both the room the buttons sit in and the handle the window is moved by,
+ * which a titlebar-less window otherwise has none of.
+ *
+ * The buttons stay AppKit's. Nothing here draws its own: `SidebarHeader` is
+ * passed `windowControls="native"`, and Craft publishes where it measured the
+ * real ones so the header can leave them room.
+ *
+ * A runtime too old to publish that measurement degrades rather than breaks,
+ * which is why this needs no version check. The strip is empty — no title, no
+ * logo, nothing for the buttons to overlap — so the reserve it does not receive
+ * is a reserve it has no use for, and an unmeasured header keeps its default
+ * padding, making the strip taller than it needs to be rather than shorter.
+ */
 const craft = Bun.spawn([
   craftBinary,
   `http://127.0.0.1:${port}/app`,
   '--title',
   APP_NAME,
+  '--titlebar-hidden',
   '--width',
   '1400',
   '--height',

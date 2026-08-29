@@ -53,8 +53,31 @@ function syncActive(): void {
   }
 }
 
+/**
+ * Mark the section whose scan is still running.
+ *
+ * A disk or large-file scan keeps going in the agent after you leave its
+ * screen, and until now nothing said so — you came back to a spinner with no
+ * way of knowing whether it had been working the whole time or had died. The
+ * rail outlives navigation, so it is the one place that can carry this.
+ */
+function syncScanning(): void {
+  fetch('/api/scan-progress', { method: 'POST' })
+    .then(r => r.json())
+    .then((d: { scanning?: boolean, kind?: string }) => {
+      const busy = d?.scanning ? (d.kind === 'large-files' ? 'large-files' : 'disk') : ''
+      for (const item of Array.from(document.querySelectorAll<HTMLElement>('[data-rail-item]')))
+        item.toggleAttribute('data-scanning', item.getAttribute('data-rail-item') === busy)
+    })
+    .catch(() => {})
+}
+
 useEventListener('stx:navigate', syncActive)
 useEventListener('stx:load', syncActive)
+
+// Two seconds: fast enough that the dot appears while you are still deciding
+// where to click, slow enough to be invisible next to a scan's own work.
+useIntervalFn(syncScanning, 2000, { immediate: true })
 </script>
 
 <nav class="rail" aria-label="SystemCleaner sections">
@@ -68,7 +91,7 @@ useEventListener('stx:load', syncActive)
         @foreach (group as item)
           <a
             class="rail-item"
-            data-rail-item
+            data-rail-item="{{ item.id }}"
             href="{{ item.href }}"
             data-stx-link
             aria-label="{{ item.label }}"

@@ -20,6 +20,13 @@
     someone that the file they deliberately protected "failed to delete".
   - A scan runs for tens of seconds, so `/api/scan-progress` is polled while it
     does. A spinner that never moves is indistinguishable from a hang.
+  - A scan is stuck when its count stops moving, not only when it never started:
+    a walk parked on a permission gate after 56 entries reports 56 forever.
+  - `rejoin()` runs on mount. Navigating away tears down this page's state while
+    the scan keeps running in the agent, so the server is the only thing that
+    knows what happened — ask it rather than showing an empty screen over a live
+    scan, or a spinner over one that already finished. `applyResult()` is shared
+    by a scan this page started and one it rejoined, so both land identically.
   - Nothing here mutates an array or a row in place. STX's reactivity tracks
     assignment, not `Array.prototype.push`, so `selected.push(path)` updated
     the state and left the DOM showing the old one — the checkbox ticked while
@@ -40,7 +47,10 @@
   scanProgress: '',
   scanProgressPath: '',
   scanStalled: false,
+  lastCount: -1,
+  lastCountAt: 0,
   progressTimer: null,
+  rejoinTimer: null,
   scanned: false,
   deleting: false,
   lifetimeFreed: '0 B',
@@ -50,6 +60,7 @@
 
   init() {
     this.refreshHistory();
+    this.rejoin();
   },
 
   post(endpoint, data) {
@@ -79,25 +90,67 @@
     this.scanProgress = '';
     this.scanProgressPath = '';
     this.scanStalled = false;
+    this.lastCount = -1;
+    this.lastCountAt = 0;
     this.pollProgress();
     this.post('/api/large-files', { minSizeMB: this.minSizeMB, path: this.scanRoot }).then(function(r) {
       self.scanning = false;
       self.stopProgress();
       if (!r.success) { self.toast(r.error || 'Scan failed', 'error'); return; }
-      self.files = r.files || [];
-      self.matched = r.matched || 0;
-      self.totalBytes = r.totalBytes || 0;
-      self.truncated = !!r.truncated;
-      self.scanTime = r.scanTime || '';
-      self.scanned = true;
-      var present = {};
-      self.files.forEach(function(f) { present[f.path] = true; });
-      self.selected = self.selected.filter(function(p) { return present[p]; });
+      self.applyResult(r);
     }).catch(function(err) {
       self.scanning = false;
       self.stopProgress();
       self.toast('Scan failed: ' + (err && err.message ? err.message : 'network'), 'error');
     });
+  },
+
+  applyResult(r) {
+    this.files = r.files || [];
+    this.matched = r.matched || 0;
+    this.totalBytes = r.totalBytes || 0;
+    this.truncated = !!r.truncated;
+    this.scanTime = r.scanTime || '';
+    this.scanned = true;
+    var present = {};
+    this.files.forEach(function(f) { present[f.path] = true; });
+    this.selected = this.selected.filter(function(p) { return present[p]; });
+  },
+
+  rejoin() {
+    var self = this;
+    this.post('/api/scan-progress').then(function(d) {
+      if (!d || !d.scanning || d.kind !== 'large-files') {
+        if (!self.scanned) self.collectFinished();
+        return;
+      }
+      self.scanning = true;
+      self.pollProgress();
+      self.watchForResult();
+    }).catch(function() {});
+  },
+
+  watchForResult() {
+    var self = this;
+    if (this.rejoinTimer) clearInterval(this.rejoinTimer);
+    this.rejoinTimer = setInterval(function() {
+      self.post('/api/scan-progress').then(function(d) {
+        if (d && d.scanning) return;
+        clearInterval(self.rejoinTimer);
+        self.rejoinTimer = null;
+        self.scanning = false;
+        self.stopProgress();
+        self.collectFinished();
+      }).catch(function() {});
+    }, 700);
+  },
+
+  collectFinished() {
+    var self = this;
+    this.post('/api/last-scan', { kind: 'large-files' }).then(function(d) {
+      if (!d || !d.result || !d.result.success) return;
+      self.applyResult(d.result);
+    }).catch(function() {});
   },
 
   pollProgress() {
@@ -110,7 +163,9 @@
         var count = n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n);
         self.scanProgress = count + ' items · ' + Math.round(d.elapsedMs / 1000) + 's';
         self.scanProgressPath = self.shortPath(d.path || '');
-        self.scanStalled = d.scanned === 0 && d.elapsedMs > 8000;
+        if (d.scanned !== self.lastCount) { self.lastCount = d.scanned; self.lastCountAt = Date.now(); }
+        else if (!self.lastCountAt) { self.lastCountAt = Date.now(); }
+        self.scanStalled = !!self.lastCountAt && (Date.now() - self.lastCountAt) > 8000;
       }).catch(function() {});
     }, 400);
   },

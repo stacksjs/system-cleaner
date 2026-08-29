@@ -337,27 +337,83 @@
     };
   }
 
+  // Navigating away tears down this module, taking the in-flight request's
+  // callback with it. The scan itself keeps running in the agent, so on the way
+  // back the server is the only thing that knows what happened — ask it, rather
+  // than trusting a localStorage flag that outlived the request it described.
+  function rejoinServerScan() {
+    return fetch('/api/scan-progress', { method: 'POST' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (!d || !d.scanning || d.kind !== 'tree') return false;
+
+        patchDiskScope({ scanState: 'scanning' });
+        startProgressPoll();
+        watchForServerResult();
+        return true;
+      })
+      .catch(function() { return false; });
+  }
+
+  // Poll until the scan is no longer running, then collect what it produced.
+  function watchForServerResult() {
+    if (window._diskRejoinTimer) clearInterval(window._diskRejoinTimer);
+    window._diskRejoinTimer = setInterval(function() {
+      fetch('/api/scan-progress', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d && d.scanning) return;
+          clearInterval(window._diskRejoinTimer);
+          window._diskRejoinTimer = null;
+          stopProgressPoll();
+          localStorage.removeItem(DISK_SCANNING_KEY);
+          fetchLastScan().then(function(data) {
+            if (data && data.success) applyScanResult(data, false);
+            else if (data) patchDiskScope({ scanState: 'error', scanError: data.error || 'Scan failed' });
+            else patchDiskScope({ scanState: 'idle' });
+          });
+        })
+        .catch(function() {});
+    }, 700);
+  }
+
+  function fetchLastScan() {
+    return fetch('/api/last-scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 'tree' }),
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(d) { return (d && d.result) ? d.result : null; })
+      .catch(function() { return null; });
+  }
+
   function doDiskPanelMount() {
     if (!document.querySelector('.disk-layout')) return;
     flushDiskExecQueue();
     window._diskScan.onComplete = function(data) { applyScanResult(data, false); };
     bindSvgEvents();
 
-    var cached = readCachedScan();
-    var scanningFlag = localStorage.getItem(DISK_SCANNING_KEY) === 'true';
-    if (cached && !window._diskScan.scanning && scanningFlag) {
-      localStorage.removeItem(DISK_SCANNING_KEY);
-      scanningFlag = false;
-    }
-
-    if (window._diskScan.scanning || scanningFlag) {
+    // A scan started in this page's own lifetime still reports through its own
+    // promise; nothing to rejoin.
+    if (window._diskScan.scanning) {
       patchDiskScope({ scanState: 'scanning' });
-      if (cached) applyScanResult(cached, true);
-      else pollForScanComplete();
+      startProgressPoll();
       return;
     }
+
+    var cached = readCachedScan();
     if (cached) applyScanResult(cached, true);
     else patchDiskScope({ scanState: 'idle' });
+
+    rejoinServerScan().then(function(rejoined) {
+      if (rejoined || cached) return;
+      // Nothing running, nothing cached locally — but a scan may have finished
+      // while this screen was closed.
+      fetchLastScan().then(function(data) {
+        if (data && data.success) applyScanResult(data, false);
+      });
+    });
   }
 
   function diskPanelMount() {
@@ -374,6 +430,28 @@
   }
 
   var progressTimer = null;
+
+  // A scan is stuck when its count stops moving, not only when it never
+  // started: a walk parked on a permission gate after 56 entries reports 56
+  // forever, and a zero-only check called that healthy.
+  var lastCount = -1;
+  var lastCountAt = 0;
+
+  function isStalled(d) {
+    var now = Date.now();
+    if (d.scanned !== lastCount) {
+      lastCount = d.scanned;
+      lastCountAt = now;
+      return false;
+    }
+    if (!lastCountAt) { lastCountAt = now; return false; }
+    return now - lastCountAt > 8000;
+  }
+
+  function resetStallTracking() {
+    lastCount = -1;
+    lastCountAt = 0;
+  }
 
   function stopProgressPoll() {
     if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
@@ -397,6 +475,7 @@
   // makes a slow scan tolerable rather than suspicious.
   function startProgressPoll() {
     stopProgressPoll();
+    resetStallTracking();
     progressTimer = setInterval(function() {
       fetch('/api/scan-progress', { method: 'POST' })
         .then(function(r) { return r.json(); })
@@ -409,7 +488,7 @@
             // slow, it is stopped — parked in a syscall macOS will not return
             // from until someone answers a permission prompt. Saying so beats
             // counting seconds up to a timeout the user cannot interpret.
-            scanStalled: d.scanned === 0 && d.elapsedMs > 8000,
+            scanStalled: isStalled(d),
           });
         })
         .catch(function() {});

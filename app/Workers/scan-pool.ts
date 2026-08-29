@@ -82,6 +82,31 @@ export interface ScanProgress {
 let running: { file: string, startedAt: number, kind: ScanRequest['kind'] } | null = null
 
 /**
+ * The last result of each kind of scan, kept so a page that walked away can
+ * still collect it.
+ *
+ * Navigation between screens tears down the page's JavaScript, and with it the
+ * pending request that was going to receive the result. The scan carried on and
+ * finished correctly; there was simply nobody left holding the promise, so
+ * coming back showed a spinner that would never resolve. Holding the result
+ * here means returning to the screen picks up where it left off.
+ */
+const lastResults = new Map<ScanRequest['kind'], { at: number, result: ScanResult }>()
+
+/** How long a finished scan stays collectable. Matches the UI's cache note. */
+const RESULT_TTL_MS = 10 * 60_000
+
+export function lastScanResult(kind: ScanRequest['kind']): { at: number, result: ScanResult } | null {
+  const held = lastResults.get(kind)
+  if (!held) return null
+  if (Date.now() - held.at > RESULT_TTL_MS) {
+    lastResults.delete(kind)
+    return null
+  }
+  return held
+}
+
+/**
  * Progress of the scan running now, or null when nothing is running.
  *
  * Read off the scanner's progress file at the moment it is asked for. The
@@ -192,12 +217,23 @@ async function runScanner(request: ScanRequest, hardTimeoutMs: number): Promise<
     if (!resultFile)
       throw new Error('Scan produced no result')
 
-    return JSON.parse(fs.readFileSync(resultFile, 'utf8')) as ScanResult
+    const result = JSON.parse(fs.readFileSync(resultFile, 'utf8')) as ScanResult
+    lastResults.set(request.kind, { at: Date.now(), result })
+    return result
   }
   catch (err) {
-    if (timedOut)
-      throw new Error(`Scan exceeded ${Math.round(hardTimeoutMs / 1000)}s`)
-    throw err instanceof Error ? err : new Error('Scan failed')
+    const failure = timedOut
+      ? new Error(`Scan exceeded ${Math.round(hardTimeoutMs / 1000)}s`)
+      : (err instanceof Error ? err : new Error('Scan failed'))
+
+    // Failures are held too. A screen that was closed when the scan died has no
+    // other way to learn why, and silently dropping back to "ready to scan"
+    // reads as though nothing ever happened.
+    lastResults.set(request.kind, {
+      at: Date.now(),
+      result: { success: false, error: failure.message },
+    })
+    throw failure
   }
   finally {
     clearTimeout(timer)

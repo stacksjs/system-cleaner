@@ -19,7 +19,7 @@ import {
   getDashboardStatsCached,
   invalidateStartupCache,
 } from './data-service';
-import { runDiskScan, runLargeFileScan, scanProgress } from '../app/Workers/scan-pool';
+import { lastScanResult, runDiskScan, runLargeFileScan, scanProgress } from '../app/Workers/scan-pool';
 import { findAppBundle, findAppBundleForCask, getSystemInfoSync, ICON_SIZES, listApplicationEntries, renderAppIcon } from '@system-cleaner/core';
 import * as nodeOs from 'node:os';
 import { cleanDirectory, emptyTrash } from '@system-cleaner/clean';
@@ -213,6 +213,27 @@ export default async function (router: Router) {
    * indistinguishable from a hang — which is exactly how the disk scan read
    * before this existed.
    */
+  /**
+   * The most recent finished scan, for a screen that was not watching when it
+   * landed. Navigating away tears down the page and the request with it, so
+   * without this a scan that completed while the user was elsewhere was simply
+   * lost and the screen sat on a spinner forever.
+   */
+  await router.post('/last-scan', async (req: Request) => {
+    const body = await readJsonBody<{ kind?: string }>(req);
+    const kind = body?.kind === 'large-files' ? 'large-files' : 'tree';
+    const held = lastScanResult(kind);
+
+    if (!held) return Response.json({ success: true, result: null });
+
+    return Response.json({
+      success: true,
+      kind,
+      ageMs: Date.now() - held.at,
+      result: held.result,
+    });
+  });
+
   await router.post('/scan-progress', async () => {
     const progress = scanProgress();
     if (!progress) return Response.json({ success: true, scanning: false });
