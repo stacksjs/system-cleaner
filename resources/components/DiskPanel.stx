@@ -18,6 +18,7 @@
   scanInfo: null,
   scanTotalLabel: '',
   rootName: '',
+  drilled: false,
   defaultSize: '',
   defaultName: '',
   volumeTotal: '-',
@@ -69,7 +70,9 @@
           </div>
         </div>
         <div class='disk-usage-bar'>
-          <div class='disk-usage-fill' :style="'width: ' + volumePct + '%'"></div>
+          <div class='disk-usage-fill'
+               :class="volumePct >= 95 ? 'is-critical' : (volumePct >= 85 ? 'is-tight' : '')"
+               :style="'width: ' + volumePct + '%'"></div>
         </div>
         <div class='disk-usage-text'>
           <span x-text="volumeUsed + ' used'">- used</span>
@@ -79,18 +82,18 @@
     </div>
 
     <div class='disk-sidebar-section'>
-      <div style='font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--tertiary); margin-bottom: 8px;' x-text="'Home: ' + rootName">Home</div>
+      <div style='font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--tertiary); margin-bottom: 8px;' x-text="(drilled ? 'Folder: ' : 'Home: ') + rootName">Home</div>
       <div style='font-size: 18px; font-weight: 700; margin-bottom: 2px;' x-text="scanTotalLabel">-</div>
       <div style='font-size: 10px; color: var(--tertiary);' x-text="metaText()">Click 'Scan Disk' to analyze</div>
     </div>
 
     <!-- A tree that ran out of time is a real answer, but only if it says so:
          52 GB of a 490 GB disk looks like the whole picture otherwise. -->
-    <div class='disk-sidebar-section' x-show='scanInfo && scanInfo.truncated' x-cloak
-         style='padding-top: 0;'>
-      <div style='padding: 8px 10px; border: .5px solid color-mix(in srgb, var(--orange) 30%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--orange) 10%, var(--surface)); color: var(--secondary); font-size: 10px; line-height: 1.45;'>
-        This scan hit its time limit, so the chart covers only the folders it
-        reached. Everything shown is real; there is simply more below it.
+    <div class='disk-notice-wrap' x-show='scanInfo && scanInfo.truncated' x-cloak>
+      <div class='disk-notice'>
+        This scan hit its time limit, so folders deeper down are still
+        unmeasured. Everything shown is real, and the sizes here are compared
+        fairly against each other.
       </div>
     </div>
 
@@ -213,6 +216,8 @@
 .disk-empty-glyph.is-scanning { animation: pulse 1.5s ease-in-out infinite; }
 .scan-blocked { margin: 10px auto 0; max-width: 42ch; padding: 8px 12px; border: .5px solid color-mix(in srgb, var(--orange) 32%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--orange) 10%, var(--surface)); color: var(--secondary); font-size: 11px; line-height: 1.5; }
 .scan-blocked strong { display: block; margin-bottom: 2px; color: var(--ink); }
-.scan-path { margin-top: 3px; max-width: 46ch; overflow: hidden; color: var(--tertiary); font: 10px/1.5 'SF Mono', Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
+/* Centred like everything else in this column: a max-width block with no auto
+   margin sits left, which read as misaligned against the text above it. */
+.scan-path { margin: 3px auto 0; max-width: 46ch; overflow: hidden; color: var(--tertiary); font: 10px/1.5 'SF Mono', Menlo, monospace; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .disk-empty-glyph.is-scanning { animation: none; } }
 </style>

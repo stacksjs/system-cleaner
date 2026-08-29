@@ -176,6 +176,10 @@
       defaultSize: label,
       defaultName: root.n,
       rootName: root.n,
+      // The sidebar heading is "Home: chris" at the scan root and "Folder:
+      // Code" once you drill in — it read "Home: Code" before, which is not a
+      // place that exists.
+      drilled: viewStack.length > 0,
       scanTotalLabel: label,
       hovered: null,
     });

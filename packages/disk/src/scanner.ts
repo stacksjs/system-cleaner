@@ -138,55 +138,75 @@ export function scanDirectory(rootPath: string, options: ScanOptions = {}): Scan
     }
   }
 
-  function scan(dirPath: string, depth: number): DiskEntry {
-    const baseName = path.basename(dirPath) || '/'
+  /**
+   * Directories discovered but not yet read.
+   *
+   * The walk is breadth-first, and that is the whole point. Depth-first spends
+   * its budget on whatever it happens to enter first: a scan of `~/Code` that
+   * ran out of time inside `Code/Home` returned Home at 36 GB and every one of
+   * its siblings at zero, so the chart said all the space was in one folder
+   * when it simply had not looked anywhere else. A sunburst is nothing but
+   * proportions, and those were false rather than merely incomplete.
+   *
+   * Breadth-first, running out of time costs depth uniformly instead: every
+   * sibling at the level you are looking at has been measured, and what is
+   * missing is detail further down. That is the shape a truncated disk map
+   * should have.
+   */
+  interface Pending { entry: DiskEntry, depth: number }
 
-    if (depth > maxDepth || aborted) {
-      return { name: baseName, path: dirPath, sizeBytes: 0, isDirectory: true, children: [] }
-    }
+  const rootEntry: DiskEntry = {
+    name: path.basename(rootPath) || '/',
+    path: rootPath,
+    sizeBytes: 0,
+    isDirectory: true,
+    children: [],
+  }
 
-    // Checked every time, not every Nth: `Date.now()` costs a fraction of the
-    // `readdir` that follows it, and sampling was why a scan given 50s ran for
-    // 60 and was killed — losing the perfectly good partial tree it had built.
+  const queue: Pending[] = [{ entry: rootEntry, depth: 0 }]
+  let head = 0
+
+  while (head < queue.length) {
+    const { entry: parent, depth } = queue[head]
+    head++
+
     const now = Date.now()
     if (now > deadline || totalFiles + totalFolders > maxEntries) {
       aborted = true
-      return { name: baseName, path: dirPath, sizeBytes: 0, isDirectory: true, children: [] }
+      break
     }
-    report(now, dirPath)
+    report(now, parent.path)
+
+    if (depth >= maxDepth)
+      continue
 
     let entries: fs.Dirent[]
     try {
-      entries = fs.readdirSync(dirPath, { withFileTypes: true })
+      entries = fs.readdirSync(parent.path, { withFileTypes: true })
     }
     catch {
-      return { name: baseName, path: dirPath, sizeBytes: 0, isDirectory: true, children: [] }
+      continue
     }
 
     const children: DiskEntry[] = []
-    let totalSize = 0
 
     for (const entry of entries) {
-      if (aborted)
-        break
-
-      // Per-entry guards: the cap must trip on flat directories with
-      // millions of children (the depth-1 recursion cap doesn't reach
-      // them). Same for wallclock — `readdirSync` can't yield, so we
-      // check inside the entry loop.
+      // Per-entry guards: the cap must trip on flat directories with millions
+      // of children, and `readdirSync` cannot yield, so wallclock is checked
+      // inside the loop too.
       const tick = Date.now()
       if (tick > deadline || totalFiles + totalFolders > maxEntries) {
         aborted = true
         break
       }
-      report(tick, dirPath)
+      report(tick, parent.path)
 
       if (!includeHidden && entry.name.startsWith('.') && depth > 0)
         continue
       if (SYSTEM_SKIP.has(entry.name))
         continue
 
-      const fullPath = path.join(dirPath, entry.name)
+      const fullPath = path.join(parent.path, entry.name)
 
       try {
         const stats = fs.lstatSync(fullPath)
@@ -196,13 +216,11 @@ export function scanDirectory(rootPath: string, options: ScanOptions = {}): Scan
         if (stats.isDirectory()) {
           totalFolders++
 
-          // Folded directories: use `du` for fast size, don't recurse
+          // Folded directories are sized whole and never entered. `du` is the
+          // most expensive thing this scan does, so each call is capped by
+          // what is left of the budget rather than a fixed ceiling — one slow
+          // directory must not eat the deadline and leave the rest unwalked.
           if (skipPatterns.has(entry.name) || depth >= maxDepth - 1) {
-            // `du` is the single most expensive thing this scan does, and a
-            // home directory with dozens of `node_modules` spends most of its
-            // budget here. Cap each call by what is left of that budget rather
-            // than a fixed 5s, so one slow directory cannot eat the deadline
-            // and leave the rest of the tree unwalked.
             const remaining = deadline - Date.now()
             const size = remaining > 250 ? getDirSizeSync(fullPath, Math.min(3000, remaining)) : 0
             const child: DiskEntry = {
@@ -214,18 +232,21 @@ export function scanDirectory(rootPath: string, options: ScanOptions = {}): Scan
             }
             children.push(child)
             pushToHeap(child)
-            totalSize += size
           }
           else {
-            const child = scan(fullPath, depth + 1)
+            const child: DiskEntry = {
+              name: entry.name,
+              path: fullPath,
+              sizeBytes: 0,
+              isDirectory: true,
+              children: [],
+            }
             children.push(child)
-            pushToHeap(child)
-            totalSize += child.sizeBytes
+            queue.push({ entry: child, depth: depth + 1 })
           }
         }
         else {
           totalFiles++
-          totalSize += stats.size
           const child: DiskEntry = {
             name: entry.name,
             path: fullPath,
@@ -243,29 +264,42 @@ export function scanDirectory(rootPath: string, options: ScanOptions = {}): Scan
       }
     }
 
-    // Sort children by size descending
-    children.sort((a, b) => b.sizeBytes - a.sizeBytes)
-
-    // Count files based on the full child list before truncation.
-    const directFileCount = children.filter(c => !c.isDirectory).length
-
-    // Cap retained children — the global top-N heap already tracks the
-    // largest items, so this just keeps the returned tree bounded.
-    const trimmedChildren = children.length > MAX_CHILDREN_PER_DIR
-      ? children.slice(0, MAX_CHILDREN_PER_DIR)
-      : children
-
-    return {
-      name: baseName,
-      path: dirPath,
-      sizeBytes: totalSize,
-      isDirectory: true,
-      children: trimmedChildren,
-      fileCount: directFileCount,
-    }
+    parent.fileCount = children.filter(c => !c.isDirectory).length
+    parent.children = children
   }
 
-  const tree = scan(rootPath, 0)
+  /**
+   * Roll sizes up from the leaves.
+   *
+   * Breadth-first means a directory's size is not known when it is created —
+   * only once everything beneath it has been read. Folded directories already
+   * carry a `du` size and have no children, so they are returned as they are;
+   * a directory the walk never reached stays at zero, which is now one leaf
+   * among many rather than an entire missing branch.
+   */
+  function rollUp(entry: DiskEntry): number {
+    if (!entry.isDirectory || !entry.children || entry.children.length === 0)
+      return entry.sizeBytes
+
+    let total = 0
+    for (const child of entry.children)
+      total += rollUp(child)
+
+    entry.sizeBytes = total
+
+    // Sorted and capped here rather than during the walk, because a child's
+    // size is not known until its own subtree has been rolled up. The global
+    // top-N heap already tracks the largest items; this just keeps the
+    // returned tree bounded.
+    entry.children.sort((a, b) => b.sizeBytes - a.sizeBytes)
+    if (entry.children.length > MAX_CHILDREN_PER_DIR)
+      entry.children = entry.children.slice(0, MAX_CHILDREN_PER_DIR)
+
+    return total
+  }
+
+  rollUp(rootEntry)
+  const tree = rootEntry
   const scanTimeMs = Date.now() - scanStart
 
   return {

@@ -255,8 +255,18 @@ const localAgent = isLocalAgent()
     .info-bar-text { margin-top: 3px; color: var(--secondary); font-size: 10px; text-align: right; }
     .info-drill { margin-top: 12px; padding: 6px 10px; border: .5px solid color-mix(in srgb, var(--accent) 18%, transparent); border-radius: 5px; background: color-mix(in srgb, var(--accent) 7%, transparent); color: var(--accent); font-size: 10px; text-align: center; }
     .disk-card { padding: 12px; border-radius: 8px; }
+    /* Deliberately not a .disk-sidebar-section: those draw a divider above one
+       another, which landed a rule flush on this card's own top border. */
+    .disk-notice-wrap { padding: 0 14px 14px; }
+    .disk-notice { padding: 8px 10px; border: .5px solid color-mix(in srgb, var(--orange) 30%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--orange) 10%, var(--surface)); color: var(--secondary); font-size: 10px; line-height: 1.45; }
+
     .disk-usage-bar { height: 5px; margin: 8px 0 6px; }
-    .disk-usage-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--green)); }
+    /* Coloured by how full it is, not by a fixed gradient. The old bar ran
+       blue to green, so a disk at 99% ended in the colour that means "fine" —
+       on the one screen whose job is to say otherwise. */
+    .disk-usage-fill { height: 100%; border-radius: 3px; background: var(--green); transition: background .2s ease; }
+    .disk-usage-fill.is-tight { background: var(--orange); }
+    .disk-usage-fill.is-critical { background: var(--red); }
     .disk-usage-text { display: flex; justify-content: space-between; color: var(--secondary); font-size: 10px; }
 
     .breadcrumb { display: flex; align-items: center; gap: 2px; margin-bottom: 12px; font-size: 11px; }
