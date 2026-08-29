@@ -8,24 +8,33 @@
   and re-filters underneath the user, and an index-keyed selection would
   silently retarget itself when it did.
 -->
+<!--
+  Before a scan there is nothing to count, and a card reading "0 B · 0 of 0
+  shown" states that as though it were a finding. An em dash says the honest
+  thing: not measured yet.
+-->
 <div class='card-row'>
   <div class='card'>
     <div class='card-label'>Selected</div>
-    <div class='card-value' :style="selected.length ? 'color: var(--accent);' : ''" x-text='fmtBytes(selectedBytes())'>0 B</div>
-    <div class='card-detail'><span x-text='selected.length'>0</span> of <span x-text='visible().length'>0</span> shown</div>
+    <div class='card-value' :style="selected.length ? 'color: var(--accent);' : ''"
+         x-text="scanned ? fmtBytes(selectedBytes()) : '—'">—</div>
+    <div class='card-detail' x-text="scanned ? (selected.length + ' of ' + visible().length + ' shown') : 'Nothing selected'">Nothing selected</div>
   </div>
   <div class='card'>
     <div class='card-label'>Found</div>
-    <div class='card-value' x-text='fmtBytes(totalBytes)'>-</div>
+    <div class='card-value' x-text="scanned ? fmtBytes(totalBytes) : '—'">—</div>
     <div class='card-detail'>
-      <span x-text='matched'>0</span> items over <span x-text='minSizeMB'>100</span> MB
+      <span x-show='!scanned'>No scan yet</span>
+      <span x-show='scanned' x-cloak>
+        <span x-text='matched'>0</span> items over <span x-text='minSizeMB'>100</span> MB
+      </span>
       <span x-show='truncated' class='badge badge-orange' style='margin-left: 6px;'>partial scan</span>
     </div>
   </div>
   <div class='card'>
     <div class='card-label'>Reclaimed All Time</div>
-    <div class='card-value' style='color: var(--green);' x-text='lifetimeFreed'>0 B</div>
-    <div class='card-detail'>across <span x-text='runCount'>0</span> cleanups</div>
+    <div class='card-value' :style="runCount ? 'color: var(--green);' : ''" x-text="runCount ? lifetimeFreed : '—'">—</div>
+    <div class='card-detail' x-text="runCount ? ('across ' + runCount + ' cleanup' + (runCount === 1 ? '' : 's')) : 'No cleanups yet'">No cleanups yet</div>
   </div>
 </div>
 
@@ -177,10 +186,17 @@
 </div>
 
 <div class='tbl-wrap' x-show='!scanned && !scanning'>
-  <div class='empty-state'>
-    Find the biggest files and document bundles in your home folder, then clear
-    as many as you like in one pass. Nothing is deleted until you say so, and
-    &ldquo;Move to Trash&rdquo; stays recoverable from Finder.
+  <div class='lf-intro'>
+    <span class='lf-intro-glyph i-f7-doc-on-doc-fill' aria-hidden='true'></span>
+    <p>
+      Find the biggest files and document bundles in your home folder, then clear
+      as many as you like in one pass. Nothing is deleted until you say so, and
+      &ldquo;Move to Trash&rdquo; stays recoverable from Finder.
+    </p>
+    <button class='btn btn-icon' @click='scan()'>
+      <span class='i-f7-search' aria-hidden='true'></span>
+      Find Large Files
+    </button>
   </div>
 </div>
 
@@ -202,6 +218,10 @@
 .lf-bulkbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 8px 12px; border: .5px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
 .lf-bulk-summary { margin-right: auto; font-size: 12px; font-variant-numeric: tabular-nums; }
 .lf-row-on { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.lf-intro { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 44px 24px; text-align: center; }
+.lf-intro-glyph { width: 26px; height: 26px; color: var(--tertiary); }
+.lf-intro p { max-width: 52ch; margin: 0; color: var(--secondary); font-size: 12px; line-height: 1.6; }
+.lf-intro .btn { padding: 7px 16px; font-size: 12px; }
 .lf-blocked { margin: 10px auto 0; max-width: 46ch; padding: 8px 12px; border: .5px solid color-mix(in srgb, var(--orange) 32%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--orange) 10%, var(--surface)); color: var(--secondary); font-size: 11px; line-height: 1.5; text-align: left; }
 .lf-blocked strong { display: block; margin-bottom: 2px; color: var(--ink); }
 .lf-scan-path { margin-top: 3px; max-width: 52ch; overflow: hidden; color: var(--tertiary); font: 10px/1.5 'SF Mono', Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
