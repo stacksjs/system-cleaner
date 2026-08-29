@@ -62,6 +62,19 @@ const SYSTEM_SKIP = new Set([
 /**
  * Scan a directory tree using concurrent workers, building a size-annotated tree.
  * Folded directories (node_modules, .git, etc.) are sized via `du` instead of recursing.
+ *
+ * Before reaching for a faster walker: it was measured, and the walker is not
+ * the bottleneck. On a home directory whose permissions had not been granted,
+ * this walk spent 87 minutes against a 180-second budget having visited 49
+ * directories — and `du -x -d 6`, the same job in C, took 94 minutes at **1%
+ * CPU** (103s of CPU across 143,140 directories). Both were parked in the
+ * kernel, not computing. Replacing this with `du`, or with a thread pool, buys
+ * nothing against the thing that actually stops it.
+ *
+ * What does help, and is implemented: report progress so a blocked scan is
+ * visibly blocked rather than apparently slow, fold the directory trees that
+ * cannot return promptly (cloud providers), and let the caller kill a scan that
+ * has stopped responding.
  */
 export function scanDirectory(rootPath: string, options: ScanOptions = {}): ScanResult {
   const maxDepth = options.maxDepth ?? DEFAULT_MAX_DEPTH
