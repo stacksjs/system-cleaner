@@ -120,7 +120,10 @@ function doCleanDir(p, name, id) {
     _exec("delete cleaning['' + id + '']");
     if (r.success) {
       try { localStorage.removeItem(CACHE_KEY); } catch (e) {}
-      _exec("toast('Cleaned " + name.replace(/'/g, "\\'") + " - freed " + _fmtBytes(r.freedBytes) + "', 'success')");
+      // An unmeasured clean really did happen; only its size is unknown.
+      // Saying "freed 0 B" would read as a failure.
+      var freedNote = r.measured === false ? '' : ' - freed ' + _fmtBytes(r.freedBytes);
+      _exec("toast('Cleaned " + name.replace(/'/g, "\\'") + freedNote + "', 'success')");
       // Re-scan so the row's size cell reflects the cleaned-up state
       // instead of holding stale numbers until the user manually rescans.
       scanCleanupSizes(true);

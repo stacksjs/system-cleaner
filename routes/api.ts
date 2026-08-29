@@ -313,6 +313,10 @@ export default async function (router: Router) {
     return Response.json({
       success: result.errors.length === 0,
       freedBytes: result.freedBytes,
+      // False when the directory could not be sized in time. The clean still
+      // happened, so the UI says "Cleaned" rather than "0 B freed", which reads
+      // as a failure.
+      measured: result.measured,
       errors: result.errors.length ? result.errors : undefined,
     });
   });

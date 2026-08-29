@@ -191,14 +191,20 @@ export async function emptyTrash(): Promise<CleanResult> {
 /**
  * Clean directory contents (used by API routes)
  */
-export async function cleanDirectory(dirPath: string): Promise<{ freedBytes: number, errors: string[] }> {
+export async function cleanDirectory(dirPath: string): Promise<{ freedBytes: number, measured: boolean, errors: string[] }> {
   const resolvedPath = path.resolve(dirPath)
   const check = isCleanable(resolvedPath)
   if (!check.safe) {
-    return { freedBytes: 0, errors: [check.reason || 'Path is not safe'] }
+    return { freedBytes: 0, measured: true, errors: [check.reason || 'Path is not safe'] }
   }
 
-  const sizeBefore = await getDirSize(resolvedPath)
+  // Bounded: `getDirSize` shells out to `du`, whose own timeout cannot kill a
+  // process blocked in a syscall macOS will not return from. Measuring
+  // ~/Library/Caches hung indefinitely, and because the measurement came first,
+  // the clean never happened at all — the button did nothing, silently, on the
+  // largest category the app offers. Nothing may block the delete.
+  const sizeBefore = await sizeWithin(resolvedPath)
+  const measured = sizeBefore !== null
   const errors: string[] = []
 
   try {
@@ -217,12 +223,36 @@ export async function cleanDirectory(dirPath: string): Promise<{ freedBytes: num
 
   // Same accounting fix as cleanTarget: re-walk the actual surviving
   // size rather than treating "du failed" as "everything was freed".
-  let sizeAfter = 0
+  const sizeAfter = await sizeWithin(resolvedPath) ?? 0
+
+  return {
+    freedBytes: measured ? Math.max(0, (sizeBefore ?? 0) - sizeAfter) : 0,
+    // False when the directory could not be measured in time. The clean still
+    // happened; the byte count is the part we do not know, and reporting an
+    // unmeasured clean as "0 B freed" reads as a failure when it was not.
+    measured,
+    errors,
+  }
+}
+
+/** How long a directory gets to report its size before the clean proceeds anyway. */
+const SIZE_TIMEOUT_MS = 10_000
+
+/** `getDirSize`, or null if it does not answer in time. */
+async function sizeWithin(dirPath: string): Promise<number | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined
   try {
-    sizeAfter = await getDirSize(resolvedPath)
+    return await Promise.race([
+      getDirSize(dirPath),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), SIZE_TIMEOUT_MS)
+      }),
+    ])
   }
   catch {
-    sizeAfter = 0
+    return null
   }
-  return { freedBytes: Math.max(0, sizeBefore - sizeAfter), errors }
+  finally {
+    if (timer) clearTimeout(timer)
+  }
 }

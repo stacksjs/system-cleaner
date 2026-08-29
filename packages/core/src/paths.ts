@@ -109,10 +109,37 @@ export function isPathSafe(targetPath: string): PathSafetyCheck {
 }
 
 /**
+ * Caches macOS gates behind a consent prompt, keyed on the media libraries.
+ *
+ * These do not fail to clean, they *hang*: a process that touches
+ * `~/Library/Caches/com.apple.Music` without consent parks in a syscall the
+ * kernel will not return from, ignoring both its own timeout and SIGKILL.
+ * Measuring `~/Library/Caches` hit it and blocked, which took the whole clean
+ * down with it — the button did nothing at all, silently, on the largest
+ * category the app offers.
+ *
+ * Refusing them up front costs a few hundred megabytes and keeps every other
+ * category workable.
+ */
+const PERMISSION_GATED = [
+  'Library/Caches/com.apple.Music',
+  'Library/Caches/com.apple.TV',
+  'Library/Caches/com.apple.podcasts',
+  'Library/Caches/com.apple.photolibraryd',
+]
+
+/**
  * Check if a path is safe for cleaning (less strict - allows cleaning contents)
  */
 export function isCleanable(targetPath: string): PathSafetyCheck {
   const resolved = path.resolve(targetPath)
+
+  if (PERMISSION_GATED.some(gated => resolved === path.join(HOME, gated) || resolved.startsWith(`${path.join(HOME, gated)}/`))) {
+    return {
+      safe: false,
+      reason: 'macOS gates this cache behind a media-library permission; cleaning it blocks until that is granted',
+    }
+  }
 
   if (
     !resolved.startsWith(HOME)
