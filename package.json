@@ -8,8 +8,9 @@
   ],
   "scripts": {
     "buddy": "./buddy",
-    "dev": "./buddy dev",
-    "build": "./buddy build views",
+    "dev": "bun ./scripts/build-client-scripts.ts && ./buddy dev",
+    "build": "bun ./scripts/build-client-scripts.ts && ./buddy build views",
+    "build:scripts": "bun ./scripts/build-client-scripts.ts",
     "build:binaries": "bun ./scripts/build-binaries.ts",
     "build:app": "bun ./scripts/build-desktop-app.ts",
     "release": "./buddy release",
@@ -28,7 +29,7 @@
     "typecheck": "bun x --bun tsc --noEmit -p tsconfig.json --pretty false",
     "typecheck:app": "bun x --bun tsc --noEmit -p tsconfig.json --pretty false",
     "types:check": "bun x --bun tsc --noEmit -p tsconfig.json --pretty false",
-    "test": "./buddy test"
+    "test": "bun ./scripts/build-client-scripts.ts && ./buddy test"
   },
   "dependencies": {
     "@system-cleaner/clean": "workspace:*",
@@ -36,6 +37,7 @@
     "@system-cleaner/disk": "workspace:*",
     "@system-cleaner/monitor": "workspace:*",
     "@system-cleaner/uninstall": "workspace:*",
+    "@stacksjs/desktop": "^0.2.249",
     "@ts-charts/format": "^0.2.7",
     "@ts-charts/scale": "^0.2.7",
     "@ts-charts/shape": "^0.2.7",

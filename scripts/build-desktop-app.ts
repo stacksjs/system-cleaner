@@ -109,6 +109,12 @@ console.log('[desktop] building views')
 for (const cache of ['.stx', 'storage/framework/stx', 'dist'])
   fs.rmSync(path.join(ROOT, cache), { recursive: true, force: true })
 
+// The client scripts are bundled from `resources/scripts` into `public/`, and
+// `build:views` copies `public/` into the render. They are generated output, so
+// they are built here rather than tracked — a stale one shipping in the bundle
+// is the kind of thing nobody looks for.
+run('bun', [path.join(ROOT, 'scripts/build-client-scripts.ts')])
+
 run('./buddy', ['build:views'])
 
 const web = path.join(ROOT, 'dist')
