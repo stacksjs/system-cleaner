@@ -99,6 +99,13 @@
       self.stopProgress();
       if (!r.success) { self.toast(r.error || 'Scan failed', 'error'); return; }
       self.applyResult(r);
+      if (window.notifyIfAway) {
+        window.notifyIfAway({
+          elapsedMs: (parseFloat(String(r.scanTime || '0')) || 0) * 1000,
+          title: 'Large file scan finished',
+          body: (r.matched || 0) + ' items over ' + self.minSizeMB + ' MB.',
+        });
+      }
     }).catch(function(err) {
       self.scanning = false;
       self.stopProgress();

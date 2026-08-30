@@ -427,5 +427,9 @@ useEventListener('mousedown', moveWindowFrom, { target: document })
 <!-- Loaded for every app page: `nativeConfirm` and `nativeAlert` replace the
      web dialogs on the destructive actions, and every screen has one. -->
 <script src="/native-dialog.js"></script>
+<!-- Replaces AppKit's default menubar with one that knows this app: every
+     screen on Cmd+1..9, Rescan on Cmd+R, and Edit's roles wired so Copy and
+     Paste work in the filter fields. -->
+<script src="/app-menu.js"></script>
 </body>
 </html>

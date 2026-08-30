@@ -26,7 +26,7 @@
       <span class='i-f7-trash-fill' aria-hidden='true'></span>
       Empty Trash
     </button>
-    <button class='btn btn-icon btn-sm' style='margin-left: auto;' onclick='scanCleanupSizes(true)'>
+    <button class='btn btn-icon btn-sm' data-rescan style='margin-left: auto;' onclick='scanCleanupSizes(true)'>
       <span class='i-f7-arrow-clockwise' aria-hidden='true'></span>
       Rescan
     </button>

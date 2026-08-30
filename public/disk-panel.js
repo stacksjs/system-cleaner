@@ -272,6 +272,17 @@
     bindSvgEvents();
     renderSegments(tree);
     flushDiskExecQueue();
+
+    // A fresh scan that took a while and finished while the user was elsewhere.
+    // Cached results never notify: nothing happened, the screen just remembered.
+    if (!cached && window.notifyIfAway) {
+      var seconds = parseFloat(String(data.scanTime || '0')) || 0;
+      window.notifyIfAway({
+        elapsedMs: seconds * 1000,
+        title: 'Disk scan finished',
+        body: fmtBytes(tree.s) + ' across ' + data.folderCount + ' folders.',
+      });
+    }
   }
 
   function pollForScanComplete() {

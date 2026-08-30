@@ -107,6 +107,39 @@
     }
   };
 
+  /**
+   * Tell the user a long job finished, but only if they looked away.
+   *
+   * A scan takes forty-five seconds, which is long enough to go and do
+   * something else and miss the result. Notification Center is exactly for
+   * that. It is also exactly the wrong thing when the window is in front — a
+   * banner announcing something the user is already looking at is noise, so
+   * this checks first.
+   *
+   * `minMs` keeps it off fast jobs: nobody needs telling about a scan that took
+   * two seconds.
+   */
+  window.notifyIfAway = async function (options) {
+    var elapsed = options.elapsedMs || 0;
+    var minMs = options.minMs || 10000;
+    if (elapsed < minMs) return;
+    if (document.hasFocus()) return;
+
+    var craft = window.craft;
+    if (!(craft && craft.notifications && typeof craft.notifications.show === 'function')) return;
+
+    try {
+      await craft.notifications.show({
+        title: options.title,
+        body: options.body || '',
+      });
+    }
+    catch (_) {
+      // A refused notification permission is not worth surfacing: the result is
+      // on screen either way.
+    }
+  };
+
   /** Report something that already happened and cannot be undone from here. */
   window.nativeAlert = async function (title, message) {
     if (!hasNative()) {

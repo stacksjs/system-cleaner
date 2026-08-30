@@ -21,7 +21,7 @@
       </div>
     </div>
     <div x-show='!loading' x-cloak style='display: flex; gap: 6px; flex-shrink: 0;'>
-      <button class='btn btn-sm' @click='refresh(false)'>Refresh</button>
+      <button class='btn btn-sm' data-rescan @click='refresh(false)'>Refresh</button>
       <button class='btn btn-sm' @click='refresh(true)' title='Full Apple Software Update scan'>Deep Scan</button>
     </div>
   </div>
