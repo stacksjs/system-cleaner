@@ -206,23 +206,39 @@ function sealSignedBundle(imagePath: string): void {
         fs.renameSync(source, path.join(metadataDir, name))
     }
 
-    for (const name of ['system-cleaner-scan', 'craft-runtime', 'system-cleaner-agent', APP_NAME]) {
-      run('codesign', [
-        '--force',
-        '--options', 'runtime',
-        '--timestamp',
-        '--sign', identity,
-        path.join(macosDir, name),
-      ])
-    }
+    // Hardened runtime with no entitlements produces a window that opens,
+    // reports valid bounds, and draws nothing: WebKit cannot allocate
+    // executable memory for JavaScriptCore, the content process is killed, and
+    // the webview never composites. The app looked like it had vanished.
+    //
+    // `app/Desktop/Entitlements.plist` carries the minimum that a Craft window
+    // and three compiled Bun binaries need under `--options runtime`:
+    //
+    //   allow-jit                        JavaScriptCore, in the webview and in Bun
+    //   allow-unsigned-executable-memory  Bun maps pages it writes to
+    //   disable-library-validation        the launcher spawns sibling binaries
+    //   allow-dyld-environment-variables  the launcher passes SYSTEM_CLEANER_* through
+    //   automation.apple-events           "Move to Trash" drives Finder
+    //
+    // The file carries no XML comments: AMFI's unserializer is stricter than
+    // `plutil -lint` and rejects them outright — "syntax error near line 12",
+    // pointing at a comment plutil had just called valid.
+    const entitlements = path.join(ROOT, 'app/Desktop/Entitlements.plist')
+    if (!fs.existsSync(entitlements))
+      throw new Error(`Signing needs ${entitlements}`)
 
-    run('codesign', [
+    const signArgs = [
       '--force',
       '--options', 'runtime',
+      '--entitlements', entitlements,
       '--timestamp',
       '--sign', identity,
-      appBundle,
-    ])
+    ]
+
+    for (const name of ['system-cleaner-scan', 'craft-runtime', 'system-cleaner-agent', APP_NAME])
+      run('codesign', [...signArgs, path.join(macosDir, name)])
+
+    run('codesign', [...signArgs, appBundle])
     run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', appBundle])
 
     fs.symlinkSync('/Applications', path.join(imageRoot, 'Applications'))

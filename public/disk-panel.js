@@ -197,13 +197,17 @@
         if (s) { window.__diskHovered = s; patchDiskScope({ hovered: s }); }
       }
     });
-    diskLayout.addEventListener('mouseout', function(e) {
-      var seg = e.target.closest('.segment');
-      if (seg && (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest('.segment'))) {
-        window.__diskHovered = null;
-        patchDiskScope({ hovered: null });
-      }
-    });
+    // Deliberately no mouseout handler.
+    //
+    // Clearing on mouseout made the inspector's own buttons unreachable: they
+    // live on the far side of the window, so the trip to click Reveal in Finder
+    // leaves the segment, empties the panel, and the click lands on nothing.
+    // Every press of that button did exactly nothing, which is not a thing a
+    // user can be expected to diagnose.
+    //
+    // The inspector now holds the last segment until another is hovered. That
+    // is also what a details pane is for — you look away from the chart to read
+    // it, and it should still be there when you do.
     // Right-click acts on whatever is under the pointer, the way a Finder
     // window does — not on whatever happened to be selected last.
     diskLayout.addEventListener('contextmenu', function(e) {
