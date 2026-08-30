@@ -36,6 +36,7 @@
 
 import { spawnSync } from 'node:child_process'
 import * as fs from 'node:fs'
+import * as os from 'node:os'
 import * as path from 'node:path'
 import process from 'node:process'
 
@@ -89,11 +90,11 @@ const buildEnv: Record<string, string> = {
   ...(craftBin ? { CRAFT_BIN: craftBin } : {}),
 }
 
-function run(cmd: string, args: string[]): void {
+function run(cmd: string, args: string[], envOverrides: Record<string, string> = {}): void {
   const result = spawnSync(cmd, args, {
     stdio: 'inherit',
     cwd: ROOT,
-    env: { ...process.env, ...buildEnv },
+    env: { ...process.env, ...buildEnv, ...envOverrides },
   })
   if (result.status !== 0)
     throw new Error(`${cmd} ${args.join(' ')} exited with ${result.status}`)
@@ -148,7 +149,11 @@ for (const [entry, name] of [
 
 // ── 5. Bundle and image ─────────────────────────────────────────
 console.log('[desktop] packaging')
-run('./buddy', ['build:dmg'])
+// The framework cannot yet distinguish executable payloads from its JSON
+// metadata when signing an app with a userland launcher. Build the image
+// unsigned here; `sealSignedBundle` below performs the authoritative,
+// verified inside-out signing pass.
+run('./buddy', ['build:dmg'], { DESKTOP_SIGNING_IDENTITY: '' })
 
 const dmgDir = path.join(ROOT, 'storage/framework/desktop-dmg')
 const dmg = (fs.existsSync(dmgDir) ? fs.readdirSync(dmgDir) : []).find(file => file.endsWith('.dmg'))
@@ -156,6 +161,93 @@ if (!dmg)
   throw new Error(`build:dmg produced no disk image in ${dmgDir}`)
 
 const dmgPath = path.join(dmgDir, dmg)
+
+/**
+ * `build:dmg` copies every desktop-dist file into `Contents/MacOS`. That is
+ * harmless for unsigned development images, but Apple treats every item in
+ * that directory as nested code when it seals the outer bundle. The manifest,
+ * provenance, and checksum files therefore make an otherwise valid Developer
+ * ID signature fail with "code object is not signed at all".
+ *
+ * The userland launcher does not consume those files. Preserve them as build
+ * metadata under Resources, then sign the executable leaves before sealing the
+ * app itself. Rebuilding the image here also makes a failed framework signing
+ * attempt impossible to mistake for a distributable artifact.
+ */
+function sealSignedBundle(imagePath: string): void {
+  const identity = process.env.DESKTOP_SIGNING_IDENTITY
+  if (!identity)
+    return
+
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'system-cleaner-sign-'))
+  const mountDir = path.join(workDir, 'mounted')
+  const imageRoot = path.join(workDir, 'image')
+  const appBundle = path.join(imageRoot, `${APP_NAME}.app`)
+  const rebuiltImage = path.join(workDir, path.basename(imagePath))
+  let mounted = false
+
+  fs.mkdirSync(mountDir)
+  fs.mkdirSync(imageRoot)
+
+  try {
+    run('hdiutil', ['attach', imagePath, '-nobrowse', '-readonly', '-mountpoint', mountDir])
+    mounted = true
+    run('ditto', [path.join(mountDir, `${APP_NAME}.app`), appBundle])
+    run('hdiutil', ['detach', mountDir])
+    mounted = false
+
+    const macosDir = path.join(appBundle, 'Contents/MacOS')
+    const metadataDir = path.join(appBundle, 'Contents/Resources/BuildMetadata')
+    fs.mkdirSync(metadataDir, { recursive: true })
+
+    for (const name of ['desktop.json', 'provenance.json', 'checksums.sha256']) {
+      const source = path.join(macosDir, name)
+      if (fs.existsSync(source))
+        fs.renameSync(source, path.join(metadataDir, name))
+    }
+
+    for (const name of ['system-cleaner-scan', 'craft-runtime', 'system-cleaner-agent', APP_NAME]) {
+      run('codesign', [
+        '--force',
+        '--options', 'runtime',
+        '--timestamp',
+        '--sign', identity,
+        path.join(macosDir, name),
+      ])
+    }
+
+    run('codesign', [
+      '--force',
+      '--options', 'runtime',
+      '--timestamp',
+      '--sign', identity,
+      appBundle,
+    ])
+    run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', appBundle])
+
+    fs.symlinkSync('/Applications', path.join(imageRoot, 'Applications'))
+    run('hdiutil', [
+      'create',
+      '-volname', APP_NAME,
+      '-srcfolder', imageRoot,
+      '-ov',
+      '-format', 'UDZO',
+      rebuiltImage,
+    ])
+    fs.renameSync(rebuiltImage, imagePath)
+  }
+  finally {
+    if (mounted) {
+      spawnSync('hdiutil', ['detach', mountDir], {
+        stdio: 'inherit',
+        cwd: ROOT,
+      })
+    }
+    fs.rmSync(workDir, { recursive: true, force: true })
+  }
+}
+
+sealSignedBundle(dmgPath)
 
 // ── 6. Notarize ─────────────────────────────────────────────────
 // Signing is `build:dmg`'s job; notarization is not, and a signed but
