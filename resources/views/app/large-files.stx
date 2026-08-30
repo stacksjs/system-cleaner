@@ -39,6 +39,7 @@
   activeCategory: '',
   minSizeMB: 100,
   scanRoot: '',
+  customRoot: '',
   matched: 0,
   totalBytes: 0,
   truncated: false,
@@ -151,6 +152,20 @@
       if (!d || !d.result || !d.result.success) return;
       self.applyResult(d.result);
     }).catch(function() {});
+  },
+
+  customRootLabel() {
+    if (!this.customRoot) return '';
+    var parts = this.customRoot.split('/').filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : this.customRoot;
+  },
+
+  async chooseFolder() {
+    var picked = await window.nativeChooseFolder('Choose a folder to scan');
+    if (!picked) return;
+    this.customRoot = picked;
+    this.scanRoot = picked;
+    this.rescanIfScanned();
   },
 
   pollProgress() {

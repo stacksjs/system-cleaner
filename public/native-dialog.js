@@ -54,6 +54,59 @@
     }
   };
 
+  /**
+   * Put text on the pasteboard.
+   *
+   * `navigator.clipboard` in a WKWebView is gated on a user gesture the bridge
+   * does not always carry, and fails silently when it is not — a Copy Path that
+   * quietly does nothing. `craft.clipboard` is NSPasteboard and has no such
+   * condition.
+   */
+  window.nativeCopy = async function (text) {
+    if (window.craft && window.craft.clipboard && typeof window.craft.clipboard.writeText === 'function') {
+      try {
+        await window.craft.clipboard.writeText(text);
+        return true;
+      }
+      catch (_) { /* fall through to the web path */ }
+    }
+
+    if (navigator.clipboard) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+      catch (_) {}
+    }
+
+    return false;
+  };
+
+  /**
+   * Ask for a folder with the system's own open panel.
+   *
+   * Resolves the chosen path, or null when there is no native panel to open or
+   * the user cancelled. Callers keep their own fallback for the browser.
+   */
+  window.nativeChooseFolder = async function (title) {
+    if (!(window.craft && window.craft.dialog && typeof window.craft.dialog.showOpenDialog === 'function'))
+      return null;
+
+    try {
+      var result = await window.craft.dialog.showOpenDialog({
+        title: title || 'Choose a folder to scan',
+        properties: ['openDirectory'],
+        buttonLabel: 'Scan',
+      });
+      if (!result || result.canceled) return null;
+      var paths = result.filePaths || [];
+      return paths.length > 0 ? paths[0] : null;
+    }
+    catch (_) {
+      return null;
+    }
+  };
+
   /** Report something that already happened and cannot be undone from here. */
   window.nativeAlert = async function (title, message) {
     if (!hasNative()) {

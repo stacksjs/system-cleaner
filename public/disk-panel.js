@@ -531,7 +531,7 @@
       pendingMenuTarget = null;
 
       if (id === 'sc.reveal') window.diskRevealInFinder(s.fullPath);
-      else if (id === 'sc.copy' && navigator.clipboard) navigator.clipboard.writeText(s.fullPath).catch(function(){});
+      else if (id === 'sc.copy') window.nativeCopy(s.fullPath);
       else if (id === 'sc.drill') drillInto(s);
       else if (id === 'sc.trash') window.diskDeletePath(s.fullPath, s.name, s.size);
     });
@@ -629,7 +629,7 @@
 
     addItem('Reveal in Finder', false, function() { window.diskRevealInFinder(s.fullPath); });
     addItem('Copy Path', false, function() {
-      if (navigator.clipboard) navigator.clipboard.writeText(s.fullPath).catch(function(){});
+      window.nativeCopy(s.fullPath);
     });
 
     if (s.isDir && s.childCount) {

@@ -51,7 +51,21 @@
       <option value='Music'>Music</option>
       <option value='Pictures'>Pictures</option>
       <option value='Library'>Library</option>
+      <!-- Set by chooseFolder() when the user picks one the list does not
+           name, so the select can show it as the current value. -->
+      <option x-show='customRoot' x-cloak :value='customRoot' x-text='customRootLabel()'></option>
     </select>
+  </label>
+
+  <!-- The list above covers the folders people scan most; this covers the rest.
+       Without it the app can only look where it was told about at build time,
+       which is not a thing a Mac app does. -->
+  <label class='lf-field'>
+    <span class='lf-field-label'>&nbsp;</span>
+    <button class='btn btn-icon' @click='chooseFolder()'>
+      <span class='i-f7-folder' aria-hidden='true'></span>
+      Choose&hellip;
+    </button>
   </label>
 
   <label class='lf-field'>
