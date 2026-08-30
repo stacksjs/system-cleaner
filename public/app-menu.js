@@ -55,16 +55,26 @@
   }
 
   /**
-   * The menubar, in the shape Craft's `setAppMenu` actually parses.
+   * The whole menubar.
    *
-   *   { menus: [ { label, items: [ { id, label, shortcut, separator, role } ] } ] }
+   * `setAppMenu` builds a fresh NSMenu and calls `setMainMenu:` — it replaces
+   * the bar, it does not merge into it. Whatever you supply is the entire bar,
+   * so anything you leave out is gone.
    *
-   * Two levels, not a tree: a menubar is a list of menus, each a list of items.
-   * Shortcuts are `cmd+r`, not `Cmd+R`. Roles are how cut/copy/paste have to be
-   * done — they wire the item to the AppKit selector with a nil target, so the
-   * responder chain performs it. A JS round-trip cannot reach the field editor
-   * or the webview's own clipboard actions, so Copy would do nothing in the
-   * filter fields.
+   * And by AppKit convention the *first* menu is the application menu: its
+   * title is replaced by the app name whatever you call it. That is what made
+   * the earlier attempts look haunted. Supplying Edit, View and Window left a
+   * bar reading SystemCleaner, View, Window — Edit had not failed, it had been
+   * consumed as the app menu. Supplying View alone emptied the bar for the same
+   * reason, with nothing left over to render.
+   *
+   * So: an app menu first, then everything the bar should carry.
+   *
+   * Roles do the work wherever AppKit has a selector for it. A role wires the
+   * item to that selector with a nil target, so the responder chain performs
+   * it; cut/copy/paste *must* take this path, since an id round-tripping
+   * through JS cannot reach the field editor and Copy would do nothing inside
+   * the filter fields.
    */
   function build() {
     var viewItems = [
@@ -73,27 +83,46 @@
     ].concat(VIEWS.map(function (v) {
       return { id: 'app.view.' + v.id, label: v.label, shortcut: 'cmd+' + v.key };
     }));
-    // No Enter Full Screen here: Craft's own View menu already carries one, and
-    // adding a second produced two entries a line apart, one of them without
-    // its shortcut.
+    viewItems.push({ id: 'app.sep.view', separator: true });
+    viewItems.push({ id: 'app.fullscreen', label: 'Enter Full Screen', role: 'fullscreen' });
 
     return {
-      // Only View. Two things learned by supplying more:
-      //
-      //   File never appeared. Menus are merged into the bar the runtime
-      //   already has, so one it does not carry is dropped without a word —
-      //   which is why Rescan sits at the top of View instead.
-      //
-      //   Edit *disappeared*. Supplying an Edit menu of role items removed the
-      //   runtime's own, leaving no Edit at all and no Copy anywhere. Craft
-      //   already wires cut/copy/paste to the AppKit selectors correctly, so
-      //   redeclaring them bought nothing and cost the menu.
-      //
-      // Window is left alone for the same reason: the runtime's is already
-      // right. This adds the one menu the runtime cannot know — the app's own
-      // screens.
       menus: [
+        {
+          // First, so AppKit takes it as the application menu and titles it.
+          label: 'SystemCleaner',
+          items: [
+            { id: 'app.about', label: 'About SystemCleaner', role: 'about' },
+            { id: 'app.sep.app1', separator: true },
+            { id: 'app.hide', label: 'Hide SystemCleaner', role: 'hide', shortcut: 'cmd+h' },
+            { id: 'app.hideothers', label: 'Hide Others', role: 'hideOthers', shortcut: 'cmd+alt+h' },
+            { id: 'app.showall', label: 'Show All', role: 'showAll' },
+            { id: 'app.sep.app2', separator: true },
+            { id: 'app.quit', label: 'Quit SystemCleaner', role: 'quit', shortcut: 'cmd+q' },
+          ],
+        },
+        {
+          label: 'Edit',
+          items: [
+            { id: 'app.undo', label: 'Undo', role: 'undo', shortcut: 'cmd+z' },
+            { id: 'app.redo', label: 'Redo', role: 'redo', shortcut: 'cmd+shift+z' },
+            { id: 'app.sep.edit', separator: true },
+            { id: 'app.cut', label: 'Cut', role: 'cut', shortcut: 'cmd+x' },
+            { id: 'app.copy', label: 'Copy', role: 'copy', shortcut: 'cmd+c' },
+            { id: 'app.paste', label: 'Paste', role: 'paste', shortcut: 'cmd+v' },
+            { id: 'app.selectall', label: 'Select All', role: 'selectAll', shortcut: 'cmd+a' },
+          ],
+        },
         { label: 'View', items: viewItems },
+        {
+          label: 'Window',
+          items: [
+            { id: 'app.minimize', label: 'Minimize', role: 'minimize', shortcut: 'cmd+m' },
+            { id: 'app.zoom', label: 'Zoom', role: 'zoom' },
+            { id: 'app.sep.window', separator: true },
+            { id: 'app.close', label: 'Close Window', role: 'close', shortcut: 'cmd+w' },
+          ],
+        },
       ],
     };
   }
@@ -121,21 +150,9 @@
   if (!window._appMenuBound) {
     window._appMenuBound = true;
     window.addEventListener('craft:menu:action', onAction);
-    // Disabled: `setAppMenu` replaces the whole bar and silently drops any
-    // menu it fails to build, so a bad payload leaves fewer menus than it
-    // started with — and nothing says which part failed.
-    //
-    //   Edit + View + Window  ->  View, Window        (Edit gone)
-    //   View alone            ->  nothing             (bar emptied)
-    //
-    // The first shape worked well enough to prove the idea — Cmd+1..9 moved
-    // between screens and Cmd+R rescanned — but "well enough" here means the
-    // user lost their Edit menu, and Copy with it. Craft's default bar is worth
-    // more than the shortcuts until the native side either merges instead of
-    // replacing, or reports which menu it rejected.
-    //
-    // `build()` and the action handler stay, working and tested, for whoever
-    // picks that up.
-    void hasMenu;
+    if (hasMenu()) {
+      try { window.craft.menu.set(build()); }
+      catch (_) { /* a window with the default bar is still a working app */ }
+    }
   }
 })();
