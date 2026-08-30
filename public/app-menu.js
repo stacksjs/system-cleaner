@@ -121,9 +121,21 @@
   if (!window._appMenuBound) {
     window._appMenuBound = true;
     window.addEventListener('craft:menu:action', onAction);
-    if (hasMenu()) {
-      try { window.craft.menu.set(build()); }
-      catch (_) { /* a window with no menubar is still a working app */ }
-    }
+    // Disabled: `setAppMenu` replaces the whole bar and silently drops any
+    // menu it fails to build, so a bad payload leaves fewer menus than it
+    // started with — and nothing says which part failed.
+    //
+    //   Edit + View + Window  ->  View, Window        (Edit gone)
+    //   View alone            ->  nothing             (bar emptied)
+    //
+    // The first shape worked well enough to prove the idea — Cmd+1..9 moved
+    // between screens and Cmd+R rescanned — but "well enough" here means the
+    // user lost their Edit menu, and Copy with it. Craft's default bar is worth
+    // more than the shortcuts until the native side either merges instead of
+    // replacing, or reports which menu it rejected.
+    //
+    // `build()` and the action handler stay, working and tested, for whoever
+    // picks that up.
+    void hasMenu;
   }
 })();
