@@ -113,8 +113,13 @@ function _fmtBytes(b) {
   return b+' B';
 }
 
-function doCleanDir(p, name, id) {
-  if (!confirm('Clean ' + name + '? This cannot be undone.')) return;
+async function doCleanDir(p, name, id) {
+  if (!await window.nativeConfirm({
+    title: 'Clean ' + name + '?',
+    message: 'Its contents are removed. Apps rebuild these files as they need them.',
+    confirmLabel: 'Clean',
+    destructive: true,
+  })) return;
   _exec("cleaning['' + id + ''] = true");
   _api('/api/clean-dir', { path: p }).then(function(r) {
     _exec("delete cleaning['' + id + '']");
@@ -132,20 +137,30 @@ function doCleanDir(p, name, id) {
   }).catch(_apiCatch('Clean failed', { clearCleaning: id }));
 }
 
-function doEmptyTrash() {
-  if (!confirm('Empty Trash? This cannot be undone.')) return;
+async function doEmptyTrash() {
+  if (!await window.nativeConfirm({
+    title: 'Empty the Trash?',
+    message: 'Everything in it is deleted permanently. This is the one action here that cannot be recovered from.',
+    confirmLabel: 'Empty Trash',
+    destructive: true,
+  })) return;
   _api('/api/empty-trash', {}).then(function(r) {
     if (r.success) _exec("toast('Trash emptied - freed ' + _fmtBytes(r.freedBytes) + '', 'success')");
     else _exec("toast('Failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");
   }).catch(_apiCatch('Empty Trash failed'));
 }
 
-function doCleanSelected() {
+async function doCleanSelected() {
   var scope = _scope();
   if (!scope || !scope.__stx_state) return;
   var items = scope.__stx_state.selected || [];
   if (items.length === 0) return;
-  if (!confirm('Clean ' + items.length + ' categories? This cannot be undone.')) return;
+  if (!await window.nativeConfirm({
+    title: 'Clean ' + items.length + ' categories?',
+    message: 'Their contents are removed. Apps rebuild these files as they need them.',
+    confirmLabel: 'Clean Selected',
+    destructive: true,
+  })) return;
   var total = 0, remaining = items.length;
   items.forEach(function(id) {
     var row = document.querySelector('[data-clean-id="' + id + '"]');

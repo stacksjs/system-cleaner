@@ -247,14 +247,21 @@
     return this.files.length + ' items' + suffix;
   },
 
-  remove(mode) {
+  async remove(mode) {
     if (this.deleting || this.selected.length === 0) return;
     var count = this.selected.length;
     var size = this.fmtBytes(this.selectedBytes());
-    var question = mode === 'permanent'
-      ? 'Permanently delete ' + count + ' item(s), freeing ' + size + '? This cannot be undone.'
-      : 'Move ' + count + ' item(s) to the Trash, freeing ' + size + '? You can restore them from Finder.';
-    if (!confirm(question)) return;
+    var permanent = mode === 'permanent';
+    if (!await window.nativeConfirm({
+      title: permanent
+        ? 'Permanently delete ' + count + ' item' + (count === 1 ? '' : 's') + '?'
+        : 'Move ' + count + ' item' + (count === 1 ? '' : 's') + ' to the Trash?',
+      message: permanent
+        ? size + ' is freed immediately and cannot be recovered.'
+        : size + ' is freed, and you can put them back from Finder.',
+      confirmLabel: permanent ? 'Delete' : 'Move to Trash',
+      destructive: permanent,
+    })) return;
 
     var self = this;
     this.deleting = true;

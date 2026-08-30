@@ -273,7 +273,11 @@ window.updatesXData = function () {
     doUpdateSelected() {
       var items = this.selected.slice()
       if (items.length === 0) return
-      if (!confirm('Update ' + items.length + ' packages?')) return
+      if (!await window.nativeConfirm({
+        title: 'Update ' + items.length + ' packages?',
+        message: 'Each package is upgraded to its latest published version.',
+        confirmLabel: 'Update',
+      })) return
       var self = this
       items.forEach(function (key) {
         var isCask = key.startsWith('cask:')
@@ -283,7 +287,11 @@ window.updatesXData = function () {
     },
 
     doUpdateAll() {
-      if (!confirm('Update all outdated Homebrew packages? This may take a while.')) return
+      if (!await window.nativeConfirm({
+        title: 'Update all outdated Homebrew packages?',
+        message: 'This can take several minutes and cannot be interrupted cleanly.',
+        confirmLabel: 'Update All',
+      })) return
       this.toast('Running brew upgrade...', 'info')
       var self = this
       fetch('/api/brew-update-all', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })

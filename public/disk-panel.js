@@ -665,9 +665,15 @@
     fetch('/api/reveal-in-finder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: path }) }).catch(function(){});
   };
 
-  window.diskDeletePath = function(path, name, sizeBytes) {
+  window.diskDeletePath = async function(path, name, sizeBytes) {
     var sizeStr = fmtBytes(sizeBytes || 0);
-    if (!confirm('Delete "' + name + '" (' + sizeStr + ')?\n\n' + path + '\n\nThis cannot be undone.')) return;
+    var ok = await window.nativeConfirm({
+      title: 'Delete “' + name + '”?',
+      message: sizeStr + ' will be removed from ' + path + '. This cannot be undone.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!ok) return;
     fetch('/api/delete-path', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: path }) })
       .then(function(r) { return r.json(); })
       .then(function(r) {
@@ -677,11 +683,11 @@
           renderSegments(currentRoot && currentRoot.p !== path ? currentRoot : tree);
           patchDiskScope({ hovered: null });
         } else {
-          alert('Delete failed: ' + (r.error || 'Unknown'));
+          window.nativeAlert('Could not delete “' + name + '”', r.error || 'The scanner gave no reason.');
         }
       })
       .catch(function(err) {
-        alert('Delete failed: ' + err.message);
+        window.nativeAlert('Could not delete “' + name + '”', err.message);
       });
   };
 

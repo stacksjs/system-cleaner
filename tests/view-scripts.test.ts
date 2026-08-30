@@ -63,9 +63,16 @@ describe('view scripts', () => {
     for await (const file of components.scan('.'))
       componentSources.set(file, await Bun.file(file).text())
 
+    // Scripts the shared layout pulls in are on every page, so a view does not
+    // have to load them again. `native-dialog.js` is the case: every screen has
+    // a destructive action, so it belongs in the layout rather than repeated
+    // across seven views.
+    const layoutSource = await Bun.file('resources/layouts/app.stx').text()
+    const layoutScripts = new Set(scriptSources(layoutSource))
+
     for await (const file of views.scan('.')) {
       const source = await Bun.file(file).text()
-      const loaded = new Set(scriptSources(source))
+      const loaded = new Set([...scriptSources(source), ...layoutScripts])
 
       // Whatever this view renders, by component tag name.
       let combined = source

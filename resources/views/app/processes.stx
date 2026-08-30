@@ -72,8 +72,13 @@
     setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 4000);
   },
 
-  confirmKill(p) {
-    if (!confirm('Kill ' + p.name + ' (PID ' + p.pid + ')?')) return;
+  async confirmKill(p) {
+    if (!await window.nativeConfirm({
+      title: 'Force quit ' + p.name + '?',
+      message: 'PID ' + p.pid + '. Unsaved work in this process is lost.',
+      confirmLabel: 'Force Quit',
+      destructive: true,
+    })) return;
     if (this.killing[p.pid]) return;
     this.killing = { ...this.killing, [p.pid]: true };
     fetch('/api/kill-process', {

@@ -424,5 +424,8 @@ function moveWindowFrom(event: Event): void {
 
 useEventListener('mousedown', moveWindowFrom, { target: document })
 </script>
+<!-- Loaded for every app page: `nativeConfirm` and `nativeAlert` replace the
+     web dialogs on the destructive actions, and every screen has one. -->
+<script src="/native-dialog.js"></script>
 </body>
 </html>

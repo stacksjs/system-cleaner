@@ -108,9 +108,13 @@ function _toastErr(label) {
   };
 }
 
-function doToggle(fp, name, action, itemId) {
+async function doToggle(fp, name, action, itemId) {
   var verb = action === 'disable' ? 'Disable' : 'Enable';
-  if (!confirm(verb + ' ' + name + '?')) return;
+  if (!await window.nativeConfirm({
+    title: verb + ' ' + name + '?',
+    message: 'This changes what runs when you log in.',
+    confirmLabel: verb,
+  })) return;
   _api('/api/toggle-startup', { filepath: fp, label: name, action: action }).then(function(r) {
     if (r.success) {
       var method = action === 'disable' ? 'disabledItems = [...disabledItems, \'' + itemId + '\']' : 'disabledItems = disabledItems.filter(function(x){ return x !== \'' + itemId + '\' })';
@@ -122,8 +126,13 @@ function doToggle(fp, name, action, itemId) {
   }).catch(_toastErr(verb + ' failed'));
 }
 
-function doRemove(fp, name, itemId) {
-  if (!confirm('Permanently delete ' + name + '?\nThis will unload and remove the launch agent/daemon.')) return;
+async function doRemove(fp, name, itemId) {
+  if (!await window.nativeConfirm({
+    title: 'Permanently delete ' + name + '?',
+    message: 'The launch agent is unloaded and its file removed. This cannot be undone.',
+    confirmLabel: 'Delete',
+    destructive: true,
+  })) return;
   _api('/api/remove-startup', { filepath: fp }).then(function(r) {
     if (r.success) {
       _exec("removedItems = [...removedItems, '' + itemId + '']");
