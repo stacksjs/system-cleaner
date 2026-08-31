@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { isCleanable } from '../packages/core/src/paths'
@@ -39,8 +40,25 @@ describe('permission-gated caches', () => {
     expect(check.reason).not.toMatch(/permission/i)
   })
 
-  test('leaves ordinary caches cleanable', () => {
+  // Asserted on the *reason*, not on `safe`. The gate has to not swallow the
+  // parent of the directories it guards — that is the regression this catches.
+  // Asking for `safe === true` instead made the test depend on the macOS
+  // directory layout existing, so it failed on the Linux CI runner for a
+  // reason that had nothing to do with gating.
+  test('does not treat the caches directory itself as gated', () => {
     const check = isCleanable(path.join(home, 'Library/Caches'))
-    expect(check.safe).toBe(true)
+    // `?? ''` because a cleanable path carries no reason at all, and
+    // `toMatch` on undefined throws rather than passing.
+    expect(check.reason ?? '').not.toMatch(/permission/i)
+  })
+
+  test('leaves an ordinary directory cleanable', () => {
+    const dir = fs.mkdtempSync(path.join(home, '.system-cleaner-gated-test-'))
+    try {
+      expect(isCleanable(dir).safe).toBe(true)
+    }
+    finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

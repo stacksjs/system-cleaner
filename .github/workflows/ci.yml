@@ -80,6 +80,23 @@ jobs:
       - name: Install Dependencies
         run: bun install
 
+      # Two generated inputs the suite reads straight off disk. Neither is
+      # tracked, so a fresh checkout has neither, and five tests failed here on
+      # every push for reasons that had nothing to do with the code under test.
+      #
+      # `public/app-menu.js` and `public/native-dialog.js` are bundled from
+      # resources/scripts and gitignored — the client-scripts suite asserts
+      # they exist, which is precisely a check that this step ran.
+      - name: Build client scripts
+        run: bun run build:scripts
+
+      # `database/migrations` is derived from app/Models; bulk-delete.test.ts
+      # applies it to a throwaway SQLite file in beforeAll and died with ENOENT
+      # before a single case ran. Same missing step the desktop bundle build
+      # had.
+      - name: Generate migrations
+        run: ./buddy migrate:regenerate --force
+
       - name: Unit Test
         run: bun test
 
