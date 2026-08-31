@@ -1,5 +1,75 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.1.3...v0.2.0)
+
+## ✨ Features
+
+- **cleanup**: find the 30 GB Quick Clean was walking past ([9dd983f](https://github.com/stacksjs/system-cleaner/commit/9dd983f)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **desktop**: the menubar, with the app menu it was missing ([73cc2e5](https://github.com/stacksjs/system-cleaner/commit/73cc2e5)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **desktop**: app menu with per-screen shortcuts, and notify long scans ([e9d7bb2](https://github.com/stacksjs/system-cleaner/commit/e9d7bb2)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **desktop**: native folder picker and pasteboard ([145aad4](https://github.com/stacksjs/system-cleaner/commit/145aad4)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **desktop**: native alerts for every destructive action ([c71c7a2](https://github.com/stacksjs/system-cleaner/commit/c71c7a2)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **disk**: right-click a segment for a native menu ([89276db](https://github.com/stacksjs/system-cleaner/commit/89276db)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **desktop**: put the Mac's own window buttons in the app's chrome ([0bc79f2](https://github.com/stacksjs/system-cleaner/commit/0bc79f2)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **disk**: show what a scan is doing, and say when it is blocked ([c1fe0ec](https://github.com/stacksjs/system-cleaner/commit/c1fe0ec)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **app**: find and bulk-delete large files, and ship a real macOS app ([1f75899](https://github.com/stacksjs/system-cleaner/commit/1f75899)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## 🐛 Bug Fixes
+
+- **ci**: attach the DMG the release job was silently dropping ([172ca26](https://github.com/stacksjs/system-cleaner/commit/172ca26)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **system**: the app detail panel collapsed in a narrow window ([a9de6f6](https://github.com/stacksjs/system-cleaner/commit/a9de6f6)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **app**: the Updates page, the CPU bars, and the numbers around them ([badb79a](https://github.com/stacksjs/system-cleaner/commit/badb79a)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **desktop**: sign with entitlements, and a mark that says what the app does ([2be958f](https://github.com/stacksjs/system-cleaner/commit/2be958f)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **disk**: drop accelerators the menu does not honour ([530111f](https://github.com/stacksjs/system-cleaner/commit/530111f)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **cleanup**: one gated cache silently stopped the whole clean ([3a534c6](https://github.com/stacksjs/system-cleaner/commit/3a534c6)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **scans**: leaving a screen threw away the scan it had started ([1b71906](https://github.com/stacksjs/system-cleaner/commit/1b71906)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **disk**: a truncated scan reported false proportions, not partial ones ([bd3fd96](https://github.com/stacksjs/system-cleaner/commit/bd3fd96)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **cleanup**: spend the danger colour where the danger is ([9a699bd](https://github.com/stacksjs/system-cleaner/commit/9a699bd)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **large-files**: stop presenting zeros as findings ([c7b19fa](https://github.com/stacksjs/system-cleaner/commit/c7b19fa)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **disk**: a wedged scan leaked a process per attempt ([36c1d32](https://github.com/stacksjs/system-cleaner/commit/36c1d32)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **app**: make Scan Disk work, and say which macOS beta you are on ([334eede](https://github.com/stacksjs/system-cleaner/commit/334eede)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **framework**: leave the traffic lights to the platform ([0e9a38a](https://github.com/stacksjs/system-cleaner/commit/0e9a38a)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## ⚡ Performance Improvements
+
+- **desktop**: one binary instead of three, and 130 MB less of it ([9af6811](https://github.com/stacksjs/system-cleaner/commit/9af6811)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## ♻️ Code Refactoring
+
+- **desktop**: use the desktop package instead of reimplementing it ([be691a7](https://github.com/stacksjs/system-cleaner/commit/be691a7)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## 📝 Documentation
+
+- **marketing**: reshoot the showcase, which was two designs out of date ([dcdc99e](https://github.com/stacksjs/system-cleaner/commit/dcdc99e)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **disk**: the walker is not the bottleneck, and here is the measurement ([c5bea2d](https://github.com/stacksjs/system-cleaner/commit/c5bea2d)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## 👷 Build System
+
+- ship signed Craft 0.0.81 runtime ([0bf0def](https://github.com/stacksjs/system-cleaner/commit/0bf0def)) _(by Chris <chrisbreuer93@gmail.com>)_
+- track craft 0.0.80 ([8ca436a](https://github.com/stacksjs/system-cleaner/commit/8ca436a)) _(by Chris <chrisbreuer93@gmail.com>)_
+- track craft 0.0.79, which carries the native context menu ([60c6bfe](https://github.com/stacksjs/system-cleaner/commit/60c6bfe)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **desktop**: package the app with buddy instead of around it ([3f66d3b](https://github.com/stacksjs/system-cleaner/commit/3f66d3b)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## 💚 Continuous Integration
+
+- install the pantry action that can actually install craft ([d48de74](https://github.com/stacksjs/system-cleaner/commit/d48de74)) _(by Chris <chrisbreuer93@gmail.com>)_
+- deliver the Mac App Store build from the release tag ([37a561d](https://github.com/stacksjs/system-cleaner/commit/37a561d)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## 🔧 Chores
+
+- **deps**: craft 0.0.83, now that the registry has it ([a80e390](https://github.com/stacksjs/system-cleaner/commit/a80e390)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **framework**: update Stacks to 0.72.103 ([2e23b9b](https://github.com/stacksjs/system-cleaner/commit/2e23b9b)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **framework**: follow the dashboard's window-controls comments ([448c412](https://github.com/stacksjs/system-cleaner/commit/448c412)) _(by Chris <chrisbreuer93@gmail.com>)_
+- wip ([cb72933](https://github.com/stacksjs/system-cleaner/commit/cb72933)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## ⏪ Reverts
+
+- **desktop**: stop replacing the menubar, which cost more than it added ([a663457](https://github.com/stacksjs/system-cleaner/commit/a663457)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## Contributors
+
+- _Chris <chrisbreuer93@gmail.com>_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.1.2...v0.1.3)
 
 ## 🐛 Bug Fixes
