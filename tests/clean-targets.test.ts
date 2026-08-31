@@ -1,7 +1,7 @@
 import * as path from 'node:path'
 import { describe, expect, it } from 'bun:test'
 import { CLEAN_TARGETS, getCategories, getCleanTarget } from '../packages/clean/src/categories'
-import { isPathSafe } from '../packages/core/src/paths'
+import { isCleanable, isPathSafe, isPermissionGated } from '../packages/core/src/paths'
 
 describe('clean targets', () => {
   it('has unique ids', () => {
@@ -51,5 +51,36 @@ describe('clean targets', () => {
       const guarded = target.requiresSudo === true || isPathSafe(target.path).safe
       expect(guarded).toBe(true)
     }
+  })
+})
+
+describe('clean target risk', () => {
+  it('classifies every target', () => {
+    for (const target of CLEAN_TARGETS)
+      expect(['safe', 'caution']).toContain(target.risk)
+  })
+
+  // The Quick Clean page hides `caution` targets from "Select All Safe" for
+  // exactly this reason: cleaning one is a permanent loss, not a rebuild.
+  it('marks the stores nothing rebuilds as caution', () => {
+    const mustBeCaution = ['claude-code-projects', 'codex-sessions', 'codex-archived-sessions', 'ollama-models', 'lmstudio-models', 'vagrant-boxes']
+    for (const id of mustBeCaution)
+      expect(getCleanTarget(id)?.risk).toBe('caution')
+  })
+
+  it('leaves plain caches safe', () => {
+    for (const id of ['user-caches', 'npm-cache', 'chrome-cache', 'trash'])
+      expect(getCleanTarget(id)?.risk).toBe('safe')
+  })
+})
+
+describe('permission-gated targets', () => {
+  // A gated path has a size and looks perfectly cleanable, so listing it means
+  // offering a Clean button that can only ever fail. The cleanup list filters
+  // them out; this pins the pairing so a new gated path cannot slip back in.
+  it('is what getCleanupTargetsCached filters on', () => {
+    const gated = CLEAN_TARGETS.filter(t => isPermissionGated(t.path))
+    for (const target of gated)
+      expect(isCleanable(target.path).safe).toBe(false)
   })
 })

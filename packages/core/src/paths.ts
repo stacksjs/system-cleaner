@@ -129,6 +129,19 @@ const PERMISSION_GATED = [
 ]
 
 /**
+ * Whether `isCleanable` will refuse this path for the consent-prompt reason.
+ *
+ * Callers that *list* cleanable things want this: a gated path has a real size
+ * and looks perfectly cleanable, so it used to appear in Quick Clean with a
+ * Clean button that could only ever fail. Better to leave it out of the list
+ * than to offer an action that never works.
+ */
+export function isPermissionGated(targetPath: string): boolean {
+  const resolved = path.resolve(targetPath)
+  return PERMISSION_GATED.some(gated => resolved === path.join(HOME, gated) || resolved.startsWith(`${path.join(HOME, gated)}/`))
+}
+
+/**
  * Check if a path is safe for cleaning (less strict - allows cleaning contents)
  */
 export function isCleanable(targetPath: string): PathSafetyCheck {

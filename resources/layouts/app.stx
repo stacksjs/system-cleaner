@@ -341,6 +341,10 @@ const localAgent = isLocalAgent()
     .clean-total { color: var(--green); }
     .clean-size { font-weight: 600; font-variant-numeric: tabular-nums; }
     .clean-size.is-pending { color: var(--tertiary); font-weight: 400; }
+    /* Category filter above the Quick Clean table. Plain buttons, because the
+       list is long enough that a second control style would be noise. */
+    .filter-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .cap { text-transform: capitalize; }
 
     .app-icon { width: 18px; height: 18px; flex-shrink: 0; border-radius: 4px; object-fit: contain; }
     .app-icon-missing { visibility: hidden; }

@@ -16,6 +16,7 @@ function esc(str) { return escapeHtml(str || '') }
   diskAvail: '-',
   diskPercent: 0,
   targetsLoading: true,
+  filter: 'all',
 
   init() {
     var self = this;
@@ -38,6 +39,12 @@ function esc(str) { return escapeHtml(str || '') }
   toggle(id) { this.selected = this.selected.indexOf(id) === -1 ? this.selected.concat([id]) : this.selected.filter(function(x) { return x !== id; }); },
   isOn(id) { return this.selected.includes(id); },
   allOn(ids) { const keep = this.selected.filter(id => !ids.includes(id)); this.selected = ids.every(id => this.selected.includes(id)) ? keep : keep.concat(ids); },
+
+  safeIds() { return this.cleanCategories.filter(function(c) { return c.risk !== 'caution'; }).map(function(c) { return c.id; }); },
+  allSafeSelected() { var s = this.selected; var ids = this.safeIds(); return ids.length > 0 && ids.every(function(id) { return s.indexOf(id) !== -1; }); },
+  toggleAllSafe() { this.selected = this.allSafeSelected() ? [] : this.safeIds(); },
+  categoriesPresent() { var seen = []; this.cleanCategories.forEach(function(c) { if (seen.indexOf(c.category) === -1) seen.push(c.category); }); return seen.sort(); },
+  setFilter(c) { this.filter = c; applyCleanupFilter(c); },
   shortPath(p) {
     if (!p || p.indexOf('/Users/') !== 0) return p;
     var rest = p.slice(7);
@@ -113,10 +120,14 @@ function _fmtBytes(b) {
   return b+' B';
 }
 
-async function doCleanDir(p, name, id) {
+async function doCleanDir(p, name, id, risk) {
   if (!await window.nativeConfirm({
     title: 'Clean ' + name + '?',
-    message: 'Its contents are removed. Apps rebuild these files as they need them.',
+    // A cache and a folder of session transcripts warrant different sentences.
+    // "Apps rebuild these files" is reassuring and, for a caution target, false.
+    message: risk === 'caution'
+      ? 'Its contents are removed for good. Nothing rebuilds this one - whatever is in it has to be re-downloaded or is simply gone.'
+      : 'Its contents are removed. Apps rebuild these files as they need them.',
     confirmLabel: 'Clean',
     destructive: true,
   })) return;
@@ -155,9 +166,19 @@ async function doCleanSelected() {
   if (!scope || !scope.__stx_state) return;
   var items = scope.__stx_state.selected || [];
   if (items.length === 0) return;
+  var cautionNames = items.map(function(id) {
+    var row = document.querySelector('[data-clean-id="' + id + '"]');
+    if (!row || row.getAttribute('data-clean-risk') !== 'caution') return null;
+    var el = row.querySelector('.item-name');
+    return el ? el.textContent : null;
+  }).filter(Boolean);
   if (!await window.nativeConfirm({
     title: 'Clean ' + items.length + ' categories?',
-    message: 'Their contents are removed. Apps rebuild these files as they need them.',
+    // Name the caution ones. A batch confirm that says only "their contents are
+    // removed" is how someone loses their session history to one click.
+    message: cautionNames.length > 0
+      ? 'Their contents are removed. Most are caches apps rebuild, but ' + cautionNames.join(', ') + (cautionNames.length === 1 ? ' holds' : ' hold') + ' content nothing rebuilds.'
+      : 'Their contents are removed. Apps rebuild these files as they need them.',
     confirmLabel: 'Clean Selected',
     destructive: true,
   })) return;
@@ -198,24 +219,67 @@ function setCachedSizes(sizes) {
   catch { /* storage full or unavailable */ }
 }
 
-function applySizes(sizes) {
-  var rows = document.querySelectorAll('[data-clean-path]');
+// Last scan, kept so filtering can re-total without another walk.
+var _cleanupSizes = {};
+
+/**
+ * Sum sizes without counting nested targets twice.
+ *
+ * Many targets live inside another one - ~/Library/Caches/Google/Chrome sits
+ * under ~/Library/Caches, and so do about thirty others. Adding every row's
+ * `du` figure counted those bytes once per level, and the headline "Space
+ * Recoverable" came out far larger than the disk could ever give back. A path
+ * with an ancestor in the same set contributes nothing; the ancestor already
+ * counted it.
+ */
+function _sumWithoutOverlap(paths, sizes) {
   var total = 0;
+  for (var i = 0; i < paths.length; i++) {
+    var p = paths[i];
+    var nested = false;
+    for (var j = 0; j < paths.length; j++) {
+      if (j !== i && p.indexOf(paths[j] + '/') === 0) { nested = true; break; }
+    }
+    if (!nested) total += sizes[p] || 0;
+  }
+  return total;
+}
+
+/** Re-total and re-count from whichever rows the current filter leaves visible. */
+function recomputeCleanupTotal() {
+  var rows = Array.from(document.querySelectorAll('[data-clean-path]'))
+    .filter(function(r) { return r.style.display !== 'none'; });
+  var paths = rows.map(function(r) { return r.getAttribute('data-clean-path'); });
+  var total = _sumWithoutOverlap(paths, _cleanupSizes);
+
+  var totalEl = document.getElementById('total-cleanable');
+  if (totalEl) {
+    totalEl.textContent = total > 0 ? _fmtBytes(total) : '< 1 MB';
+    totalEl.classList.remove('is-scanning');
+  }
+  var countEl = document.getElementById('cleanup-visible-count');
+  if (countEl) countEl.textContent = String(rows.length);
+}
+
+function applyCleanupFilter(cat) {
+  document.querySelectorAll('[data-clean-path]').forEach(function(row) {
+    var match = cat === 'all' || row.getAttribute('data-clean-category') === cat;
+    row.style.display = match ? '' : 'none';
+  });
+  recomputeCleanupTotal();
+}
+
+function applySizes(sizes) {
+  _cleanupSizes = sizes;
+  var rows = document.querySelectorAll('[data-clean-path]');
   rows.forEach(function(row) {
-    var p = row.getAttribute('data-clean-path');
-    var bytes = sizes[p] || 0;
-    total += bytes;
+    var bytes = sizes[row.getAttribute('data-clean-path')] || 0;
     var cell = row.querySelector('.clean-size');
     if (cell) {
       cell.textContent = bytes > 0 ? _fmtBytes(bytes) : '< 1 MB';
       cell.classList.remove('is-pending');
     }
   });
-  var totalEl = document.getElementById('total-cleanable');
-  if (totalEl) {
-    totalEl.textContent = total > 0 ? _fmtBytes(total) : '< 1 MB';
-    totalEl.classList.remove('is-scanning');
-  }
   var labelEl = document.getElementById('cleanup-sort-label');
   if (labelEl) labelEl.textContent = 'sorted by size';
   // Sort rows by size (largest first)
@@ -225,6 +289,7 @@ function applySizes(sizes) {
     rowArr.sort(function(a, b) { return (sizes[b.getAttribute('data-clean-path')] || 0) - (sizes[a.getAttribute('data-clean-path')] || 0); });
     rowArr.forEach(function(r) { tbody.appendChild(r); });
   }
+  recomputeCleanupTotal();
 }
 
 function scanCleanupSizes(force) {

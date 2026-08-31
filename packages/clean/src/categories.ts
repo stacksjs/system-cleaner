@@ -33,8 +33,12 @@ export function iconForCategory(category: CleanTarget['category']): string {
 }
 
 /**
- * Comprehensive cleaning database — 170+ targets matching and exceeding Mole's coverage.
- * Organized by category for maintainability.
+ * Comprehensive cleaning database — 260+ targets, organized by category.
+ *
+ * Entries earn their place by being found on a real machine, not by being
+ * plausible. The AI-tooling, browser-automation and second-location caches
+ * below came from auditing a working developer Mac where the previous list
+ * surfaced 32 targets and walked past roughly 30 GB it had no entry for.
  */
 export const CLEAN_TARGETS: CleanTarget[] = [
   // ═══════════════════════════════════════════════════════════════
@@ -74,10 +78,37 @@ export const CLEAN_TARGETS: CleanTarget[] = [
   t('edge-cache', 'Edge Cache', `${HOME}/Library/Caches/Microsoft Edge`, 'browser', 'Microsoft Edge browser cache', true),
   // Brave
   t('brave-cache', 'Brave Cache', `${HOME}/Library/Caches/BraveSoftware/Brave-Browser`, 'browser', 'Brave browser cache', true),
+  // Edge — the same four stores Chrome gets above
+  t('edge-sw', 'Edge Service Workers', `${HOME}/Library/Application Support/Microsoft Edge/Default/Service Worker/CacheStorage`, 'browser', 'Edge service worker cache', true),
+  t('edge-gpu', 'Edge GPU Cache', `${HOME}/Library/Application Support/Microsoft Edge/Default/GPUCache`, 'browser', 'Edge GPU shader cache', true),
+  t('edge-code', 'Edge Code Cache', `${HOME}/Library/Application Support/Microsoft Edge/Default/Code Cache`, 'browser', 'Edge compiled code cache', true),
+  // Brave
+  t('brave-sw', 'Brave Service Workers', `${HOME}/Library/Application Support/BraveSoftware/Brave-Browser/Default/Service Worker/CacheStorage`, 'browser', 'Brave service worker cache', true),
+  t('brave-gpu', 'Brave GPU Cache', `${HOME}/Library/Application Support/BraveSoftware/Brave-Browser/Default/GPUCache`, 'browser', 'Brave GPU shader cache', true),
+  t('brave-code', 'Brave Code Cache', `${HOME}/Library/Application Support/BraveSoftware/Brave-Browser/Default/Code Cache`, 'browser', 'Brave compiled code cache', true),
   // Arc
   t('arc-cache', 'Arc Cache', `${HOME}/Library/Caches/company.thebrowser.Browser`, 'browser', 'Arc browser cache', true),
+  t('arc-sw', 'Arc Service Workers', `${HOME}/Library/Application Support/Arc/User Data/Default/Service Worker/CacheStorage`, 'browser', 'Arc service worker cache', true),
+  t('arc-gpu', 'Arc GPU Cache', `${HOME}/Library/Application Support/Arc/User Data/Default/GPUCache`, 'browser', 'Arc GPU shader cache', true),
+  t('arc-code', 'Arc Code Cache', `${HOME}/Library/Application Support/Arc/User Data/Default/Code Cache`, 'browser', 'Arc compiled code cache', true),
+  // Dia — two bundle ids, and both carry weight
+  t('dia-cache', 'Dia Cache', `${HOME}/Library/Caches/Dia`, 'browser', 'Dia browser cache', true),
+  t('dia-browser-cache', 'Dia App Cache', `${HOME}/Library/Caches/company.thebrowser.dia`, 'browser', 'Dia application cache', true),
+  t('dia-sw', 'Dia Service Workers', `${HOME}/Library/Application Support/Dia/User Data/Default/Service Worker/CacheStorage`, 'browser', 'Dia service worker cache', true),
+  t('dia-gpu', 'Dia GPU Cache', `${HOME}/Library/Application Support/Dia/User Data/Default/GPUCache`, 'browser', 'Dia GPU shader cache', true),
+  t('dia-code', 'Dia Code Cache', `${HOME}/Library/Application Support/Dia/User Data/Default/Code Cache`, 'browser', 'Dia compiled code cache', true),
   // Opera
   t('opera-cache', 'Opera Cache', `${HOME}/Library/Caches/com.operasoftware.Opera`, 'browser', 'Opera browser cache', true),
+  // Vivaldi, Chromium, Zen, Orion, Safari Technology Preview
+  t('vivaldi-cache', 'Vivaldi Cache', `${HOME}/Library/Caches/com.vivaldi.Vivaldi`, 'browser', 'Vivaldi browser cache', true),
+  t('chromium-cache', 'Chromium Cache', `${HOME}/Library/Caches/org.chromium.Chromium`, 'browser', 'Chromium browser cache', true),
+  t('zen-cache', 'Zen Browser Cache', `${HOME}/Library/Caches/app.zen-browser.zen`, 'browser', 'Zen browser cache', true),
+  t('orion-cache', 'Orion Cache', `${HOME}/Library/Caches/com.kagi.kagimacOS`, 'browser', 'Orion browser cache', true),
+  t('safari-tp-cache', 'Safari Technology Preview Cache', `${HOME}/Library/Caches/com.apple.SafariTechnologyPreview`, 'browser', 'Safari Technology Preview cache', true),
+  // Headless and test builds Chrome leaves behind, plus the updater's old versions
+  t('chrome-headless', 'Chrome Headless Profile', `${HOME}/Library/Application Support/Google/Chrome-headless`, 'browser', 'Profile data left by headless Chrome runs', true),
+  t('chrome-for-testing', 'Chrome for Testing', `${HOME}/Library/Application Support/Google/Chrome for Testing`, 'browser', 'Profile data from Chrome for Testing builds', true),
+  t('google-updater', 'Google Updater Versions', `${HOME}/Library/Application Support/Google/GoogleUpdater`, 'browser', 'Superseded copies of the Google updater', true),
 
   // ═══════════════════════════════════════════════════════════════
   // DEVELOPER — JavaScript ecosystem
@@ -97,6 +128,31 @@ export const CLEAN_TARGETS: CleanTarget[] = [
   t('electron-cache', 'Electron Cache', `${HOME}/.cache/electron`, 'developer', 'Electron framework cache', true),
   t('node-gyp-cache', 'node-gyp Cache', `${HOME}/.cache/node-gyp`, 'developer', 'node-gyp build cache', true),
   t('node-gyp-home', 'node-gyp Home', `${HOME}/.node-gyp`, 'developer', 'node-gyp headers cache', true),
+  // node-gyp, bun and pnpm each write to a second location under Library that
+  // the XDG-style entries above never matched.
+  t('node-gyp-library', 'node-gyp Headers (Library)', `${HOME}/Library/Caches/node-gyp`, 'developer', 'Downloaded Node headers for native builds', true),
+  t('bun-build-cache', 'Bun Build Cache', `${HOME}/.bun/build-cache`, 'developer', 'Bun compiled build artifacts and downloaded toolchains', true),
+  t('bun-library-cache', 'Bun Cache (Library)', `${HOME}/Library/Caches/bun`, 'developer', 'Bun runtime cache', true),
+  t('pnpm-library-cache', 'pnpm Cache', `${HOME}/Library/Caches/pnpm`, 'developer', 'pnpm metadata and download cache', true),
+  t('yarn-berry-cache', 'Yarn Berry Cache', `${HOME}/.yarn/berry/cache`, 'developer', 'Yarn 2+ zipped package cache', true),
+  t('yarn-xdg-cache', 'Yarn Cache (XDG)', `${HOME}/.cache/yarn`, 'developer', 'Yarn cache written under ~/.cache', true),
+  t('corepack-cache', 'Corepack Cache', `${HOME}/Library/Caches/node/corepack`, 'developer', 'Corepack-managed package manager downloads', true),
+  t('nvm-cache', 'nvm Cache', `${HOME}/.nvm/.cache`, 'developer', 'nvm Node download cache', true),
+  t('volta-tmp', 'Volta Temp', `${HOME}/.volta/tmp`, 'developer', 'Volta staging directory', true),
+  t('nx-cache', 'Nx Cache', `${HOME}/.cache/nx`, 'developer', 'Nx computation cache', true),
+  t('bazel-cache', 'Bazel Cache', `${HOME}/.cache/bazel`, 'developer', 'Bazel build output cache', true),
+  t('pre-commit-cache', 'pre-commit Cache', `${HOME}/.cache/pre-commit`, 'developer', 'pre-commit hook environments', true),
+  t('gh-cache', 'GitHub CLI Cache', `${HOME}/.cache/gh`, 'developer', 'GitHub CLI API response cache', true),
+  // Browser automation downloads whole browsers — hundreds of megabytes that
+  // never appeared anywhere in this list before.
+  t('puppeteer-cache', 'Puppeteer Browsers', `${HOME}/.cache/puppeteer`, 'developer', 'Chrome builds Puppeteer downloaded, re-fetched on next run', true),
+  t('playwright-cache', 'Playwright Browsers', `${HOME}/Library/Caches/ms-playwright`, 'developer', 'Browser builds Playwright downloaded, restored by `playwright install`', true),
+  t('playwright-xdg-cache', 'Playwright Browsers (XDG)', `${HOME}/.cache/ms-playwright`, 'developer', 'Playwright browsers written under ~/.cache', true),
+  t('cypress-cache', 'Cypress Cache', `${HOME}/Library/Caches/Cypress`, 'developer', 'Cypress binary versions', true),
+  t('selenium-cache', 'Selenium Cache', `${HOME}/.cache/selenium`, 'developer', 'Selenium driver downloads', true),
+  // Launchpad / pantry package caches
+  t('pantry-cache', 'Pantry Cache', `${HOME}/.cache/pantry`, 'developer', 'Downloaded pantry package archives', true),
+  t('pantry-local-cache', 'Pantry Local Cache', `${HOME}/.pantry/cache`, 'developer', 'Pantry working cache', true),
 
   // ═══════════════════════════════════════════════════════════════
   // DEVELOPER — Xcode & Apple
@@ -111,6 +167,9 @@ export const CLEAN_TARGETS: CleanTarget[] = [
   t('xcode-products', 'Xcode Products', `${HOME}/Library/Developer/Xcode/Products`, 'developer', 'Xcode build products', true),
   t('simulator-caches', 'Simulator Caches', `${HOME}/Library/Developer/CoreSimulator/Caches`, 'developer', 'CoreSimulator cache', true),
   t('simulator-logs', 'Simulator Logs', `${HOME}/Library/Logs/CoreSimulator`, 'developer', 'CoreSimulator logs', true),
+  t('xcode-ios-devicesupport', 'iOS Device Support', `${HOME}/Library/Developer/Xcode/iOS DeviceSupport`, 'developer', 'Symbols per iOS version, re-copied when a device is next attached', true),
+  t('xcode-watchos-devicesupport', 'watchOS Device Support', `${HOME}/Library/Developer/Xcode/watchOS DeviceSupport`, 'developer', 'Symbols per watchOS version, re-copied on next attach', true),
+  t('xcode-instruments-cache', 'Instruments Cache', `${HOME}/Library/Caches/com.apple.dt.instruments`, 'developer', 'Instruments trace cache', true),
   t('cocoapods-cache', 'CocoaPods Cache', `${HOME}/Library/Caches/CocoaPods`, 'developer', 'CocoaPods dependency cache', true),
   t('swiftpm-cache', 'Swift Package Manager Cache', `${HOME}/Library/Caches/org.swift.swiftpm`, 'developer', 'Swift Package Manager dependency cache', true),
 
@@ -148,6 +207,14 @@ export const CLEAN_TARGETS: CleanTarget[] = [
   t('zls-cache', 'ZLS Cache', `${HOME}/.cache/zls`, 'developer', 'Zig Language Server build cache', true),
   t('gradle-cache', 'Gradle Cache', `${HOME}/.gradle/caches`, 'developer', 'Gradle build system cache', true),
   t('maven-cache', 'Maven Repository', `${HOME}/.m2/repository`, 'developer', 'Maven local repository cache', true),
+  t('cargo-registry-index', 'Cargo Registry Index', `${HOME}/.cargo/registry/index`, 'developer', 'Crates.io index checkout, re-fetched on next build', true),
+  t('rustup-tmp', 'Rustup Temp', `${HOME}/.rustup/tmp`, 'developer', 'Rustup staging directory', true),
+  t('ccache', 'ccache', `${HOME}/.ccache`, 'developer', 'C/C++ compiler cache', true),
+  t('ccache-library', 'ccache (Library)', `${HOME}/Library/Caches/ccache`, 'developer', 'ccache written under Library/Caches', true),
+  t('coursier-cache', 'Coursier Cache', `${HOME}/Library/Caches/Coursier`, 'developer', 'Scala/JVM dependency cache', true),
+  t('ivy-cache', 'Ivy Cache', `${HOME}/.ivy2/cache`, 'developer', 'Apache Ivy dependency cache', true),
+  t('cabal-packages', 'Cabal Packages', `${HOME}/.cabal/packages`, 'developer', 'Haskell Cabal package downloads', true),
+  t('nuget-cache', 'NuGet Packages', `${HOME}/.nuget/packages`, 'developer', '.NET NuGet global package cache', true),
 
   // ═══════════════════════════════════════════════════════════════
   // DEVELOPER — Docker, Cloud, DevOps
@@ -158,6 +225,11 @@ export const CLEAN_TARGETS: CleanTarget[] = [
   t('aws-cli-cache', 'AWS CLI Cache', `${HOME}/.aws/cli/cache`, 'developer', 'AWS CLI request cache', true),
   t('gcloud-logs', 'Google Cloud Logs', `${HOME}/.config/gcloud/logs`, 'developer', 'Google Cloud CLI logs', true),
   t('azure-logs', 'Azure CLI Logs', `${HOME}/.azure/logs`, 'developer', 'Azure CLI logs', true),
+  t('docker-logs', 'Docker Logs', `${HOME}/Library/Containers/com.docker.docker/Data/log`, 'developer', 'Docker Desktop daemon logs', true),
+  t('docker-scout', 'Docker Scout Cache', `${HOME}/.docker/scout`, 'developer', 'Docker Scout analysis cache', true),
+  t('orbstack-logs', 'OrbStack Logs', `${HOME}/.orbstack/log`, 'developer', 'OrbStack machine logs', true),
+  t('terraform-plugin-cache', 'Terraform Plugin Cache', `${HOME}/.terraform.d/plugin-cache`, 'developer', 'Terraform provider plugin downloads', true),
+  c('vagrant-boxes', 'Vagrant Boxes', `${HOME}/.vagrant.d/boxes`, 'developer', 'Downloaded Vagrant box images — each has to be pulled again', true),
 
   // ═══════════════════════════════════════════════════════════════
   // DEVELOPER — Ruby, PHP, Dart/Flutter, Misc
@@ -175,6 +247,14 @@ export const CLEAN_TARGETS: CleanTarget[] = [
   t('vscode-logs', 'VS Code Logs', `${HOME}/Library/Application Support/Code/logs`, 'developer', 'VS Code log files', true),
   t('vscode-ext-cache', 'VS Code Extensions Cache', `${HOME}/Library/Application Support/Code/CachedExtensions`, 'developer', 'VS Code extension cache', true),
   t('sublime-cache', 'Sublime Text Cache', `${HOME}/Library/Caches/com.sublimetext.4`, 'developer', 'Sublime Text editor cache', true),
+  t('vscode-insiders-cache', 'VS Code Insiders Cache', `${HOME}/Library/Application Support/Code - Insiders/Cache`, 'developer', 'VS Code Insiders cache', true),
+  t('vscode-insiders-cacheddata', 'VS Code Insiders Cached Data', `${HOME}/Library/Application Support/Code - Insiders/CachedData`, 'developer', 'VS Code Insiders compiled extension cache', true),
+  t('zed-node', 'Zed Node Runtime', `${HOME}/Library/Application Support/Zed/node`, 'developer', 'Node runtime Zed downloads for language servers', true),
+  t('zed-cache', 'Zed Cache', `${HOME}/Library/Caches/dev.zed.Zed`, 'developer', 'Zed editor cache', true),
+  t('zed-logs', 'Zed Logs', `${HOME}/Library/Logs/Zed`, 'developer', 'Zed log files', true),
+  t('jetbrains-cache', 'JetBrains Caches', `${HOME}/Library/Caches/JetBrains`, 'developer', 'IntelliJ, WebStorm, PyCharm and friends — indexes and caches', true),
+  t('jetbrains-logs', 'JetBrains Logs', `${HOME}/Library/Logs/JetBrains`, 'developer', 'JetBrains IDE logs', true),
+  t('github-desktop-cache', 'GitHub Desktop Cache', `${HOME}/Library/Application Support/GitHub Desktop/Cache`, 'developer', 'GitHub Desktop web cache', true),
 
   // ═══════════════════════════════════════════════════════════════
   // HOMEBREW
@@ -199,10 +279,56 @@ export const CLEAN_TARGETS: CleanTarget[] = [
 
   // ═══════════════════════════════════════════════════════════════
   // APPLICATIONS — AI Assistants
+  //
+  // The heaviest category on a machine that codes with agents, and the one the
+  // list used to say almost nothing about. Sandbox images, downloaded runtimes
+  // and per-session transcripts each run to gigabytes and none of them showed
+  // up here. The transcript stores are `c()` — they are the biggest single
+  // entries and the only ones that lose something real.
   // ═══════════════════════════════════════════════════════════════
   t('chatgpt-cache', 'ChatGPT Cache', `${HOME}/Library/Caches/com.openai.chat`, 'application', 'ChatGPT desktop cache', true),
   t('claude-cache', 'Claude Cache', `${HOME}/Library/Caches/com.anthropic.claudefordesktop`, 'application', 'Claude desktop cache', true),
   t('claude-logs', 'Claude Logs', `${HOME}/Library/Logs/Claude`, 'application', 'Claude desktop logs', true),
+  // Claude Desktop
+  t('claude-vm-bundles', 'Claude VM Bundles', `${HOME}/Library/Application Support/Claude/vm_bundles`, 'application', 'Sandbox VM images, re-downloaded when a sandboxed session next needs one', true),
+  t('claude-code-vm', 'Claude Code VM', `${HOME}/Library/Application Support/Claude/claude-code-vm`, 'application', 'Claude Code sandbox runtime, re-downloaded on demand', true),
+  t('claude-desktop-cache', 'Claude Desktop Cache', `${HOME}/Library/Application Support/Claude/Cache`, 'application', 'Claude desktop web cache', true),
+  t('claude-desktop-code-cache', 'Claude Desktop Code Cache', `${HOME}/Library/Application Support/Claude/Code Cache`, 'application', 'Claude desktop compiled script cache', true),
+  t('claude-desktop-gpu', 'Claude Desktop GPU Cache', `${HOME}/Library/Application Support/Claude/GPUCache`, 'application', 'Claude desktop GPU shader cache', true),
+  t('claude-desktop-crashpad', 'Claude Desktop Crash Dumps', `${HOME}/Library/Application Support/Claude/Crashpad`, 'application', 'Claude desktop crash dumps', true),
+  // Claude Code
+  t('claude-code-shell-snapshots', 'Claude Code Shell Snapshots', `${HOME}/.claude/shell-snapshots`, 'developer', 'Captured shell environments, rebuilt each session', true),
+  t('claude-code-debug', 'Claude Code Debug Logs', `${HOME}/.claude/debug`, 'developer', 'Claude Code debug logs', true),
+  t('claude-code-cache', 'Claude Code Cache', `${HOME}/.claude/cache`, 'developer', 'Claude Code internal cache', true),
+  t('claude-code-paste-cache', 'Claude Code Paste Cache', `${HOME}/.claude/paste-cache`, 'developer', 'Images and text pasted into Claude Code', true),
+  t('claude-code-downloads', 'Claude Code Downloads', `${HOME}/.claude/downloads`, 'developer', 'Files Claude Code downloaded during sessions', true),
+  c('claude-code-projects', 'Claude Code Session History', `${HOME}/.claude/projects`, 'developer', 'Full transcripts of every Claude Code session — cleaning ends --resume and --continue for past work', true),
+  // Codex
+  t('codex-cache', 'Codex Cache', `${HOME}/Library/Caches/com.openai.codex`, 'developer', 'Codex CLI cache', true),
+  t('codex-runtimes', 'Codex Runtimes', `${HOME}/.cache/codex-runtimes`, 'developer', 'Downloaded Codex runtime images, re-fetched on demand', true),
+  t('codex-internal-cache', 'Codex Internal Cache', `${HOME}/.codex/cache`, 'developer', 'Codex working cache', true),
+  t('codex-logs', 'Codex Logs', `${HOME}/Library/Logs/com.openai.codex`, 'developer', 'Codex CLI logs', true),
+  c('codex-sessions', 'Codex Sessions', `${HOME}/.codex/sessions`, 'developer', 'Transcripts of current Codex sessions', true),
+  c('codex-archived-sessions', 'Codex Archived Sessions', `${HOME}/.codex/archived_sessions`, 'developer', 'Transcripts of past Codex sessions — usually the largest single directory on an agent-heavy machine', true),
+  // Codex desktop (Chromium-based)
+  t('codex-app-crx', 'Codex App Component Cache', `${HOME}/Library/Application Support/Codex/component_crx_cache`, 'application', 'Codex desktop component downloads', true),
+  t('codex-app-crashpad', 'Codex App Crash Dumps', `${HOME}/Library/Application Support/Codex/Crashpad`, 'application', 'Codex desktop crash dumps', true),
+  t('codex-app-gpu', 'Codex App GPU Cache', `${HOME}/Library/Application Support/Codex/GraphiteDawnCache`, 'application', 'Codex desktop GPU shader cache', true),
+  // opencode
+  t('opencode-cache', 'opencode Cache', `${HOME}/.cache/opencode`, 'developer', 'opencode CLI cache', true),
+  t('opencode-desktop-cache', 'opencode Desktop Cache', `${HOME}/Library/Application Support/ai.opencode.desktop/Cache`, 'application', 'opencode desktop web cache', true),
+  t('opencode-desktop-crashpad', 'opencode Crash Dumps', `${HOME}/Library/Application Support/ai.opencode.desktop/Crashpad`, 'application', 'opencode desktop crash dumps', true),
+  // Kimi
+  t('kimi-cache', 'Kimi Cache', `${HOME}/Library/Application Support/kimi-desktop/Cache`, 'application', 'Kimi desktop web cache', true),
+  t('kimi-code-cache', 'Kimi Code Cache', `${HOME}/Library/Application Support/kimi-desktop/Code Cache`, 'application', 'Kimi desktop compiled script cache', true),
+  // Cursor / Windsurf
+  t('cursor-cache', 'Cursor Cache', `${HOME}/Library/Application Support/Cursor/Cache`, 'developer', 'Cursor editor cache', true),
+  t('cursor-cacheddata', 'Cursor Cached Data', `${HOME}/Library/Application Support/Cursor/CachedData`, 'developer', 'Cursor compiled extension cache', true),
+  t('cursor-logs', 'Cursor Logs', `${HOME}/Library/Application Support/Cursor/logs`, 'developer', 'Cursor log files', true),
+  t('windsurf-cache', 'Windsurf Cache', `${HOME}/Library/Application Support/Windsurf/Cache`, 'developer', 'Windsurf editor cache', true),
+  // Local models — gigabytes each, and a re-download rather than a rebuild
+  c('ollama-models', 'Ollama Models', `${HOME}/.ollama/models`, 'developer', 'Downloaded Ollama models — each has to be pulled again', true),
+  c('lmstudio-models', 'LM Studio Models', `${HOME}/.cache/lm-studio/models`, 'developer', 'Downloaded LM Studio models — each has to be pulled again', true),
 
   // ═══════════════════════════════════════════════════════════════
   // APPLICATIONS — Media & Music
@@ -282,6 +408,13 @@ export const CLEAN_TARGETS: CleanTarget[] = [
   t('mail-attachments', 'Mail Attachments', `${HOME}/Library/Containers/com.apple.mail/Data/Library/Mail Downloads`, 'system', 'Mail.app downloaded attachment cache', true),
   t('mail-downloads', 'Mail Downloads', `${HOME}/Library/Mail Downloads`, 'system', 'Old Mail downloaded attachments', true),
   t('recent-items', 'Recent Items Lists', `${HOME}/Library/Application Support/com.apple.sharedfilelist`, 'system', 'Recent apps, documents, and servers lists', true),
+  t('crashreporter-support', 'Crash Reporter Data', `${HOME}/Library/Application Support/CrashReporter`, 'system', 'Crash reporter working files', true),
+  t('geoservices-cache', 'Maps & Location Cache', `${HOME}/Library/Caches/GeoServices`, 'system', 'Downloaded map tiles and location lookups', true),
+  t('helpd-cache', 'Help Viewer Cache', `${HOME}/Library/Caches/com.apple.helpd`, 'system', 'Downloaded application help books', true),
+  t('parsecd-cache', 'Siri Suggestions Cache', `${HOME}/Library/Caches/com.apple.parsecd`, 'system', 'Siri suggestions and Spotlight web results cache', true),
+  t('visual-intelligence-cache', 'Visual Intelligence Cache', `${HOME}/Library/Caches/com.apple.VisualIntelligenceCore`, 'system', 'On-device image analysis cache', true),
+  t('appstore-cache', 'App Store Cache', `${HOME}/Library/Caches/com.apple.appstoreagent`, 'system', 'App Store artwork and metadata cache', true),
+  t('raycast-cache', 'Raycast Cache', `${HOME}/Library/Caches/com.raycast.macos`, 'application', 'Raycast launcher cache', true),
   t('private-tmp', 'System Temp Files', '/private/tmp', 'system', 'System temporary files', true, true),
   t('private-var-tmp', 'System Var Temp', '/private/var/tmp', 'system', 'System variable temp files', true, true),
   t('diagnostic-logs', 'Diagnostic Logs', '/private/var/db/diagnostics', 'system', 'System diagnostic logs', true, true),
@@ -312,7 +445,23 @@ function t(
   requiresSudo = false,
   skipPatterns?: string[],
 ): CleanTarget {
-  return { id, name, path: p, icon: iconForCategory(category), category, description, contentsOnly, requiresSudo, skipPatterns }
+  return { id, name, path: p, icon: iconForCategory(category), category, description, contentsOnly, requiresSudo, risk: 'safe', skipPatterns }
+}
+
+/**
+ * A target holding content the machine cannot get back on its own — session
+ * transcripts, downloaded models, VM boxes. Same shape as `t()`, marked so the
+ * UI can keep it out of "Select All" and label it.
+ */
+function c(
+  id: string,
+  name: string,
+  p: string,
+  category: CleanTarget['category'],
+  description: string,
+  contentsOnly = true,
+): CleanTarget {
+  return { ...t(id, name, p, category, description, contentsOnly), risk: 'caution' }
 }
 
 /**

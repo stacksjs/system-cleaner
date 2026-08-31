@@ -1,4 +1,4 @@
-import { execSync, HOME, TtlCache } from '@system-cleaner/core'
+import { execSync, HOME, isPermissionGated, TtlCache } from '@system-cleaner/core'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { CLEAN_TARGETS, getAllExtensions } from '@system-cleaner/clean'
@@ -13,6 +13,8 @@ const cleanupTargetsCache = new TtlCache<Array<{
   path: string
   icon: string
   desc: string
+  category: string
+  risk: 'safe' | 'caution'
 }>>(5 * 60_000)
 
 function safeExec(cmd: string, fallback = ''): string {
@@ -109,6 +111,9 @@ export function getCleanupTargetsCached() {
 
   const targets = CLEAN_TARGETS
     .filter(t => !t.requiresSudo)
+    // A gated cache has a size and looks cleanable, but `isCleanable` refuses
+    // it, so listing it means a Clean button that can only ever fail.
+    .filter(t => !isPermissionGated(t.path))
     .filter((t) => {
       try {
         const st = fs.statSync(t.path)
@@ -124,6 +129,8 @@ export function getCleanupTargetsCached() {
       path: t.path,
       icon: t.icon,
       desc: t.description,
+      category: t.category,
+      risk: t.risk,
     }))
 
   cleanupTargetsCache.set('targets', targets)
