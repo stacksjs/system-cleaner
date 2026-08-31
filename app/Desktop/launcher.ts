@@ -234,12 +234,51 @@ function runtimeCanHostChrome(): boolean {
   }
 }
 
+/**
+ * The vibrancy behind the icon rail.
+ *
+ * Hiding the titlebar puts the real window buttons over the rail's top-left
+ * corner, which is the right half of the arrangement. The other half is what
+ * they sit ON. In Finder the buttons rest on a translucent sidebar that is
+ * visibly a different surface from the content beside it; here the rail was
+ * the same flat fill as the page, so three AppKit buttons floated on a white
+ * rectangle and the corner read as a web page wearing a Mac window's buttons.
+ * They are the genuine article — they show the ×/−/⤢ glyphs on hover and grey
+ * out when the window loses focus — but nothing around them said so.
+ *
+ * `--web-sidebar-material` puts an NSVisualEffectView behind the leftmost
+ * strip of the web view, which is exactly the surface Finder's buttons sit on.
+ * The dev runner has been passing it all along, from the framework's defaults,
+ * which is why the window has looked right under `buddy dev` and wrong once
+ * installed — the launcher this app substitutes for the framework's never
+ * carried it across.
+ *
+ * The width is the rail's own 74px rather than the 286px default, which is
+ * sized for a sidebar with labels in it. The tint is what the material is
+ * washed with: the framework's 0.78 washes it almost white, and
+ * Finder's sidebar is plainly greyer and more translucent than the pane beside
+ * it. 0.25 lands on that, and the window buttons read as buttons sitting on a
+ * sidebar rather than on a white page.
+ *
+ * The page has to get out of the way for any of this to be visible — an opaque
+ * `.app-chrome` covers the material completely. It does that by keying on the
+ * marker Craft stamps on the root element when this flag is on, so a browser,
+ * which has no material to show, keeps its ordinary fill.
+ */
+const SIDEBAR_MATERIAL = [
+  '--web-sidebar-material',
+  '--web-sidebar-width',
+  '74',
+  '--web-sidebar-material-opacity',
+  '0.25',
+]
+
 const craft = Bun.spawn([
   craftBinary,
   `http://127.0.0.1:${port}/app`,
   '--title',
   APP_NAME,
-  ...(runtimeCanHostChrome() ? ['--titlebar-hidden'] : []),
+  ...(runtimeCanHostChrome() ? ['--titlebar-hidden', ...SIDEBAR_MATERIAL] : []),
   '--width',
   '1400',
   '--height',

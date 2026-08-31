@@ -52,12 +52,38 @@ if (process.platform !== 'darwin') {
 const version = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version || '0.0.0'
 
 /**
- * Point the framework at the Craft runtime this project declares in
- * `deps.yaml`.
+ * The macOS SDK a Mach-O was linked against, as [major, minor].
+ *
+ * This is not trivia. AppKit keys its appearance off the SDK recorded in
+ * `LC_BUILD_VERSION`: a binary built against an older one keeps the older
+ * look, so the system can change how controls are drawn without redrawing
+ * every app that was shipped before the change. On macOS 26 and up that
+ * includes the window buttons, which are the glassy ones for a binary built
+ * against the 26 SDK and the flat ones for anything older.
+ *
+ * The runtime draws this app's window, so its SDK decides whether the traffic
+ * lights in the corner look like the rest of the system. Returns null when the
+ * load command cannot be read.
+ */
+function linkedSdk(binary: string): [number, number] | null {
+  const printed = spawnSync('otool', ['-l', binary], { encoding: 'utf8' })
+  if (printed.status !== 0 || !printed.stdout) return null
+
+  const match = printed.stdout.match(/LC_BUILD_VERSION[\s\S]*?sdk (\d+)\.(\d+)/)
+  return match ? [Number(match[1]), Number(match[2])] : null
+}
+
+/**
+ * Point the framework at the Craft runtime to bundle.
  *
  * `buddy build:desktop` resolves `CRAFT_BIN`, then `craft` on PATH. Pantry
  * installs into the project rather than onto PATH, so without this the build
  * fails on a machine that has done nothing wrong.
+ *
+ * Among the candidates the newest *SDK* wins rather than the newest version,
+ * because that is the axis the window chrome depends on — a 0.0.83 built
+ * against the 15 SDK gives this app last year's window buttons, and a 0.0.81
+ * built against the 26 one gives it the system's. Version breaks the tie.
  */
 function resolveCraftBin(): string | undefined {
   if (process.env.CRAFT_BIN) return process.env.CRAFT_BIN
@@ -65,16 +91,50 @@ function resolveCraftBin(): string | undefined {
   const pantryDir = path.join(ROOT, 'pantry/craft-native.org')
   if (!fs.existsSync(pantryDir)) return undefined
 
-  // Newest installed version wins, so an upgrade needs no edit here.
-  for (const dir of fs.readdirSync(pantryDir).filter(name => name.startsWith('v')).sort().reverse()) {
-    const candidate = path.join(pantryDir, dir, 'bin/craft')
-    if (fs.existsSync(candidate)) return candidate
+  const candidates = fs.readdirSync(pantryDir)
+    .filter(name => name.startsWith('v'))
+    .sort()
+    .reverse()
+    .map(dir => path.join(pantryDir, dir, 'bin/craft'))
+    .filter(candidate => fs.existsSync(candidate))
+
+  if (candidates.length === 0) return undefined
+
+  let best = candidates[0]
+  let bestSdk = linkedSdk(best)?.[0] ?? 0
+  for (const candidate of candidates.slice(1)) {
+    const sdk = linkedSdk(candidate)?.[0] ?? 0
+    if (sdk > bestSdk) {
+      best = candidate
+      bestSdk = sdk
+    }
   }
 
-  return undefined
+  return best
 }
 
 const craftBin = resolveCraftBin()
+
+/**
+ * Say so when the runtime will draw the wrong window buttons.
+ *
+ * Nothing in this repo can correct it: the SDK is baked into the runtime when
+ * Craft itself is built, so the fix is a Craft release built against a current
+ * SDK, or `CRAFT_BIN` pointed at a local build of one. Silence here means
+ * shipping a window that looks a major version out of date with no clue why.
+ */
+if (craftBin) {
+  const sdk = linkedSdk(craftBin)
+  const host = Number(spawnSync('sw_vers', ['-productVersion'], { encoding: 'utf8' }).stdout?.split('.')[0] ?? 0)
+  if (sdk && host && sdk[0] < host) {
+    console.warn(
+      `\n[desktop] WARNING: the Craft runtime at ${craftBin} is linked against the macOS ${sdk[0]}.${sdk[1]} SDK,`
+      + `\n           but this machine runs macOS ${host}. AppKit draws pre-${host} window buttons for a binary`
+      + `\n           built that far back, so the traffic lights will not match the rest of the system.`
+      + `\n           Set CRAFT_BIN to a Craft built against the ${host} SDK to fix it.\n`,
+    )
+  }
+}
 
 /** Environment every step shares: this is a production build of the local agent. */
 const buildEnv: Record<string, string> = {

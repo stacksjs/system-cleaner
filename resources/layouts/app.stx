@@ -77,6 +77,52 @@ const localAgent = isLocalAgent()
 
     .app-chrome { display: flex; width: 100vw; height: 100vh; flex-direction: column; overflow: hidden; background: var(--app-bg); }
     .app-body { display: flex; min-width: 0; flex: 1; overflow: hidden; }
+
+    /* ---------- Vibrant rail ---------- */
+    /* Craft draws an NSVisualEffectView behind the leftmost 74px of the web
+       view when the launcher asks for `--web-sidebar-material`, and stamps
+       `data-craft-native-sidebar` on the root element when it has. That marker
+       is the whole switch: in a Craft window the shell goes transparent so the
+       material shows through under the rail, and in a browser — the marketing
+       site renders this same shell — nothing changes and the rail keeps the
+       page's own fill.
+
+       Only the rail strip is uncovered. The content column paints `--app-bg`
+       over itself, so the material stops where Finder's sidebar stops, with a
+       hairline in the same place Finder puts one. */
+    :root[data-craft-native-sidebar] body,
+    :root[data-craft-native-sidebar] .app-chrome { background: transparent; }
+    :root[data-craft-native-sidebar] .app-column {
+      background: var(--app-bg);
+      border-left: 0.5px solid var(--line-soft);
+    }
+
+    /* ---------- Inactive window ---------- */
+    /* A Mac window that is not in front goes quiet. AppKit does that for the
+       window buttons on its own — they grey out — but everything the page
+       draws keeps shouting: a saturated blue selection pill on a sidebar the
+       user is no longer looking at, next to three grey buttons that have
+       already stood down. Finder does not do that; its selected row drops to
+       a neutral fill and its icons desaturate, so the whole sidebar recedes
+       together.
+
+       `data-window-active="false"` is stamped on the root element by the block
+       at the bottom of this file. Colour is the only thing that changes —
+       nothing moves, so returning to the window does not reflow it. */
+    :root[data-window-active='false'] .rail-item[data-active] {
+      background: var(--surface-soft);
+      color: var(--secondary);
+      box-shadow: none;
+    }
+    :root[data-window-active='false'] .rail-icon { opacity: .55; }
+    :root[data-window-active='false'] .topnav-item { color: var(--tertiary); }
+    :root[data-window-active='false'] .topnav-item[data-active] { background: var(--surface-soft); }
+    .rail-item, .rail-icon, .topnav-item {
+      transition: background .18s ease, color .18s ease, opacity .18s ease, box-shadow .18s ease;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .rail-item, .rail-icon, .topnav-item { transition: none; }
+    }
     .app-column { display: flex; flex: 1; flex-direction: column; min-width: 0; }
     .main { min-width: 0; flex: 1; overflow-y: auto; background: var(--app-bg); }
 
@@ -470,6 +516,52 @@ function moveWindowFrom(event: Event): void {
 }
 
 useEventListener('mousedown', moveWindowFrom, { target: document })
+
+/*
+ * Whether this window is the one in front.
+ *
+ * `document.hasFocus()` is the obvious reading and the wrong one inside a
+ * WKWebView: it reports whether the *web view* holds first responder, not
+ * whether the window is key. A window can be perfectly in front with the web
+ * view not first responder, and the page then paints itself inactive — the
+ * whole sidebar greyed out on a window the user is looking straight at.
+ *
+ * Craft re-emits its NSWindowDelegate as `craft:window:focus` and
+ * `craft:window:blur`, which come from `windowDidBecomeKey:` and
+ * `windowDidResignKey:`. That is the actual answer, so take it when it is
+ * there and keep `hasFocus` for the browser, where this shell also renders and
+ * where the tab either has focus or is not on screen at all.
+ *
+ * Neither has fired yet on a cold load, so the default is active. A window
+ * that launches behind something then looks active until the first blur, which
+ * is a far better way to be wrong than a focused window that looks dead.
+ */
+function setWindowActive(active: boolean): void {
+  document.documentElement.setAttribute('data-window-active', active ? 'true' : 'false')
+}
+
+setWindowActive(true)
+
+useEventListener('craft:window:focus', () => setWindowActive(true), { target: window })
+useEventListener('craft:window:blur', () => setWindowActive(false), { target: window })
+
+// The browser path, and only the browser path: in a Craft window these fire on
+// web-view focus changes that have nothing to do with which window is key.
+if (typeof (globalThis as { craft?: { window?: unknown } }).craft?.window === 'undefined') {
+  setWindowActive(document.hasFocus())
+  useEventListener('focus', () => setWindowActive(true), { target: window })
+  useEventListener('blur', () => setWindowActive(false), { target: window })
+}: void {
+  document.documentElement.setAttribute(
+    'data-window-active',
+    document.hasFocus() ? 'true' : 'false',
+  )
+}
+
+useEventListener('focus', syncWindowActive, { target: window })
+useEventListener('blur', syncWindowActive, { target: window })
+useEventListener('stx:load', syncWindowActive)
+syncWindowActive()
 </script>
 <!-- Loaded for every app page: `nativeConfirm` and `nativeAlert` replace the
      web dialogs on the destructive actions, and every screen has one. -->
