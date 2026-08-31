@@ -22,7 +22,7 @@ interface Screen {
   href: string
 }
 
-/** The rail, in the rail's order, so ⌘1..⌘9 match what the eye sees. */
+/** The rail then the top strip, in the order the eye reads them, so ⌘1..⌘9 match. */
 const SCREENS: Screen[] = [
   { label: 'Dashboard', href: '/app' },
   { label: 'Startup Items', href: '/app/startup' },
@@ -31,12 +31,11 @@ const SCREENS: Screen[] = [
   { label: 'Disk Usage', href: '/app/disk' },
   { label: 'Large Files', href: '/app/large-files' },
   { label: 'Duplicates', href: '/app/duplicates' },
-  { label: 'System', href: '/app/system' },
+  { label: 'Applications', href: '/app/applications' },
   { label: 'Maintenance', href: '/app/maintenance' },
   { label: 'Updates', href: '/app/updates' },
   { label: 'Quick Clean', href: '/app/cleanup' },
   { label: 'Privacy', href: '/app/privacy' },
-  { label: 'Uninstaller', href: '/app/uninstall' },
   { label: 'Schedule', href: '/app/schedule' },
 ]
 

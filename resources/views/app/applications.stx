@@ -1,9 +1,30 @@
 @extends('layouts/app')
-@section('nav', 'uninstall')
+@section('nav', 'applications')
+
+@section('styles')
+.vol-card { background: var(--surface); border: .5px solid var(--line); border-radius: 12px; padding: 14px 18px; margin-bottom: 16px; }
+.vol-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.vol-name { font-size: 14px; font-weight: 650; letter-spacing: -.01em; }
+.vol-pct { font-size: 12px; color: var(--tertiary); white-space: nowrap; }
+.vol-bar { height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
+.vol-fill { height: 100%; border-radius: 3px; background: var(--accent); }
+.vol-stats { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 10px; font-size: 11px; color: var(--tertiary); }
+.vol-stats strong { color: var(--ink); font-weight: 600; }
+@endsection
+
 @section('body')
 
+
+
+
 <!--
-  Uninstaller.
+  Applications.
+
+  The Uninstaller and the old System screen were the same screen twice: both
+  listed what is installed, both sized it, and each was missing the half the
+  other had. This is the merge. The list and the removal flow come from the
+  Uninstaller; the volume readout it never had comes from System, because
+  "how much room would this free" is the question that sends you here.
 
   All state lives in this `x-data`, as on the other screens. No `//` comments
   and no double quotes inside it: STX flattens the attribute onto one line
@@ -41,7 +62,15 @@
   toasts: [],
   toastId: 0,
 
+  disk: null,
+
   init() {
+    var self0 = this;
+    fetch('/api/system-disk-info', { method: 'POST' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) { if (d.success) self0.disk = d; })
+      .catch(function() {});
+
     var self = this;
     this.post('/api/installed-apps').then(function(r) {
       if (r.success) self.apps = r.apps || [];
@@ -285,19 +314,36 @@
 }">
 
 <div class='toast-area'>
-  <template x-for='toast in toasts' :key='toast.id'>
+  <template x-for='note in toasts' :key='note.id'>
     <div class='toast'>
-      <span class='toast-glyph' :class="toast.type === 'success' ? 'i-f7-checkmark-alt-circle-fill' : toast.type === 'error' ? 'i-f7-xmark-circle-fill' : 'i-f7-exclamationmark-triangle-fill'" aria-hidden='true'></span>
-      <span x-text='toast.msg'></span>
+      <span class='toast-glyph' :class="note.type === 'success' ? 'i-f7-checkmark-alt-circle-fill' : note.type === 'error' ? 'i-f7-xmark-circle-fill' : 'i-f7-exclamationmark-triangle-fill'" aria-hidden='true'></span>
+      <span x-text='note.msg'></span>
     </div>
   </template>
 </div>
 
 <div class='main-header'>
-  <div class='main-title'>Uninstaller</div>
-  <div class='main-subtitle'>Remove an app and everything it left behind</div>
+  <div class='main-title'>Applications</div>
+  <div class='main-subtitle'>What is installed, what it takes up, and what it leaves behind when it goes</div>
 </div>
 <div class='main-content'>
+  <!-- Top line first: the reason anyone opens this screen is to work out what
+       is worth removing, and that only means something against the free space
+       it would be freeing into. -->
+  <div class='vol-card' x-show='disk' x-cloak>
+    <div class='vol-head'>
+      <span class='vol-name'>Macintosh HD</span>
+      <span class='vol-pct' x-text="disk ? disk.fDiskPct + '% full' : ''"></span>
+    </div>
+    <div class='vol-bar'><div class='vol-fill' :style="disk ? disk.fDiskBarStyle : 'width: 0%'"></div></div>
+    <div class='vol-stats'>
+      <span>Free <strong x-text='disk ? disk.fDiskFree : ""'></strong></span>
+      <span>Used <strong x-text='disk ? disk.fDiskUsed : ""'></strong></span>
+      <span x-show='apps.length > 0'>Apps <strong x-text='apps.length'></strong></span>
+      <span x-show='orphanBytes > 0'>Left behind <strong x-text='fmtBytes(orphanBytes)'></strong></span>
+    </div>
+  </div>
+
   <div x-show='loading' class='empty-state'>Reading /Applications&hellip;</div>
   <div x-show='!loading' x-cloak>
     <UninstallPanel />

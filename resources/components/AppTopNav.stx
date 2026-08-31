@@ -1,0 +1,54 @@
+<script server>
+// The window's top strip, to the right of the icon rail.
+//
+// Privacy and Schedule live here rather than in the rail because neither is a
+// place you go to look at your Mac — they are settings for how the app behaves
+// while you are not watching. Mixing them into a rail of scanners meant the
+// rail read as a list of eleven equal things when it is really nine scanners
+// and two preferences.
+//
+// `active` is passed by each view so a cold load paints the right selection
+// with no flash; the client block re-syncs it on SPA navigations, which only
+// swap `[data-stx-content]` and leave this bar mounted.
+export const active = $props.active || ''
+
+export const items = [
+  { id: 'privacy', label: 'Privacy', icon: 'i-f7-eye-slash-fill', href: '/app/privacy' },
+  { id: 'schedule', label: 'Schedule', icon: 'i-f7-clock-fill', href: '/app/schedule' },
+]
+</script>
+
+<script client>
+function syncTopNav(): void {
+  const path = useRoute().path
+  for (const item of Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-topnav-item]'))) {
+    const href = item.getAttribute('href') || ''
+    const selected = path === href || path.startsWith(`${href}/`)
+    item.toggleAttribute('data-active', selected)
+    if (selected)
+      item.setAttribute('aria-current', 'page')
+    else
+      item.removeAttribute('aria-current')
+  }
+}
+
+useEventListener('stx:navigate', syncTopNav)
+useEventListener('stx:load', syncTopNav)
+</script>
+
+<div class="topnav">
+  <nav class="topnav-items" aria-label="SystemCleaner settings">
+    @foreach (items as item)
+      <a
+        class="topnav-item"
+        data-topnav-item="{{ item.id }}"
+        href="{{ item.href }}"
+        data-stx-link
+        @if(active === item.id)data-active aria-current="page"@endif
+      >
+        <span class="topnav-icon {{ item.icon }}" aria-hidden="true"></span>
+        <span>{{ item.label }}</span>
+      </a>
+    @endforeach
+  </nav>
+</div>

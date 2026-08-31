@@ -26,7 +26,7 @@ const PAGES = [
   { path: '/app', name: 'dashboard' },
   { path: '/app/disk', name: 'disk' },
   { path: '/app/cleanup', name: 'cleanup' },
-  { path: '/app/system', name: 'system' },
+  { path: '/app/applications', name: 'applications' },
   { path: '/app/processes', name: 'processes' },
   { path: '/app/startup', name: 'startup' },
   { path: '/app/extensions', name: 'extensions' },

@@ -2,6 +2,10 @@
 // Icon rail. Labels live in tooltips rather than in the row, so the rail
 // costs 76px instead of 234px and the content column gets the difference.
 //
+// Privacy and Schedule are not here — they moved to the top strip
+// (`AppTopNav`), because they configure the app rather than inspect the Mac,
+// and a rail of scanners was the wrong company for them.
+//
 // `active` is passed by each view so a cold page load paints the correct
 // selection with no flash. SPA navigations only swap `[data-stx-content]`,
 // which leaves this rail mounted, so the client block below re-syncs the
@@ -23,15 +27,12 @@ export const groups = [
     { id: 'duplicates', label: 'Duplicates', icon: 'i-f7-square-on-square', href: '/app/duplicates' },
   ],
   [
-    { id: 'system', label: 'System', icon: 'i-f7-desktopcomputer', href: '/app/system' },
+    { id: 'applications', label: 'Applications', icon: 'i-f7-app-fill', href: '/app/applications' },
     { id: 'maintenance', label: 'Maintenance', icon: 'i-f7-wrench-fill', href: '/app/maintenance' },
     { id: 'updates', label: 'Updates', icon: 'i-f7-arrow-down-circle-fill', href: '/app/updates' },
   ],
   [
     { id: 'cleanup', label: 'Quick Clean', icon: 'i-f7-sparkles', href: '/app/cleanup' },
-    { id: 'privacy', label: 'Privacy', icon: 'i-f7-eye-slash-fill', href: '/app/privacy' },
-    { id: 'uninstall', label: 'Uninstaller', icon: 'i-f7-bin-xmark-fill', href: '/app/uninstall' },
-    { id: 'schedule', label: 'Schedule', icon: 'i-f7-clock-fill', href: '/app/schedule' },
   ],
 ]
 </script>

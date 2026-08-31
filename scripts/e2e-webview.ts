@@ -79,14 +79,6 @@ const PAGES: PageSpec[] = [
     },
   },
   {
-    path: '/system',
-    name: 'system',
-    assert(r) {
-      if (!r.bodySnippet.includes('System')) return 'missing System heading'
-      return null
-    },
-  },
-  {
     path: '/cleanup',
     name: 'cleanup',
     assert(r) {
@@ -101,6 +93,55 @@ const PAGES: PageSpec[] = [
     name: 'extensions',
     assert(r) {
       if (!r.bodySnippet.includes('Extensions')) return 'missing Extensions heading'
+      return null
+    },
+  },
+  {
+    path: '/applications',
+    name: 'applications',
+    assert(r) {
+      if (!r.bodySnippet.includes('Applications')) return 'missing Applications heading'
+      // The list is the screen. An empty one means /api/installed-apps
+      // answered but the rows never bound.
+      if (r.tableRows < 1) return `expected application rows, got ${r.tableRows}`
+      return null
+    },
+  },
+  {
+    path: '/privacy',
+    name: 'privacy',
+    assert(r) {
+      if (!r.bodySnippet.includes('Privacy')) return 'missing Privacy heading'
+      if (r.tableRows < 1) return `expected browser data rows, got ${r.tableRows}`
+      return null
+    },
+  },
+  {
+    path: '/duplicates',
+    name: 'duplicates',
+    assert(r) {
+      if (!r.bodySnippet.includes('Duplicates')) return 'missing Duplicates heading'
+      // No scan runs on load, so the intro is the correct state — its absence
+      // means the panel failed to render rather than that it found nothing.
+      if (!r.bodySnippet.includes('Find Duplicates')) return 'missing scan control'
+      return null
+    },
+  },
+  {
+    path: '/maintenance',
+    name: 'maintenance',
+    assert(r) {
+      if (!r.bodySnippet.includes('Maintenance')) return 'missing Maintenance heading'
+      if (r.tableRows < 1) return `expected task rows, got ${r.tableRows}`
+      return null
+    },
+  },
+  {
+    path: '/schedule',
+    name: 'schedule',
+    assert(r) {
+      if (!r.bodySnippet.includes('Schedule')) return 'missing Schedule heading'
+      if (r.tableRows < 1) return `expected clean-target rows, got ${r.tableRows}`
       return null
     },
   },
