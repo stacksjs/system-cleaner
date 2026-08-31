@@ -41,18 +41,36 @@ export interface ConfirmOptions {
  * which one does the thing.
  */
 async function nativeConfirm(options: ConfirmOptions): Promise<boolean> {
+  const buttons = [options.confirmLabel || 'OK', 'Cancel']
+  const CANCEL = 1
+
+  // `defaultButton` used to be `destructive ? 1 : 0` — the same index as
+  // `cancelButton`, to make Return mean Cancel on a destructive question. Two
+  // fields naming one button is a contradiction each side of the bridge is
+  // free to resolve its own way, and they resolved it differently: the web
+  // fallback special-cases the collision and still reports 0 for the action
+  // button, while a host that puts its default button first can report the
+  // action as 1. `response === 0` then reads a confirmed dialog as cancelled,
+  // and the caller returns having done nothing at all — which is exactly what
+  // Clean Selected did in the packaged app and never did in a browser.
+  //
+  // So say it once. `cancelButton` already carries the whole intent: Escape
+  // dismisses, and a host that keys Return to the cancel button honours the
+  // safe default without a second field to disagree about.
   const { response } = await showMessageBox({
     type: options.destructive ? 'warning' : 'question',
     title: APP_NAME,
     message: options.title,
     detail: options.message,
-    buttons: [options.confirmLabel || 'OK', 'Cancel'],
-    // A destructive default is the *safe* one: Return cancels. Confirming
-    // still means button 0, which is what `showMessageBox` resolves.
-    defaultButton: options.destructive ? 1 : 0,
-    cancelButton: 1,
+    buttons,
+    cancelButton: CANCEL,
   })
-  return response === 0
+
+  // Index into the array rather than comparing the number, so an index the
+  // host never should have sent reads as "not the action" instead of as a
+  // confirmation. Being wrong in that direction costs a second click; being
+  // wrong in the other empties a folder nobody asked about.
+  return buttons[response] === buttons[0]
 }
 
 /** Report something that already happened and cannot be undone from here. */

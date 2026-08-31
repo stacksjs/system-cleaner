@@ -63,8 +63,8 @@ function esc(str) { return escapeHtml(str || '') }
 
 <!-- Reactive toast container -->
 <div class='toast-area'>
-  <template x-for='toast in toasts' :key='toast.id'>
-    <div class=toast><span class=toast-glyph :class="toast.type === success ? i-f7-checkmark-alt-circle-fill : toast.type === error ? i-f7-xmark-circle-fill : i-f7-exclamationmark-triangle-fill" aria-hidden="true"></span><span x-text="toast.msg"></span></div>
+  <template x-for='note in toasts' :key='note.id'>
+    <div class='toast'><span class='toast-glyph' :class="note.type === 'success' ? 'i-f7-checkmark-alt-circle-fill' : note.type === 'error' ? 'i-f7-xmark-circle-fill' : 'i-f7-exclamationmark-triangle-fill'" aria-hidden='true'></span><span x-text='note.msg'></span></div>
   </template>
 </div>
 
@@ -164,40 +164,84 @@ async function doEmptyTrash() {
 async function doCleanSelected() {
   var scope = _scope();
   if (!scope || !scope.__stx_state) return;
-  var items = scope.__stx_state.selected || [];
-  if (items.length === 0) return;
-  var cautionNames = items.map(function(id) {
-    var row = document.querySelector('[data-clean-id="' + id + '"]');
-    if (!row || row.getAttribute('data-clean-risk') !== 'caution') return null;
-    var el = row.querySelector('.item-name');
-    return el ? el.textContent : null;
-  }).filter(Boolean);
-  if (!await window.nativeConfirm({
-    title: 'Clean ' + items.length + ' categories?',
-    // Name the caution ones. A batch confirm that says only "their contents are
-    // removed" is how someone loses their session history to one click.
-    message: cautionNames.length > 0
-      ? 'Their contents are removed. Most are caches apps rebuild, but ' + cautionNames.join(', ') + (cautionNames.length === 1 ? ' holds' : ' hold') + ' content nothing rebuilds.'
-      : 'Their contents are removed. Apps rebuild these files as they need them.',
-    confirmLabel: 'Clean Selected',
-    destructive: true,
-  })) return;
-  var total = 0, remaining = items.length;
-  items.forEach(function(id) {
-    var row = document.querySelector('[data-clean-id="' + id + '"]');
-    var path = row ? row.getAttribute('data-clean-path') : null;
-    if (!path) { remaining--; return; }
-    _exec("cleaning['' + id + ''] = true");
-    _api('/api/clean-dir', { path: path }).then(function(r) {
-      _exec("delete cleaning['' + id + '']");
-      if (r.success) total += r.freedBytes || 0;
-      remaining--;
-      if (remaining === 0) {
-        try { localStorage.removeItem(CACHE_KEY); } catch (e) {}
-        _exec("toast('Cleaned " + items.length + " items - freed ' + _fmtBytes(" + total + ") + '', 'success'); selected = []");
-        scanCleanupSizes(true);
-      }
-    }).catch(_apiCatch('Clean failed', { clearCleaning: id }));
+  var state = scope.__stx_state;
+  var ids = (state.selected || []).slice();
+  if (ids.length === 0) return;
+
+  // Resolve every id against the category list the API returned, not against
+  // the table. The row for a selected id is not reliably in the DOM — the
+  // filter buttons hide rows, a rescan re-renders them, and `x-for` is free to
+  // reuse nodes — and the old lookup treated a missing row as "no path to
+  // clean" and dropped the item on the floor. Silently: the drop also skipped
+  // the counter that fires the toast, so a click could clean nothing and say
+  // nothing. The state has the path for every id regardless of what is on
+  // screen, so ask it.
+  var byId = {};
+  (state.cleanCategories || []).forEach(function(c) { byId[c.id] = c; });
+
+  var targets = [], unknown = [];
+  ids.forEach(function(id) {
+    var cat = byId[id];
+    if (cat && cat.path) targets.push({ id: id, path: cat.path, name: cat.name, risk: cat.risk });
+    else unknown.push(id);
+  });
+
+  if (targets.length === 0) {
+    _exec("toast('Nothing to clean - those categories are no longer listed. Rescan and try again.', 'error')");
+    return;
+  }
+
+  var cautionNames = targets.filter(function(t) { return t.risk === 'caution'; }).map(function(t) { return t.name; });
+  var confirmed = false;
+  try {
+    confirmed = await window.nativeConfirm({
+      title: 'Clean ' + targets.length + (targets.length === 1 ? ' category?' : ' categories?'),
+      // Name the caution ones. A batch confirm that says only "their contents
+      // are removed" is how someone loses their session history to one click.
+      message: cautionNames.length > 0
+        ? 'Their contents are removed. Most are caches apps rebuild, but ' + cautionNames.join(', ') + (cautionNames.length === 1 ? ' holds' : ' hold') + ' content nothing rebuilds.'
+        : 'Their contents are removed. Apps rebuild these files as they need them.',
+      confirmLabel: 'Clean Selected',
+      destructive: true,
+    });
+  }
+  catch (e) {
+    // A dialog that cannot be drawn is not consent, so nothing is cleaned —
+    // but it is also not a decision the person made, so say so rather than
+    // ending the click in silence.
+    _exec("toast('Could not open the confirmation dialog, so nothing was cleaned.', 'error')");
+    return;
+  }
+  if (!confirmed) return;
+
+  var freed = 0, failed = 0, done = 0;
+  function settle(id) {
+    _exec("delete cleaning['" + id + "']");
+    if (++done < targets.length) return;
+    try { localStorage.removeItem(CACHE_KEY); } catch (e) {}
+    var cleaned = targets.length - failed;
+    var msg = cleaned > 0
+      ? 'Cleaned ' + cleaned + (cleaned === 1 ? ' category' : ' categories') + ' - freed ' + _fmtBytes(freed)
+      : 'Nothing could be cleaned';
+    if (failed > 0) msg += ' - ' + failed + ' failed';
+    if (unknown.length > 0) msg += ' - ' + unknown.length + ' no longer listed';
+    _exec("toast('" + msg.replace(/'/g, "\\'") + "', '" + (cleaned > 0 ? (failed > 0 ? 'info' : 'success') : 'error') + "'); selected = []");
+    scanCleanupSizes(true);
+  }
+
+  targets.forEach(function(t) {
+    // The id has to be interpolated into the statement here rather than left
+    // as `'' + id + ''` inside the quoted string: the statement is evaluated
+    // in the x-data scope, which has no `id` of its own to read.
+    _exec("cleaning['" + t.id + "'] = true");
+    _api('/api/clean-dir', { path: t.path }).then(function(r) {
+      if (r && r.success) freed += r.freedBytes || 0;
+      else failed++;
+      settle(t.id);
+    }).catch(function() {
+      failed++;
+      settle(t.id);
+    });
   });
 }
 

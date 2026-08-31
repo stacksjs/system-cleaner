@@ -191,10 +191,10 @@
 }">
 
 <div class='toast-area'>
-  <template x-for='toast in toasts' :key='toast.id'>
+  <template x-for='note in toasts' :key='note.id'>
     <div class='toast'>
-      <span class='toast-glyph' :class="toast.type === 'success' ? 'i-f7-checkmark-alt-circle-fill' : toast.type === 'error' ? 'i-f7-xmark-circle-fill' : 'i-f7-exclamationmark-triangle-fill'" aria-hidden='true'></span>
-      <span x-text='toast.msg'></span>
+      <span class='toast-glyph' :class="note.type === 'success' ? 'i-f7-checkmark-alt-circle-fill' : note.type === 'error' ? 'i-f7-xmark-circle-fill' : 'i-f7-exclamationmark-triangle-fill'" aria-hidden='true'></span>
+      <span x-text='note.msg'></span>
     </div>
   </template>
 </div>

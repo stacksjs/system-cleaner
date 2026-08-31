@@ -3,46 +3,204 @@
 @section('body')
 
 <!--
-  The `x-data` literal below is an HTML attribute delimited by double quotes,
-  so it must not contain one. `toast()` used to build its markup with
-  `class="toast-glyph ..."`, which ended the attribute early and left the whole
-  block unparseable — every binding on this page rendered empty. Single quotes
-  inside the generated markup, always. `tests/xdata-parses.test.ts` guards this.
+  Browser extensions — inventory, and removal.
+
+  No `//` comments and no double quotes inside this `x-data`: STX flattens the
+  attribute onto one line before evaluating it, so either would take the whole
+  object down and leave every binding on the page empty with nothing in the
+  console. `tests/xdata-parses.test.ts` guards both. The toast used to build its
+  markup with `class="..."` in here, which is exactly how that was learned.
+
+  Commentary that belongs to this state:
+
+  - Rows whose browser is open are listed, disabled, with the reason. Deleting
+    an extension out from under a running browser corrupts the profile rather
+    than uninstalling anything.
+  - `mayReturn` marks a Web Store extension, which Chrome can reinstall from a
+    sync account at the next launch. The confirmation says so rather than
+    letting it be a surprise a day later.
+  - Sizes arrive in a second request. Walking every version directory of every
+    extension takes seconds and the list is useful before it finishes.
 -->
-
 <div x-data="{
-  selected: [],
   browserExtensions: [],
+  running: [],
+  selected: [],
   loading: true,
-  totalExtSize: 0,
+  sizesPending: true,
+  removing: false,
+  toasts: [],
+  toastId: 0,
 
-  init() {
-    var self = this;
-    fetch('/api/extensions-list', { method: 'POST' })
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        if (d.success) {
-          self.browserExtensions = (d.extensions || []).map(function(e) {
-            return Object.assign({}, e, { size: 0, sizeStr: '—' });
-          });
-        }
-        self.loading = false;
-      })
-      .catch(function() { self.loading = false; });
+  init() { this.refresh(true); },
+
+  post(endpoint, data) {
+    return fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data || {}),
+    }).then(function(r) {
+      if (!r.ok && r.status !== 400 && r.status !== 404) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
   },
 
-  toggle(id) { this.selected = this.selected.indexOf(id) === -1 ? this.selected.concat([id]) : this.selected.filter(function(x) { return x !== id; }); },
-  isOn(id) { return this.selected.includes(id); },
-  allOn(ids) { const keep = this.selected.filter(id => !ids.includes(id)); this.selected = ids.every(id => this.selected.includes(id)) ? keep : keep.concat(ids); },
-  toast(msg, type) { var d = document.createElement('div'); d.className='toast'; var glyph = type==='success'?'i-f7-checkmark-alt-circle-fill':type==='error'?'i-f7-xmark-circle-fill':'i-f7-exclamationmark-triangle-fill'; d.innerHTML='<span class=\'toast-glyph '+glyph+'\' aria-hidden=\'true\'></span><span>'+msg+'</span>'; var area = document.querySelector('.toast-area'); if(!area){area=document.createElement('div');area.className='toast-area';document.body.appendChild(area);} area.appendChild(d); setTimeout(function(){d.remove()},4000); }
+  refresh(initial) {
+    var self = this;
+    if (!initial) this.sizesPending = true;
+    this.post('/api/extensions-list', { refresh: !initial }).then(function(d) {
+      if (d.success) self.browserExtensions = d.extensions || [];
+      self.loading = false;
+      return self.post('/api/extensions-list', { sizes: true });
+    }).then(function(d) {
+      if (!d || !d.success) return;
+      self.browserExtensions = d.extensions || [];
+      self.running = d.running || [];
+      self.sizesPending = false;
+      var present = {};
+      self.browserExtensions.forEach(function(e) { present[e.id] = true; });
+      self.selected = self.selected.filter(function(id) { return present[id]; });
+    }).catch(function() { self.loading = false; self.sizesPending = false; });
+  },
+
+  isBusy(ext) { return this.running.indexOf(ext.browser) !== -1; },
+  browsers() {
+    var seen = [];
+    this.browserExtensions.forEach(function(e) { if (seen.indexOf(e.browser) === -1) seen.push(e.browser); });
+    return seen.sort();
+  },
+  countFor(browser) { return this.browserExtensions.filter(function(e) { return e.browser === browser; }).length; },
+
+  totalBytes() { return this.browserExtensions.reduce(function(sum, e) { return sum + (e.sizeBytes || 0); }, 0); },
+
+  isOn(id) { return this.selected.indexOf(id) !== -1; },
+  toggle(id) {
+    this.selected = this.selected.indexOf(id) === -1
+      ? this.selected.concat([id])
+      : this.selected.filter(function(x) { return x !== id; });
+  },
+
+  selectableIds() {
+    var self = this;
+    return this.browserExtensions
+      .filter(function(e) { return !self.isBusy(e); })
+      .map(function(e) { return e.id; });
+  },
+  allSelected() {
+    var ids = this.selectableIds();
+    if (ids.length === 0) return false;
+    var self = this;
+    return ids.every(function(id) { return self.isOn(id); });
+  },
+  toggleAll() { this.selected = this.allSelected() ? [] : this.selectableIds(); },
+  clearSelection() { this.selected = []; },
+
+  selectedExtensions() {
+    var picked = {};
+    this.selected.forEach(function(id) { picked[id] = true; });
+    return this.browserExtensions.filter(function(e) { return picked[e.id]; });
+  },
+  selectedBytes() {
+    return this.selectedExtensions().reduce(function(sum, e) { return sum + (e.sizeBytes || 0); }, 0);
+  },
+
+  syncWarning(total, syncable) {
+    var subject = total === 1
+      ? 'It is a Web Store extension'
+      : syncable === total
+        ? (total === 2 ? 'Both are Web Store extensions' : 'All of them are Web Store extensions')
+        : syncable === 1
+          ? 'One of them is a Web Store extension'
+          : syncable + ' of them are Web Store extensions';
+    var files = total === 1 ? 'Its files are deleted now. ' : 'Their files are deleted now. ';
+    var revoke = syncable === 1 && total === 1
+      ? 'Removing it in the browser is what revokes that.'
+      : 'Removing them in the browser is what revokes that.';
+    var pronoun = syncable === 1 ? 'it can be reinstalled' : 'they can be reinstalled';
+    return files + subject + ', so if this browser signs in to sync ' + pronoun + ' at the next launch. ' + revoke;
+  },
+
+  async remove(ids) {
+    if (this.removing || ids.length === 0) return;
+    var picked = {};
+    ids.forEach(function(id) { picked[id] = true; });
+    var rows = this.browserExtensions.filter(function(e) { return picked[e.id]; });
+    var syncable = rows.filter(function(e) { return e.mayReturn; });
+    var names = rows.map(function(e) { return e.name; });
+
+    if (!await window.nativeConfirm({
+      title: rows.length === 1
+        ? 'Remove ' + names[0] + '?'
+        : 'Remove ' + rows.length + ' extensions?',
+      message: syncable.length > 0
+        ? this.syncWarning(rows.length, syncable.length)
+        : (rows.length === 1
+          ? 'Its files are deleted now. It did not come from the Web Store, so nothing will bring it back.'
+          : 'Their files are deleted now. None of them came from the Web Store, so nothing will bring them back.'),
+      confirmLabel: 'Remove',
+      destructive: true,
+    })) return;
+
+    var self = this;
+    this.removing = true;
+    this.post('/api/remove-extensions', { ids: ids }).then(function(r) {
+      self.removing = false;
+      if ((r.removed || []).length > 0) {
+        self.toast('Removed ' + r.removed.length + ' extension(s) - freed ' + r.freedFormatted, 'success');
+        var returning = (r.removed || []).filter(function(e) { return e.mayReturn; });
+        if (returning.length > 0)
+          self.toast(returning.length + ' may return if this browser syncs - remove them in the browser to stop that', 'info');
+      }
+      (r.skipped || []).slice(0, 2).forEach(function(entry) { self.toast(entry.reason, 'info'); });
+      (r.failed || []).slice(0, 2).forEach(function(entry) { self.toast(entry.error, 'error'); });
+      self.selected = [];
+      self.refresh();
+    }).catch(function(err) {
+      self.removing = false;
+      self.toast('Remove failed: ' + (err && err.message ? err.message : 'network'), 'error');
+    });
+  },
+
+  openBrowser(browser) {
+    var self = this;
+    this.post('/api/open-extensions-page', { browser: browser }).then(function(r) {
+      if (!r.success) self.toast(r.error || 'Could not open ' + browser, 'error');
+    }).catch(function() { self.toast('Could not open ' + browser, 'error'); });
+  },
+
+  reveal(p) { this.post('/api/reveal-in-finder', { path: p }).catch(function() {}); },
+
+  fmtBytes(b) {
+    if (!b) return '0 B';
+    if (b >= 1e9) return (b/1e9).toFixed(1)+' GB';
+    if (b >= 1e6) return (b/1e6).toFixed(1)+' MB';
+    if (b >= 1e3) return (b/1e3).toFixed(1)+' KB';
+    return b+' B';
+  },
+
+  toast(msg, type) {
+    var id = ++this.toastId;
+    this.toasts = [...this.toasts, { id: id, msg: msg, type: type || 'info' }];
+    var self = this;
+    setTimeout(function() { self.toasts = self.toasts.filter(function(t) { return t.id !== id; }); }, 5000);
+  },
 }">
-<div class='toast-area'></div>
+
+<div class='toast-area'>
+  <template x-for='note in toasts' :key='note.id'>
+    <div class='toast'>
+      <span class='toast-glyph' :class="note.type === 'success' ? 'i-f7-checkmark-alt-circle-fill' : note.type === 'error' ? 'i-f7-xmark-circle-fill' : 'i-f7-exclamationmark-triangle-fill'" aria-hidden='true'></span>
+      <span x-text='note.msg'></span>
+    </div>
+  </template>
+</div>
+
 <div class='main-header'>
   <div class='main-title'>Browser Extensions</div>
-  <div class='main-subtitle'>Installed extensions across all browsers</div>
+  <div class='main-subtitle'>Every add-on across every browser and profile, with what it can reach</div>
 </div>
 <div class='main-content'>
-  <div x-show='loading' class='empty-state'>Scanning extensions...</div>
+  <div x-show='loading' class='empty-state'>Scanning extensions&hellip;</div>
   <div x-show='!loading' x-cloak>
     <ExtensionsPanel />
   </div>

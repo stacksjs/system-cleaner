@@ -191,12 +191,12 @@ const port = await readPort()
 await waitForHealth(port)
 
 /**
- * The first Craft release that can host this app's chrome.
+ * Whether the bundled runtime can host this app's chrome.
  *
  * Hiding the titlebar puts the window's own buttons over the page's top-left
  * corner, which is where this app's chrome belongs — every Mac app with a
  * sidebar carries them there rather than in a strip above it. Two things have
- * to be true of the runtime for that to work, and both arrived in 0.0.78:
+ * to be true of the runtime for that to work:
  *
  *   1. It measures its window buttons and publishes where they are, so the
  *      icon rail can start its first button below them instead of under them.
@@ -205,45 +205,31 @@ await waitForHealth(port)
  *      `-webkit-app-region: drag` — a WKWebView discards the declaration — so
  *      without `startDrag` a titlebar-less window cannot be moved at all.
  *
- * 0.0.37, which is what `pantry` serves for macOS today, has neither. Asking
- * it for this window would produce an app that looks right and cannot be
- * dragged anywhere, which is why this is a question rather than an assumption.
- */
-const CHROME_CAPABLE_CRAFT = [0, 0, 78]
-
-/**
- * Whether the bundled runtime is one of those.
+ * This used to ask the binary its version and compare it to the release that
+ * introduced both. That check was silently wrong: Craft prints nothing for
+ * `--version` (or for `--help`) — it has not since at least 0.0.80 — so the
+ * regex never matched, the runtime was treated as incapable on every launch,
+ * and the flag was never passed. The app shipped for weeks with an ordinary
+ * titlebar strip above the sidebar and no traffic lights over the rail, which
+ * is precisely the look the flag exists to avoid.
  *
- * A locally built Craft reports `0.0.0` — the release version is stamped in by
- * the release build and a `zig build` leaves it unset — and is treated as
- * capable, because a checkout is by definition newer than the last release.
- * Anything unreadable is treated as incapable: a window with a titlebar is the
- * wrong look, and a window that cannot be moved is a broken app.
+ * So ask the binary what it *supports* rather than what it is called. The flag
+ * name appears in its own argument table, which is the same fact the version
+ * number was standing in for and cannot drift away from the behaviour. A
+ * runtime that cannot be read is treated as incapable: a window with a
+ * titlebar is the wrong look, and a window that cannot be moved is a broken
+ * app.
  */
 function runtimeCanHostChrome(): boolean {
-  let version: number[]
   try {
-    const printed = Bun.spawnSync([craftBinary, '--version']).stdout.toString()
-    const parts = printed.match(/version\s+(\d+)\.(\d+)\.(\d+)/)
-    if (!parts)
-      return false
-
-    version = parts.slice(1, 4).map(Number)
+    // `grep -q` on the binary, rather than reading 13 MB into this process to
+    // search it. Exit code 0 means the flag is in the runtime's option table.
+    const probe = Bun.spawnSync(['grep', '-qa', '--', '--titlebar-hidden', craftBinary])
+    return probe.exitCode === 0
   }
   catch {
     return false
   }
-
-  // A checkout is newer than the last release by definition.
-  if (version.every(part => part === 0))
-    return true
-
-  for (const [index, floor] of CHROME_CAPABLE_CRAFT.entries()) {
-    if (version[index] !== floor)
-      return version[index] > floor
-  }
-
-  return true
 }
 
 const craft = Bun.spawn([
