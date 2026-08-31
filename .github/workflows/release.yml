@@ -105,18 +105,22 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
 
       - name: Build, sign, and notarize
-        run: bun run build:app:dmg
+        run: bun run build:app
         env:
           DESKTOP_SIGNING_IDENTITY: ${{ vars.DESKTOP_SIGNING_IDENTITY_NAME }}
           NOTARY_PROFILE: systemcleaner
 
+      # `build:app` images into `desktop-dmg`; `desktop-dist` holds the compiled
+      # binaries that go *inside* the bundle. Globbing the latter matched no
+      # file, and the pantry action treats an empty match as nothing to upload,
+      # so the job went green having attached no installer at all.
       - name: Attach the DMG to the release
         uses: pantry-pm/pantry/packages/action@v0.11.45
         with:
           install: 'false'
           release: 'true'
           release-files: |
-            storage/framework/desktop-dist/*.dmg
+            storage/framework/desktop-dmg/*.dmg
           release-checksums: sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
