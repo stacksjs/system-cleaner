@@ -82,13 +82,18 @@ jobs:
       # Brings in the Craft runtime this project declares in deps.yaml, and
       # imports the Developer ID identity into an ephemeral keychain that its
       # post step deletes even if the job is cancelled.
+      # Passed as inputs, not env. The action falls back to
+      # `APPLE_APPLICATION_CERTIFICATE` / `APPLE_CERTIFICATE_PASSWORD`, and the
+      # env block here named the certificate `APPLE_APP_CERTIFICATE_BASE64` —
+      # the repository *secret's* name, not the one the action reads. It saw no
+      # certificate at all and stopped with "Apple code signing requires an
+      # application certificate" before a single build step ran.
       - name: Setup Pantry
         uses: pantry-pm/pantry/packages/action@v0.11.45
         with:
           apple-signing: 'true'
-        env:
-          APPLE_APP_CERTIFICATE_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_BASE64 }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          apple-signing-application-certificate: ${{ secrets.DEVELOPER_ID_CERTIFICATE_BASE64 }}
+          apple-signing-certificate-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
 
       - name: Install Dependencies
         run: bun install

@@ -42,7 +42,6 @@ import process from 'node:process'
 
 const ROOT = process.cwd()
 const APP_NAME = process.env.DESKTOP_APP_NAME || 'SystemCleaner'
-const DESKTOP_DIST = path.join(ROOT, 'storage/framework/desktop-dist')
 const RESOURCES = path.join(ROOT, 'app/Desktop/Resources')
 
 if (process.platform !== 'darwin') {
