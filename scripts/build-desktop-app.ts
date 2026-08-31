@@ -116,22 +116,33 @@ function resolveCraftBin(): string | undefined {
 const craftBin = resolveCraftBin()
 
 /**
+ * The macOS SDK generation the current window chrome requires.
+ *
+ * 26 is where AppKit restyled the window buttons, so 26 and anything after it
+ * draw the current ones. This is deliberately not "the version this machine
+ * runs": comparing against the host would fire on every macOS release whether
+ * or not it changed how a control is drawn, and a warning that is always on is
+ * one nobody reads. Raise it when a future release restyles them again.
+ */
+const CHROME_SDK_FLOOR = 26
+
+/**
  * Say so when the runtime will draw the wrong window buttons.
  *
  * Nothing in this repo can correct it: the SDK is baked into the runtime when
  * Craft itself is built, so the fix is a Craft release built against a current
- * SDK, or `CRAFT_BIN` pointed at a local build of one. Silence here means
- * shipping a window that looks a major version out of date with no clue why.
+ * SDK — 0.0.84 and up — or `CRAFT_BIN` pointed at a local build of one.
+ * Silence here means shipping a window that looks a major version out of date
+ * with no clue why.
  */
 if (craftBin) {
   const sdk = linkedSdk(craftBin)
-  const host = Number(spawnSync('sw_vers', ['-productVersion'], { encoding: 'utf8' }).stdout?.split('.')[0] ?? 0)
-  if (sdk && host && sdk[0] < host) {
+  if (sdk && sdk[0] < CHROME_SDK_FLOOR) {
     console.warn(
-      `\n[desktop] WARNING: the Craft runtime at ${craftBin} is linked against the macOS ${sdk[0]}.${sdk[1]} SDK,`
-      + `\n           but this machine runs macOS ${host}. AppKit draws pre-${host} window buttons for a binary`
-      + `\n           built that far back, so the traffic lights will not match the rest of the system.`
-      + `\n           Set CRAFT_BIN to a Craft built against the ${host} SDK to fix it.\n`,
+      `\n[desktop] WARNING: the Craft runtime at ${craftBin} is linked against the macOS ${sdk[0]}.${sdk[1]} SDK.`
+      + `\n           AppKit draws pre-${CHROME_SDK_FLOOR} window buttons for a binary built that far back, so the`
+      + `\n           traffic lights will not match the rest of the system. Upgrade craft-native.org to`
+      + `\n           0.0.84 or newer, or set CRAFT_BIN to a build made against the ${CHROME_SDK_FLOOR} SDK.\n`,
     )
   }
 }
