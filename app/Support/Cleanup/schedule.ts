@@ -106,6 +106,13 @@ export function scheduleRunner(): ScheduleRunner {
 
   const workingDirectory = process.cwd()
 
+  // The shipped app is a single binary whose agent is a subcommand, so launchd
+  // invokes `SystemCleaner agent --run-schedule`. `system-cleaner-agent` was
+  // the separate executable this used to be; a plist written by an older
+  // version still names it, and it still works, so both spellings resolve.
+  if (path.basename(executable) === 'SystemCleaner')
+    return { argv: [executable, 'agent', '--run-schedule'], env, workingDirectory }
+
   if (path.basename(executable) === 'system-cleaner-agent')
     return { argv: [executable, '--run-schedule'], env, workingDirectory }
 

@@ -236,9 +236,16 @@ async function emit(payload: Record<string, unknown>): Promise<never> {
   process.exit(0)
 }
 
-if (import.meta.main) {
-  const input = process.argv[2] ?? ''
-
+/**
+ * Run one scan from a JSON request and exit.
+ *
+ * Takes the request explicitly rather than reading `process.argv`, because the
+ * shipped app reaches this as `SystemCleaner scan <json>` — one executable with
+ * a subcommand — while `bun app/Workers/disk-scan.ts <json>` still passes argv
+ * position 2. The caller decides which slot the request came from; this only
+ * has to parse it.
+ */
+export async function runScannerCli(input: string): Promise<never> {
   let parsed: unknown
   try {
     parsed = JSON.parse(input)
@@ -251,9 +258,13 @@ if (import.meta.main) {
     await emit({ success: false, error: 'Invalid scan request' })
 
   try {
-    await emit(runScan(parsed as ScanRequest))
+    return await emit(runScan(parsed as ScanRequest))
   }
   catch (e: any) {
-    await emit({ success: false, error: e?.message || 'Scan failed' })
+    return await emit({ success: false, error: e?.message || 'Scan failed' })
   }
 }
+
+if (import.meta.main)
+  // eslint-disable-next-line ts/no-top-level-await
+  await runScannerCli(process.argv[2] ?? '')

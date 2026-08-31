@@ -137,21 +137,16 @@ fs.cpSync(path.join(ROOT, 'database/migrations'), path.join(RESOURCES, 'migratio
 console.log('[desktop] building the desktop bundle')
 run('./buddy', ['build:desktop'])
 
-// ── 4. The binaries the launcher spawns ─────────────────────────
-// After build:desktop, which clears that directory first. The scanner is its
-// own executable because `bun build --compile` does not embed worker
-// entrypoints — see the note at the top of app/Workers/disk-scan.ts.
-for (const [entry, name] of [
-  ['app/Desktop/server.ts', 'system-cleaner-agent'],
-  ['app/Workers/disk-scan.ts', 'system-cleaner-scan'],
-] as const) {
-  console.log(`[desktop] compiling ${name}`)
-  run('bun', [
-    'build', path.join(ROOT, entry),
-    '--compile', '--target=bun-darwin-arm64',
-    '--outfile', path.join(DESKTOP_DIST, name),
-  ])
-}
+// ── 4. (nothing to compile here) ────────────────────────────────
+// The agent and the scanner used to be two more compiled binaries alongside the
+// launcher. They are subcommands of it now — `SystemCleaner agent`,
+// `SystemCleaner scan <json>` — because `bun build --compile` embeds the whole
+// Bun runtime in every output it writes, and a hello-world measures 60 MB. Three
+// executables meant three copies of that runtime and a 230 MB bundle whose
+// actual native component, the Craft runtime, is 13 MB of it.
+//
+// The two still run out-of-process, spawned exactly as before; only the file
+// being executed changed. `app/Desktop/launcher.ts` dispatches on argv[2].
 
 // ── 5. Bundle and image ─────────────────────────────────────────
 console.log('[desktop] packaging')
@@ -241,7 +236,7 @@ function sealSignedBundle(imagePath: string): void {
       '--sign', identity,
     ]
 
-    for (const name of ['system-cleaner-scan', 'craft-runtime', 'system-cleaner-agent', APP_NAME])
+    for (const name of ['craft-runtime', APP_NAME])
       run('codesign', [...signArgs, path.join(macosDir, name)])
 
     run('codesign', [...signArgs, appBundle])

@@ -203,10 +203,17 @@ export async function startAgentServer(options: AgentServerOptions) {
   return server
 }
 
-// Running the compiled binary directly starts the server and blocks. The
-// launcher uses this; `bun app/Desktop/server.ts` is the way to exercise it
-// against a local `dist/` during development.
-if (import.meta.main) {
+/**
+ * Start the agent and block, reading its configuration from the environment.
+ *
+ * A function rather than top-level code because the shipped app compiles one
+ * executable, not three: `SystemCleaner agent` calls this. Sixty megabytes of
+ * that binary is the Bun runtime, and shipping a copy per entrypoint cost more
+ * than everything else in the bundle combined.
+ *
+ * `bun app/Desktop/server.ts` still runs it directly against a local `dist/`.
+ */
+export async function runAgent(): Promise<void> {
   const webRoot = process.env.SYSTEM_CLEANER_WEB_ROOT
     ?? path.resolve(path.dirname(process.execPath), '../Resources/web')
 
@@ -248,3 +255,7 @@ if (import.meta.main) {
   // `console.warn` here left it waiting for a port that never arrived.
   Bun.write(Bun.stdout, `system-cleaner-agent listening on ${server.url.origin}\n`)
 }
+
+if (import.meta.main)
+  // eslint-disable-next-line ts/no-top-level-await
+  await runAgent()

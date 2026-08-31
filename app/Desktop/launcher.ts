@@ -23,6 +23,50 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import process from 'node:process'
 
+/**
+ * One executable, three jobs.
+ *
+ * `bun build --compile` writes a ~60 MB file whatever you compile: sixty of
+ * those megabytes are the Bun runtime, and the entrypoint is a rounding error
+ * on top. This app shipped three of them — launcher, agent, scanner — so the
+ * bundle carried three copies of the same runtime and weighed 230 MB, of which
+ * about 180 MB was that duplication. The Craft runtime, which is the part
+ * people expect to be big, is 13 MB.
+ *
+ * So the agent and the scanner are subcommands of this binary rather than
+ * binaries of their own. Both were already spawned as child processes with
+ * their input in argv, so nothing about how they run changed — only which file
+ * gets executed.
+ *
+ * This has to come before anything else at module scope: the launcher's own
+ * body starts a server and opens a window as a side effect of loading.
+ */
+const subcommand = process.argv[2]
+
+if (subcommand === 'agent' || subcommand === 'scan') {
+  if (subcommand === 'agent') {
+    // Returns as soon as the server is listening; `Bun.serve` is what keeps the
+    // process alive from then on. An earlier draft called `process.exit(0)`
+    // here, which killed the agent one line after it had printed the port the
+    // launcher was still waiting to connect to — the launcher then timed out
+    // with "the agent server never became healthy", which is true and says
+    // nothing about why.
+    const { runAgent } = await import('./server')
+    await runAgent()
+  }
+  else {
+    // Always exits the process. The request is argv[3], behind the subcommand.
+    const { runScannerCli } = await import('../Workers/disk-scan')
+    await runScannerCli(process.argv[3] ?? '')
+  }
+
+  // Everything below this point is the launcher, and a subcommand must never
+  // reach it — falling through would have the agent spawn a second agent and
+  // open a window. Parking here suspends module evaluation for good; the
+  // process stays alive on the server's own handle.
+  await new Promise(() => {})
+}
+
 const APP_NAME = 'SystemCleaner'
 
 /** How long the server gets to bind and answer before the launcher gives up. */
@@ -32,8 +76,6 @@ const POLL_INTERVAL_MS = 100
 const macosDir = path.dirname(process.execPath)
 const contentsDir = path.dirname(macosDir)
 
-const agentBinary = path.join(macosDir, 'system-cleaner-agent')
-const scannerBinary = path.join(macosDir, 'system-cleaner-scan')
 const craftBinary = path.join(macosDir, 'craft-runtime')
 const webRoot = path.join(contentsDir, 'Resources/web')
 const migrationsDir = path.join(contentsDir, 'Resources/migrations')
@@ -53,8 +95,6 @@ function fail(message: string): never {
 }
 
 for (const [label, target] of [
-  ['agent server', agentBinary],
-  ['scanner', scannerBinary],
   ['Craft runtime', craftBinary],
   ['web payload', webRoot],
 ] as const) {
@@ -64,7 +104,7 @@ for (const [label, target] of [
 
 fs.mkdirSync(dataDir, { recursive: true })
 
-const agent = Bun.spawn([agentBinary], {
+const agent = Bun.spawn([process.execPath, 'agent'], {
   stdout: 'pipe',
   stderr: 'inherit',
   env: {
@@ -77,7 +117,6 @@ const agent = Bun.spawn([agentBinary], {
     SYSTEM_CLEANER_AGENT: '1',
     SYSTEM_CLEANER_WEB_ROOT: webRoot,
     SYSTEM_CLEANER_MIGRATIONS: migrationsDir,
-    SYSTEM_CLEANER_SCANNER: scannerBinary,
     SYSTEM_CLEANER_PORT: '0',
     DB_CONNECTION: 'sqlite',
     DB_DATABASE_PATH: databasePath,

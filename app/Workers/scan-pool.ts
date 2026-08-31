@@ -172,6 +172,15 @@ function resolveScanner(): string[] {
     return scannerCommand
   }
 
+  // In the shipped app the scanner is a subcommand of the executable already
+  // running this code — the bundle compiles one binary, not three, because each
+  // one costs a 60 MB copy of the Bun runtime. `bun` as execPath means we are
+  // in development, where the entry file is on disk to be handed to it.
+  if (path.basename(process.execPath) !== 'bun') {
+    scannerCommand = [process.execPath, 'scan']
+    return scannerCommand
+  }
+
   scannerCommand = [process.execPath, new URL('./disk-scan.ts', import.meta.url).pathname]
   return scannerCommand
 }
