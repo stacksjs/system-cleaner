@@ -1,11 +1,12 @@
 import { execSync, HOME, isPermissionGated, TtlCache } from '@system-cleaner/core'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { CLEAN_TARGETS, getAllExtensions } from '@system-cleaner/clean'
+import { CLEAN_TARGETS, getAllExtensions, sizeExtensions } from '@system-cleaner/clean'
 import { discoverStartupItems } from '@system-cleaner/uninstall'
 
 const startupCache = new TtlCache<ReturnType<typeof discoverStartupItems>>(60_000)
 const extensionsCache = new TtlCache<ReturnType<typeof getAllExtensions>>(60_000)
+const extensionSizesCache = new TtlCache<Record<string, number>>(5 * 60_000)
 const diskInfoCache = new TtlCache<Record<string, unknown>>(30_000)
 const cleanupTargetsCache = new TtlCache<Array<{
   id: string
@@ -44,6 +45,28 @@ export function getExtensionsCached() {
 
 export function invalidateStartupCache(): void {
   startupCache.clear()
+}
+
+export function invalidateExtensionsCache(): void {
+  extensionsCache.clear()
+  extensionSizesCache.clear()
+}
+
+/**
+ * Extension sizes, measured separately from the list.
+ *
+ * Walking every version directory of every extension across every profile is
+ * seconds of work, and the list is useful before the numbers arrive — same
+ * two-phase shape as `/installed-apps`.
+ */
+export function getExtensionSizesCached() {
+  const hit = extensionSizesCache.get('sizes')
+  if (hit) return { sizes: hit, cached: true }
+
+  const { extensions } = getExtensionsCached()
+  const sizes = sizeExtensions(extensions)
+  extensionSizesCache.set('sizes', sizes)
+  return { sizes, cached: false }
 }
 
 export function getSystemDiskInfoCached() {

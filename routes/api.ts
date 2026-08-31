@@ -17,6 +17,8 @@ import {
   getSystemDiskInfoCached,
   getCleanupTargetsCached,
   getDashboardStatsCached,
+  getExtensionSizesCached,
+  invalidateExtensionsCache,
   invalidateStartupCache,
 } from './data-service';
 import { lastScanResult, runDiskScan, runDuplicateScan, runLargeFileScan, scanProgress } from '../app/Workers/scan-pool';
@@ -31,8 +33,11 @@ import {
   findDsStoreFiles,
   findIncompleteDownloads,
   findOrphanedAppData,
+  extensionsPage,
+  isWebStoreId,
   MAINTENANCE_TASKS,
   previewKeptCookies,
+  removeExtensions,
   runMaintenanceTask,
   runningBrowsers,
   scanPrivacyItems,
@@ -920,9 +925,86 @@ export default async function (router: Router) {
     return Response.json({ success: true, items, cached });
   });
 
-  await router.post('/extensions-list', async () => {
+  await router.post('/extensions-list', async (req: Request) => {
+    const body = await readJsonBody<{ sizes?: unknown; refresh?: unknown }>(req);
+
+    // Rescan means rescan. The list and size caches hold for a minute and five
+    // minutes respectively, which is right for navigating between screens and
+    // wrong for the one control whose entire purpose is to go and look again.
+    if (body?.refresh === true)
+      invalidateExtensionsCache();
+
     const { extensions, cached } = getExtensionsCached();
-    return Response.json({ success: true, extensions, cached });
+
+    // Sizes are a second request for the same reason as `/installed-apps`:
+    // walking every version directory of every extension takes seconds, and
+    // the list is worth reading before the numbers land.
+    const sizes = body?.sizes === true ? getExtensionSizesCached().sizes : null;
+    const running = body?.sizes === true ? await runningBrowsers() : [];
+
+    return Response.json({
+      success: true,
+      extensions: extensions.map(extension => ({
+        ...extension,
+        sizeBytes: sizes ? sizes[extension.id] ?? 0 : null,
+        // A Web Store extension in a sync account comes back at the next
+        // launch. The UI has to be able to say which ones those are.
+        mayReturn: extension.browser !== 'Firefox' && isWebStoreId(extension.extId),
+      })),
+      running,
+      sizesPending: sizes === null,
+      cached,
+    });
+  });
+
+  await router.post('/remove-extensions', async (req: Request) => {
+    const body = await readJsonBody<{ ids: unknown }>(req);
+    if (body === null) return badJson();
+
+    const ids = sanitizeStringArray(body.ids, 200);
+    if (ids === null) return badRequest('ids must be a non-empty string array');
+
+    const outcome = await removeExtensions(ids);
+
+    if (outcome.removed.length > 0) {
+      invalidateExtensionsCache();
+      await CleanupRun.create({
+        source: 'extensions',
+        mode: 'permanent',
+        itemCount: outcome.removed.length,
+        failedCount: outcome.failed.length,
+        freedBytes: outcome.freedBytes,
+      });
+    }
+
+    return Response.json({ success: outcome.failed.length === 0, ...outcome });
+  });
+
+  /**
+   * Open the browser's own extensions page.
+   *
+   * The reliable way to uninstall a synced extension, and the only way to
+   * revoke its sync entry — so it sits next to the delete button rather than
+   * being something the user has to know.
+   */
+  await router.post('/open-extensions-page', async (req: Request) => {
+    const body = await readJsonBody<{ browser: unknown }>(req);
+    if (body === null) return badJson();
+    if (typeof body.browser !== 'string') return badRequest('No browser provided');
+
+    const page = extensionsPage(body.browser);
+    if (!page) return badRequest('Unknown browser', 404);
+
+    try {
+      // The app and the URL are both from the table above, never from the
+      // request, so nothing the client sends reaches `open` as an argument.
+      Bun.spawn(['open', '-a', page.app, page.url], { stdout: 'ignore', stderr: 'ignore' });
+    }
+    catch {
+      return Response.json({ success: false, error: `Could not open ${page.app}` });
+    }
+
+    return Response.json({ success: true, ...page });
   });
 
   await router.post('/system-disk-info', async () => {

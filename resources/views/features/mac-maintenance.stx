@@ -1,0 +1,7 @@
+@extends('layouts/marketing')
+@section('title', 'Mac Maintenance - SystemCleaner')
+@section('description', 'Rebuild macOS caches and restart the services behind stuck menus, fonts and previews.')
+@section('canonical', 'https://system-cleaner.app/features/mac-maintenance')
+@section('content')
+  <MarketingFeatureDetail slug="mac-maintenance" />
+@endsection

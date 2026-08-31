@@ -1,25 +1,50 @@
-<!-- Browser extensions panel -->
+<!--
+  Browser extensions — the inventory, and the two ways to get rid of one.
+
+  Removing an extension is not one operation on macOS, it is a different one
+  per browser, so the screen offers both honestly: **Remove** deletes the files
+  from disk, and **In browser** opens the browser's own extensions page, which
+  is the only thing that revokes a sync entry. Which one you want depends on
+  whether the extension came from the Web Store, and the row says so.
+-->
 <div class='card-row'>
   <div class='card'>
-    <div class='card-label'>Total Extensions</div>
-    <div class='card-value' style='color: #bf5af2;'>{{ browserExtensions.length }}</div>
-    <div class='card-detail'>Across all browsers</div>
+    <div class='card-label'>Installed</div>
+    <div class='card-value' style='color: var(--purple);' x-text='browserExtensions.length'>0</div>
+    <div class='card-detail' x-text="browsers().length + ' browser(s)'">across your browsers</div>
   </div>
   <div class='card'>
     <div class='card-label'>Total Size</div>
-    <div class='card-value'>-</div>
-    <div class='card-detail'>Disk space used</div>
+    <div class='card-value' x-text="sizesPending ? '—' : fmtBytes(totalBytes())">—</div>
+    <div class='card-detail' x-text="sizesPending ? 'Measuring…' : 'On disk'">Measuring…</div>
   </div>
   <div class='card'>
-    <div class='card-label'>Chrome</div>
-    <div class='card-value'>{{ browserExtensions.filter(function(e){ return e.browser === 'Chrome'; }).length }}</div>
-    <div class='card-detail'>extensions</div>
+    <div class='card-label'>Selected</div>
+    <div class='card-value' :style="selected.length ? 'color: var(--accent);' : ''" x-text='selected.length'>0</div>
+    <div class='card-detail' x-text="selected.length ? fmtBytes(selectedBytes()) : 'Nothing selected'">Nothing selected</div>
   </div>
-  <div class='card'>
-    <div class='card-label'>Firefox</div>
-    <div class='card-value'>{{ browserExtensions.filter(function(e){ return e.browser === 'Firefox'; }).length }}</div>
-    <div class='card-detail'>extensions</div>
-  </div>
+</div>
+
+<div class='ex-bar'>
+  <button class='btn btn-sm' @click='toggleAll()' :disabled='selectableIds().length === 0'
+    x-text="allSelected() ? 'Deselect All' : 'Select All'">Select All</button>
+  <button class='btn btn-sm' @click='clearSelection()' :disabled='selected.length === 0'>Clear</button>
+  <button class='btn btn-sm' data-rescan @click='refresh()' :disabled='sizesPending'>Rescan</button>
+  <div class='ex-spacer'></div>
+  <button class='btn btn-danger btn-icon' @click='remove(selected)' :disabled='removing || selected.length === 0'>
+    <span class='i-f7-trash-fill' aria-hidden='true'></span>
+    <span x-text="removing ? 'Removing…' : 'Remove Selected'">Remove Selected</span>
+  </button>
+</div>
+
+<!-- Same rule as the privacy clean: a live profile is being written to, and
+     deleting out from under it corrupts it rather than uninstalling anything. -->
+<div class='ex-running' x-show='running.length > 0' x-cloak>
+  <strong x-text="running.join(', ')"></strong>
+  <span x-text="running.length === 1 ? ' is open.' : ' are open.'"></span>
+  Its extensions are listed but cannot be removed from here — deleting one from
+  a running browser corrupts the profile. Quit it and press Rescan, or use
+  <strong>In browser</strong>, which works either way.
 </div>
 
 <div x-show='browserExtensions.length > 0'>
@@ -27,40 +52,58 @@
     <div class='tbl-bar'>
       <div>
         <span class='tbl-title'>Installed Extensions</span>
-        <span class='tbl-count'>sorted by name</span>
+        <span class='tbl-count' x-text="browsers().map(function(b) { return b + ' ' + countFor(b); }).join(' · ')"></span>
       </div>
-      <button class='btn btn-sm' x-cloak x-show='false' aria-hidden='true'>Remove Selected</button>
     </div>
     <table>
       <thead>
         <tr>
-          <th style='width: 28px;'><input type='checkbox' class='check' @click="allOn(browserExtensions.map(function(e){ return e.id; }))" /></th>
+          <th style='width: 28px;'>
+            <input type='checkbox' class='check' :checked='allSelected()' @click='toggleAll()'
+              aria-label='Select every removable extension' />
+          </th>
           <th>Extension</th>
-          <th>Browser</th>
-          <th>Version</th>
-          <th>Size</th>
-          <th>Permissions</th>
-          <th>Actions</th>
+          <th style='width: 96px;'>Browser</th>
+          <th style='width: 84px;'>Version</th>
+          <th style='width: 84px;'>Size</th>
+          <th style='width: 104px;'>Reach</th>
+          <th style='width: 168px;'>Actions</th>
         </tr>
       </thead>
       <tbody>
-        <template x-for="ext in browserExtensions" :key="ext.id">
-          <tr>
-            <td><input type='checkbox' class='check' :checked="isOn(ext.id)" @click="toggle(ext.id)" /></td>
+        <template x-for='ext in browserExtensions' :key='ext.id'>
+          <tr :class="isOn(ext.id) ? 'ex-row-on' : ''">
             <td>
-              <div class='item-row'><span class='item-glyph' :class="ext.browserIcon" aria-hidden='true'></span><span class='item-name' x-text='ext.name'></span></div>
+              <input type='checkbox' class='check' :checked='isOn(ext.id)' @click='toggle(ext.id)'
+                :disabled='isBusy(ext)' :aria-label="'Select ' + ext.name" />
+            </td>
+            <td>
+              <div class='item-row'>
+                <span class='item-glyph' :class='ext.browserIcon' aria-hidden='true'></span>
+                <span class='item-name' x-text='ext.name'></span>
+                <!-- Not a warning. It is the difference between a delete that
+                     sticks and one the browser undoes overnight. -->
+                <span class='badge badge-blue' x-show='ext.mayReturn' x-cloak>syncable</span>
+              </div>
               <div class='item-sub' x-show='ext.description' x-text='ext.description'></div>
             </td>
-            <td><span class='badge badge-purple'>{{ ext.browser }}</span></td>
-            <td class='dim mono' style='font-size: 11px;'>{{ ext.version }}</td>
-            <td style='font-size: 11px;'>{{ ext.sizeStr }}</td>
+            <td><span class='badge badge-purple' x-text='ext.browser'></span></td>
+            <td class='dim mono' style='font-size: 11px;' x-text='ext.version'></td>
+            <td style='font-variant-numeric: tabular-nums;'
+                x-text="ext.sizeBytes === null ? '—' : fmtBytes(ext.sizeBytes)">—</td>
             <td>
-              <span class='badge badge-red' x-show="(ext.permissions + ext.hostPermissions) > 5">{{ (ext.permissions + ext.hostPermissions) + ' perms' }}</span>
-              <span class='badge badge-orange' x-show="(ext.permissions + ext.hostPermissions) > 0 && (ext.permissions + ext.hostPermissions) <= 5">{{ (ext.permissions + ext.hostPermissions) + ' perms' }}</span>
-              <span class='badge badge-gray' x-show="(ext.permissions + ext.hostPermissions) === 0">None</span>
+              <span class='badge badge-red' x-show="(ext.permissions + ext.hostPermissions) > 5"
+                x-text="(ext.permissions + ext.hostPermissions) + ' perms'"></span>
+              <span class='badge badge-orange' x-cloak
+                x-show="(ext.permissions + ext.hostPermissions) > 0 && (ext.permissions + ext.hostPermissions) <= 5"
+                x-text="(ext.permissions + ext.hostPermissions) + ' perms'"></span>
+              <span class='badge badge-gray' x-cloak x-show="(ext.permissions + ext.hostPermissions) === 0">None</span>
             </td>
-            <td>
-              <span class='dim' style='font-size: 11px;'>-</span>
+            <td class='action-cell'>
+              <button class='btn btn-sm' @click='openBrowser(ext.browser)'>In browser</button>
+              <button class='btn btn-sm' @click='reveal(ext.path)'>Reveal</button>
+              <button class='btn btn-danger btn-sm' @click='remove([ext.id])'
+                :disabled='removing || isBusy(ext)'>Remove</button>
             </td>
           </tr>
         </template>
@@ -71,6 +114,41 @@
 
 <div x-show='browserExtensions.length === 0' x-cloak>
   <div class='tbl-wrap'>
-    <div class='empty-state'>No browser extensions found.</div>
+    <div class='empty-state'>
+      No browser extensions found. If you know you have some, SystemCleaner
+      needs Full Disk Access to read browser profiles — grant it in System
+      Settings &rsaquo; Privacy &amp; Security, then press Rescan.
+    </div>
   </div>
 </div>
+
+<div class='ex-note'>
+  <p><strong>Two kinds of removal, and why both are here.</strong></p>
+  <p>
+    <strong>Remove</strong> deletes the extension's files. That is immediate and
+    it frees the space, but it cannot revoke the entry in your browser's sync
+    account &mdash; the registry holding that is signed by the browser
+    specifically to stop other programs editing it. So an extension marked
+    <span class='badge badge-blue'>syncable</span> can be reinstalled at the
+    next launch. <strong>In browser</strong> opens the browser's own extensions
+    page, which is what revokes it for good.
+  </p>
+  <p>
+    The permission count is a prompt to look, not a verdict. A password manager
+    legitimately asks for a great deal; a theme asking for the same thing is
+    worth a second look.
+  </p>
+</div>
+
+<style>
+.ex-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+.ex-spacer { flex: 1; }
+.ex-row-on { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.ex-running { margin-bottom: 14px; padding: 10px 14px; border: .5px solid color-mix(in srgb, var(--orange) 32%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--orange) 10%, var(--surface)); color: var(--secondary); font-size: 11px; line-height: 1.5; }
+.ex-running strong { color: var(--ink); }
+.ex-note { margin-top: 12px; padding: 12px 16px; border: .5px solid var(--line); border-radius: 8px; background: var(--surface-soft); color: var(--tertiary); font-size: 11px; line-height: 1.6; }
+.ex-note p { max-width: 96ch; }
+.ex-note p + p { margin-top: 8px; }
+.ex-note strong { color: var(--secondary); }
+.ex-note .badge { vertical-align: baseline; }
+</style>

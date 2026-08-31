@@ -1,8 +1,8 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { Database } from 'bun:sqlite'
-import { HOME, exec, formatBytes, pathExists, safeStat } from '@system-cleaner/core'
-import { detectBrowserProfiles } from './browser'
+import { HOME, formatBytes, pathExists, safeStat } from '@system-cleaner/core'
+import { blockedByRunningBrowser, detectBrowserProfiles, runningBrowsers } from './browser'
 
 /**
  * Per-browser privacy data — the feature CCleaner is actually known for.
@@ -62,35 +62,6 @@ export interface PrivacyItem {
   keepable: boolean
 }
 
-/** Process names to check before touching a browser's profile. */
-const BROWSER_PROCESSES: Record<string, string[]> = {
-  'Chrome': ['Google Chrome'],
-  'Safari': ['Safari'],
-  'Firefox': ['firefox'],
-  'Edge': ['Microsoft Edge'],
-  'Brave': ['Brave Browser'],
-  'Arc': ['Arc'],
-}
-
-/** Which browsers are running right now, by the name used in `PrivacyItem`. */
-export async function runningBrowsers(): Promise<string[]> {
-  const running: string[] = []
-
-  for (const [browser, processes] of Object.entries(BROWSER_PROCESSES)) {
-    for (const name of processes) {
-      // `pgrep -x` matches the executable name exactly, so "Chrome" cannot
-      // match "Chrome Helper" and report a browser that is not open.
-      const result = await exec(`pgrep -x ${JSON.stringify(name)} >/dev/null && echo yes`, { timeout: 3000 })
-      if (result.stdout.trim() === 'yes') {
-        running.push(browser)
-        break
-      }
-    }
-  }
-
-  return running
-}
-
 function sizeOfPaths(paths: string[]): number {
   let total = 0
   for (const p of paths) {
@@ -140,6 +111,30 @@ const FIREFOX_DOWNLOAD_TABLES = ['moz_annos']
 
 function isFirefox(browser: string): boolean {
   return browser === 'Firefox'
+}
+
+/**
+ * The SQL that decides which cookies survive a clear.
+ *
+ * Exported because it is the one piece of this file where a mistake is
+ * expensive in both directions: too loose and a clear leaves tracking cookies
+ * behind, too tight and it signs you out of the sites you explicitly asked to
+ * keep. `tests/privacy-keep-list.test.ts` runs it against a real database.
+ *
+ * A cookie for `github.com` is stored under `github.com` or `.github.com`, and
+ * its subdomains under `.gist.github.com` — so an entry has to match a suffix,
+ * not a string.
+ */
+export function buildKeepClause(hostColumn: string, domains: string[]): { clause: string, params: string[] } {
+  const clause = domains
+    .map(() => `(${hostColumn} = ? OR ${hostColumn} LIKE ? OR ${hostColumn} LIKE ?)`)
+    .join(' OR ')
+
+  const params: string[] = []
+  for (const domain of domains)
+    params.push(domain, `%.${domain}`, `.${domain}`)
+
+  return { clause, params }
 }
 
 /**
@@ -380,8 +375,9 @@ export async function cleanPrivacyItems(
   }
 
   for (const item of items) {
-    if (busy.has(item.browser)) {
-      outcome.skipped.push({ id: item.id, reason: `Quit ${item.browser} first — writing to a live profile corrupts it` })
+    const blocked = blockedByRunningBrowser(item.browser, busy, 'clear')
+    if (blocked) {
+      outcome.skipped.push({ id: item.id, reason: blocked })
       continue
     }
 
@@ -438,16 +434,9 @@ function clearSqliteRows(item: PrivacyItem, keepDomains: string[]): number {
         db.run(`DELETE FROM ${table}`)
       }
       else {
-        // A cookie for `github.com` is stored under `github.com` or
-        // `.github.com`, and its subdomains under `.gist.github.com` — so a
-        // keep-list entry has to match a suffix, not a string.
-        const clauses = keepDomains.map(() => `(${hostColumn} = ? OR ${hostColumn} LIKE ? OR ${hostColumn} LIKE ?)`).join(' OR ')
-        const params: string[] = []
-        for (const domain of keepDomains)
-          params.push(domain, `%.${domain}`, `.${domain}`)
-
-        kept = Number((db.query(`SELECT COUNT(*) AS n FROM ${table} WHERE ${clauses}`).get(...params) as { n: number } | null)?.n ?? 0)
-        db.run(`DELETE FROM ${table} WHERE NOT (${clauses})`, params)
+        const { clause, params } = buildKeepClause(hostColumn, keepDomains)
+        kept = Number((db.query(`SELECT COUNT(*) AS n FROM ${table} WHERE ${clause}`).get(...params) as { n: number } | null)?.n ?? 0)
+        db.run(`DELETE FROM ${table} WHERE NOT (${clause})`, params)
       }
     }
     else {
@@ -506,11 +495,8 @@ export function previewKeptCookies(keepDomains: string[]): number {
     try {
       const db = new Database(file, { readonly: true })
       try {
-        const clauses = keepDomains.map(() => `(${hostColumn} = ? OR ${hostColumn} LIKE ? OR ${hostColumn} LIKE ?)`).join(' OR ')
-        const params: string[] = []
-        for (const domain of keepDomains)
-          params.push(domain, `%.${domain}`, `.${domain}`)
-        kept += Number((db.query(`SELECT COUNT(*) AS n FROM ${table} WHERE ${clauses}`).get(...params) as { n: number } | null)?.n ?? 0)
+        const { clause, params } = buildKeepClause(hostColumn, keepDomains)
+        kept += Number((db.query(`SELECT COUNT(*) AS n FROM ${table} WHERE ${clause}`).get(...params) as { n: number } | null)?.n ?? 0)
       }
       finally {
         db.close()

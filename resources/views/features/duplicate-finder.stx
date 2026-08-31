@@ -1,0 +1,7 @@
+@extends('layouts/marketing')
+@section('title', 'Duplicate Finder - SystemCleaner')
+@section('description', 'Find byte-for-byte identical files on your Mac and keep one of each, verified by a full content hash.')
+@section('canonical', 'https://system-cleaner.app/features/duplicate-finder')
+@section('content')
+  <MarketingFeatureDetail slug="duplicate-finder" />
+@endsection

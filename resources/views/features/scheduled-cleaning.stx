@@ -1,0 +1,7 @@
+@extends('layouts/marketing')
+@section('title', 'Scheduled Cleaning - SystemCleaner')
+@section('description', 'Clean your Mac automatically on a schedule that runs whether or not SystemCleaner is open.')
+@section('canonical', 'https://system-cleaner.app/features/scheduled-cleaning')
+@section('content')
+  <MarketingFeatureDetail slug="scheduled-cleaning" />
+@endsection

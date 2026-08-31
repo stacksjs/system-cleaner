@@ -64,7 +64,7 @@
     <label class='sc-field' x-show="spec.frequency === 'monthly'" x-cloak>
       <span class='sc-field-label'>Date</span>
       <select class='sc-input' :value='spec.day' @change="set('day', Number($event.target.value))">
-        <template x-for='n in 28' :key='n'>
+        <template x-for='n in monthDays()' :key='n'>
           <option :value='n' x-text='n'></option>
         </template>
       </select>
@@ -72,9 +72,12 @@
 
     <label class='sc-field'>
       <span class='sc-field-label'>Hour</span>
+      <!-- Built from an array rather than `x-for='n in 24'`: the stx runtime
+           iterates arrays, not integer ranges, and a numeric range renders no
+           options at all — a dropdown that looks enabled and is empty. -->
       <select class='sc-input' :value='spec.hour' @change="set('hour', Number($event.target.value))">
-        <template x-for='n in 24' :key='n'>
-          <option :value='n - 1' x-text="String(n - 1).padStart(2, '0')"></option>
+        <template x-for='hour in hours()' :key='hour.value'>
+          <option :value='hour.value' x-text='hour.label'></option>
         </template>
       </select>
     </label>

@@ -1,0 +1,7 @@
+@extends('layouts/marketing')
+@section('title', 'Privacy Cleanup - SystemCleaner')
+@section('description', 'Clear browser history, cookies and site data across every browser while staying signed in to the sites you choose.')
+@section('canonical', 'https://system-cleaner.app/features/privacy-cleanup')
+@section('content')
+  <MarketingFeatureDetail slug="privacy-cleanup" />
+@endsection

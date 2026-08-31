@@ -11,6 +11,8 @@
  *   - `packages/clean/src/browser.ts`      (browserIcon)
  *   - `packages/disk/src/categories.ts`    (FILE_CATEGORIES)
  *   - `packages/uninstall/src/discover.ts` (VENDOR_MAP)
+ *   - `packages/uninstall/src/remnants.ts`  (REMNANT_PRESENTATION)
+ *   - `packages/clean/src/maintenance.ts`   (MAINTENANCE_TASKS)
  *
  * `tests/runtime-icons.test.ts` fails if any of those ship a class that is
  * missing from this list.
@@ -57,6 +59,22 @@ export const RUNTIME_ICON_CLASSES: string[] = [
   'i-f7-gamecontroller-fill',
   'i-f7-list-bullet',
   'i-f7-gear-alt-fill',
+
+  // Uninstaller remnant kinds
+  'i-f7-macwindow',
+  'i-f7-doc-checkmark-fill',
+
+  // Maintenance tasks
+  'i-f7-textformat',
+  'i-f7-eye-fill',
+  'i-f7-doc-chart-fill',
+  'i-f7-lock-shield-fill',
+  'i-f7-wifi',
+  'i-f7-antenna-radiowaves-left-right',
+  'i-f7-search',
+  'i-f7-calendar',
+  'i-f7-memories',
+  'i-f7-power',
 
   // Toast states, bound by `:class` from the toast type
   'i-f7-checkmark-alt-circle-fill',

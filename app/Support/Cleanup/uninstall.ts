@@ -1,7 +1,7 @@
 import type { AppInfo, AppRemnant, RemnantType } from '@system-cleaner/core'
 import * as path from 'node:path'
 import { formatBytes, getDirSize, HOME, TtlCache } from '@system-cleaner/core'
-import { discoverApps, findRemnants, getAppInfo, summarizeRemnants } from '@system-cleaner/uninstall'
+import { discoverApps, findRemnants, getAppInfo, remnantPresentation, summarizeRemnants } from '@system-cleaner/uninstall'
 import { bulkDelete, protectedPathSet } from './bulk-delete'
 import type { BulkDeleteOutcome, DeleteMode } from './bulk-delete'
 
@@ -38,29 +38,6 @@ export interface InstalledApp {
   path: string
   installedAt: string | null
   sizeBytes: number | null
-}
-
-/** Human labels for the places a remnant is found, and an icon per kind. */
-const REMNANT_PRESENTATION: Record<RemnantType, { label: string, icon: string }> = {
-  'application-support': { label: 'Application Support', icon: 'i-f7-folder-fill' },
-  'preferences': { label: 'Preferences', icon: 'i-f7-gear-alt-fill' },
-  'caches': { label: 'Caches', icon: 'i-f7-archivebox-fill' },
-  'logs': { label: 'Logs', icon: 'i-f7-doc-text-fill' },
-  'cookies': { label: 'Cookies', icon: 'i-f7-globe' },
-  'launch-agent': { label: 'Launch Agent', icon: 'i-f7-bolt-fill' },
-  'launch-daemon': { label: 'Launch Daemon', icon: 'i-f7-bolt-fill' },
-  'saved-state': { label: 'Saved Window State', icon: 'i-f7-macwindow' },
-  'http-storage': { label: 'HTTP Storage', icon: 'i-f7-globe' },
-  'webkit': { label: 'WebKit Data', icon: 'i-f7-compass-fill' },
-  'containers': { label: 'Container', icon: 'i-f7-cube-box-fill' },
-  'group-containers': { label: 'Group Container', icon: 'i-f7-cube-box-fill' },
-  'crash-reports': { label: 'Crash Reports', icon: 'i-f7-exclamationmark-triangle-fill' },
-  'receipts': { label: 'Install Receipts', icon: 'i-f7-doc-checkmark-fill' },
-  'other': { label: 'Other', icon: 'i-f7-doc-fill' },
-}
-
-export function remnantPresentation(type: RemnantType): { label: string, icon: string } {
-  return REMNANT_PRESENTATION[type] ?? REMNANT_PRESENTATION.other
 }
 
 /**

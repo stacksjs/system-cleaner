@@ -3,7 +3,9 @@ import f7 from '@iconify-json/f7/icons.json'
 import { RUNTIME_COLOR_CLASSES } from '../app/Support/UI/runtime-colors'
 import { RUNTIME_ICON_CLASSES } from '../app/Support/UI/runtime-icons'
 import { CLEAN_TARGETS } from '../packages/clean/src/categories'
+import { MAINTENANCE_TASKS } from '../packages/clean/src/maintenance'
 import { getAllCategories } from '../packages/disk/src/categories'
+import { REMNANT_PRESENTATION } from '../packages/uninstall/src/remnants'
 
 const safelist = new Set(RUNTIME_ICON_CLASSES)
 
@@ -25,6 +27,23 @@ describe('runtime icon safelist', () => {
   // so the Quick Clean row renders a blank gap instead of an icon.
   it('covers every clean-target category icon', () => {
     const uncovered = [...new Set(CLEAN_TARGETS.map(target => target.icon))]
+      .filter(icon => !safelist.has(icon))
+
+    expect(uncovered).toEqual([])
+  })
+
+  // Same failure mode as the clean targets: the maintenance list arrives over
+  // `/api/maintenance-tasks` and every glyph is bound with `:class`, so an
+  // unlisted one renders as a gap in the middle of a table of icons.
+  it('covers every maintenance-task icon', () => {
+    const uncovered = [...new Set(MAINTENANCE_TASKS.map(task => task.icon))]
+      .filter(icon => !safelist.has(icon))
+
+    expect(uncovered).toEqual([])
+  })
+
+  it('covers every uninstaller remnant icon', () => {
+    const uncovered = [...new Set(Object.values(REMNANT_PRESENTATION).map(entry => entry.icon))]
       .filter(icon => !safelist.has(icon))
 
     expect(uncovered).toEqual([])

@@ -1,0 +1,7 @@
+@extends('layouts/marketing')
+@section('title', 'App Uninstaller - SystemCleaner')
+@section('description', 'Remove a Mac app and every preference, cache and launch agent it leaves behind, with SystemCleaner.')
+@section('canonical', 'https://system-cleaner.app/features/app-uninstaller')
+@section('content')
+  <MarketingFeatureDetail slug="app-uninstaller" />
+@endsection

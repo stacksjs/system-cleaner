@@ -1,5 +1,5 @@
 import * as path from 'node:path'
-import { HOME, pathExists, safeReadDir, safeReadFile } from '@system-cleaner/core'
+import { HOME, exec, pathExists, safeReadDir, safeReadFile } from '@system-cleaner/core'
 import type { BrowserProfile } from './types'
 
 /**
@@ -298,4 +298,62 @@ function findChromeProfiles(basePath: string): string[] {
   }
 
   return profiles
+}
+
+/** Process names to check before touching a browser's profile. */
+const BROWSER_PROCESSES: Record<string, string[]> = {
+  'Chrome': ['Google Chrome'],
+  'Safari': ['Safari'],
+  'Firefox': ['firefox'],
+  'Edge': ['Microsoft Edge'],
+  'Brave': ['Brave Browser'],
+  'Arc': ['Arc'],
+}
+
+/**
+ * Which browsers are running right now, by the display name the rest of this
+ * package uses.
+ *
+ * Both the privacy clean and the extension remover check this first: writing
+ * into a live browser profile does not clear or uninstall anything, it corrupts
+ * the profile, and the damage only shows up at the next launch.
+ */
+export async function runningBrowsers(): Promise<string[]> {
+  const running: string[] = []
+
+  for (const [browser, processes] of Object.entries(BROWSER_PROCESSES)) {
+    for (const name of processes) {
+      // `pgrep -x` matches the executable name exactly, so "Chrome" cannot
+      // match "Chrome Helper" and report a browser that is not open.
+      const result = await exec(`pgrep -x ${JSON.stringify(name)} >/dev/null && echo yes`, { timeout: 3000 })
+      if (result.stdout.trim() === 'yes') {
+        running.push(browser)
+        break
+      }
+    }
+  }
+
+  return running
+}
+
+/**
+ * Why a browser's data cannot be touched right now, or null if it can.
+ *
+ * Shared by the privacy clean and the extension remover because both enforce
+ * the same rule for the same reason, and a rule enforced twice is a rule that
+ * drifts. Takes the running set rather than looking it up, so one `pgrep`
+ * sweep covers a whole batch and the decision itself is testable without a
+ * browser open.
+ */
+export function blockedByRunningBrowser(browser: string, running: Iterable<string>, action: 'clear' | 'remove'): string | null {
+  for (const open of running) {
+    if (open !== browser)
+      continue
+
+    return action === 'clear'
+      ? `Quit ${browser} first — writing to a live profile corrupts it`
+      : `Quit ${browser} first — removing an extension from a live profile corrupts it`
+  }
+
+  return null
 }
