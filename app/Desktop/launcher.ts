@@ -205,20 +205,22 @@ await waitForHealth(port)
  *      `-webkit-app-region: drag` — a WKWebView discards the declaration — so
  *      without `startDrag` a titlebar-less window cannot be moved at all.
  *
- * This used to ask the binary its version and compare it to the release that
- * introduced both. That check was silently wrong: Craft prints nothing for
- * `--version` (or for `--help`) — it has not since at least 0.0.80 — so the
- * regex never matched, the runtime was treated as incapable on every launch,
- * and the flag was never passed. The app shipped for weeks with an ordinary
- * titlebar strip above the sidebar and no traffic lights over the rail, which
- * is precisely the look the flag exists to avoid.
+ * This used to ask the binary its version and compare it against the release
+ * that introduced both. That works for the runtime this app ships, which is
+ * signed during the bundle build and answers `--version` properly. It does not
+ * work for one that is not yet signed: macOS kills an unsigned Mach-O on exec,
+ * so the probe reads an empty stdout, the regex finds no version, and the
+ * runtime is judged incapable. The pantry download behaves exactly that way
+ * before the build signs it, and a local `zig build` reports 0.0.0. In both
+ * cases the answer is "no titlebar-hidden", and the window comes up with an
+ * ordinary titlebar and no buttons over the rail.
  *
- * So ask the binary what it *supports* rather than what it is called. The flag
- * name appears in its own argument table, which is the same fact the version
- * number was standing in for and cannot drift away from the behaviour. A
- * runtime that cannot be read is treated as incapable: a window with a
- * titlebar is the wrong look, and a window that cannot be moved is a broken
- * app.
+ * So ask the binary what it *supports* rather than what it is called, without
+ * running it at all. The flag name appears in its own argument table, which is
+ * the fact the version number was standing in for and cannot drift away from
+ * the behaviour. A runtime that cannot be read is treated as incapable: a
+ * window with a titlebar is the wrong look, and a window that cannot be moved
+ * is a broken app.
  */
 function runtimeCanHostChrome(): boolean {
   try {
