@@ -1,0 +1,267 @@
+<!--
+  Uninstaller — the app list, and what one app left behind.
+
+  Dragging an app to the Trash removes the bundle and nothing else. The
+  preferences, caches, containers, launch agents and receipts stay, and on a
+  Mac that has been in use for years they are the larger half. This screen
+  lists them with their sizes and lets each one be kept.
+
+  Every row is reviewable before anything happens, because no heuristic can
+  tell a licence file from a cache. Application Support holds both.
+-->
+<div class='card-row'>
+  <div class='card'>
+    <div class='card-label'>Applications</div>
+    <div class='card-value' style='color: var(--accent);' x-text='apps.length'>0</div>
+    <div class='card-detail'>Installed outside the system</div>
+  </div>
+  <div class='card'>
+    <div class='card-label'>Total Size</div>
+    <div class='card-value' x-text="sizesPending ? '—' : fmtBytes(totalAppBytes())">—</div>
+    <div class='card-detail' x-text="sizesPending ? 'Measuring…' : 'Across every app bundle'">Measuring…</div>
+  </div>
+  <div class='card'>
+    <div class='card-label'>Reviewing</div>
+    <div class='card-value' x-text="scan ? scan.app.name : '—'">—</div>
+    <div class='card-detail' x-text="scan ? (scan.remnants.length + ' leftover item(s) · ' + scan.totalFormatted + ' in total') : 'Pick an app below'">Pick an app below</div>
+  </div>
+</div>
+
+<!-- The review pane. Above the list on purpose: it is where the decision is
+     made, and scrolling back up to find it after picking an app is a chore. -->
+<div class='tbl-wrap' x-show='scan' x-cloak>
+  <div class='tbl-bar'>
+    <div>
+      <span class='tbl-title'>What <span x-text="scan ? scan.app.name : 'this app'"></span> left behind</span>
+      <span class='tbl-count' x-text="scan ? (scan.remnants.length + ' items · ' + scan.totalRemnantFormatted) : ''"></span>
+    </div>
+    <div style='display: flex; gap: 6px;'>
+      <button class='btn btn-sm' @click='toggleAllRemnants()'
+        x-text="allRemnantsChosen() ? 'Deselect Leftovers' : 'Select Leftovers'">Select Leftovers</button>
+      <button class='btn btn-sm' @click='close()'>Close</button>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style='width: 28px;'></th>
+        <th>Item</th>
+        <th style='width: 150px;'>Kind</th>
+        <th style='width: 96px;'>Size</th>
+        <th style='width: 92px;'>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- The bundle itself, always first and never sorted away from the top:
+           it is the one row whose meaning differs from all the others. -->
+      <tr x-show='scan' :class="scan && isChosen(scan.app.path) ? 'un-row-on' : ''">
+        <td>
+          <input type='checkbox' class='check' :checked='scan && isChosen(scan.app.path)'
+            @click='scan && toggleRow(scan.app.path)' aria-label='Select the application bundle' />
+        </td>
+        <td>
+          <div class='item-row'>
+            <img class='app-icon' loading='lazy' alt=''
+                 :src="'/api/app-icon?size=64&name=' + encodeURIComponent(scan ? scan.app.name : '')"
+                 onerror="this.classList.add('app-icon-missing')" />
+            <span class='item-name' x-text="scan ? scan.app.name : ''"></span>
+            <span class='badge badge-blue'>application</span>
+          </div>
+          <div class='item-path' :title="scan ? scan.app.path : ''" x-text="scan ? scan.app.path : ''"></div>
+        </td>
+        <td class='dim'>The app itself</td>
+        <td style='font-weight: 600; font-variant-numeric: tabular-nums;' x-text="scan ? scan.app.sizeFormatted : ''"></td>
+        <td class='action-cell'>
+          <button class='btn btn-sm' @click='scan && reveal(scan.app.path)'>Reveal</button>
+        </td>
+      </tr>
+
+      <template x-for='row in (scan ? scan.remnants : [])' :key='row.path'>
+        <tr :class="isChosen(row.path) ? 'un-row-on' : ''">
+          <td>
+            <input type='checkbox' class='check' :checked='isChosen(row.path)' @click='toggleRow(row.path)'
+              :disabled='row.protected || row.needsAdmin' :aria-label="'Select ' + row.displayPath" />
+          </td>
+          <td>
+            <div class='item-row'>
+              <span class='item-glyph' :class='row.icon' aria-hidden='true'></span>
+              <span class='item-name' x-text='row.typeLabel'></span>
+              <span class='badge badge-green' x-show='row.protected'>protected</span>
+              <span class='badge badge-orange' x-show='row.needsAdmin'>needs admin</span>
+            </div>
+            <div class='item-path' :title='row.path' x-text='row.displayPath'></div>
+          </td>
+          <td class='dim' x-text='row.type'></td>
+          <td style='font-variant-numeric: tabular-nums;' x-text='row.sizeFormatted'></td>
+          <td class='action-cell'>
+            <button class='btn btn-sm' @click='reveal(row.path)'>Reveal</button>
+          </td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+
+  <div class='un-actions'>
+    <div class='un-summary'>
+      <strong x-text='chosen.length'>0</strong> selected ·
+      <strong x-text='fmtBytes(chosenBytes())'>0 B</strong>
+    </div>
+    <button class='btn btn-danger btn-icon' @click="remove('trash')" :disabled='removing || chosen.length === 0'>
+      <span class='i-f7-trash-fill' aria-hidden='true'></span>
+      <span x-text="removing ? 'Working…' : 'Move to Trash'">Move to Trash</span>
+    </button>
+    <button class='btn btn-danger' @click="remove('permanent')" :disabled='removing || chosen.length === 0'>
+      Delete Permanently
+    </button>
+  </div>
+
+  <!-- Anything under /Library belongs to every account on this Mac, and
+       removing it needs rights this process does not have. Saying so beats a
+       checkbox that fails. -->
+  <div class='un-note' x-show='adminCount() > 0' x-cloak>
+    <strong x-text='adminCount()'>0</strong> item(s) live outside your home
+    folder — system-wide launch daemons and install receipts. Removing those
+    needs administrator rights, so they are listed but not selectable. Reveal
+    one to see where it is.
+  </div>
+</div>
+
+<div class='tbl-wrap'>
+  <div class='tbl-bar'>
+    <div>
+      <span class='tbl-title'>Applications</span>
+      <span class='tbl-count' x-text="visible().length + ' of ' + apps.length + ' shown'"></span>
+    </div>
+    <input class='un-search' type='search' placeholder='Filter by name' x-model='filter' aria-label='Filter applications' />
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Application</th>
+        <th style='width: 110px;'>Version</th>
+        <th style='width: 96px;'>Size</th>
+        <th style='width: 116px;'>Installed</th>
+        <th style='width: 96px;'>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <template x-for='app in visible()' :key='app.path'>
+        <tr :class="scan && scan.app.path === app.path ? 'un-row-on' : ''">
+          <td>
+            <div class='item-row'>
+              <img class='app-icon' loading='lazy' alt=''
+                   :src="'/api/app-icon?size=64&name=' + encodeURIComponent(app.name)"
+                   onerror="this.classList.add('app-icon-missing')" />
+              <span class='item-name' x-text='app.name'></span>
+            </div>
+            <div class='item-sub mono' x-text='app.bundleId'></div>
+          </td>
+          <td class='dim mono' style='font-size: 11px;' x-text='app.version'></td>
+          <td style='font-variant-numeric: tabular-nums;'
+              x-text="app.sizeBytes === null ? '—' : fmtBytes(app.sizeBytes)">—</td>
+          <td class='dim' x-text='fmtDate(app.installedAt)'></td>
+          <td class='action-cell'>
+            <button class='btn btn-sm' @click='review(app)' :disabled='scanning'
+              x-text="scanning && scanningPath === app.path ? 'Scanning…' : 'Review'">Review</button>
+          </td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+
+  <div class='empty-state' x-show='visible().length === 0' x-cloak>
+    No application matches that filter.
+  </div>
+</div>
+
+<!--
+  Data belonging to software that is not installed any more.
+
+  Nothing else in the app can find this. Quick Clean works from a fixed list of
+  paths, and these are by definition the leftovers of applications that list
+  never knew about — every one is a cache, log or saved state whose owning
+  bundle id no longer resolves to anything on disk.
+-->
+<div class='tbl-wrap'>
+  <div class='tbl-bar'>
+    <div>
+      <span class='tbl-title'>Left behind by apps you have already removed</span>
+      <span class='tbl-count'
+        x-text="orphansLoading ? 'scanning…' : (orphans.length + ' items · ' + fmtBytes(orphanBytes))">scanning…</span>
+    </div>
+    <div style='display: flex; gap: 6px;'>
+      <button class='btn btn-sm' @click='toggleAllOrphans()' x-show='orphans.length > 0'
+        x-text="allOrphansSelected() ? 'Deselect All' : 'Select All'">Select All</button>
+      <button class='btn btn-sm' @click='loadOrphans()' :disabled='orphansLoading'>Rescan</button>
+    </div>
+  </div>
+
+  <table x-show='orphans.length > 0' x-cloak>
+    <thead>
+      <tr>
+        <th style='width: 28px;'></th>
+        <th>Item</th>
+        <th style='width: 130px;'>Kind</th>
+        <th style='width: 96px;'>Size</th>
+        <th style='width: 110px;'>Last Touched</th>
+      </tr>
+    </thead>
+    <tbody>
+      <template x-for='row in orphans' :key='row.path'>
+        <tr :class="isOrphanOn(row.path) ? 'un-row-on' : ''">
+          <td>
+            <input type='checkbox' class='check' :checked='isOrphanOn(row.path)' @click='toggleOrphan(row.path)'
+              :disabled='row.protected' :aria-label="'Select ' + row.displayPath" />
+          </td>
+          <td>
+            <div class='item-row'>
+              <span class='item-name mono' x-text='row.bundleId'></span>
+              <span class='badge badge-green' x-show='row.protected'>protected</span>
+            </div>
+            <div class='item-path' :title='row.path' x-text='row.displayPath'></div>
+          </td>
+          <td class='dim' x-text='row.type'></td>
+          <td style='font-variant-numeric: tabular-nums;' x-text='fmtBytes(row.sizeBytes)'></td>
+          <td class='dim' x-text="row.daysSinceModified + ' days ago'"></td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+
+  <div class='un-actions' x-show='orphanSelected.length > 0' x-cloak>
+    <div class='un-summary'>
+      <strong x-text='orphanSelected.length'>0</strong> selected ·
+      <strong x-text='fmtBytes(orphanSelectedBytes())'>0 B</strong>
+    </div>
+    <button class='btn btn-danger btn-sm btn-icon' @click="removeOrphans('trash')" :disabled='orphanBusy'>
+      <span class='i-f7-trash-fill' aria-hidden='true'></span>
+      <span x-text="orphanBusy ? 'Working…' : 'Move to Trash'">Move to Trash</span>
+    </button>
+    <button class='btn btn-danger btn-sm' @click="removeOrphans('permanent')" :disabled='orphanBusy'>
+      Delete Permanently
+    </button>
+  </div>
+
+  <div class='empty-state' x-show='!orphansLoading && orphans.length === 0' x-cloak>
+    Nothing left over. Every cache and log under ~/Library belongs to something
+    still installed.
+  </div>
+  <div class='empty-state' x-show='orphansLoading'>Looking for data with no app&hellip;</div>
+</div>
+
+<div class='un-footnote'>
+  Apple's own apps are not listed: they are part of macOS, and removing one
+  breaks software updates rather than freeing space.
+</div>
+
+<style>
+.un-search { height: 28px; width: 220px; padding: 0 8px; border: .5px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-family: inherit; font-size: 12px; }
+.un-search:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.un-row-on { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.un-actions { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-top: .5px solid var(--line); background: var(--surface-soft); }
+.un-summary { margin-right: auto; font-size: 12px; font-variant-numeric: tabular-nums; }
+.un-note { padding: 10px 16px; border-top: .5px solid var(--line); color: var(--secondary); font-size: 11px; line-height: 1.5; }
+.un-footnote { margin-top: 12px; padding: 12px 16px; border: .5px solid var(--line); border-radius: 8px; background: var(--surface-soft); color: var(--tertiary); font-size: 11px; line-height: 1.5; }
+</style>

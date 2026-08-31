@@ -1,0 +1,150 @@
+<!--
+  Privacy — one table per browser, plus the cookie keep-list.
+
+  Grouped by browser rather than by kind because that is the unit people think
+  in: "clear Chrome" is a sentence, "clear every service worker" is not.
+-->
+<div class='card-row'>
+  <div class='card'>
+    <div class='card-label'>Selected</div>
+    <div class='card-value' :style="selected.length ? 'color: var(--accent);' : ''" x-text='fmtBytes(selectedBytes())'>0 B</div>
+    <div class='card-detail' x-text="selected.length + ' of ' + items.length + ' items'">0 items</div>
+  </div>
+  <div class='card'>
+    <div class='card-label'>Found</div>
+    <div class='card-value' x-text='fmtBytes(totalBytes())'>0 B</div>
+    <div class='card-detail' x-text="browsers().length + ' source(s) on this Mac'">0 sources</div>
+  </div>
+  <div class='card'>
+    <div class='card-label'>Signed-in Sites Kept</div>
+    <div class='card-value' style='color: var(--green);' x-text='keptDomains.length'>0</div>
+    <div class='card-detail' x-text="keptCookieCount + ' cookie(s) would survive a clear'">0 cookies</div>
+  </div>
+</div>
+
+<div class='pv-bar'>
+  <button class='btn btn-sm' @click='selectSafe()'>Select Safe</button>
+  <button class='btn btn-sm' @click='selectAll()'>Select All</button>
+  <button class='btn btn-sm' @click='clearSelection()' :disabled='selected.length === 0'>Clear Selection</button>
+  <button class='btn btn-sm' data-rescan @click='refresh()'>Rescan</button>
+  <div class='pv-spacer'></div>
+  <button class='btn btn-danger btn-icon' @click='clean()' :disabled='cleaning || selected.length === 0'>
+    <span class='i-f7-eye-slash-fill' aria-hidden='true'></span>
+    <span x-text="cleaning ? 'Clearing…' : 'Clear Selected'">Clear Selected</span>
+  </button>
+</div>
+
+<!-- Open browsers, named. A row that cannot be cleaned needs to say why on the
+     row itself; this is the summary for the ones that are open right now. -->
+<div class='pv-running' x-show='running.length > 0' x-cloak>
+  <strong x-text="running.join(', ')"></strong>
+  <span x-text="running.length === 1 ? ' is open.' : ' are open.'"></span>
+  Their data is listed but cannot be cleared: writing to a live browser profile
+  corrupts it rather than clearing it. Quit them and press Rescan.
+</div>
+
+<template x-for='browser in browsers()' :key='browser'>
+  <div class='tbl-wrap'>
+    <div class='tbl-bar'>
+      <div class='item-row'>
+        <span class='item-glyph' :class='iconFor(browser)' aria-hidden='true'></span>
+        <span class='tbl-title' x-text='browser'></span>
+        <span class='tbl-count' x-text='fmtBytes(bytesFor(browser))'></span>
+        <span class='badge badge-orange' x-show="running.indexOf(browser) !== -1" x-cloak>open</span>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style='width: 28px;'></th>
+          <th>Data</th>
+          <th style='width: 110px;'>Profile</th>
+          <th style='width: 96px;'>Size</th>
+          <th style='width: 120px;'>Impact</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-for='item in rowsFor(browser)' :key='item.id'>
+          <tr :class="isOn(item.id) ? 'pv-row-on' : ''">
+            <td>
+              <input type='checkbox' class='check' :checked='isOn(item.id)' @click='toggle(item.id)'
+                :disabled='isBusy(item)' :aria-label="'Select ' + item.label" />
+            </td>
+            <td>
+              <div class='item-row'>
+                <span class='item-name' x-text='item.label'></span>
+                <span class='badge badge-green' x-show='item.keepable' x-cloak>keep-list applies</span>
+              </div>
+              <div class='item-sub' x-text='item.description'></div>
+            </td>
+            <td class='dim' x-text="item.profile || '—'">—</td>
+            <td style='font-variant-numeric: tabular-nums;' x-text='item.sizeFormatted'></td>
+            <td>
+              <span class='badge badge-gray' x-show='!item.sensitive'>rebuilt</span>
+              <span class='badge badge-orange' x-show='item.sensitive' x-cloak>you lose state</span>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+</template>
+
+<!-- The keep-list. On this screen rather than in a settings pane, because it
+     only means anything next to the cookie checkbox it qualifies. -->
+<div class='tbl-wrap'>
+  <div class='tbl-bar'>
+    <div>
+      <span class='tbl-title'>Stay signed in to</span>
+      <span class='tbl-count'>cookies for these sites survive every clear</span>
+    </div>
+  </div>
+
+  <div class='pv-keep'>
+    <form class='pv-keep-add' @submit.prevent='addDomain()'>
+      <input class='pv-input' type='text' placeholder='github.com' x-model='newDomain' aria-label='Domain to keep' />
+      <button class='btn btn-sm' type='submit'>Keep</button>
+    </form>
+
+    <div class='pv-chips' x-show='keptDomains.length > 0' x-cloak>
+      <template x-for='domain in keptDomains' :key='domain'>
+        <span class='pv-chip'>
+          <span x-text='domain'></span>
+          <button class='pv-chip-x' @click='removeDomain(domain)' :aria-label="'Stop keeping ' + domain">&times;</button>
+        </span>
+      </template>
+    </div>
+
+    <p class='pv-keep-note' x-show='keptDomains.length === 0' x-cloak>
+      Nothing kept yet. Clearing cookies will sign you out of every site. Add
+      the handful you never want to log into again &mdash; a subdomain match is
+      included, so <strong>github.com</strong> also covers
+      <strong>gist.github.com</strong>.
+    </p>
+  </div>
+</div>
+
+<div class='pv-note'>
+  Safari stores its cookies in a single binary file rather than a database, so
+  it is the one browser where the keep-list cannot apply &mdash; clearing
+  Safari cookies clears all of them. Passwords are never touched: they live in
+  the Keychain, which nothing here reads.
+</div>
+
+<style>
+.pv-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+.pv-spacer { flex: 1; }
+.pv-row-on { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.pv-running { margin-bottom: 14px; padding: 10px 14px; border: .5px solid color-mix(in srgb, var(--orange) 32%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--orange) 10%, var(--surface)); color: var(--secondary); font-size: 11px; line-height: 1.5; }
+.pv-running strong { color: var(--ink); }
+.pv-keep { padding: 14px 16px; }
+.pv-keep-add { display: flex; gap: 6px; margin-bottom: 10px; }
+.pv-input { height: 28px; width: 240px; padding: 0 8px; border: .5px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-family: inherit; font-size: 12px; }
+.pv-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pv-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pv-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px 3px 9px; border: .5px solid color-mix(in srgb, var(--green) 30%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--green) 10%, transparent); color: var(--green); font-size: 11px; font-weight: 500; }
+.pv-chip-x { border: 0; background: none; color: inherit; cursor: pointer; font-family: inherit; font-size: 13px; line-height: 1; opacity: .7; }
+.pv-chip-x:hover { opacity: 1; }
+.pv-keep-note { max-width: 62ch; color: var(--secondary); font-size: 11px; line-height: 1.6; }
+.pv-note { margin-top: 12px; padding: 12px 16px; border: .5px solid var(--line); border-radius: 8px; background: var(--surface-soft); color: var(--tertiary); font-size: 11px; line-height: 1.5; }
+</style>

@@ -9,7 +9,7 @@ import { categorizeFile } from './categories'
  * snapshots, and the Trash (which has its own screen and its own "empty"
  * action).
  */
-const SKIP_DIRS = new Set([
+export const SKIP_DIRS: ReadonlySet<string> = new Set([
   '.Spotlight-V100', '.fseventsd', '.DocumentRevisions-V100', '.TemporaryItems',
   '.PKInstallSandboxManager', '.PKInstallSandboxManager-SystemSoftware',
   '.Trashes', '.Trash', '.vol', '.file', '.MobileBackups',
@@ -36,7 +36,7 @@ const SKIP_DIRS = new Set([
  * Usage view already sizes and offers the whole directory. Pass
  * `includeDependencies` to walk them anyway.
  */
-const DEPENDENCY_DIRS = new Set([
+export const DEPENDENCY_DIRS: ReadonlySet<string> = new Set([
   'node_modules', '.git', '.svn', '.hg',
   'DerivedData', 'Pods', 'Carthage', '.build',
   'target', '.gradle', '.m2', '.cargo', '.rustup',
@@ -54,7 +54,7 @@ const DEPENDENCY_DIRS = new Set([
  * Photos library the user is actually looking for, so each is reported as one
  * entry whose size is the sum of everything inside it.
  */
-const BUNDLE_SUFFIXES = [
+export const BUNDLE_SUFFIXES: readonly string[] = [
   '.app', '.photoslibrary', '.sparsebundle', '.framework', '.bundle',
   '.xcarchive', '.imovielibrary', '.fcpbundle', '.logicx', '.band',
   '.rtfd', '.aplibrary', '.tvlibrary', '.musiclibrary', '.pbproj',

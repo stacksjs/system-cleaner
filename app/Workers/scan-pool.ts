@@ -7,7 +7,7 @@
  * a `Worker` stuck inside a blocking `readdir` cannot be.
  */
 
-import type { LargeFile } from '@system-cleaner/disk'
+import type { DuplicateGroup, LargeFile } from '@system-cleaner/disk'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
@@ -31,7 +31,17 @@ type LargeFilesRequest = {
   progressFile?: string
 }
 
-type ScanRequest = TreeScanRequest | LargeFilesRequest
+type DuplicatesRequest = {
+  kind: 'duplicates'
+  roots: string[]
+  minSizeBytes?: number
+  limit?: number
+  timeoutMs?: number
+  includeDependencies?: boolean
+  progressFile?: string
+}
+
+type ScanRequest = TreeScanRequest | LargeFilesRequest | DuplicatesRequest
 
 export type TreeScanResult = {
   success: boolean
@@ -55,7 +65,20 @@ export type LargeFilesResult = {
   error?: string
 }
 
-type ScanResult = TreeScanResult | LargeFilesResult
+export type DuplicatesResult = {
+  success: boolean
+  groups?: DuplicateGroup[]
+  scanned?: number
+  groupCount?: number
+  duplicateCount?: number
+  wastedBytes?: number
+  wastedFormatted?: string
+  truncated?: boolean
+  scanTime?: string
+  error?: string
+}
+
+type ScanResult = TreeScanResult | LargeFilesResult | DuplicatesResult
 
 /**
  * How to invoke the scanner.
@@ -274,4 +297,11 @@ export function runLargeFileScan(
   hardTimeoutMs: number,
 ): Promise<LargeFilesResult> {
   return enqueue({ kind: 'large-files', ...request }, hardTimeoutMs) as Promise<LargeFilesResult>
+}
+
+export function runDuplicateScan(
+  request: Omit<DuplicatesRequest, 'kind'>,
+  hardTimeoutMs: number,
+): Promise<DuplicatesResult> {
+  return enqueue({ kind: 'duplicates', ...request }, hardTimeoutMs) as Promise<DuplicatesResult>
 }

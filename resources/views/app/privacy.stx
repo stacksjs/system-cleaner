@@ -1,0 +1,213 @@
+@extends('layouts/app')
+@section('nav', 'privacy')
+@section('body')
+
+<!--
+  Privacy — browser data and the traces macOS keeps.
+
+  No `//` comments and no double quotes inside this `x-data`: STX flattens the
+  attribute onto one line, so either would take the whole object down and leave
+  the page rendering empty bindings with nothing in the console.
+  `tests/xdata-parses.test.ts` guards both.
+
+  Commentary that belongs to this state:
+
+  - A row whose browser is open is shown, disabled, with the reason. Writing to
+    a live profile does not clear history, it corrupts the profile — and the
+    damage surfaces days later, at the next launch. Hiding the row instead
+    would just look like a bug.
+  - `selectSafe()` picks the kinds that cost nothing: caches, history,
+    downloads, service workers. Cookies, sessions, local storage and autofill
+    are left out, because a one-click clean that signs you out of everything is
+    a one-click clean nobody presses twice.
+  - The keep-list is what makes the cookie box usable at all. It is edited on
+    this screen rather than buried in settings, next to the checkbox it
+    qualifies.
+-->
+<div x-data="{
+  items: [],
+  running: [],
+  keptDomains: [],
+  keptCookieCount: 0,
+  selected: [],
+  loading: true,
+  cleaning: false,
+  newDomain: '',
+  toasts: [],
+  toastId: 0,
+
+  init() { this.refresh(); },
+
+  post(endpoint, data) {
+    return fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data || {}),
+    }).then(function(r) {
+      if (!r.ok && r.status !== 400 && r.status !== 403) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  },
+
+  refresh() {
+    var self = this;
+    this.post('/api/privacy-scan').then(function(r) {
+      self.loading = false;
+      if (!r.success) return;
+      self.items = r.items || [];
+      self.running = r.running || [];
+      self.keptDomains = r.keptDomains || [];
+      self.keptCookieCount = r.keptCookieCount || 0;
+      var present = {};
+      self.items.forEach(function(item) { present[item.id] = true; });
+      self.selected = self.selected.filter(function(id) { return present[id]; });
+    }).catch(function() { self.loading = false; });
+  },
+
+  isBusy(item) { return this.running.indexOf(item.browser) !== -1; },
+  browsers() {
+    var seen = [];
+    this.items.forEach(function(item) { if (seen.indexOf(item.browser) === -1) seen.push(item.browser); });
+    return seen;
+  },
+  rowsFor(browser) { return this.items.filter(function(item) { return item.browser === browser; }); },
+  iconFor(browser) {
+    var match = this.items.filter(function(item) { return item.browser === browser; })[0];
+    return match ? match.browserIcon : 'i-f7-globe';
+  },
+  bytesFor(browser) {
+    return this.rowsFor(browser).reduce(function(sum, item) { return sum + item.sizeBytes; }, 0);
+  },
+
+  isOn(id) { return this.selected.indexOf(id) !== -1; },
+  toggle(id) {
+    this.selected = this.selected.indexOf(id) === -1
+      ? this.selected.concat([id])
+      : this.selected.filter(function(x) { return x !== id; });
+  },
+
+  selectableIds() {
+    var self = this;
+    return this.items.filter(function(item) { return !self.isBusy(item); }).map(function(item) { return item.id; });
+  },
+  safeIds() {
+    var self = this;
+    return this.items
+      .filter(function(item) { return !self.isBusy(item) && !item.sensitive; })
+      .map(function(item) { return item.id; });
+  },
+  selectSafe() { this.selected = this.safeIds(); },
+  selectAll() {
+    var ids = this.selectableIds();
+    this.selected = this.selected.length === ids.length ? [] : ids;
+  },
+  clearSelection() { this.selected = []; },
+
+  selectedBytes() {
+    var picked = {};
+    this.selected.forEach(function(id) { picked[id] = true; });
+    return this.items.reduce(function(sum, item) { return picked[item.id] ? sum + item.sizeBytes : sum; }, 0);
+  },
+  totalBytes() { return this.items.reduce(function(sum, item) { return sum + item.sizeBytes; }, 0); },
+  selectedSensitive() {
+    var picked = {};
+    this.selected.forEach(function(id) { picked[id] = true; });
+    return this.items.filter(function(item) { return picked[item.id] && item.sensitive; });
+  },
+
+  async clean() {
+    if (this.cleaning || this.selected.length === 0) return;
+    var sensitive = this.selectedSensitive().map(function(item) { return item.browser + ' ' + item.label.toLowerCase(); });
+    if (!await window.nativeConfirm({
+      title: 'Clear ' + this.selected.length + ' item(s)?',
+      message: sensitive.length > 0
+        ? 'This cannot be undone. It includes ' + sensitive.slice(0, 3).join(', ') + (sensitive.length > 3 ? ' and more' : '') + ', so you will lose those logins or tabs.'
+        : 'This cannot be undone. Nothing here is a document - it is cache, history and site data browsers rebuild as you use them.',
+      confirmLabel: 'Clear',
+      destructive: true,
+    })) return;
+
+    var self = this;
+    this.cleaning = true;
+    this.post('/api/privacy-clean', { ids: this.selected }).then(function(r) {
+      self.cleaning = false;
+      if ((r.cleaned || []).length > 0)
+        self.toast('Cleared ' + r.cleaned.length + ' item(s) - freed ' + r.freedFormatted, 'success');
+      if (r.keptCookies > 0)
+        self.toast('Kept ' + r.keptCookies + ' cookie(s) for your keep-list', 'info');
+      (r.skipped || []).slice(0, 2).forEach(function(entry) { self.toast(entry.reason, 'info'); });
+      (r.errors || []).slice(0, 2).forEach(function(entry) { self.toast(entry.error, 'error'); });
+      self.selected = [];
+      self.refresh();
+    }).catch(function(err) {
+      self.cleaning = false;
+      self.toast('Clear failed: ' + (err && err.message ? err.message : 'network'), 'error');
+    });
+  },
+
+  addDomain() {
+    var value = this.newDomain.trim();
+    if (!value) return;
+    var self = this;
+    this.post('/api/keep-cookie', { domain: value }).then(function(r) {
+      if (!r.success) { self.toast(r.error || 'That does not look like a domain', 'error'); return; }
+      self.newDomain = '';
+      self.toast('Keeping cookies for ' + r.domain, 'success');
+      self.refreshKept();
+    }).catch(function() { self.toast('Could not save that domain', 'error'); });
+  },
+
+  removeDomain(domain) {
+    var self = this;
+    this.post('/api/unkeep-cookie', { domain: domain }).then(function() {
+      self.refreshKept();
+    }).catch(function() { self.toast('Could not remove that domain', 'error'); });
+  },
+
+  refreshKept() {
+    var self = this;
+    this.post('/api/kept-cookies').then(function(r) {
+      if (!r.success) return;
+      self.keptDomains = r.domains || [];
+      self.keptCookieCount = r.keptCookieCount || 0;
+    }).catch(function() {});
+  },
+
+  fmtBytes(b) {
+    if (!b) return '0 B';
+    if (b >= 1e12) return (b/1e12).toFixed(1)+' TB';
+    if (b >= 1e9) return (b/1e9).toFixed(1)+' GB';
+    if (b >= 1e6) return (b/1e6).toFixed(1)+' MB';
+    if (b >= 1e3) return (b/1e3).toFixed(1)+' KB';
+    return b+' B';
+  },
+
+  toast(msg, type) {
+    var id = ++this.toastId;
+    this.toasts = [...this.toasts, { id: id, msg: msg, type: type || 'info' }];
+    var self = this;
+    setTimeout(function() { self.toasts = self.toasts.filter(function(t) { return t.id !== id; }); }, 5000);
+  },
+}">
+
+<div class='toast-area'>
+  <template x-for='toast in toasts' :key='toast.id'>
+    <div class='toast'>
+      <span class='toast-glyph' :class="toast.type === 'success' ? 'i-f7-checkmark-alt-circle-fill' : toast.type === 'error' ? 'i-f7-xmark-circle-fill' : 'i-f7-exclamationmark-triangle-fill'" aria-hidden='true'></span>
+      <span x-text='toast.msg'></span>
+    </div>
+  </template>
+</div>
+
+<div class='main-header'>
+  <div class='main-title'>Privacy</div>
+  <div class='main-subtitle'>Clear browsing history, cookies and the traces macOS keeps &mdash; while staying signed in where you want to</div>
+</div>
+<div class='main-content'>
+  <div x-show='loading' class='empty-state'>Reading browser profiles&hellip;</div>
+  <div x-show='!loading' x-cloak>
+    <PrivacyPanel />
+  </div>
+</div>
+</div>
+@endsection

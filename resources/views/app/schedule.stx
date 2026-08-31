@@ -1,0 +1,208 @@
+@extends('layouts/app')
+@section('nav', 'schedule')
+@section('body')
+
+<!--
+  Scheduled cleaning.
+
+  No `//` comments and no double quotes inside this `x-data`: STX flattens the
+  attribute onto one line, and either would take the whole object down with
+  nothing in the console. `tests/xdata-parses.test.ts` guards both.
+
+  Commentary that belongs to this state:
+
+  - `installed` and `loaded` come from launchd, not from the saved row. The row
+    is what the user asked for; launchd is what will actually happen. Reporting
+    the row alone would let a plist the user deleted by hand leave this screen
+    claiming a clean is scheduled.
+  - Only `safe` targets can be picked. A schedule is unattended by definition,
+    and the caution targets are the ones holding chat history and downloaded
+    models — content nothing rebuilds. Those stay a deliberate, on-screen
+    choice in Quick Clean.
+  - Saving with nothing selected disables the agent rather than scheduling an
+    empty run. A job that fires weekly to do nothing is worse than no job.
+-->
+<div x-data="{
+  spec: { enabled: false, frequency: 'weekly', hour: 3, minute: 0, weekday: 0, day: 1 },
+  targetIds: [],
+  includePrivacy: false,
+  emptyTrash: false,
+  targets: [],
+  filter: '',
+  description: '',
+  installed: false,
+  loaded: false,
+  lastRunAt: null,
+  lastFreedFormatted: '0 B',
+  lastStatus: null,
+  log: '',
+  loading: true,
+  saving: false,
+  runningNow: false,
+  toasts: [],
+  toastId: 0,
+
+  init() {
+    var self = this;
+    Promise.all([
+      this.post('/api/schedule'),
+      this.post('/api/cleanup-targets'),
+    ]).then(function(results) {
+      var schedule = results[0];
+      var targets = results[1];
+      if (schedule.success) self.apply(schedule);
+      if (targets.success) self.targets = (targets.targets || []).filter(function(t) { return t.risk !== 'caution'; });
+      self.loading = false;
+    }).catch(function() { self.loading = false; });
+  },
+
+  post(endpoint, data) {
+    return fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data || {}),
+    }).then(function(r) {
+      if (!r.ok && r.status !== 400) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  },
+
+  apply(payload) {
+    this.spec = payload.spec;
+    this.targetIds = payload.targetIds || [];
+    this.includePrivacy = !!payload.includePrivacy;
+    this.emptyTrash = !!payload.emptyTrash;
+    this.description = payload.description || '';
+    this.installed = !!payload.installed;
+    this.loaded = !!payload.loaded;
+    this.lastRunAt = payload.lastRunAt;
+    this.lastFreedFormatted = payload.lastFreedFormatted || '0 B';
+    this.lastStatus = payload.lastStatus;
+    this.log = payload.log || '';
+  },
+
+  set(key, value) { this.spec = Object.assign({}, this.spec, { [key]: value }); },
+
+  visibleTargets() {
+    var needle = this.filter.trim().toLowerCase();
+    if (!needle) return this.targets;
+    return this.targets.filter(function(t) {
+      return t.name.toLowerCase().indexOf(needle) !== -1
+        || t.category.toLowerCase().indexOf(needle) !== -1;
+    });
+  },
+
+  categories() {
+    var seen = [];
+    this.targets.forEach(function(t) { if (seen.indexOf(t.category) === -1) seen.push(t.category); });
+    return seen.sort();
+  },
+
+  isOn(id) { return this.targetIds.indexOf(id) !== -1; },
+  toggle(id) {
+    this.targetIds = this.targetIds.indexOf(id) === -1
+      ? this.targetIds.concat([id])
+      : this.targetIds.filter(function(x) { return x !== id; });
+  },
+
+  selectCategory(category) {
+    var ids = this.targets.filter(function(t) { return t.category === category; }).map(function(t) { return t.id; });
+    var touched = {};
+    ids.forEach(function(id) { touched[id] = true; });
+    var self = this;
+    if (ids.every(function(id) { return self.isOn(id); })) {
+      this.targetIds = this.targetIds.filter(function(id) { return !touched[id]; });
+      return;
+    }
+    this.targetIds = this.targetIds.filter(function(id) { return !touched[id]; }).concat(ids);
+  },
+
+  clearTargets() { this.targetIds = []; },
+
+  hasWork() { return this.targetIds.length > 0 || this.includePrivacy || this.emptyTrash; },
+
+  save() {
+    if (this.saving) return;
+    var self = this;
+    this.saving = true;
+    this.post('/api/schedule-save', {
+      spec: this.spec,
+      targetIds: this.targetIds,
+      includePrivacy: this.includePrivacy,
+      emptyTrash: this.emptyTrash,
+    }).then(function(r) {
+      self.saving = false;
+      self.apply(r);
+      if (r.error) { self.toast('Saved, but launchd refused it: ' + r.error, 'error'); return; }
+      self.toast(r.installed ? 'Scheduled - ' + r.description : 'Automatic cleaning is off', 'success');
+    }).catch(function(err) {
+      self.saving = false;
+      self.toast('Could not save: ' + (err && err.message ? err.message : 'network'), 'error');
+    });
+  },
+
+  async runNow() {
+    if (this.runningNow || !this.hasWork()) return;
+    if (!await window.nativeConfirm({
+      title: 'Run the scheduled clean now?',
+      message: 'It removes exactly what the schedule below would remove, immediately. Cleaned items are not recoverable from the Trash.',
+      confirmLabel: 'Run Now',
+      destructive: true,
+    })) return;
+
+    var self = this;
+    this.runningNow = true;
+    this.post('/api/schedule-run').then(function(r) {
+      self.runningNow = false;
+      self.toast('Cleaned ' + r.targets + ' item(s) - freed ' + r.freedFormatted, r.errors && r.errors.length ? 'info' : 'success');
+      (r.errors || []).slice(0, 2).forEach(function(message) { self.toast(message, 'error'); });
+      self.post('/api/schedule').then(function(payload) { if (payload.success) self.apply(payload); });
+    }).catch(function(err) {
+      self.runningNow = false;
+      self.toast('Run failed: ' + (err && err.message ? err.message : 'network'), 'error');
+    });
+  },
+
+  fmtDate(value) {
+    if (!value) return 'Never';
+    var d = new Date(value);
+    if (isNaN(d.getTime())) return 'Never';
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  },
+
+  shortPath(p) {
+    if (!p || p.indexOf('/Users/') !== 0) return p;
+    var rest = p.slice(7);
+    var slash = rest.indexOf('/');
+    return '~' + (slash >= 0 ? rest.slice(slash) : '');
+  },
+
+  toast(msg, type) {
+    var id = ++this.toastId;
+    this.toasts = [...this.toasts, { id: id, msg: msg, type: type || 'info' }];
+    var self = this;
+    setTimeout(function() { self.toasts = self.toasts.filter(function(t) { return t.id !== id; }); }, 5000);
+  },
+}">
+
+<div class='toast-area'>
+  <template x-for='toast in toasts' :key='toast.id'>
+    <div class='toast'>
+      <span class='toast-glyph' :class="toast.type === 'success' ? 'i-f7-checkmark-alt-circle-fill' : toast.type === 'error' ? 'i-f7-xmark-circle-fill' : 'i-f7-exclamationmark-triangle-fill'" aria-hidden='true'></span>
+      <span x-text='toast.msg'></span>
+    </div>
+  </template>
+</div>
+
+<div class='main-header'>
+  <div class='main-title'>Schedule</div>
+  <div class='main-subtitle'>Clean automatically, whether or not the app is open</div>
+</div>
+<div class='main-content'>
+  <div x-show='loading' class='empty-state'>Reading your schedule&hellip;</div>
+  <div x-show='!loading' x-cloak>
+    <SchedulePanel />
+  </div>
+</div>
+</div>
+@endsection

@@ -30,10 +30,24 @@ const SCREENS: Screen[] = [
   { label: 'Processes', href: '/app/processes' },
   { label: 'Disk Usage', href: '/app/disk' },
   { label: 'Large Files', href: '/app/large-files' },
+  { label: 'Duplicates', href: '/app/duplicates' },
   { label: 'System', href: '/app/system' },
+  { label: 'Maintenance', href: '/app/maintenance' },
   { label: 'Updates', href: '/app/updates' },
   { label: 'Quick Clean', href: '/app/cleanup' },
+  { label: 'Privacy', href: '/app/privacy' },
+  { label: 'Uninstaller', href: '/app/uninstall' },
+  { label: 'Schedule', href: '/app/schedule' },
 ]
+
+/**
+ * There are only nine of ⌘1..⌘9, and more screens than that.
+ *
+ * The first nine keep their shortcut, in rail order, so the numbers still
+ * match what the eye sees. The rest are in the menu without one — which is
+ * how AppKit itself handles a Window menu longer than the digits.
+ */
+const MAX_SHORTCUTS = 9
 
 /**
  * Go to a screen the way clicking the rail would.
@@ -79,7 +93,7 @@ menu.set({
         { separator: true },
         ...SCREENS.map((screen, index) => ({
           label: screen.label,
-          shortcut: `cmd+${index + 1}`,
+          ...(index < MAX_SHORTCUTS ? { shortcut: `cmd+${index + 1}` } : {}),
           onClick: () => go(screen.href),
         })),
         { separator: true },

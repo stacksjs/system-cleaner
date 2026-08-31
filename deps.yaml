@@ -1,8 +1,12 @@
 dependencies:
-  # 0.0.83 carries the menu fix (a role item with no id was skipped), but the
-  # pantry registry has not indexed 0.0.82 or 0.0.83 — both answer "not found in
-  # registry" while the GitHub release has every asset. Nothing here needs it:
-  # @stacksjs/desktop sends an id on every item since 0.2.249, so the native
-  # fallback is defence in depth. Bump when the registry catches up.
-  craft-native.org: 0.0.81
+  # Pinned exactly, not `^0.0.83`: this is the runtime the shipped .app embeds,
+  # and a caret would let a build pick up a different one without the bundle
+  # being rebuilt against it.
+  #
+  # 0.0.83 carries the menu fix — an item declared by role alone is built rather
+  # than silently skipped. Nothing here depends on it, since @stacksjs/desktop
+  # sends an id on every item as of 0.2.249, so it is defence in depth for
+  # hand-written payloads. (0.0.82 does not exist as far as pantry is concerned:
+  # its release shipped without the macOS binaries.)
+  craft-native.org: 0.0.83
   bun.sh: ^1.3.14

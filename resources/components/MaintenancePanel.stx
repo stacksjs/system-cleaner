@@ -1,0 +1,174 @@
+<!--
+  Maintenance — tasks grouped by what they touch, plus housekeeping and the
+  shredder.
+
+  Each task says what it *fixes* rather than what it does. "Rebuild Launch
+  Services" means nothing to most people; "fixes an Open With menu full of apps
+  you deleted" is the reason someone came looking.
+-->
+<div class='card-row'>
+  <div class='card'>
+    <div class='card-label'>Housekeeping</div>
+    <div class='card-value' x-text="junkLoading ? '…' : ((dsStoreCount || 0) + incompleteDownloads.length)">…</div>
+    <div class='card-detail'>Stray files worth sweeping</div>
+  </div>
+  <div class='card'>
+    <div class='card-label'>Tasks Available</div>
+    <div class='card-value' x-text='tasks.length'>0</div>
+    <div class='card-detail'
+      x-text="tasks.filter(function(t) { return !t.requiresSudo; }).length + ' run from here, the rest need Terminal'"></div>
+  </div>
+  <div class='card'>
+    <div class='card-label'>Queued to Erase</div>
+    <div class='card-value' :style="shredTargets.length ? 'color: var(--red);' : ''" x-text='shredTargets.length'>0</div>
+    <div class='card-detail'>Secure erase, no Trash step</div>
+  </div>
+</div>
+
+<!-- Housekeeping. Two one-click sweeps that do not warrant a screen each. -->
+<div class='tbl-wrap'>
+  <div class='tbl-bar'>
+    <div>
+      <span class='tbl-title'>Housekeeping</span>
+      <span class='tbl-count'>small sweeps, run on demand</span>
+    </div>
+    <button class='btn btn-sm' data-rescan @click='refreshJunk()' :disabled='junkLoading'>Rescan</button>
+  </div>
+  <table>
+    <tbody>
+      <tr>
+        <td>
+          <div class='item-row'>
+            <span class='item-glyph i-f7-doc-fill' aria-hidden='true'></span>
+            <span class='item-name'>.DS_Store files</span>
+          </div>
+          <div class='item-sub'>Finder's per-folder view settings, scattered through your home folder and into every archive you share</div>
+        </td>
+        <td style='width: 120px; font-variant-numeric: tabular-nums;'
+            x-text="junkLoading ? '…' : (dsStoreCount === null ? '—' : dsStoreCount + ' files')">…</td>
+        <td class='action-cell' style='width: 110px;'>
+          <button class='btn btn-sm' @click='cleanDsStore()' :disabled='junkBusy || !dsStoreCount'>Remove</button>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <div class='item-row'>
+            <span class='item-glyph i-f7-arrow-down-circle-fill' aria-hidden='true'></span>
+            <span class='item-name'>Unfinished downloads</span>
+          </div>
+          <div class='item-sub'>Half-downloaded <strong>.download</strong> and <strong>.crdownload</strong> files. Anything still downloading is skipped</div>
+        </td>
+        <td style='font-variant-numeric: tabular-nums;'
+            x-text="junkLoading ? '…' : (incompleteDownloads.length + ' files · ' + fmtBytes(incompleteBytes))">…</td>
+        <td class='action-cell'>
+          <button class='btn btn-sm' @click='cleanIncomplete()' :disabled='junkBusy || incompleteDownloads.length === 0'>Delete</button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<template x-for='category in categories()' :key='category'>
+  <div class='tbl-wrap'>
+    <div class='tbl-bar'>
+      <span class='tbl-title' x-text='categoryLabel(category)'>Tasks</span>
+    </div>
+    <table>
+      <tbody>
+        <template x-for='task in tasksIn(category)' :key='task.id'>
+          <tr>
+            <td>
+              <div class='item-row'>
+                <span class='item-glyph' :class='task.icon' aria-hidden='true'></span>
+                <span class='item-name' x-text='task.name'></span>
+                <span class='badge badge-orange' x-show='task.requiresSudo' x-cloak>needs Terminal</span>
+              </div>
+              <div class='item-sub' x-text='task.effect'></div>
+              <!-- Half of these print nothing on success, so the recorded
+                   output is the only difference between "done" and "did
+                   nothing at all". -->
+              <div class='mt-output' x-show='resultFor(task.id) && resultFor(task.id).output' x-cloak
+                   x-text="resultFor(task.id) ? resultFor(task.id).output : ''"></div>
+            </td>
+            <td style='width: 120px;'>
+              <span class='badge badge-green' x-show='resultFor(task.id) && resultFor(task.id).success' x-cloak>done</span>
+              <span class='badge badge-red' x-show='resultFor(task.id) && !resultFor(task.id).success && !resultFor(task.id).needsSudo' x-cloak>failed</span>
+              <span class='dim' style='font-size: 11px;' x-show='!resultFor(task.id)'>not run</span>
+            </td>
+            <td class='action-cell' style='width: 132px;'>
+              <button class='btn btn-sm' x-show='!task.requiresSudo' @click='run(task)' :disabled='isRunning(task.id)'
+                x-text="isRunning(task.id) ? 'Running…' : 'Run'">Run</button>
+              <button class='btn btn-sm btn-icon' x-show='task.requiresSudo' x-cloak @click='copyCommand(task)'>
+                <span class='i-f7-doc-on-doc' aria-hidden='true'></span>
+                Copy Command
+              </button>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+</template>
+
+<!-- The shredder. Last on the page, and the only thing here with no undo. -->
+<div class='tbl-wrap'>
+  <div class='tbl-bar'>
+    <div>
+      <span class='tbl-title'>Secure Erase</span>
+      <span class='tbl-count'>overwrite, then delete</span>
+    </div>
+    <button class='btn btn-sm btn-icon' @click='pickShredTargets()'>
+      <span class='i-f7-folder' aria-hidden='true'></span>
+      Choose Items&hellip;
+    </button>
+  </div>
+
+  <div class='mt-shred'>
+    <div class='mt-shred-list' x-show='shredTargets.length > 0' x-cloak>
+      <template x-for='target in shredTargets' :key='target'>
+        <div class='mt-shred-row'>
+          <span class='i-f7-doc-fill mt-shred-glyph' aria-hidden='true'></span>
+          <span class='mt-shred-path' :title='target' x-text='shortPath(target)'></span>
+          <button class='btn btn-sm' @click='dropShredTarget(target)'>Remove</button>
+        </div>
+      </template>
+      <div class='mt-shred-actions'>
+        <button class='btn btn-danger btn-icon' @click='shred()' :disabled='shredding'>
+          <span class='i-f7-flame-fill' aria-hidden='true'></span>
+          <span x-text="shredding ? 'Erasing…' : 'Erase ' + shredTargets.length + ' Item(s)'">Erase</span>
+        </button>
+      </div>
+    </div>
+
+    <p class='mt-shred-note' x-show='shredTargets.length === 0' x-cloak>
+      Choose files or folders to overwrite with random data and delete. Nothing
+      goes to the Trash and nothing can be brought back.
+    </p>
+
+    <!-- Said plainly, because the alternative is selling a guarantee the
+         hardware does not give. Apple removed Secure Empty Trash for this
+         reason. -->
+    <div class='mt-shred-caveat'>
+      <strong>What this can and cannot promise.</strong>
+      Overwriting defeats every undelete tool that works through the filesystem,
+      which is what shredding is normally for. It cannot promise the original
+      bytes are gone from the SSD: APFS writes copies rather than replacing
+      blocks, and the drive's controller moves data around underneath that. For
+      the stronger guarantee, turn on FileVault &mdash; then the leftover blocks
+      are unreadable whether or not they were overwritten.
+    </div>
+  </div>
+</div>
+
+<style>
+.mt-output { margin-top: 6px; max-height: 120px; overflow: auto; padding: 6px 8px; border-radius: 5px; background: var(--surface-soft); color: var(--secondary); font: 10px/1.5 'SF Mono', Menlo, monospace; white-space: pre-wrap; }
+.mt-shred { padding: 14px 16px; }
+.mt-shred-list { display: flex; flex-direction: column; gap: 6px; }
+.mt-shred-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: .5px solid var(--line); border-radius: 6px; background: var(--surface-soft); }
+.mt-shred-glyph { width: 13px; height: 13px; flex-shrink: 0; color: var(--red); }
+.mt-shred-path { flex: 1; overflow: hidden; font: 11px 'SF Mono', Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.mt-shred-actions { margin-top: 6px; }
+.mt-shred-note { max-width: 60ch; color: var(--secondary); font-size: 11px; line-height: 1.6; }
+.mt-shred-caveat { margin-top: 12px; max-width: 74ch; padding: 10px 12px; border: .5px solid color-mix(in srgb, var(--orange) 30%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--orange) 8%, var(--surface)); color: var(--secondary); font-size: 11px; line-height: 1.6; }
+.mt-shred-caveat strong { color: var(--ink); }
+</style>

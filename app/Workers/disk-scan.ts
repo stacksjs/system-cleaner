@@ -32,7 +32,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import process from 'node:process'
-import { scanDirectory, scanLargeFiles } from '@system-cleaner/disk'
+import { findDuplicates, scanDirectory, scanLargeFiles } from '@system-cleaner/disk'
 
 interface TreeScanRequest {
   kind: 'tree'
@@ -54,7 +54,18 @@ interface LargeFilesRequest {
   progressFile?: string
 }
 
-export type ScanRequest = TreeScanRequest | LargeFilesRequest
+interface DuplicatesRequest {
+  kind: 'duplicates'
+  roots: string[]
+  minSizeBytes?: number
+  limit?: number
+  timeoutMs?: number
+  includeDependencies?: boolean
+  /** File to rewrite with `{ scanned, path }` as the walk runs. */
+  progressFile?: string
+}
+
+export type ScanRequest = TreeScanRequest | LargeFilesRequest | DuplicatesRequest
 
 function isPositiveInt(value: unknown, max = Number.MAX_SAFE_INTEGER): boolean {
   return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= max
@@ -87,6 +98,20 @@ export function isValidRequest(value: unknown): value is ScanRequest {
     if (typeof v.home !== 'string' || v.home.length === 0)
       return false
     if (v.maxDepth !== undefined && !isPositiveInt(v.maxDepth))
+      return false
+    return true
+  }
+
+  if (v.kind === 'duplicates') {
+    if (!Array.isArray(v.roots) || v.roots.length === 0)
+      return false
+    if (!v.roots.every(root => typeof root === 'string' && root.length > 0))
+      return false
+    if (v.minSizeBytes !== undefined && (typeof v.minSizeBytes !== 'number' || !Number.isFinite(v.minSizeBytes) || v.minSizeBytes < 0))
+      return false
+    if (v.limit !== undefined && !isPositiveInt(v.limit, 5000))
+      return false
+    if (v.includeDependencies !== undefined && typeof v.includeDependencies !== 'boolean')
       return false
     return true
   }
@@ -139,6 +164,29 @@ function progressReporter(file: string | undefined): ((scanned: number, path: st
 
 export function runScan(request: ScanRequest): Record<string, unknown> {
   const onProgress = progressReporter(request.progressFile)
+
+  if (request.kind === 'duplicates') {
+    const result = findDuplicates({
+      roots: request.roots,
+      minSizeBytes: request.minSizeBytes,
+      limit: request.limit,
+      timeoutMs: request.timeoutMs,
+      includeDependencies: request.includeDependencies,
+      onProgress,
+    })
+
+    return {
+      success: true,
+      groups: result.groups,
+      scanned: result.scanned,
+      groupCount: result.groupCount,
+      duplicateCount: result.duplicateCount,
+      wastedBytes: result.wastedBytes,
+      wastedFormatted: result.wastedFormatted,
+      truncated: result.truncated,
+      scanTime: formatDuration(result.scanTimeMs),
+    }
+  }
 
   if (request.kind === 'large-files') {
     const result = scanLargeFiles({

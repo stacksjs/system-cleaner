@@ -1,0 +1,218 @@
+<!--
+  Schedule — when the automatic clean runs, and what it does.
+
+  The job is a launchd agent rather than a timer inside the app, for the reason
+  that decides it: the app is not running at 3am. A `setInterval` only fires
+  while the window is open, which is exactly when the Clean button is already
+  in front of you.
+-->
+<div class='card-row'>
+  <div class='card'>
+    <div class='card-label'>Status</div>
+    <div class='card-value' :style="loaded ? 'color: var(--green);' : ''" x-text="loaded ? 'On' : 'Off'">Off</div>
+    <div class='card-detail' x-text="loaded ? description : 'Nothing is scheduled'">Nothing is scheduled</div>
+  </div>
+  <div class='card'>
+    <div class='card-label'>Last Run</div>
+    <div class='card-value' x-text='fmtDate(lastRunAt)'>Never</div>
+    <div class='card-detail' x-text="lastStatus || 'No automatic clean has run yet'">No automatic clean has run yet</div>
+  </div>
+  <div class='card'>
+    <div class='card-label'>Freed Last Time</div>
+    <div class='card-value' :style="lastRunAt ? 'color: var(--green);' : ''" x-text='lastFreedFormatted'>0 B</div>
+    <div class='card-detail' x-text="targetIds.length + ' target(s) selected'">0 targets selected</div>
+  </div>
+</div>
+
+<div class='tbl-wrap'>
+  <div class='tbl-bar'>
+    <div>
+      <span class='tbl-title'>When</span>
+      <span class='tbl-count' x-text='description'></span>
+    </div>
+    <label class='sc-switch'>
+      <input type='checkbox' class='check' :checked='spec.enabled' @change="set('enabled', $event.target.checked)" />
+      <span x-text="spec.enabled ? 'Enabled' : 'Disabled'">Disabled</span>
+    </label>
+  </div>
+
+  <div class='sc-when'>
+    <label class='sc-field'>
+      <span class='sc-field-label'>Frequency</span>
+      <select class='sc-input' :value='spec.frequency' @change="set('frequency', $event.target.value)">
+        <option value='daily'>Every day</option>
+        <option value='weekly'>Every week</option>
+        <option value='monthly'>Every month</option>
+      </select>
+    </label>
+
+    <label class='sc-field' x-show="spec.frequency === 'weekly'" x-cloak>
+      <span class='sc-field-label'>Day</span>
+      <select class='sc-input' :value='spec.weekday' @change="set('weekday', Number($event.target.value))">
+        <option value='0'>Sunday</option>
+        <option value='1'>Monday</option>
+        <option value='2'>Tuesday</option>
+        <option value='3'>Wednesday</option>
+        <option value='4'>Thursday</option>
+        <option value='5'>Friday</option>
+        <option value='6'>Saturday</option>
+      </select>
+    </label>
+
+    <!-- Capped at the 28th: launchd simply never fires a job set to the 31st
+         in February, so a monthly clean would skip most of the year. -->
+    <label class='sc-field' x-show="spec.frequency === 'monthly'" x-cloak>
+      <span class='sc-field-label'>Date</span>
+      <select class='sc-input' :value='spec.day' @change="set('day', Number($event.target.value))">
+        <template x-for='n in 28' :key='n'>
+          <option :value='n' x-text='n'></option>
+        </template>
+      </select>
+    </label>
+
+    <label class='sc-field'>
+      <span class='sc-field-label'>Hour</span>
+      <select class='sc-input' :value='spec.hour' @change="set('hour', Number($event.target.value))">
+        <template x-for='n in 24' :key='n'>
+          <option :value='n - 1' x-text="String(n - 1).padStart(2, '0')"></option>
+        </template>
+      </select>
+    </label>
+
+    <label class='sc-field'>
+      <span class='sc-field-label'>Minute</span>
+      <select class='sc-input' :value='spec.minute' @change="set('minute', Number($event.target.value))">
+        <option value='0'>00</option>
+        <option value='15'>15</option>
+        <option value='30'>30</option>
+        <option value='45'>45</option>
+      </select>
+    </label>
+  </div>
+
+  <!-- launchd runs a missed job on wake rather than skipping it, which is the
+       whole reason this is not a cron entry. Worth saying, because "3am" and
+       "my Mac is asleep at 3am" is the first objection anyone has. -->
+  <div class='sc-hint'>
+    If your Mac is asleep at the appointed time, the clean runs when it next
+    wakes rather than being skipped.
+  </div>
+</div>
+
+<div class='tbl-wrap'>
+  <div class='tbl-bar'>
+    <div>
+      <span class='tbl-title'>What</span>
+      <span class='tbl-count' x-text="targetIds.length + ' of ' + targets.length + ' targets'"></span>
+    </div>
+    <div style='display: flex; gap: 6px; align-items: center;'>
+      <input class='sc-input' style='width: 180px;' type='search' placeholder='Filter targets' x-model='filter' aria-label='Filter targets' />
+      <button class='btn btn-sm' @click='clearTargets()' :disabled='targetIds.length === 0'>Clear</button>
+    </div>
+  </div>
+
+  <div class='sc-extras'>
+    <label class='sc-check'>
+      <input type='checkbox' class='check' :checked='includePrivacy' @change='includePrivacy = $event.target.checked' />
+      <span>
+        <strong>Clear browser caches and history</strong>
+        <span class='sc-check-note'>Cookies, sessions and logins are never touched by a scheduled run &mdash; only the parts browsers rebuild on their own.</span>
+      </span>
+    </label>
+    <label class='sc-check'>
+      <input type='checkbox' class='check' :checked='emptyTrash' @change='emptyTrash = $event.target.checked' />
+      <span>
+        <strong>Empty the Trash</strong>
+        <span class='sc-check-note'>Off by default. This is the one step in an unattended run that cannot be undone.</span>
+      </span>
+    </label>
+  </div>
+
+  <div class='sc-chips'>
+    <template x-for='category in categories()' :key='category'>
+      <button class='tab cap' @click='selectCategory(category)' x-text='category'></button>
+    </template>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style='width: 28px;'></th>
+        <th>Target</th>
+        <th style='width: 120px;'>Category</th>
+      </tr>
+    </thead>
+    <tbody>
+      <template x-for='target in visibleTargets()' :key='target.id'>
+        <tr :class="isOn(target.id) ? 'sc-row-on' : ''">
+          <td>
+            <input type='checkbox' class='check' :checked='isOn(target.id)' @click='toggle(target.id)'
+              :aria-label="'Include ' + target.name" />
+          </td>
+          <td>
+            <div class='item-row'>
+              <span class='item-glyph' :class='target.icon' aria-hidden='true'></span>
+              <span class='item-name' x-text='target.name'></span>
+            </div>
+            <div class='item-path' :title='target.path' x-text='shortPath(target.path)'></div>
+          </td>
+          <td class='dim cap' x-text='target.category'></td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+
+  <div class='empty-state' x-show='visibleTargets().length === 0' x-cloak>
+    Nothing matches that filter.
+  </div>
+
+  <div class='sc-actions'>
+    <div class='sc-summary' x-show='!hasWork()' x-cloak>
+      Nothing selected &mdash; saving now turns automatic cleaning off.
+    </div>
+    <div class='sc-summary' x-show='hasWork()' x-text='description'></div>
+    <button class='btn btn-sm' @click='runNow()' :disabled='runningNow || !hasWork()'
+      x-text="runningNow ? 'Running…' : 'Run Now'">Run Now</button>
+    <button class='btn btn-icon' @click='save()' :disabled='saving'>
+      <span class='i-f7-checkmark-alt' aria-hidden='true'></span>
+      <span x-text="saving ? 'Saving…' : 'Save Schedule'">Save Schedule</span>
+    </button>
+  </div>
+</div>
+
+<div class='tbl-wrap' x-show='log' x-cloak>
+  <div class='tbl-bar'>
+    <div>
+      <span class='tbl-title'>Log</span>
+      <span class='tbl-count'>what the last unattended runs did</span>
+    </div>
+  </div>
+  <pre class='sc-log' x-text='log'></pre>
+</div>
+
+<div class='sc-note'>
+  Only targets marked safe can be scheduled. The ones Quick Clean flags as
+  caution &mdash; chat transcripts, downloaded models, virtual machine images
+  &mdash; hold content nothing rebuilds, so they stay a deliberate choice you
+  make while looking at them.
+</div>
+
+<style>
+.sc-switch { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; cursor: pointer; }
+.sc-when { display: flex; flex-wrap: wrap; gap: 12px; padding: 14px 16px; }
+.sc-field { display: flex; flex-direction: column; gap: 4px; }
+.sc-field-label { color: var(--secondary); font-size: 10px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; }
+.sc-input { height: 28px; padding: 0 8px; border: .5px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-family: inherit; font-size: 12px; }
+.sc-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sc-hint { padding: 0 16px 14px; color: var(--tertiary); font-size: 11px; line-height: 1.5; }
+.sc-extras { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-bottom: .5px solid var(--line); }
+.sc-check { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; cursor: pointer; }
+.sc-check strong { display: block; font-weight: 500; }
+.sc-check-note { display: block; margin-top: 2px; max-width: 72ch; color: var(--secondary); font-size: 11px; line-height: 1.5; }
+.sc-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 16px; }
+.sc-row-on { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.sc-actions { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-top: .5px solid var(--line); background: var(--surface-soft); }
+.sc-summary { margin-right: auto; color: var(--secondary); font-size: 11px; }
+.sc-log { max-height: 220px; overflow: auto; padding: 12px 16px; color: var(--secondary); font: 10px/1.6 'SF Mono', Menlo, monospace; white-space: pre-wrap; }
+.sc-note { margin-top: 12px; padding: 12px 16px; border: .5px solid var(--line); border-radius: 8px; background: var(--surface-soft); color: var(--tertiary); font-size: 11px; line-height: 1.5; }
+</style>

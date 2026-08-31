@@ -19,16 +19,30 @@ import {
   getDashboardStatsCached,
   invalidateStartupCache,
 } from './data-service';
-import { lastScanResult, runDiskScan, runLargeFileScan, scanProgress } from '../app/Workers/scan-pool';
+import { lastScanResult, runDiskScan, runDuplicateScan, runLargeFileScan, scanProgress } from '../app/Workers/scan-pool';
 import { findAppBundle, findAppBundleForCask, getSystemInfoSync, ICON_SIZES, listApplicationEntries, readAppVersion, renderAppIcon } from '@system-cleaner/core';
 import * as nodeOs from 'node:os';
-import { cleanDirectory, emptyTrash } from '@system-cleaner/clean';
+import {
+  cleanDirectory,
+  cleanDsStoreFiles,
+  cleanIncompleteDownloads,
+  cleanPrivacyItems,
+  emptyTrash,
+  findDsStoreFiles,
+  findIncompleteDownloads,
+  findOrphanedAppData,
+  MAINTENANCE_TASKS,
+  previewKeptCookies,
+  runMaintenanceTask,
+  runningBrowsers,
+  scanPrivacyItems,
+} from '@system-cleaner/clean';
 import {
   killProcess,
   toggleStartupItem,
   removeStartupItem,
 } from '@system-cleaner/uninstall';
-import { categoryPresentation } from '@system-cleaner/disk';
+import { categoryPresentation, shredPaths } from '@system-cleaner/disk';
 import { getTopProcesses, summarizeProcesses } from '@system-cleaner/monitor';
 import { recordSystemActivity } from '../app/Support/System/activity-chart';
 import { isLocalAgent } from '../app/Support/Runtime/local-agent';
@@ -41,6 +55,19 @@ import {
   unprotectPath,
   MAX_BULK_PATHS,
 } from '../app/Support/Cleanup/bulk-delete';
+import {
+  appSizes,
+  listInstalledApps,
+  scanApp,
+  uninstall,
+} from '../app/Support/Cleanup/uninstall';
+import {
+  readSchedule,
+  runScheduledClean,
+  saveSchedule,
+} from '../app/Support/Cleanup/schedule';
+import CleanupRun from '../app/Models/CleanupRun';
+import KeptCookie from '../app/Models/KeptCookie';
 
 /**
  * Safely parse a JSON request body. Returns the parsed object or `null`
@@ -79,6 +106,10 @@ const systemAppsListCache = new TtlCache<{ name: string; sizeBytes: number | nul
 const systemAppsSizesCache = new TtlCache<{ name: string; sizeBytes: number }[]>(15 * 60_000);
 const dashboardStatsCache = new TtlCache<Record<string, unknown>>(30_000);
 const dirSizesCache = new TtlCache<Record<string, number>>(5 * 60_000);
+// A full orphan sweep reads every bundle id under ~/Library and sizes what it
+// finds, which is seconds of work for an answer that changes when an app is
+// uninstalled and not otherwise.
+const orphanCache = new TtlCache<{ items: unknown[]; totalBytes: number }>(5 * 60_000);
 
 /**
  * API routes for SystemCleaner.
@@ -221,7 +252,9 @@ export default async function (router: Router) {
    */
   await router.post('/last-scan', async (req: Request) => {
     const body = await readJsonBody<{ kind?: string }>(req);
-    const kind = body?.kind === 'large-files' ? 'large-files' : 'tree';
+    const kind = body?.kind === 'large-files' || body?.kind === 'duplicates'
+      ? body.kind
+      : 'tree';
     const held = lastScanResult(kind);
 
     if (!held) return Response.json({ success: true, result: null });
@@ -1016,5 +1049,415 @@ export default async function (router: Router) {
     const tier = body?.tier === 'quick' ? 'quick' : 'full';
     const result = await runUpdatesCheck(fullScan, forceRefresh, tier);
     return Response.json(result);
+  });
+
+  // ── Uninstaller ─────────────────────────────────────────────
+
+  /**
+   * Installed third-party apps.
+   *
+   * Two-phase like `/system-apps`: the list renders immediately, and `sizes`
+   * asks for the `du` pass separately. Sizing 120 bundles up front is seconds
+   * of work before anything appears on screen.
+   */
+  await router.post('/installed-apps', async (req: Request) => {
+    const body = await readJsonBody<{ sizes?: unknown }>(req);
+    if (body === null) return badJson();
+
+    if (body.sizes === true) {
+      const sizes = await appSizes();
+      const { apps } = await listInstalledApps();
+      return Response.json({
+        success: true,
+        apps: apps.map(app => ({ ...app, sizeBytes: sizes[app.path] ?? 0 })),
+        sizesPending: false,
+      });
+    }
+
+    const { apps, cached } = await listInstalledApps();
+    return Response.json({ success: true, apps, sizesPending: true, cached });
+  });
+
+  await router.post('/app-scan', async (req: Request) => {
+    const body = await readJsonBody<{ path: unknown }>(req);
+    if (body === null) return badJson();
+    if (typeof body.path !== 'string' || !body.path) return badRequest('No app path provided');
+    if (!pathInAllowedRoots(body.path, ['/Applications', path.join(HOME, 'Applications')]))
+      return badRequest('Only apps in /Applications can be uninstalled', 403);
+
+    const result = await scanApp(path.resolve(body.path));
+    if (!result) return badRequest('No app bundle at that path', 404);
+
+    return Response.json({ success: true, ...result });
+  });
+
+  await router.post('/app-uninstall', async (req: Request) => {
+    const body = await readJsonBody<{ path: unknown; paths: unknown; mode?: unknown }>(req);
+    if (body === null) return badJson();
+    if (typeof body.path !== 'string' || !body.path) return badRequest('No app path provided');
+    if (!pathInAllowedRoots(body.path, ['/Applications', path.join(HOME, 'Applications')]))
+      return badRequest('Only apps in /Applications can be uninstalled', 403);
+
+    const paths = sanitizeStringArray(body.paths, MAX_BULK_PATHS);
+    if (paths === null) return badRequest('paths must be a non-empty string array');
+
+    // Trash unless asked otherwise, for the reason in the module note: an app
+    // removed by mistake should be recoverable from Finder.
+    const mode = body.mode === 'permanent' ? 'permanent' : 'trash';
+
+    const result = await uninstall(path.resolve(body.path), paths, mode);
+    if (!result) return badRequest('No app bundle at that path', 404);
+
+    return Response.json({
+      success: result.outcome.failed.length === 0,
+      app: result.app,
+      mode,
+      ...result.outcome,
+    });
+  });
+
+  // ── Browser & system privacy ────────────────────────────────
+
+  await router.post('/privacy-scan', async () => {
+    const [items, running, kept] = await Promise.all([
+      Promise.resolve(scanPrivacyItems()),
+      runningBrowsers(),
+      KeptCookie.all() as Promise<Array<{ id: number; domain: string }>>,
+    ]);
+
+    const keepDomains = kept.map(row => row.domain);
+
+    return Response.json({
+      success: true,
+      items,
+      // The browsers that are open right now. Their rows are shown disabled
+      // rather than hidden: "quit Chrome to clear this" is information, and a
+      // row that vanishes because an app is open is a bug report.
+      running,
+      keptDomains: keepDomains,
+      keptCookieCount: previewKeptCookies(keepDomains),
+      totalBytes: items.reduce((sum, item) => sum + item.sizeBytes, 0),
+    });
+  });
+
+  await router.post('/privacy-clean', async (req: Request) => {
+    const body = await readJsonBody<{ ids: unknown }>(req);
+    if (body === null) return badJson();
+
+    const ids = sanitizeStringArray(body.ids, 200);
+    if (ids === null) return badRequest('ids must be a non-empty string array');
+
+    const kept = await KeptCookie.all() as Array<{ domain: string }>;
+    const outcome = await cleanPrivacyItems(ids, { keepDomains: kept.map(row => row.domain) });
+
+    if (outcome.cleaned.length > 0) {
+      await CleanupRun.create({
+        source: 'privacy',
+        mode: 'permanent',
+        itemCount: outcome.cleaned.length,
+        failedCount: outcome.errors.length,
+        freedBytes: outcome.freedBytes,
+      });
+    }
+
+    return Response.json({ success: outcome.errors.length === 0, ...outcome });
+  });
+
+  await router.post('/kept-cookies', async () => {
+    const rows = await KeptCookie.orderByDesc('id').get() as Array<{ id: number; domain: string }>;
+    const domains = rows.map(row => row.domain);
+    return Response.json({ success: true, domains, keptCookieCount: previewKeptCookies(domains) });
+  });
+
+  await router.post('/keep-cookie', async (req: Request) => {
+    const body = await readJsonBody<{ domain: unknown }>(req);
+    if (body === null) return badJson();
+    if (typeof body.domain !== 'string') return badRequest('No domain provided');
+
+    // A pasted URL is the obvious input, so take the host out of one rather
+    // than storing `https://github.com/` as a domain that matches nothing.
+    const cleaned = body.domain
+      .trim()
+      .toLowerCase()
+      .replace(/^[a-z]+:\/\//, '')
+      .replace(/\/.*$/, '')
+      .replace(/^\.+/, '');
+
+    if (!/^[a-z0-9.-]{3,255}$/.test(cleaned) || !cleaned.includes('.'))
+      return badRequest('That does not look like a domain');
+
+    await KeptCookie.firstOrCreate({ domain: cleaned }, {});
+    return Response.json({ success: true, domain: cleaned });
+  });
+
+  await router.post('/unkeep-cookie', async (req: Request) => {
+    const body = await readJsonBody<{ domain: unknown }>(req);
+    if (body === null) return badJson();
+    if (typeof body.domain !== 'string' || !body.domain) return badRequest('No domain provided');
+
+    const existing = await KeptCookie.where('domain', body.domain.trim().toLowerCase()).first() as { id: number } | undefined;
+    if (existing) await KeptCookie.remove(existing.id);
+
+    return Response.json({ success: true, removed: Boolean(existing) });
+  });
+
+  // ── Orphaned app data & leftover junk ───────────────────────
+
+  /**
+   * Caches, logs and saved state belonging to apps that are no longer
+   * installed. Nothing rebuilds these, and nothing else in the app finds them:
+   * Quick Clean works from a fixed list of paths, and this is by definition the
+   * data of software that list never knew about.
+   */
+  await router.post('/orphaned-data', async () => {
+    const cached = orphanCache.get('orphans');
+    if (cached) return Response.json({ success: true, ...cached, cached: true });
+
+    const [items, protectedPaths] = await Promise.all([findOrphanedAppData(), protectedPathSet()]);
+
+    const rows = items.map(item => ({
+      path: item.path,
+      displayPath: item.path.startsWith(`${HOME}/`) ? `~${item.path.slice(HOME.length)}` : item.path,
+      name: path.basename(item.path),
+      bundleId: item.bundleId,
+      type: item.type,
+      sizeBytes: item.sizeBytes,
+      daysSinceModified: item.daysSinceModified,
+      protected: protectedPaths.has(path.resolve(item.path)),
+    }));
+
+    const payload = {
+      items: rows,
+      totalBytes: rows.reduce((sum, row) => sum + row.sizeBytes, 0),
+    };
+
+    orphanCache.set('orphans', payload);
+    return Response.json({ success: true, ...payload, cached: false });
+  });
+
+  await router.post('/clean-orphans', async (req: Request) => {
+    const body = await readJsonBody<{ paths: unknown; mode?: unknown }>(req);
+    if (body === null) return badJson();
+
+    const requested = sanitizeStringArray(body.paths, MAX_BULK_PATHS);
+    if (requested === null) return badRequest('paths must be a non-empty string array');
+
+    // Only paths a scan actually produced. Without this the endpoint is
+    // "delete anything you name" with an orphan-shaped door on it.
+    const known = new Set((await findOrphanedAppData()).map(item => path.resolve(item.path)));
+    const targets = requested.map(p => path.resolve(p)).filter(p => known.has(p));
+    if (targets.length === 0) return badRequest('None of those paths are orphaned app data', 403);
+
+    const mode = body.mode === 'permanent' ? 'permanent' : 'trash';
+    const outcome = await bulkDelete(targets, mode, 'orphans');
+    orphanCache.clear();
+
+    return Response.json({ success: outcome.failed.length === 0, mode, ...outcome });
+  });
+
+  /**
+   * The small stuff: `.DS_Store` droppings and downloads that never finished.
+   *
+   * Neither is worth its own screen, and both have been sitting in
+   * `packages/clean` with no caller since they were written.
+   */
+  await router.post('/junk-scan', async () => {
+    const [dsStore, incomplete] = await Promise.all([findDsStoreFiles(), findIncompleteDownloads()]);
+
+    return Response.json({
+      success: true,
+      dsStoreCount: dsStore.count,
+      incompleteDownloads: incomplete.map(file => ({
+        path: file.path,
+        name: file.name,
+        sizeBytes: file.sizeBytes,
+      })),
+      incompleteBytes: incomplete.reduce((sum, file) => sum + file.sizeBytes, 0),
+    });
+  });
+
+  await router.post('/clean-ds-store', async () => {
+    const result = await cleanDsStoreFiles();
+    return Response.json({ success: result.errors === 0, ...result });
+  });
+
+  await router.post('/clean-incomplete-downloads', async () => {
+    const result = await cleanIncompleteDownloads();
+
+    if (result.removed > 0) {
+      await CleanupRun.create({
+        source: 'junk',
+        mode: 'permanent',
+        itemCount: result.removed,
+        failedCount: 0,
+        freedBytes: result.freedBytes,
+      });
+    }
+
+    return Response.json({ success: true, ...result });
+  });
+
+  // ── Duplicate finder ────────────────────────────────────────
+
+  let duplicateScanInFlight = false;
+
+  await router.post('/duplicates-scan', async (req: Request) => {
+    if (duplicateScanInFlight) {
+      return Response.json(
+        { success: false, error: 'A scan is already in progress' },
+        { status: 409 },
+      );
+    }
+
+    const body = await readJsonBody<{ path?: unknown; minSizeMB?: unknown; limit?: unknown }>(req);
+    if (body === null) return badJson();
+
+    let root = HOME;
+    if (typeof body.path === 'string' && body.path) {
+      const resolved = path.isAbsolute(body.path) ? path.resolve(body.path) : path.resolve(HOME, body.path);
+      if (resolved === HOME || resolved.startsWith(`${HOME}/`) || resolved.startsWith('/Volumes/'))
+        root = resolved;
+      else
+        return badRequest('Scan root must be your home directory or an external volume', 403);
+    }
+
+    // Floor of 1 MB. Below it the answer is thousands of identical icon files
+    // and lock files, which is true and completely useless.
+    const minSizeMB = typeof body.minSizeMB === 'number' && body.minSizeMB >= 1 && body.minSizeMB <= 1_000_000
+      ? body.minSizeMB
+      : 1;
+    const limit = typeof body.limit === 'number' && body.limit >= 10 && body.limit <= 1000
+      ? Math.floor(body.limit)
+      : 200;
+
+    // Longer than the large-file scan's budget: this one hashes as well as
+    // walks, and the hashing is the point.
+    const HARD_TIMEOUT_MS = 180_000;
+    const WORKER_TIMEOUT_MS = 150_000;
+
+    duplicateScanInFlight = true;
+    try {
+      const result = await runDuplicateScan(
+        { roots: [root], minSizeBytes: Math.round(minSizeMB * 1024 * 1024), limit, timeoutMs: WORKER_TIMEOUT_MS },
+        HARD_TIMEOUT_MS,
+      );
+
+      if (!result.success)
+        return Response.json({ success: false, error: result.error || 'Scan failed' });
+
+      return Response.json({ ...result, success: true, root, minSizeMB });
+    }
+    catch (err: any) {
+      const message = /exceeded/.test(err?.message ?? '')
+        ? `${err.message}. Narrow the search to one folder, or raise the minimum size.`
+        : err?.message || 'Scan failed';
+      return Response.json({ success: false, error: message });
+    }
+    finally {
+      duplicateScanInFlight = false;
+    }
+  });
+
+  // ── Maintenance ─────────────────────────────────────────────
+
+  await router.post('/maintenance-tasks', async () => {
+    return Response.json({
+      success: true,
+      tasks: MAINTENANCE_TASKS.map(task => ({
+        id: task.id,
+        name: task.name,
+        description: task.description,
+        effect: task.effect,
+        category: task.category,
+        icon: task.icon,
+        requiresSudo: task.requiresSudo,
+        // Sent so the UI can offer to copy it. These are the tasks the app
+        // cannot run itself — see the note in packages/clean/src/maintenance.ts.
+        command: task.requiresSudo ? task.command : undefined,
+      })),
+    });
+  });
+
+  await router.post('/run-maintenance', async (req: Request) => {
+    const body = await readJsonBody<{ id: unknown }>(req);
+    if (body === null) return badJson();
+    if (typeof body.id !== 'string' || !/^[a-z-]{1,32}$/.test(body.id))
+      return badRequest('Unknown maintenance task');
+
+    const result = await runMaintenanceTask(body.id);
+    return Response.json(result);
+  });
+
+  // ── Secure erase ────────────────────────────────────────────
+
+  /**
+   * Overwrite, then delete. The most destructive endpoint in the app, so it
+   * runs the same allow-list as everything else and refuses anything the
+   * shredder itself would not touch.
+   */
+  await router.post('/shred-paths', async (req: Request) => {
+    const body = await readJsonBody<{ paths: unknown; passes?: unknown }>(req);
+    if (body === null) return badJson();
+
+    const paths = sanitizeStringArray(body.paths, 200);
+    if (paths === null) return badRequest('paths must be a non-empty string array');
+
+    const passes = typeof body.passes === 'number' && body.passes >= 1 && body.passes <= 3
+      ? Math.floor(body.passes)
+      : 1;
+
+    const outcome = shredPaths(paths, { passes });
+
+    if (outcome.shredded.length > 0) {
+      await CleanupRun.create({
+        source: 'shred',
+        mode: 'permanent',
+        itemCount: outcome.shredded.length,
+        failedCount: outcome.failed.length,
+        freedBytes: outcome.bytesOverwritten,
+      });
+    }
+
+    return Response.json({ success: outcome.failed.length === 0, passes, ...outcome });
+  });
+
+  // ── Scheduled cleaning ──────────────────────────────────────
+
+  await router.post('/schedule', async () => {
+    return Response.json({ success: true, ...await readSchedule() });
+  });
+
+  await router.post('/schedule-save', async (req: Request) => {
+    const body = await readJsonBody<{
+      spec?: unknown
+      targetIds?: unknown
+      includePrivacy?: unknown
+      emptyTrash?: unknown
+    }>(req);
+    if (body === null) return badJson();
+
+    const spec = (typeof body.spec === 'object' && body.spec !== null ? body.spec : {}) as Record<string, unknown>;
+    const targetIds = sanitizeStringArray(body.targetIds, 500) ?? [];
+
+    const payload = await saveSchedule({
+      spec: {
+        enabled: spec.enabled === true,
+        frequency: spec.frequency as 'daily' | 'weekly' | 'monthly',
+        hour: Number(spec.hour),
+        minute: Number(spec.minute),
+        weekday: Number(spec.weekday),
+        day: Number(spec.day),
+      },
+      targetIds,
+      includePrivacy: body.includePrivacy === true,
+      emptyTrash: body.emptyTrash === true,
+    });
+
+    return Response.json({ success: !payload.error, ...payload });
+  });
+
+  await router.post('/schedule-run', async () => {
+    const outcome = await runScheduledClean();
+    return Response.json({ success: outcome.errors.length === 0, ...outcome });
   });
 }

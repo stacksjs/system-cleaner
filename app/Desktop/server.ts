@@ -215,6 +215,25 @@ if (import.meta.main) {
   if (process.env.DB_DATABASE_PATH)
     ensureSchema(process.env.DB_DATABASE_PATH, migrationsDir)
 
+  // The scheduled clean runs through this same binary, invoked by the launch
+  // agent that `app/Support/Cleanup/schedule.ts` writes. It does the work and
+  // exits without ever opening a socket: launchd wakes it at 3am, when there
+  // is no window to serve and nothing to serve it to.
+  if (process.argv.includes('--run-schedule')) {
+    const { runScheduledClean } = await import('../Support/Cleanup/schedule')
+    try {
+      const outcome = await runScheduledClean()
+      // stdout is the launch agent's log file, which is the only place anyone
+      // will look to find out whether last night's clean ran.
+      Bun.write(Bun.stdout, `${outcome.ranAt} cleaned ${outcome.targets} item(s), freed ${outcome.freedFormatted}${outcome.errors.length > 0 ? `, ${outcome.errors.length} error(s): ${outcome.errors.slice(0, 3).join('; ')}` : ''}\n`)
+      process.exit(0)
+    }
+    catch (err) {
+      Bun.write(Bun.stdout, `${new Date().toISOString()} scheduled clean failed: ${err instanceof Error ? err.message : String(err)}\n`)
+      process.exit(1)
+    }
+  }
+
   // Deliberately not `PORT`: that name is already the frontend port in
   // `config/ports.ts`, and setting it to 0 makes the config validator complain
   // about a value it was never meant to see.

@@ -104,6 +104,29 @@ async function nativeChooseFolder(title?: string): Promise<string | null> {
   }
 }
 
+/**
+ * Ask for one or more files or folders.
+ *
+ * The shredder needs this and the folder picker cannot give it: what people
+ * want to erase is usually a handful of documents, not a directory. Same panel,
+ * with files allowed and multiple selection on.
+ */
+async function nativeChooseItems(title?: string): Promise<string[]> {
+  try {
+    const result = await showOpenDialog({
+      title: title || 'Choose files or folders',
+      canChooseFiles: true,
+      canChooseDirectories: true,
+      multiSelections: true,
+      buttonLabel: 'Choose',
+    })
+    return result.canceled ? [] : (result.filePaths ?? [])
+  }
+  catch {
+    return []
+  }
+}
+
 export interface AwayNotice {
   title: string
   body?: string
@@ -143,6 +166,7 @@ declare global {
     nativeAlert: typeof nativeAlert
     nativeCopy: typeof nativeCopy
     nativeChooseFolder: typeof nativeChooseFolder
+    nativeChooseItems: typeof nativeChooseItems
     notifyIfAway: typeof notifyIfAway
   }
 }
@@ -151,4 +175,5 @@ window.nativeConfirm = nativeConfirm
 window.nativeAlert = nativeAlert
 window.nativeCopy = nativeCopy
 window.nativeChooseFolder = nativeChooseFolder
+window.nativeChooseItems = nativeChooseItems
 window.notifyIfAway = notifyIfAway

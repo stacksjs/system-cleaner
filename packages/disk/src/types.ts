@@ -13,12 +13,6 @@ export interface DiskUsageByCategory {
   color: string
 }
 
-export interface DuplicateGroup {
-  hash: string
-  sizeBytes: number
-  files: string[]
-}
-
 export interface ProjectArtifact {
   path: string
   type: string

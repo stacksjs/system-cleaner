@@ -1,0 +1,233 @@
+@extends('layouts/app')
+@section('nav', 'maintenance')
+@section('body')
+
+<!--
+  Maintenance — the macOS routines OnyX exists for, plus two housekeeping
+  sweeps and the shredder.
+
+  No `//` comments and no double quotes inside this `x-data`: STX flattens the
+  attribute onto one line, and either kills the whole object silently.
+  `tests/xdata-parses.test.ts` guards both.
+
+  Commentary that belongs to this state:
+
+  - `requiresSudo` tasks are not run from here. The agent has no terminal, so a
+    password prompt would go to a pipe nobody reads and the task would hang
+    until its timeout. Those rows offer their command to the clipboard instead,
+    which is the honest version of the same help.
+  - `results` keeps each task's output. Half of these tasks succeed silently —
+    `killall Dock` prints nothing — so without the recorded result there is no
+    difference on screen between "done" and "did nothing".
+-->
+<div x-data="{
+  tasks: [],
+  loading: true,
+  running: {},
+  results: {},
+  dsStoreCount: null,
+  incompleteDownloads: [],
+  incompleteBytes: 0,
+  junkLoading: true,
+  junkBusy: false,
+  shredTargets: [],
+  shredding: false,
+  toasts: [],
+  toastId: 0,
+
+  init() {
+    var self = this;
+    this.post('/api/maintenance-tasks').then(function(r) {
+      if (r.success) self.tasks = r.tasks || [];
+      self.loading = false;
+    }).catch(function() { self.loading = false; });
+    this.refreshJunk();
+  },
+
+  post(endpoint, data) {
+    return fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data || {}),
+    }).then(function(r) {
+      if (!r.ok && r.status !== 400 && r.status !== 403) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  },
+
+  refreshJunk() {
+    var self = this;
+    this.junkLoading = true;
+    this.post('/api/junk-scan').then(function(r) {
+      self.junkLoading = false;
+      if (!r.success) return;
+      self.dsStoreCount = r.dsStoreCount;
+      self.incompleteDownloads = r.incompleteDownloads || [];
+      self.incompleteBytes = r.incompleteBytes || 0;
+    }).catch(function() { self.junkLoading = false; });
+  },
+
+  categories() {
+    var seen = [];
+    this.tasks.forEach(function(task) { if (seen.indexOf(task.category) === -1) seen.push(task.category); });
+    return seen;
+  },
+  tasksIn(category) { return this.tasks.filter(function(task) { return task.category === category; }); },
+  categoryLabel(category) {
+    if (category === 'caches') return 'Caches';
+    if (category === 'services') return 'Services';
+    if (category === 'network') return 'Network';
+    return 'Storage';
+  },
+
+  isRunning(id) { return this.running[id] === true; },
+  resultFor(id) { return this.results[id] || null; },
+
+  async run(task) {
+    if (this.isRunning(task.id)) return;
+    if (!await window.nativeConfirm({
+      title: 'Run ' + task.name + '?',
+      message: task.effect + '.',
+      confirmLabel: 'Run',
+    })) return;
+
+    var self = this;
+    this.running = Object.assign({}, this.running, { [task.id]: true });
+    this.post('/api/run-maintenance', { id: task.id }).then(function(r) {
+      var next = Object.assign({}, self.running);
+      delete next[task.id];
+      self.running = next;
+      self.results = Object.assign({}, self.results, { [task.id]: r });
+      if (r.success) self.toast(task.name + ' - done', 'success');
+      else self.toast(task.name + ' failed: ' + (r.error || 'unknown'), 'error');
+    }).catch(function(err) {
+      var next = Object.assign({}, self.running);
+      delete next[task.id];
+      self.running = next;
+      self.toast(task.name + ' failed: ' + (err && err.message ? err.message : 'network'), 'error');
+    });
+  },
+
+  async copyCommand(task) {
+    var ok = await window.nativeCopy(task.command || '');
+    this.toast(ok ? 'Command copied - paste it into Terminal' : 'Could not copy the command', ok ? 'success' : 'error');
+  },
+
+  async cleanDsStore() {
+    if (this.junkBusy || !this.dsStoreCount) return;
+    if (!await window.nativeConfirm({
+      title: 'Remove ' + this.dsStoreCount + ' .DS_Store file(s)?',
+      message: 'Finder recreates them as you open folders. Any custom icon positions and view settings in those folders are lost.',
+      confirmLabel: 'Remove',
+      destructive: true,
+    })) return;
+
+    var self = this;
+    this.junkBusy = true;
+    this.post('/api/clean-ds-store').then(function(r) {
+      self.junkBusy = false;
+      self.toast('Removed ' + r.removed + ' .DS_Store file(s)', 'success');
+      self.refreshJunk();
+    }).catch(function() { self.junkBusy = false; self.toast('Could not remove them', 'error'); });
+  },
+
+  async cleanIncomplete() {
+    if (this.junkBusy || this.incompleteDownloads.length === 0) return;
+    if (!await window.nativeConfirm({
+      title: 'Delete ' + this.incompleteDownloads.length + ' unfinished download(s)?',
+      message: this.fmtBytes(this.incompleteBytes) + ' is freed. Downloads still in progress are skipped.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    })) return;
+
+    var self = this;
+    this.junkBusy = true;
+    this.post('/api/clean-incomplete-downloads').then(function(r) {
+      self.junkBusy = false;
+      self.toast('Removed ' + r.removed + ' file(s) - freed ' + self.fmtBytes(r.freedBytes), 'success');
+      self.refreshJunk();
+    }).catch(function() { self.junkBusy = false; self.toast('Could not remove them', 'error'); });
+  },
+
+  async pickShredTargets() {
+    var picked = await window.nativeChooseItems('Choose files or folders to erase');
+    if (!picked || picked.length === 0) return;
+    var existing = this.shredTargets;
+    var merged = existing.concat(picked.filter(function(p) { return existing.indexOf(p) === -1; }));
+    this.shredTargets = merged;
+  },
+
+  dropShredTarget(p) { this.shredTargets = this.shredTargets.filter(function(x) { return x !== p; }); },
+
+  async shred() {
+    if (this.shredding || this.shredTargets.length === 0) return;
+    var count = this.shredTargets.length;
+    if (!await window.nativeConfirm({
+      title: 'Erase ' + count + ' item(s) beyond recovery?',
+      message: 'Each file is overwritten with random data before it is deleted. There is no Trash step and no undo.',
+      confirmLabel: 'Erase',
+      destructive: true,
+    })) return;
+
+    var self = this;
+    this.shredding = true;
+    this.post('/api/shred-paths', { paths: this.shredTargets }).then(function(r) {
+      self.shredding = false;
+      var gone = {};
+      (r.shredded || []).forEach(function(p) { gone[p] = true; });
+      self.shredTargets = self.shredTargets.filter(function(p) { return !gone[p]; });
+      if ((r.shredded || []).length > 0)
+        self.toast('Erased ' + r.shredded.length + ' item(s)', 'success');
+      (r.skipped || []).slice(0, 2).forEach(function(entry) { self.toast(entry.reason, 'info'); });
+      (r.failed || []).slice(0, 2).forEach(function(entry) { self.toast(entry.error, 'error'); });
+    }).catch(function(err) {
+      self.shredding = false;
+      self.toast('Erase failed: ' + (err && err.message ? err.message : 'network'), 'error');
+    });
+  },
+
+  shortPath(p) {
+    if (!p || p.indexOf('/Users/') !== 0) return p;
+    var rest = p.slice(7);
+    var slash = rest.indexOf('/');
+    return '~' + (slash >= 0 ? rest.slice(slash) : '');
+  },
+
+  fmtBytes(b) {
+    if (!b) return '0 B';
+    if (b >= 1e12) return (b/1e12).toFixed(1)+' TB';
+    if (b >= 1e9) return (b/1e9).toFixed(1)+' GB';
+    if (b >= 1e6) return (b/1e6).toFixed(1)+' MB';
+    if (b >= 1e3) return (b/1e3).toFixed(1)+' KB';
+    return b+' B';
+  },
+
+  toast(msg, type) {
+    var id = ++this.toastId;
+    this.toasts = [...this.toasts, { id: id, msg: msg, type: type || 'info' }];
+    var self = this;
+    setTimeout(function() { self.toasts = self.toasts.filter(function(t) { return t.id !== id; }); }, 5000);
+  },
+}">
+
+<div class='toast-area'>
+  <template x-for='toast in toasts' :key='toast.id'>
+    <div class='toast'>
+      <span class='toast-glyph' :class="toast.type === 'success' ? 'i-f7-checkmark-alt-circle-fill' : toast.type === 'error' ? 'i-f7-xmark-circle-fill' : 'i-f7-exclamationmark-triangle-fill'" aria-hidden='true'></span>
+      <span x-text='toast.msg'></span>
+    </div>
+  </template>
+</div>
+
+<div class='main-header'>
+  <div class='main-title'>Maintenance</div>
+  <div class='main-subtitle'>Rebuild the caches and restart the services behind the things macOS gets stuck on</div>
+</div>
+<div class='main-content'>
+  <div x-show='loading' class='empty-state'>Loading maintenance tasks&hellip;</div>
+  <div x-show='!loading' x-cloak>
+    <MaintenancePanel />
+  </div>
+</div>
+</div>
+@endsection

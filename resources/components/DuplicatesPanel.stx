@@ -1,0 +1,215 @@
+<!--
+  Duplicates — one card per group of identical files.
+
+  A flat table would be the obvious shape and the wrong one: the unit of
+  decision is the group, not the file. What you are choosing is which copy
+  survives, and that only reads correctly with the copies next to each other.
+
+  The suggested keeper is the oldest copy — the one the others were made from,
+  and so the one other things are most likely to point at. It is marked, never
+  selectable, and can be changed by ticking a different row instead.
+-->
+<div class='card-row'>
+  <div class='card'>
+    <div class='card-label'>Selected</div>
+    <div class='card-value' :style="selected.length ? 'color: var(--accent);' : ''"
+         x-text="scanned ? fmtBytes(selectedBytes()) : '—'">—</div>
+    <div class='card-detail' x-text="scanned ? (selected.length + ' copy(ies) marked for removal') : 'Nothing selected'">Nothing selected</div>
+  </div>
+  <div class='card'>
+    <div class='card-label'>Reclaimable</div>
+    <div class='card-value' :style="wastedBytes ? 'color: var(--green);' : ''"
+         x-text="scanned ? wastedFormatted : '—'">—</div>
+    <div class='card-detail'>
+      <span x-show='!scanned'>No scan yet</span>
+      <span x-show='scanned' x-cloak>
+        <span x-text='duplicateCount'>0</span> redundant copies in
+        <span x-text='groupCount'>0</span> groups
+      </span>
+    </div>
+  </div>
+  <div class='card'>
+    <div class='card-label'>Minimum Size</div>
+    <div class='card-value' x-text="minSizeMB >= 1024 ? (minSizeMB / 1024) + ' GB' : minSizeMB + ' MB'">1 MB</div>
+    <div class='card-detail'>Smaller files are noise, not findings</div>
+  </div>
+</div>
+
+<div class='dp-controls'>
+  <label class='dp-field'>
+    <span class='dp-field-label'>Search in</span>
+    <select class='dp-input' x-model='scanRoot'>
+      <option value=''>Home folder</option>
+      <option value='Downloads'>Downloads</option>
+      <option value='Desktop'>Desktop</option>
+      <option value='Documents'>Documents</option>
+      <option value='Movies'>Movies</option>
+      <option value='Music'>Music</option>
+      <option value='Pictures'>Pictures</option>
+      <option x-show='customRoot' x-cloak :value='customRoot' x-text='customRootLabel()'></option>
+    </select>
+  </label>
+
+  <label class='dp-field'>
+    <span class='dp-field-label'>&nbsp;</span>
+    <button class='btn btn-icon' @click='chooseFolder()'>
+      <span class='i-f7-folder' aria-hidden='true'></span>
+      Choose&hellip;
+    </button>
+  </label>
+
+  <label class='dp-field'>
+    <span class='dp-field-label'>Minimum size</span>
+    <select class='dp-input' x-model.number='minSizeMB'>
+      <option value='1'>1 MB</option>
+      <option value='10'>10 MB</option>
+      <option value='50'>50 MB</option>
+      <option value='100'>100 MB</option>
+      <option value='500'>500 MB</option>
+    </select>
+  </label>
+
+  <div class='dp-spacer'></div>
+
+  <button class='btn btn-icon' data-rescan @click='scan()' :disabled='scanning'>
+    <span class='i-f7-square-on-square' aria-hidden='true'></span>
+    <span x-text="scanning ? 'Scanning…' : (scanned ? 'Rescan' : 'Find Duplicates')">Find Duplicates</span>
+  </button>
+</div>
+
+<div class='dp-bulkbar' x-show='selected.length > 0' x-cloak>
+  <div class='dp-bulk-summary'>
+    <strong x-text='selected.length'>0</strong> copies ·
+    <strong x-text='fmtBytes(selectedBytes())'>0 B</strong>
+  </div>
+  <button class='btn btn-sm' @click='selected = []'>Clear</button>
+  <button class='btn btn-danger btn-sm btn-icon' @click="remove('trash')" :disabled='deleting'>
+    <span class='i-f7-trash-fill' aria-hidden='true'></span>
+    <span x-text="deleting ? 'Working…' : 'Move to Trash'">Move to Trash</span>
+  </button>
+  <button class='btn btn-danger btn-sm' @click="remove('permanent')" :disabled='deleting'>
+    Delete Permanently
+  </button>
+</div>
+
+<div class='dp-partial' x-show='truncated && !scanning' x-cloak>
+  This scan stopped before it could verify everything &mdash; either it ran out
+  of time or a group was too large to hash within its budget. Every group shown
+  was checked in full; there may simply be more. Narrow <strong>Search in</strong>
+  or raise the minimum size to cover the rest.
+</div>
+
+<div class='tbl-wrap' x-show='scanning' x-cloak>
+  <div class='empty-state'>
+    <div>Comparing files&hellip;</div>
+    <div style='margin-top: 8px; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink);'
+         x-show='scanProgress' x-text='scanProgress'></div>
+    <div class='dp-scan-path' x-show='scanProgressPath' x-text='scanProgressPath'></div>
+    <div class='dp-hint'>
+      Same size, then same head and tail, then a full hash of whatever survives
+      both. Only the last pass decides, so nothing is called a duplicate on a
+      guess.
+    </div>
+  </div>
+</div>
+
+<div x-show='scanned && !scanning' x-cloak>
+  <div class='dp-groupbar' x-show='groups.length > 0'>
+    <span class='tbl-count' x-text="groups.length + ' group(s)' + (scanTime ? ' · ' + scanTime : '')"></span>
+    <button class='btn btn-sm' @click='selectAllDuplicates()'
+      x-text="allDuplicatesSelected() ? 'Deselect All Copies' : 'Select All Extra Copies'">Select All Extra Copies</button>
+  </div>
+
+  <template x-for='group in groups' :key='group.id'>
+    <div class='tbl-wrap'>
+      <div class='tbl-bar'>
+        <div>
+          <span class='tbl-title' x-text="group.files[0] ? group.files[0].name : 'Identical files'"></span>
+          <span class='tbl-count'
+            x-text="group.count + ' copies · ' + group.sizeFormatted + ' each · ' + group.wastedFormatted + ' reclaimable'"></span>
+        </div>
+        <button class='btn btn-sm' @click='selectGroup(group)'>Select Extras</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th style='width: 28px;'></th>
+            <th>Location</th>
+            <th style='width: 116px;'>Modified</th>
+            <th style='width: 92px;'>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for='file in group.files' :key='file.path'>
+            <tr :class="isOn(file.path) ? 'dp-row-on' : ''">
+              <td>
+                <input type='checkbox' class='check' :checked='isOn(file.path)' @click='toggle(file.path)'
+                  :aria-label="'Select ' + file.path" />
+              </td>
+              <td>
+                <div class='item-row'>
+                  <span class='item-name' x-text='file.name'></span>
+                  <span class='badge badge-green' x-show='file.keep'>suggested keeper</span>
+                </div>
+                <div class='item-path' :title='file.path' x-text='shortPath(file.directory)'></div>
+              </td>
+              <td class='dim' x-text='fmtDate(file.modifiedAt)'></td>
+              <td class='action-cell'>
+                <button class='btn btn-sm' @click='reveal(file.path)'>Reveal</button>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </template>
+
+  <div class='tbl-wrap' x-show='groups.length === 0'>
+    <div class='empty-state'>
+      No duplicates over <span x-text='minSizeMB'>1</span> MB in that folder.
+    </div>
+  </div>
+</div>
+
+<div class='tbl-wrap' x-show='!scanned && !scanning'>
+  <div class='dp-intro'>
+    <span class='dp-intro-glyph i-f7-square-on-square' aria-hidden='true'></span>
+    <p>
+      Photos imported twice, a downloads folder full of <strong>report (3).pdf</strong>,
+      an old backup copied into a new one. This finds files that are identical
+      byte for byte &mdash; not merely similarly named &mdash; and keeps one of
+      each.
+    </p>
+    <button class='btn btn-icon' @click='scan()'>
+      <span class='i-f7-square-on-square' aria-hidden='true'></span>
+      Find Duplicates
+    </button>
+  </div>
+</div>
+
+<div class='dp-note' x-show='scanned' x-cloak>
+  Application bundles, <strong>node_modules</strong> and other dependency
+  folders are skipped: they are full of files that are legitimately identical
+  across projects, and deleting one breaks the thing that depends on it.
+</div>
+
+<style>
+.dp-controls { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.dp-field { display: flex; flex-direction: column; gap: 4px; }
+.dp-field-label { color: var(--secondary); font-size: 10px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; }
+.dp-input { height: 28px; padding: 0 8px; border: .5px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-family: inherit; font-size: 12px; }
+.dp-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dp-spacer { flex: 1; }
+.dp-bulkbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 8px 12px; border: .5px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+.dp-bulk-summary { margin-right: auto; font-size: 12px; font-variant-numeric: tabular-nums; }
+.dp-groupbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.dp-row-on { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.dp-partial { margin-bottom: 12px; padding: 10px 14px; border: .5px solid color-mix(in srgb, var(--orange) 32%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--orange) 10%, var(--surface)); color: var(--secondary); font-size: 11px; line-height: 1.5; }
+.dp-scan-path { margin: 3px auto 0; max-width: 52ch; overflow: hidden; color: var(--tertiary); font: 10px/1.5 'SF Mono', Menlo, monospace; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.dp-hint { margin: 12px auto 0; max-width: 48ch; color: var(--tertiary); font-size: 11px; line-height: 1.6; }
+.dp-intro { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 44px 24px; text-align: center; }
+.dp-intro-glyph { width: 26px; height: 26px; color: var(--tertiary); }
+.dp-intro p { max-width: 54ch; margin: 0; color: var(--secondary); font-size: 12px; line-height: 1.6; }
+.dp-intro .btn { padding: 7px 16px; font-size: 12px; }
+.dp-note { margin-top: 12px; padding: 12px 16px; border: .5px solid var(--line); border-radius: 8px; background: var(--surface-soft); color: var(--tertiary); font-size: 11px; line-height: 1.5; }
+</style>

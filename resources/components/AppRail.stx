@@ -20,11 +20,18 @@ export const groups = [
   [
     { id: 'disk', label: 'Disk Usage', icon: 'i-f7-chart-pie-fill', href: '/app/disk' },
     { id: 'large-files', label: 'Large Files', icon: 'i-f7-doc-on-doc-fill', href: '/app/large-files' },
-    { id: 'system', label: 'System', icon: 'i-f7-desktopcomputer', href: '/app/system' },
+    { id: 'duplicates', label: 'Duplicates', icon: 'i-f7-square-on-square', href: '/app/duplicates' },
   ],
   [
+    { id: 'system', label: 'System', icon: 'i-f7-desktopcomputer', href: '/app/system' },
+    { id: 'maintenance', label: 'Maintenance', icon: 'i-f7-wrench-fill', href: '/app/maintenance' },
     { id: 'updates', label: 'Updates', icon: 'i-f7-arrow-down-circle-fill', href: '/app/updates' },
+  ],
+  [
     { id: 'cleanup', label: 'Quick Clean', icon: 'i-f7-sparkles', href: '/app/cleanup' },
+    { id: 'privacy', label: 'Privacy', icon: 'i-f7-eye-slash-fill', href: '/app/privacy' },
+    { id: 'uninstall', label: 'Uninstaller', icon: 'i-f7-bin-xmark-fill', href: '/app/uninstall' },
+    { id: 'schedule', label: 'Schedule', icon: 'i-f7-clock-fill', href: '/app/schedule' },
   ],
 ]
 </script>

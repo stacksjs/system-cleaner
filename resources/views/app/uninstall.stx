@@ -1,0 +1,307 @@
+@extends('layouts/app')
+@section('nav', 'uninstall')
+@section('body')
+
+<!--
+  Uninstaller.
+
+  All state lives in this `x-data`, as on the other screens. No `//` comments
+  and no double quotes inside it: STX flattens the attribute onto one line
+  before evaluating it, so a comment swallows the rest of the object and a
+  quote ends the attribute early. Either failure renders every binding on the
+  page empty with nothing in the console. `tests/xdata-parses.test.ts` guards
+  both.
+
+  Commentary that belongs to this state:
+
+  - `chosen` starts as everything the scan can actually remove — the bundle and
+    every user-level remnant. Anything needing admin rights, and anything the
+    user has protected, is left unticked: a box that can only fail is worse
+    than no box.
+  - Selection is keyed by path, not row index. The remnant list re-sorts by
+    size, and an index-keyed selection would quietly retarget itself.
+  - Sizes arrive in a second request. `du` across 120 bundles takes seconds,
+    and the list is useful long before the numbers are.
+-->
+<div x-data="{
+  apps: [],
+  filter: '',
+  loading: true,
+  sizesPending: true,
+  scan: null,
+  scanning: false,
+  scanningPath: '',
+  chosen: [],
+  removing: false,
+  orphans: [],
+  orphanBytes: 0,
+  orphansLoading: true,
+  orphanSelected: [],
+  orphanBusy: false,
+  toasts: [],
+  toastId: 0,
+
+  init() {
+    var self = this;
+    this.post('/api/installed-apps').then(function(r) {
+      if (r.success) self.apps = r.apps || [];
+      self.loading = false;
+      return self.post('/api/installed-apps', { sizes: true });
+    }).then(function(r) {
+      if (r && r.success) { self.apps = r.apps || []; self.sizesPending = false; }
+    }).catch(function() { self.loading = false; self.sizesPending = false; });
+    this.loadOrphans();
+  },
+
+  loadOrphans() {
+    var self = this;
+    this.orphansLoading = true;
+    this.post('/api/orphaned-data').then(function(r) {
+      self.orphansLoading = false;
+      if (!r.success) return;
+      self.orphans = r.items || [];
+      self.orphanBytes = r.totalBytes || 0;
+      var present = {};
+      self.orphans.forEach(function(row) { present[row.path] = true; });
+      self.orphanSelected = self.orphanSelected.filter(function(p) { return present[p]; });
+    }).catch(function() { self.orphansLoading = false; });
+  },
+
+  isOrphanOn(p) { return this.orphanSelected.indexOf(p) !== -1; },
+  toggleOrphan(p) {
+    this.orphanSelected = this.orphanSelected.indexOf(p) === -1
+      ? this.orphanSelected.concat([p])
+      : this.orphanSelected.filter(function(x) { return x !== p; });
+  },
+  selectableOrphans() { return this.orphans.filter(function(row) { return !row.protected; }); },
+  allOrphansSelected() {
+    var rows = this.selectableOrphans();
+    if (rows.length === 0) return false;
+    var self = this;
+    return rows.every(function(row) { return self.isOrphanOn(row.path); });
+  },
+  toggleAllOrphans() {
+    this.orphanSelected = this.allOrphansSelected() ? [] : this.selectableOrphans().map(function(row) { return row.path; });
+  },
+  orphanSelectedBytes() {
+    var picked = {};
+    this.orphanSelected.forEach(function(p) { picked[p] = true; });
+    return this.orphans.reduce(function(sum, row) { return picked[row.path] ? sum + row.sizeBytes : sum; }, 0);
+  },
+
+  async removeOrphans(mode) {
+    if (this.orphanBusy || this.orphanSelected.length === 0) return;
+    var count = this.orphanSelected.length;
+    var size = this.fmtBytes(this.orphanSelectedBytes());
+    var permanent = mode === 'permanent';
+
+    if (!await window.nativeConfirm({
+      title: permanent
+        ? 'Permanently delete ' + count + ' leftover item(s)?'
+        : 'Move ' + count + ' leftover item(s) to the Trash?',
+      message: 'These belong to software that is no longer installed. ' + size + (permanent ? ' is freed immediately and cannot be recovered.' : ' is freed, and you can put them back from Finder.'),
+      confirmLabel: permanent ? 'Delete' : 'Move to Trash',
+      destructive: permanent,
+    })) return;
+
+    var self = this;
+    this.orphanBusy = true;
+    this.post('/api/clean-orphans', { paths: this.orphanSelected, mode: mode }).then(function(r) {
+      self.orphanBusy = false;
+      if ((r.succeeded || []).length > 0)
+        self.toast('Removed ' + r.succeeded.length + ' item(s) - freed ' + r.freedFormatted, 'success');
+      if ((r.skipped || []).length > 0)
+        self.toast(r.skipped.length + ' skipped: ' + r.skipped[0].reason, 'info');
+      if ((r.failed || []).length > 0)
+        self.toast(r.failed.length + ' failed: ' + r.failed[0].error, 'error');
+      self.orphanSelected = [];
+      self.loadOrphans();
+    }).catch(function(err) {
+      self.orphanBusy = false;
+      self.toast('Remove failed: ' + (err && err.message ? err.message : 'network'), 'error');
+    });
+  },
+
+  post(endpoint, data) {
+    return fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data || {}),
+    }).then(function(r) {
+      if (!r.ok && r.status !== 403 && r.status !== 404 && r.status !== 409) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  },
+
+  visible() {
+    var needle = this.filter.trim().toLowerCase();
+    if (!needle) return this.apps;
+    return this.apps.filter(function(app) {
+      return app.name.toLowerCase().indexOf(needle) !== -1
+        || (app.bundleId || '').toLowerCase().indexOf(needle) !== -1;
+    });
+  },
+
+  totalAppBytes() { return this.apps.reduce(function(sum, app) { return sum + (app.sizeBytes || 0); }, 0); },
+
+  review(app) {
+    if (this.scanning) return;
+    var self = this;
+    this.scanning = true;
+    this.scanningPath = app.path;
+    this.scan = null;
+    this.post('/api/app-scan', { path: app.path }).then(function(r) {
+      self.scanning = false;
+      if (!r.success) { self.toast(r.error || 'Could not read that app', 'error'); return; }
+      self.scan = r;
+      self.chosen = [r.app.path].concat((r.remnants || [])
+        .filter(function(row) { return !row.protected && !row.needsAdmin; })
+        .map(function(row) { return row.path; }));
+    }).catch(function(err) {
+      self.scanning = false;
+      self.toast('Scan failed: ' + (err && err.message ? err.message : 'network'), 'error');
+    });
+  },
+
+  close() { this.scan = null; this.chosen = []; },
+
+  isChosen(p) { return this.chosen.indexOf(p) !== -1; },
+  toggleRow(p) {
+    this.chosen = this.chosen.indexOf(p) === -1
+      ? this.chosen.concat([p])
+      : this.chosen.filter(function(x) { return x !== p; });
+  },
+
+  selectableRemnants() {
+    if (!this.scan) return [];
+    return this.scan.remnants.filter(function(row) { return !row.protected && !row.needsAdmin; });
+  },
+
+  allRemnantsChosen() {
+    var rows = this.selectableRemnants();
+    if (rows.length === 0) return false;
+    var self = this;
+    return rows.every(function(row) { return self.isChosen(row.path); });
+  },
+
+  toggleAllRemnants() {
+    var rows = this.selectableRemnants();
+    var touched = {};
+    rows.forEach(function(row) { touched[row.path] = true; });
+    if (this.allRemnantsChosen()) {
+      this.chosen = this.chosen.filter(function(p) { return !touched[p]; });
+      return;
+    }
+    var keep = this.chosen.filter(function(p) { return !touched[p]; });
+    this.chosen = keep.concat(rows.map(function(row) { return row.path; }));
+  },
+
+  chosenBytes() {
+    if (!this.scan) return 0;
+    var picked = {};
+    this.chosen.forEach(function(p) { picked[p] = true; });
+    var total = picked[this.scan.app.path] ? this.scan.app.sizeBytes : 0;
+    this.scan.remnants.forEach(function(row) { if (picked[row.path]) total += row.sizeBytes; });
+    return total;
+  },
+
+  adminCount() {
+    if (!this.scan) return 0;
+    return this.scan.remnants.filter(function(row) { return row.needsAdmin; }).length;
+  },
+
+  async remove(mode) {
+    if (!this.scan || this.removing || this.chosen.length === 0) return;
+    var permanent = mode === 'permanent';
+    var name = this.scan.app.name;
+    var size = this.fmtBytes(this.chosenBytes());
+    var takesApp = this.isChosen(this.scan.app.path);
+
+    if (!await window.nativeConfirm({
+      title: permanent
+        ? 'Permanently delete ' + this.chosen.length + ' item' + (this.chosen.length === 1 ? '' : 's') + '?'
+        : (takesApp ? 'Uninstall ' + name + '?' : 'Remove ' + this.chosen.length + ' leftover item(s)?'),
+      message: permanent
+        ? size + ' is freed immediately and cannot be recovered.'
+        : size + ' is freed, and everything goes to the Trash where you can put it back.',
+      confirmLabel: permanent ? 'Delete' : 'Move to Trash',
+      destructive: true,
+    })) return;
+
+    var self = this;
+    this.removing = true;
+    this.post('/api/app-uninstall', { path: this.scan.app.path, paths: this.chosen, mode: mode })
+      .then(function(r) {
+        self.removing = false;
+        if ((r.succeeded || []).length > 0)
+          self.toast('Removed ' + r.succeeded.length + ' item(s) from ' + name + ' - freed ' + r.freedFormatted, 'success');
+        if ((r.skipped || []).length > 0)
+          self.toast(r.skipped.length + ' skipped: ' + r.skipped[0].reason, 'info');
+        if ((r.failed || []).length > 0)
+          self.toast(r.failed.length + ' failed: ' + r.failed[0].error, 'error');
+
+        var gone = {};
+        (r.succeeded || []).forEach(function(p) { gone[p] = true; });
+        if (gone[self.scan.app.path]) {
+          self.apps = self.apps.filter(function(app) { return app.path !== self.scan.app.path; });
+          self.close();
+          return;
+        }
+        self.scan = Object.assign({}, self.scan, {
+          remnants: self.scan.remnants.filter(function(row) { return !gone[row.path]; }),
+        });
+        self.chosen = self.chosen.filter(function(p) { return !gone[p]; });
+      })
+      .catch(function(err) {
+        self.removing = false;
+        self.toast('Uninstall failed: ' + (err && err.message ? err.message : 'network'), 'error');
+      });
+  },
+
+  reveal(p) { this.post('/api/reveal-in-finder', { path: p }).catch(function() {}); },
+
+  fmtBytes(b) {
+    if (!b) return '0 B';
+    if (b >= 1e12) return (b/1e12).toFixed(1)+' TB';
+    if (b >= 1e9) return (b/1e9).toFixed(1)+' GB';
+    if (b >= 1e6) return (b/1e6).toFixed(1)+' MB';
+    if (b >= 1e3) return (b/1e3).toFixed(1)+' KB';
+    return b+' B';
+  },
+
+  fmtDate(value) {
+    if (!value) return '-';
+    var d = new Date(value);
+    if (isNaN(d.getTime())) return '-';
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  },
+
+  toast(msg, type) {
+    var id = ++this.toastId;
+    this.toasts = [...this.toasts, { id: id, msg: msg, type: type || 'info' }];
+    var self = this;
+    setTimeout(function() { self.toasts = self.toasts.filter(function(t) { return t.id !== id; }); }, 5000);
+  },
+}">
+
+<div class='toast-area'>
+  <template x-for='toast in toasts' :key='toast.id'>
+    <div class='toast'>
+      <span class='toast-glyph' :class="toast.type === 'success' ? 'i-f7-checkmark-alt-circle-fill' : toast.type === 'error' ? 'i-f7-xmark-circle-fill' : 'i-f7-exclamationmark-triangle-fill'" aria-hidden='true'></span>
+      <span x-text='toast.msg'></span>
+    </div>
+  </template>
+</div>
+
+<div class='main-header'>
+  <div class='main-title'>Uninstaller</div>
+  <div class='main-subtitle'>Remove an app and everything it left behind</div>
+</div>
+<div class='main-content'>
+  <div x-show='loading' class='empty-state'>Reading /Applications&hellip;</div>
+  <div x-show='!loading' x-cloak>
+    <UninstallPanel />
+  </div>
+</div>
+</div>
+@endsection
