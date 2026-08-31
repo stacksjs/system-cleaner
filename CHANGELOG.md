@@ -1,5 +1,15 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.2.1...v0.2.2)
+
+## 🐛 Bug Fixes
+
+- **desktop**: generate the migrations the bundle build assumed were there ([1df5186](https://github.com/stacksjs/system-cleaner/commit/1df5186)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## Contributors
+
+- _Chris <chrisbreuer93@gmail.com>_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.2.0...v0.2.1)
 
 ## 🐛 Bug Fixes
