@@ -1,4 +1,5 @@
 import type { CrosswindOptions } from '@cwcss/crosswind'
+import { RUNTIME_COLOR_CLASSES } from '../app/Support/UI/runtime-colors'
 import { RUNTIME_ICON_CLASSES } from '../app/Support/UI/runtime-icons'
 
 /**
@@ -82,8 +83,9 @@ const config = {
     },
   },
   // Utilities bound at runtime via `:class`, which the content scanner cannot
-  // see. See app/Support/UI/runtime-icons.ts.
-  safelist: RUNTIME_ICON_CLASSES,
+  // see: it reads markup, and these are strings a function returns. See
+  // app/Support/UI/runtime-icons.ts and runtime-colors.ts.
+  safelist: [...RUNTIME_ICON_CLASSES, ...RUNTIME_COLOR_CLASSES],
 } satisfies Partial<CrosswindOptions>
 
 export default config as Partial<CrosswindOptions>

@@ -270,7 +270,7 @@ window.updatesXData = function () {
         })
     },
 
-    doUpdateSelected() {
+    async doUpdateSelected() {
       var items = this.selected.slice()
       if (items.length === 0) return
       if (!await window.nativeConfirm({
@@ -286,7 +286,7 @@ window.updatesXData = function () {
       })
     },
 
-    doUpdateAll() {
+    async doUpdateAll() {
       if (!await window.nativeConfirm({
         title: 'Update all outdated Homebrew packages?',
         message: 'This can take several minutes and cannot be interrupted cleanly.',

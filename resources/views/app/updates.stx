@@ -2,6 +2,23 @@
 @section('nav', 'updates')
 @section('body')
 
+<style>
+/* The installed build, with the mark that says whose OS it is. */
+.upd-installed { display: inline-flex; align-items: center; gap: 5px; }
+
+/* Both ends of the upgrade, each under its own word. A bare "27.0 → 27.0" is
+   what this looked like before the build was shown, and on a beta the build is
+   the only part that moves. */
+.upd-versions { display: inline-flex; align-items: center; gap: 10px; }
+.upd-version-side { display: inline-flex; flex-direction: column; gap: 1px; }
+.upd-version-tag {
+  font-family: -apple-system, system-ui, sans-serif;
+  font-size: 9px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--tertiary);
+}
+.upd-version-arrow { color: var(--tertiary); }
+</style>
+
 <script src='/updates-xdata.js'></script>
 <div x-data='updatesXData()'>
 
@@ -39,8 +56,11 @@
     <div class='card-label'>System</div>
     <div class='card-value' :style="systemOutdatedCount() > 0 ? 'color: #ff9f0a' : 'color: #30d158'">{{ systemOutdatedCount() }}</div>
     <div class='card-detail'>
-      <span x-show='macosVersion'>{{ 'macOS ' + installedLabel() }}</span>
-      <span x-show='clToolsInfo.version'>{{ (macosVersion ? ' \u00B7 ' : '') + 'CLT ' + clToolsInfo.version }}</span>
+      <span class='upd-installed' x-show='macosVersion'>
+        <span class='i-f7-logo-apple' aria-hidden='true'></span>
+        <span>{{ 'macOS ' + installedLabel() }}</span>
+      </span>
+      <span x-show='clToolsInfo.version' style='display: block; margin-top: 2px;'>{{ 'CLT ' + clToolsInfo.version }}</span>
       <span x-show='updateScanCached' style='display: block; margin-top: 2px;'>cached scan</span>
     </div>
   </div>
@@ -93,12 +113,24 @@
                     x-show="upd.kind === 'macos' && isBetaRelease()">from beta</span>
             </td>
             <td><span class='badge' :class="kindBadgeClass(upd.kind)">{{ kindLabel(upd.kind) }}</span></td>
+            <!--
+              Both ends, labelled. "27.0 → 27.0" is what this column said when
+              only the marketing versions were shown, which reads as an update
+              to the version already installed; on a beta the build is the only
+              part that actually moves.
+            -->
             <td class='mono' style='font-size: 11px;'>
               <template x-if="upd.kind === 'macos' && upd.buildVersion">
-                <span>
-                  <span class='dim'>{{ installedLabel() }}</span>
-                  <span class='dim' style='margin: 0 4px;'>&rarr;</span>
-                  <span style='color: #30d158;'>{{ upd.version + ' (' + upd.buildVersion + ')' }}</span>
+                <span class='upd-versions'>
+                  <span class='upd-version-side'>
+                    <span class='upd-version-tag'>Installed</span>
+                    <span class='dim'>{{ installedLabel() }}</span>
+                  </span>
+                  <span class='upd-version-arrow' aria-hidden='true'>&rarr;</span>
+                  <span class='upd-version-side'>
+                    <span class='upd-version-tag'>Available</span>
+                    <span style='color: #30d158;'>{{ upd.version + ' (' + upd.buildVersion + ')' }}</span>
+                  </span>
                 </span>
               </template>
               <template x-if="!(upd.kind === 'macos' && upd.buildVersion)">

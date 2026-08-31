@@ -372,7 +372,7 @@
         if (!d || !d.scanning || d.kind !== 'tree') return false;
 
         patchDiskScope({ scanState: 'scanning' });
-        startProgressPoll();
+        startProgressPoll(d);
         watchForServerResult();
         return true;
       })
@@ -497,26 +497,40 @@
   // A scan runs for tens of seconds. Polling for its progress is what turns a
   // motionless spinner into something a person can tell is alive — and what
   // makes a slow scan tolerable rather than suspicious.
-  function startProgressPoll() {
+  // Turn one progress payload into the fields the panel renders. Split out of
+  // the poll so a caller that already holds a payload — the rejoin path fetched
+  // one to decide whether a scan was running at all — can show it immediately
+  // instead of discarding it and waiting for the next tick.
+  function applyProgress(d) {
+    if (!d || !d.scanning) return;
+    patchDiskScope({
+      scanProgress: fmtCount(d.scanned) + ' items · ' + Math.round(d.elapsedMs / 1000) + 's',
+      scanProgressPath: shortenPath(d.path),
+      // A walk that has counted nothing after several seconds is not slow, it
+      // is stopped — parked in a syscall macOS will not return from until
+      // someone answers a permission prompt. Saying so beats counting seconds
+      // up to a timeout the user cannot interpret.
+      scanStalled: isStalled(d),
+    });
+  }
+
+  function pollProgressOnce() {
+    return fetch('/api/scan-progress', { method: 'POST' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) { applyProgress(d); return d; })
+      .catch(function() { return null; });
+  }
+
+  function startProgressPoll(seed) {
     stopProgressPoll();
     resetStallTracking();
-    progressTimer = setInterval(function() {
-      fetch('/api/scan-progress', { method: 'POST' })
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-          if (!d || !d.scanning) return;
-          patchDiskScope({
-            scanProgress: fmtCount(d.scanned) + ' items · ' + Math.round(d.elapsedMs / 1000) + 's',
-            scanProgressPath: shortenPath(d.path),
-            // A walk that has counted nothing after several seconds is not
-            // slow, it is stopped — parked in a syscall macOS will not return
-            // from until someone answers a permission prompt. Saying so beats
-            // counting seconds up to a timeout the user cannot interpret.
-            scanStalled: isStalled(d),
-          });
-        })
-        .catch(function() {});
-    }, 400);
+    // Paint before waiting. `setInterval` alone left the first 400ms — and on
+    // the rejoin path a whole round trip more — showing "scanning" with no
+    // count under it. Coming back to a running scan therefore looked like the
+    // progress had been lost and then found again, when it had never stopped.
+    if (seed) applyProgress(seed);
+    else pollProgressOnce();
+    progressTimer = setInterval(pollProgressOnce, 400);
   }
 
   window.startDiskScan = function() {

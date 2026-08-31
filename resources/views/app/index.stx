@@ -5,7 +5,7 @@ const { getSystemInfoSync } = require('@system-cleaner/core')
 const sysInfo = getSystemInfoSync()
 const cpuModel = sysInfo.cpuModel
 const cpuCores = sysInfo.cpuCores
-const totalMemGB = sysInfo.totalMemoryGB
+const totalMemGB = (os.totalmem() / 1e9).toFixed(1)
 const freeMemGB = (os.freemem() / 1e9).toFixed(1)
 const usedMemGB = ((os.totalmem() - os.freemem()) / 1e9).toFixed(1)
 const memPercent = Math.round(((os.totalmem() - os.freemem()) / os.totalmem()) * 100)
@@ -24,6 +24,10 @@ const healthDasharray = String(2 * Math.PI * 40)
 @extends('layouts/app')
 @section('nav', 'dashboard')
 @section('body')
+
+<style>
+.cpu-cell { white-space: nowrap; }
+</style>
 
 <script src='/dashboard-xdata.js'></script>
 <div x-data='dashboardXData()'>
@@ -77,11 +81,19 @@ const healthDasharray = String(2 * Math.PI * 40)
           <tr x-show='!statsLoading'>
             <td><span class='font-medium'>{{ proc.name }}</span></td>
             <td class='font-mono text-[11px] text-text-dim'>{{ proc.pid }}</td>
-            <td>
+            <!--
+              The track is a fixed 60px, not `flex-1` capped at 60. Flex-basis
+              zero means it surrenders every pixel when the column is tight, and
+              this column is tight on any window narrower than the screenshot it
+              was designed against: the label's 36px plus the gap took all 42px
+              the cell had, and the bar rendered at zero width. A bar that
+              disappears when the window narrows is worse than no bar.
+            -->
+            <td class='cpu-cell'>
               <div class='flex gap-1.5 items-center'>
                 <span class='text-[11px] min-w-[36px]' :class="cpuTextClass(proc.cpu)">{{ proc.cpu.toFixed(1) + '%' }}</span>
-                <div class='overflow-hidden flex-1 h-[3px] max-w-[60px] bg-bg-track rounded-[2px]'>
-                  <div class='h-full rounded-[2px]' :class="cpuBarClass(proc.cpu)" :style="cpuBarStyle(proc.cpu)"></div>
+                <div class='cpu-track'>
+                  <div class='cpu-fill' :class="cpuBarClass(proc.cpu)" :style="cpuBarStyle(proc.cpu)"></div>
                 </div>
               </div>
             </td>

@@ -24,38 +24,54 @@
           <span class='ring-label'>{{ healthLabel() }}</span>
         </div>
       </div>
+      <!--
+        Each row is exactly two children: the dot, and one span holding all the
+        text. The `li` is a flex row with a gap, and every `{{ }}` compiles to
+        its own <span> — so writing the sentence directly in the `li` made each
+        number a separate flex item and the gap fell between them. "(95%)"
+        rendered as "( 95 %)", and "19.1 / 19 GB" carried gaps on both sides of
+        the slash. One span means one flex item and ordinary inline spacing.
+      -->
       <ul class='dash-signals'>
         <li>
           <span class='statusbar-dot' :style="memDotStyle()" style='background: {{ memDotColor }}'></span>
-          Memory <b>{{ stats ? stats.usedMemGB : usedMemGB }} / {{ stats ? stats.totalMemGB : totalMemGB }} GB</b> (<span>{{ stats ? stats.memPercent : '…' }}</span>%)
+          <span class='signal-text'>Memory <b>{{ stats ? stats.usedMemGB : usedMemGB }} / {{ stats ? stats.totalMemGB : totalMemGB }} GB</b> <span class='signal-aside'>({{ stats ? stats.memPercent : '…' }}%)</span></span>
         </li>
         <li x-show='stats' x-cloak>
           <span class='statusbar-dot' :style="diskDotStyle(stats.dUsedPct)"></span>
-          Disk <b>{{ stats.diskUsed }} / {{ stats.diskTotal }}</b> (<span>{{ stats.diskAvail }}</span> free)
+          <span class='signal-text'>Disk <b>{{ stats.diskUsed }} / {{ stats.diskTotal }}</b> <span class='signal-aside'>({{ stats.diskAvail }} free)</span></span>
         </li>
         <li x-show='!stats'>
           <span class='statusbar-dot' style='background: #6c6c70'></span>
-          Disk <b>loading...</b>
+          <span class='signal-text'>Disk <b>loading...</b></span>
         </li>
         <li x-show='stats' x-cloak>
           <span class='statusbar-dot' :style="startupDotStyle(stats.enabledStartup)"></span>
-          Startup <b>{{ stats.enabledStartup }}</b> enabled of <b>{{ stats.totalStartup }}</b>
+          <span class='signal-text'>Startup <b>{{ stats.enabledStartup }} of {{ stats.totalStartup }}</b> enabled</span>
         </li>
         <li x-show='stats' x-cloak>
           <span class='statusbar-dot' style='background: #0a84ff'></span>
-          Extensions <b>{{ stats.extensions }}</b> installed
+          <span class='signal-text'>Extensions <b>{{ stats.extensions }}</b> installed</span>
         </li>
         <li>
           <span class='statusbar-dot' style='background: #30d158'></span>
-          Uptime <b>{{ stats ? stats.uptimeStr : uptimeStr }}</b>
+          <span class='signal-text'>Uptime <b>{{ stats ? stats.uptimeStr : uptimeStr }}</b></span>
         </li>
       </ul>
     </div>
   </div>
 
+  <!--
+    Unconditional: this app runs on macOS and nowhere else, so the machine is
+    an Apple one whatever the chip says. The card already names it in words —
+    the mark is what the eye finds first.
+  -->
   <div class='card'>
     <div class='card-label'>CPU</div>
-    <div class='card-value' style='font-size: 16px;'>{{ stats ? stats.cpuLabel : cpuLabel }}</div>
+    <div class='card-value card-value-with-mark' style='font-size: 16px;'>
+      <span class='card-mark i-f7-logo-apple' aria-hidden='true'></span>
+      <span>{{ stats ? stats.cpuLabel : cpuLabel }}</span>
+    </div>
     <div class='card-detail'>{{ stats ? stats.cpuCores : cpuCores }} cores · <span>{{ stats ? stats.cpuAvgPercent + '% avg load' : '...' }}</span></div>
   </div>
 
@@ -97,8 +113,21 @@
 .dash-health .ring-label { font-size: 10px; }
 .dash-signals { display: flex; flex: 1; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .dash-signals li { display: flex; align-items: center; gap: 7px; font-size: 12px; }
+.dash-signals li .statusbar-dot { flex: none; }
+/* The whole sentence, as one flex item, so the row's gap applies only between
+   the dot and the text. */
+.dash-signals .signal-text { min-width: 0; }
+/* `margin-left`, not a space in the markup: STX drops the whitespace between a
+   `{{ }}` span and the element after it, so "(99%)" sat flush against the GB. */
+.dash-signals .signal-aside { color: var(--tertiary); margin-left: 0.35em; }
 .dash-signals b { font-weight: 600; font-variant-numeric: tabular-nums; }
-.card-value-unit { color: var(--secondary); font-size: 14px; }
+/* `margin-left` rather than a space in the markup: STX drops the whitespace
+   between a `{{ }}` span and the next element, so the Disk card read
+   "487.9 GB/ 494.4 GB" while the Memory card, whose value is a bare
+   interpolation, kept its space. */
+.card-value-unit { color: var(--secondary); font-size: 14px; margin-left: 0.28em; }
+.card-value-with-mark { display: flex; align-items: center; gap: 7px; }
+.card-mark { font-size: 15px; color: var(--secondary); flex: none; }
 @media (max-width: 1100px) {
   .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dash-health { grid-row: auto; }

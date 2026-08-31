@@ -209,7 +209,12 @@ const localAgent = isLocalAgent()
     .btn-active { border-color: color-mix(in srgb, var(--accent) 32%, transparent); background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
 
     .cpu-bar { display: flex; align-items: center; gap: 6px; }
-    .cpu-track { max-width: 60px; height: 3px; flex: 1; }
+    /* Fixed, not `flex: 1` capped at 60px. A flex-basis of zero surrenders every
+       pixel when the column is tight, and the CPU column is tight on any window
+       narrower than the one this was designed against: the percentage label's
+       36px plus the gap took the whole cell, and the bar rendered at zero width.
+       A bar that vanishes as the window narrows is worse than no bar. */
+    .cpu-track { flex: none; width: 60px; height: 3px; }
     .cpu-fill { height: 100%; border-radius: 2px; }
     .mono { font-family: 'SF Mono', Menlo, monospace; }
     .dim, .item-sub, .ring-label { color: var(--secondary); }

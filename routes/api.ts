@@ -20,7 +20,7 @@ import {
   invalidateStartupCache,
 } from './data-service';
 import { lastScanResult, runDiskScan, runLargeFileScan, scanProgress } from '../app/Workers/scan-pool';
-import { findAppBundle, findAppBundleForCask, getSystemInfoSync, ICON_SIZES, listApplicationEntries, renderAppIcon } from '@system-cleaner/core';
+import { findAppBundle, findAppBundleForCask, getSystemInfoSync, ICON_SIZES, listApplicationEntries, readAppVersion, renderAppIcon } from '@system-cleaner/core';
 import * as nodeOs from 'node:os';
 import { cleanDirectory, emptyTrash } from '@system-cleaner/clean';
 import {
@@ -781,7 +781,11 @@ export default async function (router: Router) {
       macosVersion: info.macosVersion,
       cpuLabel: info.cpuModel.split(' ').slice(0, 3).join(' '),
       cpuCores: info.cpuCores,
-      totalMemGB: Math.round(totalBytes / 1e9),
+      // All three to one decimal, from the same bytes. `Math.round` on the
+      // total alone rendered "19.1 / 19 GB" on a 19.3 GB machine — a used
+      // figure larger than the capacity it is measured against, which reads as
+      // a broken number rather than as a rounding choice.
+      totalMemGB: (totalBytes / 1e9).toFixed(1),
       usedMemGB: ((totalBytes - freeBytes) / 1e9).toFixed(1),
       freeMemGB: (freeBytes / 1e9).toFixed(1),
       uptimeStr: uptimeDays > 0 ? `${uptimeDays}d ${uptimeHours % 24}h` : `${uptimeHours}h`,
@@ -906,8 +910,17 @@ export default async function (router: Router) {
       const cached = systemAppsListCache.get('apps');
       if (cached) return Response.json({ success: true, apps: cached, sizesPending: true, cached: true });
 
+      // `appPath` and `version` ride along with the name. Both are already on
+      // hand — `listApplicationEntries` built the path to read the bundle, and
+      // the plist is one file read — and without them the UI can list an app
+      // but not say anything about it or act on it.
       const apps = listApplicationEntries()
-        .map(({ name }) => ({ name, sizeBytes: null as number | null }))
+        .map(({ name, appPath, plistPath }) => ({
+          name,
+          appPath,
+          version: readAppVersion(plistPath),
+          sizeBytes: null as number | null,
+        }))
         .sort((a, b) => a.name.localeCompare(b.name));
       systemAppsListCache.set('apps', apps);
       return Response.json({ success: true, apps, sizesPending: true, cached: false });
@@ -916,7 +929,7 @@ export default async function (router: Router) {
     const cached = systemAppsSizesCache.get('apps');
     if (cached) return Response.json({ success: true, apps: cached, sizesPending: false, cached: true });
 
-    const apps: { name: string; sizeBytes: number }[] = [];
+    const apps: { name: string; appPath: string; version: string; sizeBytes: number }[] = [];
     const appDirs = ['/Applications', path.join(HOME, 'Applications')];
     const seen = new Set<string>();
     try {
@@ -937,12 +950,18 @@ export default async function (router: Router) {
           const results = await Promise.all(
             batch.map(async (entry: string) => {
               const name = entry.replace(/\.app$/, '');
+              const appPath = path.resolve(dir, entry);
               let sizeBytes = 0;
               try {
-                sizeBytes = await getDirSize(path.resolve(dir, entry));
+                sizeBytes = await getDirSize(appPath);
               }
               catch {}
-              return { name, sizeBytes };
+              return {
+                name,
+                appPath,
+                version: readAppVersion(path.join(appPath, 'Contents', 'Info.plist')),
+                sizeBytes,
+              };
             }),
           );
           apps.push(...results);

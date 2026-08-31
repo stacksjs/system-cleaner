@@ -76,3 +76,26 @@ describe('bundled client scripts', () => {
     }
   })
 })
+
+/**
+ * Every script in `public/` has to parse.
+ *
+ * `updates-xdata.js` shipped with `await` inside two non-async methods. That is
+ * a *parse* error, not a runtime one, so the entire file failed to evaluate,
+ * `updatesXData` was never defined, and the Updates page rendered its title
+ * over an empty body. Nothing in this repo would have caught it: these files
+ * are not typechecked, not linted as modules, and not imported by any test.
+ * The console said `updatesXData is not defined`, which points at the x-data
+ * attribute rather than at the twelve-lines-earlier `await`.
+ */
+describe('public scripts parse', () => {
+  it('every public/*.js is syntactically valid JavaScript', async () => {
+    for await (const file of new Bun.Glob('public/*.js').scan('.')) {
+      const source = await Bun.file(file).text()
+      expect(() => {
+        // eslint-disable-next-line no-new-func
+        return new Function(source)
+      }, `${file} does not parse`).not.toThrow()
+    }
+  })
+})

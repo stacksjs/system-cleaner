@@ -31,14 +31,39 @@
 .app-list-scroll {
   flex: 1; overflow-y: auto; padding: 4px 8px;
 }
+/* A button, not a div: the row does something now, so it should be reachable
+   by Tab and announce itself as pressable. The reset keeps the list looking
+   like a list. */
 .app-row {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 8px 10px; border-radius: 8px; cursor: default;
+  display: flex; align-items: center; gap: 9px;
+  width: 100%; padding: 7px 10px; border: 0; border-radius: 8px;
+  background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
   transition: background 0.1s;
 }
 .app-row:hover { background: var(--hover); }
-.app-row-name { font-size: 13px; font-weight: 450; }
+.app-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.app-row.is-selected { background: var(--accent); color: #fff; }
+.app-row.is-selected .app-row-size { color: rgba(255,255,255,0.75); }
+
+/* The glyph sits under the image and shows through when a bundle has no icon
+   and `onerror` hides the <img>. Stacking beats swapping: no layout shift, and
+   nothing to reset when the row is reused for another app. */
+.app-row-icon { position: relative; display: block; width: 18px; height: 18px; flex: none; }
+.app-row-glyph { position: absolute; inset: 0; font-size: 18px; color: var(--tertiary); }
+.app-row-img { position: absolute; inset: 0; width: 18px; height: 18px; object-fit: contain; }
+
+.app-row-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 450; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-row-size { font-size: 12px; color: var(--tertiary); font-family: 'SF Mono', Menlo, monospace; white-space: nowrap; }
+
+/* ── Selected app ───────────────────────────────── */
+.app-detail-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+.app-detail-icon { position: relative; display: block; width: 56px; height: 56px; flex: none; }
+.app-detail-glyph { position: absolute; inset: 0; font-size: 56px; color: var(--tertiary); }
+.app-detail-img { position: absolute; inset: 0; width: 56px; height: 56px; object-fit: contain; }
+.app-detail-titles { min-width: 0; }
+.app-detail-version { font-size: 12px; color: var(--tertiary); margin-top: 2px; }
+.app-detail-path strong { font-family: 'SF Mono', Menlo, monospace; font-size: 11px; overflow-wrap: anywhere; }
+.app-detail-actions { display: flex; gap: 8px; margin-top: 18px; }
 
 .app-empty { padding: 20px; color: var(--tertiary); font-size: 12px; text-align: center; }
 /* The page owns the full remaining height so both columns scroll internally
@@ -57,11 +82,13 @@
   border-radius: 16px; padding: 24px 28px; width: 100%; max-width: 560px;
 }
 .disk-card-header {
-  display: flex; justify-content: space-between; align-items: flex-start;
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
   margin-bottom: 16px;
 }
 .disk-card-title { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
-.disk-card-pct { font-size: 13px; font-weight: 500; color: var(--tertiary); }
+/* `nowrap` and `flex: none`: at a narrow window "99% full" wrapped onto two
+   lines and pushed the volume name into wrapping with it. */
+.disk-card-pct { font-size: 13px; font-weight: 500; color: var(--tertiary); white-space: nowrap; flex: none; }
 .disk-card-meta { display: flex; flex-direction: column; gap: 4px; margin-bottom: 20px; }
 .disk-card-row { font-size: 12px; color: var(--secondary); }
 .disk-card-row strong { color: var(--ink); font-weight: 600; }
@@ -70,7 +97,10 @@
 }
 .disk-bar-label { font-size: 11px; color: var(--tertiary); white-space: nowrap; font-family: 'SF Mono', Menlo, monospace; }
 .disk-bar-track {
-  flex: 1; height: 8px; background: var(--track);
+  /* `min-width` so the bar survives a narrow card. `flex: 1` alone has a basis
+     of zero, so the two labels either side took the whole row and the bar —
+     the one thing the row exists to show — collapsed to nothing. */
+  flex: 1; min-width: 80px; height: 8px; background: var(--track);
   border-radius: 4px; overflow: hidden;
 }
 .disk-bar-fill {
@@ -81,8 +111,8 @@
 .disk-card-footer {
   margin-top: 16px; padding-top: 12px; border-top: 0.5px solid var(--line-soft);
 }
-.disk-card-stat-row { display: flex; gap: 20px; }
-.disk-card-stat { font-size: 11px; color: var(--tertiary); }
+.disk-card-stat-row { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.disk-card-stat { font-size: 11px; color: var(--tertiary); white-space: nowrap; }
 .disk-card-stat strong { color: var(--ink); }
 </style>
 
@@ -91,6 +121,7 @@
   search: '',
   loading: true,
   sizesLoading: false,
+  selected: null,
   totalSize: 0,
   disk: null,
 
@@ -135,6 +166,23 @@
     if (!this.search) return this.apps;
     var q = this.search.toLowerCase();
     return this.apps.filter(function(a) { return a.name.toLowerCase().includes(q); });
+  },
+
+  iconUrl: function(app, size) {
+    return '/api/app-icon?size=' + (size || 32) + '&name=' + encodeURIComponent(app.name);
+  },
+
+  select: function(app) {
+    this.selected = this.selected && this.selected.name === app.name ? null : app;
+  },
+
+  reveal: function(app) {
+    if (!app || !app.appPath) return;
+    fetch('/api/reveal-in-finder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: app.appPath })
+    }).catch(function() {});
   }
 }">
 
@@ -170,18 +218,58 @@
           `display: none`.
         -->
         <template x-for='app in filteredApps()' :key='app.name'>
-          <div class='app-row'>
+          <button type='button' class='app-row' :class="selected && selected.name === app.name ? 'is-selected' : ''" @click='select(app)'>
+            <!--
+              The bundle's real icon, served by /api/app-icon. `onerror` hides
+              it and reveals the glyph underneath, which is the right answer
+              for a bundle with no .icns rather than a broken-image box.
+
+              `onload` un-hides it again, and that pairing is not optional:
+              x-for reuses a row element for a different app, so one bundle
+              without an icon would otherwise hide the image for every app that
+              scrolled through that row afterwards.
+            -->
+            <span class='app-row-icon'>
+              <span class='app-row-glyph i-f7-app' aria-hidden='true'></span>
+              <img class='app-row-img' loading='lazy' alt='' :src='iconUrl(app, 32)' onload='this.hidden = false' onerror='this.hidden = true' />
+            </span>
             <span class='app-row-name' x-text='app.name'></span>
             <span class='app-row-size' x-text='fmtSize(app.sizeBytes)'></span>
-          </div>
+          </button>
         </template>
         <div x-show='!loading && filteredApps().length === 0' class='app-empty'>No apps match that search.</div>
       </div>
     </div>
 
-    <!-- ── Disk info panel ───────────────────────── -->
+    <!-- ── Detail / disk panel ───────────────────── -->
     <div class='system-main'>
-      <div class='disk-card'>
+      <!--
+        Selecting an app replaces the volume readout rather than sitting beside
+        it: the column is one card wide, and two stacked cards put the thing
+        you just clicked below the thing you did not.
+      -->
+      <div class='disk-card app-detail' x-show='selected' x-cloak>
+        <div class='app-detail-head'>
+          <span class='app-detail-icon'>
+            <span class='app-detail-glyph i-f7-app' aria-hidden='true'></span>
+            <img class='app-detail-img' alt='' :src="selected ? iconUrl(selected, 128) : ''" onload='this.hidden = false' onerror='this.hidden = true' />
+          </span>
+          <div class='app-detail-titles'>
+            <div class='disk-card-title' x-text='selected ? selected.name : ""'></div>
+            <div class='app-detail-version' x-text="selected && selected.version && selected.version !== '?' ? 'Version ' + selected.version : 'Version unknown'"></div>
+          </div>
+        </div>
+        <div class='disk-card-meta'>
+          <div class='disk-card-row'>Size: <strong x-text='selected ? fmtSize(selected.sizeBytes) : ""'></strong></div>
+          <div class='disk-card-row app-detail-path'>Location: <strong x-text='selected ? selected.appPath : ""'></strong></div>
+        </div>
+        <div class='app-detail-actions'>
+          <button class='btn btn-sm' @click='reveal(selected)'>Reveal in Finder</button>
+          <button class='btn btn-sm' @click='selected = null'>Close</button>
+        </div>
+      </div>
+
+      <div class='disk-card' x-show='!selected'>
         <div class='disk-card-header'>
           <div>
             <div class='disk-card-title'>Macintosh HD</div>
