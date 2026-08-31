@@ -129,6 +129,16 @@ console.log('[desktop] staging bundle resources')
 fs.rmSync(RESOURCES, { recursive: true, force: true })
 fs.mkdirSync(RESOURCES, { recursive: true })
 fs.cpSync(web, path.join(RESOURCES, 'web'), { recursive: true })
+
+// The comment above is only half true until this runs. Nothing under
+// `database/` is tracked, so the migrations are build output in principle but
+// were never actually built here — the copy just assumed a dev tree that had
+// them lying around from an earlier `buddy migrate`. A fresh checkout has no
+// such directory, which is why this step died with ENOENT the first time CI
+// got far enough to reach it. `--force` because a machine that has already run
+// its migrations would otherwise refuse, and a build must not depend on
+// whether the local ledger happens to be empty.
+run('./buddy', ['migrate:regenerate', '--force'])
 fs.cpSync(path.join(ROOT, 'database/migrations'), path.join(RESOURCES, 'migrations'), { recursive: true })
 
 // ── 3. Launcher, Craft runtime, manifest ────────────────────────
