@@ -1,5 +1,15 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.2.0...v0.2.1)
+
+## 🐛 Bug Fixes
+
+- **ci**: hand the signing certificate to the name the action reads ([0b5c019](https://github.com/stacksjs/system-cleaner/commit/0b5c019)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## Contributors
+
+- _Chris <chrisbreuer93@gmail.com>_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.1.3...v0.2.0)
 
 ## ✨ Features
