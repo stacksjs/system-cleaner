@@ -32,7 +32,7 @@
     "test": "bun ./scripts/build-client-scripts.ts && ./buddy test"
   },
   "dependencies": {
-    "@stacksjs/desktop": "^0.2.249",
+    "@stacksjs/desktop": "^0.2.257",
     "@stacksjs/stx": "^0.2.257",
     "@system-cleaner/clean": "workspace:*",
     "@system-cleaner/core": "workspace:*",
@@ -48,6 +48,9 @@
     "@fontsource-variable/geist": "^5.3.0",
     "@iconify-json/f7": "^1.2.2",
     "better-dx": "^0.2.25",
-    "puppeteer": "^24.42.0"
+    "puppeteer": "^24.43.1"
+  },
+  "overrides": {
+    "@stacksjs/stx": "^0.2.258"
   }
 }
