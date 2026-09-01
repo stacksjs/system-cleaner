@@ -117,6 +117,26 @@ const dirSizesCache = new TtlCache<Record<string, number>>(5 * 60_000);
 const orphanCache = new TtlCache<{ items: unknown[]; totalBytes: number }>(5 * 60_000);
 
 /**
+ * The account picture and name.
+ *
+ * An hour, because this changes when the user changes it in System Settings
+ * and not otherwise, and the two `dscl` calls behind it are the slowest thing
+ * on a bar that renders on every screen.
+ */
+const userProfileCache = new TtlCache<{
+  shortName: string;
+  fullName: string;
+  hostName: string;
+  picture: string | null;
+}>(60 * 60_000);
+
+/** An account picture is a thumbnail. Anything past this is not one, and is not worth inlining into a data URI. */
+const MAX_AVATAR_BYTES = 4 * 1024 * 1024;
+
+/** Longest edge of the avatar we serve. The chip draws it at 24px; this covers 3x and nothing beyond. */
+const AVATAR_PX = 128;
+
+/**
  * API routes for SystemCleaner.
  *
  * This file is auto-discovered by bun-router from routes/api.ts.
@@ -1010,6 +1030,133 @@ export default async function (router: Router) {
   await router.post('/system-disk-info', async () => {
     const info = getSystemDiskInfoCached();
     return Response.json({ success: true, ...info });
+  });
+
+  /**
+   * Who this Mac belongs to.
+   *
+   * The account picture lives in one of two places and neither is a file path
+   * you can guess. `Picture` is a path, set when the picture came from
+   * /Library/User Pictures or was dragged in from a file. `JPEGPhoto` is the
+   * bytes themselves, in the directory, which is what you get when the picture
+   * came from a photo, from Photo Booth, or synced down from the Apple ID —
+   * and it is the common case on a Mac signed into iCloud. Reading only one of
+   * them finds a picture on some Macs and not others, which is worse than
+   * finding none: it looks broken rather than unset.
+   *
+   * `dscl` prints JPEGPhoto as an indented hex dump across many lines, so the
+   * bytes have to be rebuilt from it. Everything here is argv-form with no
+   * shell, and every step is allowed to fail: an account with no picture is
+   * ordinary, and the caller draws an initial instead.
+   */
+  await router.post('/user-profile', async () => {
+    const cached = userProfileCache.get('profile');
+    if (cached) return Response.json({ success: true, ...cached, cached: true });
+
+    const run = async (cmd: string[]): Promise<string> => {
+      try {
+        const proc = Bun.spawn(cmd, { stdout: 'pipe', stderr: 'ignore' });
+        const out = await new Response(proc.stdout).text();
+        return (await proc.exited) === 0 ? out.trim() : '';
+      }
+      catch {
+        return '';
+      }
+    };
+
+    const user = nodeOs.userInfo().username;
+    const readAttr = async (attr: string) => run(['dscl', '.', '-read', `/Users/${user}`, attr]);
+
+    // "RealName:\n Chris Breuer" — the value can be on the same line as the key
+    // or on the next one, so take everything after the first colon either way.
+    const parseValue = (raw: string, key: string): string => {
+      if (!raw) return '';
+      const body = raw.replace(new RegExp(`^${key}:\\s*`), '').trim();
+      return body.split('\n').map(line => line.trim()).filter(Boolean).join(' ');
+    };
+
+    const fullName = parseValue(await readAttr('RealName'), 'RealName');
+    const hostName = await run(['scutil', '--get', 'ComputerName']);
+
+    /**
+     * The picture, normalised to a small PNG.
+     *
+     * Two sources, and neither is usable as-is. The directory's `JPEGPhoto` is
+     * the picture macOS itself shows and is the one to prefer — but it is a
+     * full-size photo (348 KB on this Mac) being drawn into a 24px circle, and
+     * it arrives as an indented hex dump rather than as bytes. The `Picture`
+     * path is the fallback, and the stock pictures Apple ships are HEIC —
+     * /Library/User Pictures/Animals/Eagle.heic here — which is not a format a
+     * data URI can carry to a WKWebView.
+     *
+     * So both go through `sips`, which is on every Mac: one decode, one
+     * resample, one format, and about 10 KB on the wire instead of 340.
+     */
+    const avatarFrom = async (source: string): Promise<string | null> => {
+      const out = path.join(nodeOs.tmpdir(), `system-cleaner-avatar-${user}.png`);
+      try {
+        const proc = Bun.spawn(['sips', '-Z', String(AVATAR_PX), '-s', 'format', 'png', source, '--out', out], {
+          stdout: 'ignore',
+          stderr: 'ignore',
+        });
+        if (await proc.exited !== 0 || !fs.existsSync(out)) return null;
+
+        const bytes = await Bun.file(out).arrayBuffer();
+        return bytes.byteLength > 0 && bytes.byteLength <= MAX_AVATAR_BYTES
+          ? `data:image/png;base64,${Buffer.from(bytes).toString('base64')}`
+          : null;
+      }
+      catch {
+        return null;
+      }
+      finally {
+        try { fs.rmSync(out, { force: true }); }
+        catch { /* a temp file we could not remove is not worth failing over */ }
+      }
+    };
+
+    let picture: string | null = null;
+
+    // 1. The bytes in the directory.
+    //
+    // `dscl` prints them as whitespace-separated hex groups under an attribute
+    // name, so the name has to come off before the hex is read. Stripping
+    // non-hex characters from the whole string does not do that: `JPEGPhoto:`
+    // contributes an `E`, which prepends a stray nibble and leaves the string
+    // an odd length — the parse then failed every time and the fallback below
+    // quietly carried the feature. Take whitespace-delimited tokens that are
+    // entirely hex instead, which the attribute name can never be.
+    const raw = await readAttr('JPEGPhoto');
+    const hex = raw
+      .split(/\s+/)
+      .filter(token => /^[0-9a-f]+$/i.test(token) && token.length % 2 === 0)
+      .join('');
+
+    if (hex.length >= 2 && hex.length / 2 <= MAX_AVATAR_BYTES) {
+      const source = path.join(nodeOs.tmpdir(), `system-cleaner-avatar-src-${user}.jpg`);
+      try {
+        await Bun.write(source, Buffer.from(hex, 'hex'));
+        picture = await avatarFrom(source);
+      }
+      catch {
+        picture = null;
+      }
+      finally {
+        try { fs.rmSync(source, { force: true }); }
+        catch { /* see above */ }
+      }
+    }
+
+    // 2. The path, for an account whose directory carries no bytes.
+    if (!picture) {
+      const picturePath = parseValue(await readAttr('Picture'), 'Picture').replace(/^"|"$/g, '');
+      if (picturePath && fs.existsSync(picturePath))
+        picture = await avatarFrom(picturePath);
+    }
+
+    const profile = { shortName: user, fullName: fullName || user, hostName: hostName || '', picture };
+    userProfileCache.set('profile', profile);
+    return Response.json({ success: true, ...profile, cached: false });
   });
 
   await router.post('/cleanup-targets', async () => {

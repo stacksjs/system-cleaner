@@ -2,9 +2,16 @@
 // Icon rail. Labels live in tooltips rather than in the row, so the rail
 // costs 76px instead of 234px and the content column gets the difference.
 //
-// Privacy and Schedule are not here — they moved to the top strip
-// (`AppTopNav`), because they configure the app rather than inspect the Mac,
-// and a rail of scanners was the wrong company for them.
+// Privacy, Schedule, Updates and Maintenance are not here — they live in the
+// top strip (`AppTopNav`). None of them is a place you go to look at your Mac:
+// two configure the app, and two act on it. What is left in this rail is one
+// idea — the things that scan — plus the one thing you came to do.
+//
+// Quick Clean leads it. It was last, under the scanners, which put the reason
+// most people open this app at the bottom of a list of ways to investigate it.
+// Extensions follows Applications because a browser extension is an installed
+// thing, and the question it answers ("what is on here that I did not mean to
+// install") is the one Applications asks two rows up.
 //
 // `active` is passed by each view so a cold page load paints the correct
 // selection with no flash. SPA navigations only swap `[data-stx-content]`,
@@ -14,11 +21,13 @@ export const active = $props.active || ''
 
 export const groups = [
   [
+    { id: 'cleanup', label: 'Quick Clean', icon: 'i-f7-sparkles', href: '/app/cleanup' },
+  ],
+  [
     { id: 'dashboard', label: 'Dashboard', icon: 'i-f7-square-grid-2x2-fill', href: '/app' },
   ],
   [
     { id: 'startup', label: 'Startup Items', icon: 'i-f7-bolt-fill', href: '/app/startup' },
-    { id: 'extensions', label: 'Extensions', icon: 'i-f7-square-stack-3d-up-fill', href: '/app/extensions' },
     { id: 'processes', label: 'Processes', icon: 'i-f7-chart-bar-alt-fill', href: '/app/processes' },
   ],
   [
@@ -28,11 +37,7 @@ export const groups = [
   ],
   [
     { id: 'applications', label: 'Applications', icon: 'i-f7-app-fill', href: '/app/applications' },
-    { id: 'maintenance', label: 'Maintenance', icon: 'i-f7-wrench-fill', href: '/app/maintenance' },
-    { id: 'updates', label: 'Updates', icon: 'i-f7-arrow-down-circle-fill', href: '/app/updates' },
-  ],
-  [
-    { id: 'cleanup', label: 'Quick Clean', icon: 'i-f7-sparkles', href: '/app/cleanup' },
+    { id: 'extensions', label: 'Extensions', icon: 'i-f7-square-stack-3d-up-fill', href: '/app/extensions' },
   ],
 ]
 </script>

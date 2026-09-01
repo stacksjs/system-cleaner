@@ -128,12 +128,33 @@
 </div>
 
 <div class='tbl-wrap'>
+  <!--
+    The list answers two questions now, not one.
+
+    "What is installed and what does it cost me" was always here. "What is out
+    of date" lived on its own screen, which meant the answer to "should this go
+    or should it be updated" was two screens apart — and removing an app you
+    only wanted a newer copy of is the one mistake this screen can make that
+    the user cannot undo. The update state is the same row as the Review
+    button now, so the choice is visible at the moment it is made.
+  -->
   <div class='tbl-bar'>
     <div>
       <span class='tbl-title'>Applications</span>
       <span class='tbl-count' x-text="visible().length + ' of ' + apps.length + ' shown'"></span>
+      <span class='tbl-count un-outdated' x-show='outdatedCount() > 0' x-cloak
+            x-text="outdatedCount() + ' outdated'"></span>
+      <!-- The desktop-app half of the update check shells out to brew, so it
+           lands well after the list does. Saying so beats a column of dashes
+           that looks like a finished answer of "nothing to update". -->
+      <span class='tbl-count' x-show='updatesLoading' x-cloak>checking for updates&hellip;</span>
     </div>
-    <input class='un-search' type='search' placeholder='Filter by name' x-model='filter' aria-label='Filter applications' />
+    <div class='un-bar-actions'>
+      <button class='btn btn-sm btn-active' x-show='updatable().length > 0' x-cloak
+              @click='updateAll()' :disabled='updateBusy.length > 0'
+              x-text="updateBusy.length > 0 ? 'Updating…' : 'Update All (' + updatable().length + ')'">Update All</button>
+      <input class='un-search' type='search' placeholder='Filter by name' x-model='filter' aria-label='Filter applications' />
+    </div>
   </div>
 
   <table>
@@ -143,6 +164,7 @@
         <th style='width: 110px;'>Version</th>
         <th style='width: 96px;'>Size</th>
         <th style='width: 116px;'>Installed</th>
+        <th style='width: 150px;'>Update</th>
         <th style='width: 96px;'>Actions</th>
       </tr>
     </thead>
@@ -162,6 +184,28 @@
           <td style='font-variant-numeric: tabular-nums;'
               x-text="app.sizeBytes === null ? '—' : fmtBytes(app.sizeBytes)">—</td>
           <td class='dim' x-text='fmtDate(app.installedAt)'></td>
+          <td class='action-cell'>
+            <template x-if='isUpdating(app.name)'>
+              <span class='un-update-state'>Updating&hellip;</span>
+            </template>
+            <template x-if='!isUpdating(app.name) && wasUpdated(app.name)'>
+              <span class='un-update-state un-update-done'>Updated</span>
+            </template>
+            <template x-if='!isUpdating(app.name) && !wasUpdated(app.name) && hasUpdate(app) && updateFor(app).caskToken'>
+              <button class='btn btn-sm' @click='updateApp(app)'
+                :title="'Update to ' + (updateFor(app).latestVersion || 'the latest release')"
+                x-text="updateFor(app).latestVersion ? 'Update ' + updateFor(app).latestVersion : 'Update'">Update</button>
+            </template>
+            <!-- An app Homebrew does not know how to install is one the user
+                 has to update themselves, and saying so beats an inert button. -->
+            <template x-if='!isUpdating(app.name) && !wasUpdated(app.name) && hasUpdate(app) && !updateFor(app).caskToken'>
+              <span class='un-update-state un-update-manual'
+                    x-text="updateFor(app).source === 'mas' ? 'App Store' : 'Manual'"></span>
+            </template>
+            <template x-if='!isUpdating(app.name) && !wasUpdated(app.name) && !hasUpdate(app)'>
+              <span class='un-update-state dim' x-text="updatesLoading ? '' : '—'"></span>
+            </template>
+          </td>
           <td class='action-cell'>
             <button class='btn btn-sm' @click='review(app)' :disabled='scanning'
               x-text="scanning && scanningPath === app.path ? 'Scanning…' : 'Review'">Review</button>
@@ -257,6 +301,18 @@
 </div>
 
 <style>
+.un-bar-actions { display: flex; align-items: center; gap: 8px; }
+
+/* The count that says the list has news in it. Orange rather than red: an out
+   of date app is a thing to get to, not a fault. */
+.un-outdated { color: var(--orange); font-weight: 600; }
+
+/* One column, four states, all the same width so the rows do not jitter as the
+   update check resolves row by row. */
+.un-update-state { font-size: 11px; color: var(--tertiary); white-space: nowrap; }
+.un-update-done { color: var(--green); font-weight: 600; }
+.un-update-manual { color: var(--secondary); }
+
 .un-search { height: 28px; width: 220px; padding: 0 8px; border: .5px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-family: inherit; font-size: 12px; }
 .un-search:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .un-row-on { background: color-mix(in srgb, var(--accent) 8%, transparent); }

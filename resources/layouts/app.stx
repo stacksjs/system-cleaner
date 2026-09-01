@@ -141,13 +141,24 @@ const localAgent = isLocalAgent()
     /* Sits beside the traffic lights rather than below them: the lights are
        over the rail's top-left corner, and this strip fills the rest of that
        same band, which is where a Mac app with a sidebar puts its toolbar.
-       The height tracks the buttons Craft measured so the two line up in a
-       window of any size, with a floor for the browser, where there are no
-       window controls and the variable reads as 0. */
+
+       The height is what puts the two on one line, and it is a centring
+       problem rather than a clearance one. Craft publishes where the buttons
+       start (`inset-y`) and how tall they are, so their centre is
+       `inset-y + height / 2` — and a flex row centres its children on
+       `height / 2`. Equate the two and the height falls out as
+       `2 * inset-y + height`. What stood here was `inset-y + height + 12`,
+       which is the buttons' *bottom* plus a margin: it clears them, which is a
+       different question, and it left the strip's centre line above theirs by
+       half the inset. The labels sat visibly high against the lights.
+
+       `max()` keeps a 52px floor for the browser, where the marketing site
+       renders this same shell, there are no window controls, and both
+       variables read as 0. */
     .topnav {
       display: flex; align-items: center; justify-content: flex-end;
       flex: none; gap: 4px; padding: 0 20px;
-      height: max(52px, calc(var(--craft-window-controls-inset-y, 0px) + var(--craft-window-controls-height, 0px) + 12px));
+      height: max(52px, calc(2 * var(--craft-window-controls-inset-y, 0px) + var(--craft-window-controls-height, 0px)));
       background: var(--app-bg);
     }
     .topnav-items { display: flex; align-items: center; gap: 4px; }
@@ -161,11 +172,99 @@ const localAgent = isLocalAgent()
     .topnav-item:hover { background: var(--hover); color: var(--ink); }
     .topnav-item[data-active] { background: var(--surface-soft); color: var(--ink); }
     .topnav-icon { width: 14px; height: 14px; flex: none; }
-    /* The label is the point of putting these two up here; below this the
-       strip would start eating the page title, so drop to icons alone. */
-    @media (max-width: 620px) {
-      .topnav-item span:not(.topnav-icon) { display: none; }
+    /* The label is the point of putting these up here; below this the strip
+       would start eating the page title, so drop to icons alone. The badge is
+       not a label — it is the whole reason Updates is in this bar — so it
+       stays. */
+    @media (max-width: 760px) {
+      .topnav-item span:not(.topnav-icon):not(.topnav-badge) { display: none; }
       .topnav-item { padding: 5px 8px; }
+      .profile-text { display: none; }
+    }
+
+    /* The count on Updates. Sized to hold two digits without changing the
+       row's height, so the strip does not reflow when the number arrives. */
+    .topnav-badge {
+      min-width: 17px; height: 17px; padding: 0 5px;
+      border-radius: 9px;
+      background: var(--orange); color: #fff;
+      font-size: 10px; font-weight: 700; line-height: 17px;
+      text-align: center; font-variant-numeric: tabular-nums;
+    }
+    .topnav-badge[hidden] { display: none; }
+
+    /* ---------- Profile chip ---------- */
+    /* Pushed to the left of the strip by `margin-right: auto` rather than by
+       `justify-content: space-between` on the parent: the chip is hidden until
+       the account answers, and a hidden flex child is no child at all — the
+       nav would swing to the left edge for as long as it took the fetch to
+       come back. */
+    .profile-chip {
+      display: flex; align-items: center; gap: 8px;
+      margin-right: auto; padding: 4px 10px 4px 4px;
+      border: 0; border-radius: 999px;
+      background: transparent; color: var(--secondary);
+      font-family: inherit; text-align: left; cursor: pointer;
+      transition: background .12s, color .12s;
+    }
+    .profile-chip[hidden] { display: none; }
+    .profile-chip:hover { background: var(--hover); color: var(--ink); }
+    .profile-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .profile-avatar {
+      display: grid; width: 24px; height: 24px; flex: none; place-items: center;
+      border-radius: 50%; overflow: hidden;
+      background: var(--surface-soft); color: var(--secondary);
+      font-size: 11px; font-weight: 650;
+    }
+    .profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .profile-text { display: flex; flex-direction: column; line-height: 1.15; }
+    .profile-name { font-size: 12px; font-weight: 600; color: var(--ink); }
+    .profile-host { font-size: 10px; color: var(--tertiary); }
+
+    /* Inactive window: colour, not opacity — a faded tint reads as a disabled
+       control, where grey reads as a window that has stood down. */
+    :root[data-craft-window-active='false'] .profile-name { color: var(--secondary); }
+    :root[data-craft-window-active='false'] .profile-avatar img { filter: grayscale(1); opacity: .8; }
+    :root[data-craft-window-active='false'] .topnav-badge { background: var(--tertiary); }
+    .profile-chip, .profile-avatar img, .topnav-badge {
+      transition: background .18s ease, color .18s ease, filter .18s ease, opacity .18s ease;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .profile-chip, .profile-avatar img, .topnav-badge { transition: none; }
+    }
+
+    /* ---------- Collapsed sidebar ---------- */
+    /* Craft's toolbar carries a sidebar button, and it did nothing here.
+       The runtime's own user script answers that click by stamping
+       `data-sidebar-collapsed` on the root element and injecting
+       `html[data-sidebar-collapsed] body { padding-left: 128px }` — a pad
+       sized for its default 286px native sidebar, on a shell whose rail is
+       74px and which lays itself out with flex rather than with body padding.
+       Nothing here read the attribute, so the button moved nothing; the pad
+       would have shoved the whole window sideways if anything had.
+
+       So: honour the attribute, and neutralise the pad. The rail collapses to
+       nothing and the content takes the width, which is what the button in a
+       Mac toolbar means. `data-sidebar-collapsed` is Craft's, like
+       `data-craft-window-active` — this rule reads it and claims nothing else
+       about the root element. */
+    html[data-sidebar-collapsed] body { padding-left: 0 !important; }
+    :root[data-sidebar-collapsed] .rail {
+      width: 0; min-width: 0;
+      padding-left: 0; padding-right: 0;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+    }
+    /* The window buttons stay where AppKit drew them, so the strip has to keep
+       their room clear once the rail is no longer doing it. */
+    :root[data-sidebar-collapsed] .topnav {
+      padding-left: calc(var(--craft-window-controls-inset-x, 0px) + var(--craft-window-controls-width, 0px) + 16px);
+    }
+    :root[data-sidebar-collapsed] .app-column { border-left: 0; }
+    .rail { transition: width .2s ease, opacity .2s ease, padding .2s ease; }
+    @media (prefers-reduced-motion: reduce) {
+      .rail { transition: none; }
     }
     .main-header { position: sticky; top: 0; z-index: 10; padding: 24px 28px 12px; background: linear-gradient(to bottom, var(--app-bg) 72%, transparent); }
 
@@ -450,6 +549,112 @@ const localAgent = isLocalAgent()
     .offsite-shell p { max-width: 46ch; color: var(--secondary); font-size: 13px; line-height: 1.5; }
     .offsite-shell .btn { margin-top: 6px; padding: 8px 20px; font-size: 13px; text-decoration: none; }
 
+    /* ---------- Settings panel ---------- */
+    /* A sheet, not a page. It is modal to the window the way an NSPanel is,
+       and it sits over the whole shell rather than inside the content column,
+       because ⌘, is not a navigation. */
+    .settings-scrim {
+      position: fixed; inset: 0; z-index: 200;
+      display: grid; place-items: start center;
+      padding: 56px 20px 40px;
+      background: rgba(0, 0, 0, .28);
+      -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+    }
+    .settings-scrim[hidden] { display: none; }
+    .settings-panel {
+      display: flex; flex-direction: column;
+      width: min(520px, 100%); max-height: 100%;
+      border: .5px solid var(--line); border-radius: 14px;
+      background: var(--surface); box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .settings-head {
+      display: flex; align-items: center; justify-content: space-between;
+      flex: none; gap: 12px; padding: 16px 18px 12px;
+      border-bottom: .5px solid var(--line-soft);
+    }
+    .settings-title { font-size: 15px; font-weight: 650; letter-spacing: -.01em; }
+    .settings-close {
+      display: grid; width: 26px; height: 26px; place-items: center;
+      border: 0; border-radius: 7px;
+      background: transparent; color: var(--secondary);
+      cursor: pointer; font-size: 13px;
+    }
+    .settings-close:hover { background: var(--hover); color: var(--ink); }
+    .settings-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+    .settings-body { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 18px 14px; }
+    .settings-section { padding: 12px 0; }
+    .settings-section + .settings-section { border-top: .5px solid var(--line-soft); }
+    .settings-section-title {
+      margin-bottom: 8px;
+      color: var(--tertiary); font-size: 10px; font-weight: 700;
+      letter-spacing: .06em; text-transform: uppercase;
+    }
+    .settings-section-hint { margin-top: 8px; color: var(--tertiary); font-size: 11px; }
+    .settings-rows { display: flex; flex-direction: column; }
+    .settings-row {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px; padding: 9px 0; min-height: 40px;
+    }
+    .settings-row + .settings-row { border-top: .5px solid var(--line-soft); }
+    .settings-row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .settings-row-label { font-size: 13px; font-weight: 500; }
+    .settings-row-hint { color: var(--tertiary); font-size: 11px; }
+
+    /* Segmented control, the shape macOS uses for a small closed set. */
+    .settings-segmented {
+      display: flex; flex: none; gap: 2px; padding: 2px;
+      border-radius: 8px; background: var(--surface-inset);
+    }
+    .settings-segment {
+      padding: 4px 11px; border: 0; border-radius: 6px;
+      background: transparent; color: var(--secondary);
+      font-family: inherit; font-size: 12px; font-weight: 550;
+      cursor: pointer; transition: background .12s, color .12s;
+    }
+    .settings-segment:hover { color: var(--ink); }
+    .settings-segment[data-active] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+    .settings-segment:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+    /* Switch. Sized and tinted like AppKit's, which is the control people
+       expect next to a sentence that reads as an on/off. */
+    .settings-switch {
+      position: relative; flex: none;
+      width: 38px; height: 22px; padding: 0;
+      border: 0; border-radius: 11px;
+      background: var(--track); cursor: pointer;
+      transition: background .16s ease;
+    }
+    .settings-switch[data-on] { background: var(--green); }
+    .settings-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .settings-knob {
+      position: absolute; top: 2px; left: 2px;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
+      transition: transform .16s ease;
+    }
+    .settings-switch[data-on] .settings-knob { transform: translateX(16px); }
+    @media (prefers-reduced-motion: reduce) {
+      .settings-switch, .settings-knob, .settings-segment { transition: none; }
+    }
+
+    .settings-link {
+      display: flex; align-items: center; flex: none; gap: 3px;
+      padding: 4px 8px; border-radius: 7px;
+      color: var(--accent); font-size: 12px; font-weight: 550; text-decoration: none;
+    }
+    .settings-link:hover { background: var(--hover); }
+    .settings-link-glyph { width: 11px; height: 11px; }
+
+    .settings-foot {
+      display: flex; align-items: center; justify-content: space-between;
+      flex: none; gap: 12px; padding: 11px 18px;
+      border-top: .5px solid var(--line-soft); background: var(--surface-soft);
+      color: var(--tertiary); font-size: 11px;
+    }
+    .settings-local { display: flex; align-items: center; gap: 5px; }
+
     @yield('styles')
   </style>
 </head>
@@ -464,6 +669,10 @@ const localAgent = isLocalAgent()
           @yield('body')
         </main>
       </div>
+      <!-- Rendered once into the shell rather than per screen: it is opened by
+           a menubar item and a keystroke, neither of which belongs to a route,
+           and an SPA navigation only swaps `[data-stx-content]`. -->
+      <SettingsPanel />
     @else
       <main class='main' data-stx-content>
         <div class='offsite-shell'>
@@ -552,5 +761,8 @@ useEventListener('mousedown', moveWindowFrom, { target: document })
      screen on Cmd+1..9, Rescan on Cmd+R, and Edit's roles wired so Copy and
      Paste work in the filter fields. -->
 <script src="/app-menu.js"></script>
+<!-- Wires the Settings panel above: Cmd+, from the menubar or the page, the
+     profile chip in the top strip, and the controls inside it. -->
+<script src="/settings-panel.js"></script>
 </body>
 </html>

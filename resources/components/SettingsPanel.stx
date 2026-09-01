@@ -1,0 +1,143 @@
+<script server>
+// Settings, on ⌘,.
+//
+// A Mac app answers ⌘, with a panel of its own. This one had no answer at all:
+// the shortcut fell through to AppKit, which has nothing to open, so the one
+// keystroke every Mac user tries first did nothing. Everything the app could
+// be asked to remember was either unreachable (the colour mode, which the
+// appearance bootstrap has always read and nothing has ever written) or lived
+// on a screen of its own (the schedule, the privacy keep-list).
+//
+// The markup is here and the wiring is in `resources/scripts/settings-panel.ts`,
+// which is the split the rest of this app already uses for anything that talks
+// to the native side: templates describe, bundled scripts call the bridge.
+//
+// Sections are declared rather than hand-written so the panel keeps one shape.
+// `kind` picks the control: `segmented` for a small closed set, `switch` for a
+// boolean, `link` for a screen that already exists and should not be rebuilt
+// in a sheet.
+export const sections = [
+  {
+    title: 'Appearance',
+    hint: 'Follows the system unless you pick otherwise.',
+    rows: [
+      {
+        id: 'colorMode',
+        kind: 'segmented',
+        label: 'Theme',
+        options: [
+          { value: 'system', label: 'System' },
+          { value: 'light', label: 'Light' },
+          { value: 'dark', label: 'Dark' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'General',
+    rows: [
+      {
+        id: 'openAtLogin',
+        kind: 'switch',
+        label: 'Open at login',
+        hint: 'Adds SystemCleaner to your login items.',
+      },
+      {
+        id: 'notifyOnFinish',
+        kind: 'switch',
+        label: 'Notify when a long scan finishes',
+        hint: 'Only when the window is not in front.',
+      },
+    ],
+  },
+  {
+    title: 'Cleaning',
+    rows: [
+      { id: 'schedule', kind: 'link', label: 'Scheduled cleaning', hint: 'What runs on its own, and how often.', href: '/app/schedule' },
+      { id: 'privacy', kind: 'link', label: 'Privacy keep-list', hint: 'What Quick Clean is never allowed to touch.', href: '/app/privacy' },
+    ],
+  },
+]
+</script>
+
+<!--
+  Hidden until asked for, and inert until then: `hidden` keeps it out of the
+  accessibility tree as well as off the screen, which a `display: none` class
+  alone would not do for a dialog.
+-->
+<div class="settings-scrim" data-settings-scrim hidden>
+  <div class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title" data-settings-panel>
+    <header class="settings-head">
+      <h2 class="settings-title" id="settings-title">Settings</h2>
+      <button class="settings-close" type="button" data-settings-close aria-label="Close settings">
+        <span class="i-f7-xmark" aria-hidden="true"></span>
+      </button>
+    </header>
+
+    <div class="settings-body">
+      @foreach (sections as section)
+        <section class="settings-section">
+          <h3 class="settings-section-title">{{ section.title }}</h3>
+
+          <div class="settings-rows">
+            @foreach (section.rows as row)
+              <div class="settings-row" data-settings-row="{{ row.id }}">
+                <div class="settings-row-text">
+                  <span class="settings-row-label">{{ row.label }}</span>
+                  @if(row.hint)
+                    <span class="settings-row-hint">{{ row.hint }}</span>
+                  @endif
+                </div>
+
+                @if(row.kind === 'segmented')
+                  <div class="settings-segmented" role="radiogroup" aria-label="{{ row.label }}">
+                    @foreach (row.options as option)
+                      <button
+                        class="settings-segment"
+                        type="button"
+                        role="radio"
+                        aria-checked="false"
+                        data-settings-option="{{ row.id }}"
+                        data-value="{{ option.value }}"
+                      >{{ option.label }}</button>
+                    @endforeach
+                  </div>
+                @endif
+
+                @if(row.kind === 'switch')
+                  <button
+                    class="settings-switch"
+                    type="button"
+                    role="switch"
+                    aria-checked="false"
+                    aria-label="{{ row.label }}"
+                    data-settings-switch="{{ row.id }}"
+                  ><span class="settings-knob" aria-hidden="true"></span></button>
+                @endif
+
+                @if(row.kind === 'link')
+                  <a class="settings-link" href="{{ row.href }}" data-stx-link data-settings-link>
+                    Open
+                    <span class="i-f7-chevron-right settings-link-glyph" aria-hidden="true"></span>
+                  </a>
+                @endif
+              </div>
+            @endforeach
+          </div>
+
+          @if(section.hint)
+            <p class="settings-section-hint">{{ section.hint }}</p>
+          @endif
+        </section>
+      @endforeach
+    </div>
+
+    <footer class="settings-foot">
+      <span class="settings-about" data-settings-about>SystemCleaner</span>
+      <span class="settings-local">
+        <span class="i-f7-lock-shield-fill" aria-hidden="true"></span>
+        Everything stays on this Mac
+      </span>
+    </footer>
+  </div>
+</div>

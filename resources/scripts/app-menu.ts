@@ -24,17 +24,17 @@ interface Screen {
 
 /** The rail then the top strip, in the order the eye reads them, so ⌘1..⌘9 match. */
 const SCREENS: Screen[] = [
+  { label: 'Quick Clean', href: '/app/cleanup' },
   { label: 'Dashboard', href: '/app' },
   { label: 'Startup Items', href: '/app/startup' },
-  { label: 'Extensions', href: '/app/extensions' },
   { label: 'Processes', href: '/app/processes' },
   { label: 'Disk Usage', href: '/app/disk' },
   { label: 'Large Files', href: '/app/large-files' },
   { label: 'Duplicates', href: '/app/duplicates' },
   { label: 'Applications', href: '/app/applications' },
-  { label: 'Maintenance', href: '/app/maintenance' },
+  { label: 'Extensions', href: '/app/extensions' },
   { label: 'Updates', href: '/app/updates' },
-  { label: 'Quick Clean', href: '/app/cleanup' },
+  { label: 'Maintenance', href: '/app/maintenance' },
   { label: 'Privacy', href: '/app/privacy' },
   { label: 'Schedule', href: '/app/schedule' },
 ]
@@ -82,9 +82,60 @@ const APP_NAME = 'SystemCleaner'
 // AppKit's default bar is still a working app. `set` resolves false rather
 // than throwing when there is no bridge, which is the case on the marketing
 // site — it renders this same shell in a browser.
+/**
+ * Put Settings in the application menu, where ⌘, lives on a Mac.
+ *
+ * `standardMenus.leading()` builds the app menu and Edit, and the app menu is
+ * the only place this item belongs — AppKit users look under the app's own
+ * name for it and nowhere else. Craft's bridge raises `craft:settings:open`
+ * for its own Settings item; ours dispatches the same event through
+ * `craft.settings.open()`, so the panel has one entry point no matter which
+ * menu the click came from.
+ *
+ * Written defensively around the menu's shape: if a future
+ * `standardMenus.leading()` returns something without an items array, the bar
+ * is still worth setting without this one item in it.
+ */
+function withSettingsItem(menus: ReturnType<typeof standardMenus.leading>): typeof menus {
+  const appMenu = menus[0] as { items?: unknown[] } | undefined
+  if (!appMenu || !Array.isArray(appMenu.items))
+    return menus
+
+  const settings = {
+    label: 'Settings…',
+    shortcut: 'cmd+,',
+    onClick: () => openSettings('menu'),
+  }
+
+  // After About and its separator when there is one, which is where every Mac
+  // app puts it; first otherwise.
+  const separator = appMenu.items.findIndex(item => (item as { separator?: boolean }).separator)
+  const at = separator === -1 ? 0 : separator + 1
+  appMenu.items.splice(at, 0, settings, { separator: true })
+  return menus
+}
+
+/**
+ * Open the settings panel.
+ *
+ * `craft.settings.open()` dispatches `craft:settings:open` on the window,
+ * which is the same event Craft raises for its own Settings item — so the
+ * panel listens in one place. Off-bridge, in a browser, the event is
+ * dispatched directly and the panel works the same way.
+ */
+function openSettings(source: string): void {
+  const settings = (globalThis as { craft?: { settings?: { open?: (source: string) => void } } }).craft?.settings
+  if (settings?.open) {
+    settings.open(source)
+    return
+  }
+
+  window.dispatchEvent(new CustomEvent('craft:settings:open', { detail: { source } }))
+}
+
 menu.set({
   menus: [
-    ...standardMenus.leading(APP_NAME),
+    ...withSettingsItem(standardMenus.leading(APP_NAME)),
     {
       label: 'View',
       items: [

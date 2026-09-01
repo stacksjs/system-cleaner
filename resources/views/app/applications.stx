@@ -64,6 +64,11 @@
 
   disk: null,
 
+  updates: {},
+  updatesLoading: true,
+  updateBusy: [],
+  updateDone: [],
+
   init() {
     var self0 = this;
     fetch('/api/system-disk-info', { method: 'POST' })
@@ -80,6 +85,85 @@
       if (r && r.success) { self.apps = r.apps || []; self.sizesPending = false; }
     }).catch(function() { self.loading = false; self.sizesPending = false; });
     this.loadOrphans();
+    this.loadUpdates();
+  },
+
+  loadUpdates() {
+    var self = this;
+    this.updatesLoading = true;
+    this.post('/api/updates-check', { tier: 'full' }).then(function(r) {
+      self.updatesLoading = false;
+      if (!r || !r.desktopApps) return;
+      var map = {};
+      r.desktopApps.forEach(function(row) { map[row.name] = row; });
+      self.updates = map;
+    }).catch(function() { self.updatesLoading = false; });
+  },
+
+  updateFor(app) { return this.updates[app.name] || null; },
+  hasUpdate(app) {
+    var row = this.updates[app.name];
+    return !!(row && row.updateAvailable) && this.updateDone.indexOf(app.name) === -1;
+  },
+  isUpdating(name) { return this.updateBusy.indexOf(name) !== -1; },
+  wasUpdated(name) { return this.updateDone.indexOf(name) !== -1; },
+  updatable() {
+    var self = this;
+    return this.apps.filter(function(app) {
+      var row = self.updates[app.name];
+      return self.hasUpdate(app) && !!(row && row.caskToken);
+    });
+  },
+  outdatedCount() {
+    var self = this;
+    return this.apps.filter(function(app) { return self.hasUpdate(app); }).length;
+  },
+
+  async updateApp(app) {
+    var row = this.updates[app.name];
+    if (!row || !row.caskToken || this.isUpdating(app.name)) return;
+
+    if (!await window.nativeConfirm({
+      title: 'Update ' + app.name + '?',
+      message: 'Homebrew will replace version ' + app.version + ' with ' + (row.latestVersion || 'the latest release') + '. Quit the app first if it is running.',
+      confirmLabel: 'Update',
+    })) return;
+
+    await this.runUpdate(app.name, row.caskToken);
+  },
+
+  runUpdate(name, caskToken) {
+    var self = this;
+    this.updateBusy = this.updateBusy.concat([name]);
+    return this.post('/api/app-update', { name: name, caskToken: caskToken }).then(function(r) {
+      self.updateBusy = self.updateBusy.filter(function(x) { return x !== name; });
+      if (r && r.success) {
+        self.updateDone = self.updateDone.concat([name]);
+        self.toast(name + ' updated', 'success');
+      }
+      else {
+        self.toast((r && r.error) || (name + ' could not be updated'), 'error');
+      }
+    }).catch(function() {
+      self.updateBusy = self.updateBusy.filter(function(x) { return x !== name; });
+      self.toast(name + ' could not be updated', 'error');
+    });
+  },
+
+  async updateAll() {
+    var pending = this.updatable();
+    if (pending.length === 0) return;
+
+    if (!await window.nativeConfirm({
+      title: 'Update ' + pending.length + ' app' + (pending.length === 1 ? '' : 's') + '?',
+      message: 'Homebrew will upgrade them one at a time. Anything currently running should be quit first.',
+      confirmLabel: 'Update All',
+    })) return;
+
+    for (var i = 0; i < pending.length; i++) {
+      var row = this.updates[pending[i].name];
+      if (row && row.caskToken) await this.runUpdate(pending[i].name, row.caskToken);
+    }
   },
 
   loadOrphans() {
@@ -324,7 +408,7 @@
 
 <div class='main-header'>
   <div class='main-title'>Applications</div>
-  <div class='main-subtitle'>What is installed, what it takes up, and what it leaves behind when it goes</div>
+  <div class='main-subtitle'>What is installed, what it takes up, what needs updating, and what it leaves behind when it goes</div>
 </div>
 <div class='main-content'>
   <!-- Top line first: the reason anyone opens this screen is to work out what

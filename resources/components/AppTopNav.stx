@@ -1,11 +1,16 @@
 <script server>
 // The window's top strip, to the right of the icon rail.
 //
-// Privacy and Schedule live here rather than in the rail because neither is a
-// place you go to look at your Mac — they are settings for how the app behaves
-// while you are not watching. Mixing them into a rail of scanners meant the
-// rail read as a list of eleven equal things when it is really nine scanners
-// and two preferences.
+// Nothing here is a place you go to look at your Mac, which is what separates
+// this strip from the rail beside it. The rail scans; this bar acts on the
+// machine (Updates, Maintenance) or sets how the app behaves when you are not
+// watching (Privacy, Schedule). Mixing the four into a rail of scanners made
+// it read as a list of thirteen equal things when it was really nine scanners
+// and four errands.
+//
+// The order runs from the thing with news for you to the thing you set once:
+// Updates carries a count, Maintenance is a job you run, and the last two are
+// preferences.
 //
 // `active` is passed by each view so a cold load paints the right selection
 // with no flash; the client block re-syncs it on SPA navigations, which only
@@ -13,12 +18,92 @@
 export const active = $props.active || ''
 
 export const items = [
+  { id: 'updates', label: 'Updates', icon: 'i-f7-arrow-down-circle-fill', href: '/app/updates' },
+  { id: 'maintenance', label: 'Maintenance', icon: 'i-f7-wrench-fill', href: '/app/maintenance' },
   { id: 'privacy', label: 'Privacy', icon: 'i-f7-eye-slash-fill', href: '/app/privacy' },
   { id: 'schedule', label: 'Schedule', icon: 'i-f7-clock-fill', href: '/app/schedule' },
 ]
 </script>
 
 <script client>
+/**
+ * Who this Mac belongs to, from the Mac itself.
+ *
+ * The account picture is the one piece of personalisation that costs the user
+ * nothing to set up: they already chose it, at login, and every native app on
+ * the machine shows it back to them. A window that scans your disks and lists
+ * your processes and cannot say whose they are reads like a tool pointed at a
+ * stranger's computer.
+ *
+ * The endpoint answers with a data URI or with nothing, and "nothing" is a
+ * perfectly ordinary answer — plenty of accounts have no picture set. The
+ * fallback is the initial, which is why the name is fetched even when the
+ * image is not.
+ */
+function loadProfile(): void {
+  const chip = document.querySelector<HTMLElement>('[data-profile-chip]')
+  if (!chip)
+    return
+
+  fetch('/api/user-profile', { method: 'POST' })
+    .then(r => r.json())
+    .then((d: { success?: boolean, fullName?: string, shortName?: string, picture?: string | null, hostName?: string }) => {
+      if (!d?.success)
+        return
+
+      const name = d.fullName || d.shortName || ''
+      const label = chip.querySelector<HTMLElement>('[data-profile-name]')
+      if (label && name)
+        label.textContent = name
+
+      const host = chip.querySelector<HTMLElement>('[data-profile-host]')
+      if (host && d.hostName)
+        host.textContent = d.hostName
+
+      const avatar = chip.querySelector<HTMLElement>('[data-profile-avatar]')
+      if (!avatar)
+        return
+
+      if (d.picture) {
+        const img = document.createElement('img')
+        img.src = d.picture
+        img.alt = ''
+        avatar.replaceChildren(img)
+      }
+      else if (name) {
+        // The initial, not a generic silhouette: a letter that is *yours* still
+        // personalises the corner, and a grey bust does not.
+        avatar.textContent = name.trim().charAt(0).toUpperCase()
+      }
+
+      chip.removeAttribute('hidden')
+    })
+    .catch(() => {})
+}
+
+/**
+ * The count on Updates.
+ *
+ * Promoting Updates out of the rail cost it the scanning dot the rail gives
+ * its items, and an errand you cannot see the size of is one you never run.
+ * The summary endpoint is cached on the agent side, so this is cheap enough to
+ * ask for on every load.
+ */
+function loadUpdateCount(): void {
+  const badge = document.querySelector<HTMLElement>('[data-updates-badge]')
+  if (!badge)
+    return
+
+  fetch('/api/updates-summary', { method: 'POST' })
+    .then(r => r.json())
+    .then((d: { success?: boolean, total?: number }) => {
+      const total = d?.success ? (d.total || 0) : 0
+      badge.textContent = total > 99 ? '99+' : String(total)
+      badge.toggleAttribute('hidden', total === 0)
+    })
+    .catch(() => {})
+}
+
 function syncTopNav(): void {
   const path = useRoute().path
   for (const item of Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-topnav-item]'))) {
@@ -34,10 +119,30 @@ function syncTopNav(): void {
 
 useEventListener('stx:navigate', syncTopNav)
 useEventListener('stx:load', syncTopNav)
+
+// The bar outlives navigation, so these run once rather than per screen.
+useEventListener('stx:load', loadProfile)
+loadProfile()
+
+useEventListener('stx:load', loadUpdateCount)
+// Five minutes. The check behind it shells out to brew and softwareupdate, and
+// nothing about an update count is worth spending that more often than this.
+useIntervalFn(loadUpdateCount, 300_000, { immediate: true })
 </script>
 
 <div class="topnav">
-  <nav class="topnav-items" aria-label="SystemCleaner settings">
+  <!-- Hidden until the account answers, so a Mac with no picture and no full
+       name never shows an empty circle where a face should be. -->
+  <button class="profile-chip" type="button" data-profile-chip hidden
+          data-open-settings aria-label="Settings">
+    <span class="profile-avatar" data-profile-avatar aria-hidden="true"></span>
+    <span class="profile-text">
+      <span class="profile-name" data-profile-name></span>
+      <span class="profile-host" data-profile-host></span>
+    </span>
+  </button>
+
+  <nav class="topnav-items" aria-label="SystemCleaner tools and settings">
     @foreach (items as item)
       <a
         class="topnav-item"
@@ -48,6 +153,9 @@ useEventListener('stx:load', syncTopNav)
       >
         <span class="topnav-icon {{ item.icon }}" aria-hidden="true"></span>
         <span>{{ item.label }}</span>
+        @if(item.id === 'updates')
+          <span class="topnav-badge" data-updates-badge hidden></span>
+        @endif
       </a>
     @endforeach
   </nav>
