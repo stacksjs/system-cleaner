@@ -149,16 +149,43 @@ const localAgent = isLocalAgent()
        `height / 2`. Equate the two and the height falls out as
        `2 * inset-y + height`. What stood here was `inset-y + height + 12`,
        which is the buttons' *bottom* plus a margin: it clears them, which is a
-       different question, and it left the strip's centre line above theirs by
-       half the inset. The labels sat visibly high against the lights.
+       different question from sitting on their line.
 
        `max()` keeps a 52px floor for the browser, where the marketing site
        renders this same shell, there are no window controls, and both
-       variables read as 0. */
+       variables read as 0.
+
+       That floor is the normal case here, not an edge one, which the height
+       alone does not survive. Measured in the window, the lights' centre sits
+       about 16pt below the top, so `2 * inset-y + height` comes to roughly 31
+       — under the floor. The band is then 52 tall and a centred row lands
+       about 11pt *below* the lights rather than on them.
+
+       (The 23px quoted further down this file is not a measurement of this
+       window — it is what Craft's own overlay test fixture produces, inset-y 9
+       plus button height 14. It happens to give the rail a clearance that
+       works, so it stays; do not "correct" this band to match it.)
+
+       So when the floor wins, take the difference back off the bottom: the
+       content box becomes exactly the lights' own band, and a centred row
+       lands on their centre.
+
+       The `min()` is what keeps that honest in a browser. The correction
+       `52px - 2*inset-y - height` is 52 when both variables are absent, which
+       would pad the entire strip away on the marketing site; `2*inset-y +
+       height` is 0 in that same case. Taking the smaller of the two gives 0
+       where there are no window controls, the real correction where the floor
+       wins, and a negative that `max()` clamps to 0 where it does not. No
+       attribute gate, so this does not depend on which Craft version is
+       bundled. */
     .topnav {
       display: flex; align-items: center; justify-content: flex-end;
       flex: none; gap: 4px; padding: 0 20px;
       height: max(52px, calc(2 * var(--craft-window-controls-inset-y, 0px) + var(--craft-window-controls-height, 0px)));
+      padding-bottom: max(0px, min(
+        calc(52px - 2 * var(--craft-window-controls-inset-y, 0px) - var(--craft-window-controls-height, 0px)),
+        calc(2 * var(--craft-window-controls-inset-y, 0px) + var(--craft-window-controls-height, 0px))
+      ));
       background: var(--app-bg);
     }
     .topnav-items { display: flex; align-items: center; gap: 4px; }
@@ -194,15 +221,14 @@ const localAgent = isLocalAgent()
     .topnav-badge[hidden] { display: none; }
 
     /* ---------- Profile chip ---------- */
-    /* Pushed to the left of the strip by `margin-right: auto` rather than by
-       `justify-content: space-between` on the parent: the chip is hidden until
-       the account answers, and a hidden flex child is no child at all — the
-       nav would swing to the left edge for as long as it took the fetch to
-       come back. */
+    /* At the trailing end, after the nav — see AppTopNav.stx for why: Craft's
+       own toolbar owns the leading end of this band and draws over anything
+       put there. The rule separates it from the nav so it reads as a control
+       rather than as a fifth link. */
     .profile-chip {
       display: flex; align-items: center; gap: 8px;
-      margin-right: auto; padding: 4px 10px 4px 4px;
-      border: 0; border-radius: 999px;
+      margin-left: 10px; padding: 4px 10px 4px 10px;
+      border: 0; border-left: .5px solid var(--line); border-radius: 0;
       background: transparent; color: var(--secondary);
       font-family: inherit; text-align: left; cursor: pointer;
       transition: background .12s, color .12s;

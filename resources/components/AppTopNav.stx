@@ -131,17 +131,6 @@ useIntervalFn(loadUpdateCount, 300_000, { immediate: true })
 </script>
 
 <div class="topnav">
-  <!-- Hidden until the account answers, so a Mac with no picture and no full
-       name never shows an empty circle where a face should be. -->
-  <button class="profile-chip" type="button" data-profile-chip hidden
-          data-open-settings aria-label="Settings">
-    <span class="profile-avatar" data-profile-avatar aria-hidden="true"></span>
-    <span class="profile-text">
-      <span class="profile-name" data-profile-name></span>
-      <span class="profile-host" data-profile-host></span>
-    </span>
-  </button>
-
   <nav class="topnav-items" aria-label="SystemCleaner tools and settings">
     @foreach (items as item)
       <a
@@ -159,4 +148,29 @@ useIntervalFn(loadUpdateCount, 300_000, { immediate: true })
       </a>
     @endforeach
   </nav>
+
+  <!--
+    The chip goes last, and that is a placement forced by the window rather
+    than a preference.
+
+    Craft draws its own toolbar over the top-left of the web view — the
+    sidebar button and the back/forward arrows — and it reaches about 196pt in
+    from the window's left edge, well past the 74pt rail and into this strip.
+    A chip at the leading edge sat underneath it: the arrows drew straight
+    through the name. Nothing published says how wide that toolbar is, so
+    clearing it would mean a hardcoded gap that a future runtime silently
+    invalidates. The right-hand end is the one part of this band Craft never
+    draws in.
+
+    Hidden until the account answers, so a Mac with no picture and no full name
+    never shows an empty circle where a face should be.
+  -->
+  <button class="profile-chip" type="button" data-profile-chip hidden
+          data-open-settings aria-label="Settings">
+    <span class="profile-avatar" data-profile-avatar aria-hidden="true"></span>
+    <span class="profile-text">
+      <span class="profile-name" data-profile-name></span>
+      <span class="profile-host" data-profile-host></span>
+    </span>
+  </button>
 </div>

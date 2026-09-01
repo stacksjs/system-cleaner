@@ -62,6 +62,35 @@ function go(href: string): void {
     window.location.href = href
 }
 
+/**
+ * Collapse or restore the rail.
+ *
+ * Craft's toolbar has a sidebar button and it does nothing in this window.
+ * It is wired to `toggleSidebar:` on an NSSplitViewController, which is what a
+ * `--native-sidebar` window has; this app draws its own rail in the page and
+ * asks the runtime only for the vibrancy behind it (`--web-sidebar-material`),
+ * so there is no split view for that selector to act on and no event the page
+ * can hear. Verified by clicking it against a build whose CSS does honour
+ * `data-sidebar-collapsed`: the rail stayed put.
+ *
+ * So the menu carries the real one, on the shortcut every Mac app uses for it.
+ * Setting the attribute is the whole job — the stylesheet takes the rail to
+ * zero and the content column, which paints its own background, expands over
+ * the material strip that was behind it.
+ *
+ * The attribute is the same one Craft stamps for native sidebars, deliberately:
+ * if a future runtime does wire that button up for web sidebars, it will set
+ * this and the two paths agree rather than fight.
+ */
+function toggleSidebar(): void {
+  const root = document.documentElement
+  const collapsed = root.hasAttribute('data-sidebar-collapsed')
+  if (collapsed)
+    root.removeAttribute('data-sidebar-collapsed')
+  else
+    root.setAttribute('data-sidebar-collapsed', 'true')
+}
+
 /** Re-run whatever the current screen calls a scan. */
 function rescan(): void {
   const startDiskScan = (window as { startDiskScan?: () => void }).startDiskScan
@@ -140,6 +169,8 @@ menu.set({
       label: 'View',
       items: [
         { label: 'Rescan', shortcut: 'cmd+r', onClick: rescan },
+        { separator: true },
+        { label: 'Hide Sidebar', shortcut: 'cmd+alt+s', onClick: toggleSidebar },
         { separator: true },
         ...SCREENS.map((screen, index) => ({
           label: screen.label,
