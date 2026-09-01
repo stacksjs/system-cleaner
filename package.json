@@ -51,6 +51,6 @@
     "puppeteer": "^24.43.1"
   },
   "overrides": {
-    "@stacksjs/stx": "^0.2.258"
+    "@stacksjs/stx": "^0.2.259"
   }
 }
