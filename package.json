@@ -32,12 +32,13 @@
     "test": "bun ./scripts/build-client-scripts.ts && ./buddy test"
   },
   "dependencies": {
+    "@stacksjs/desktop": "^0.2.249",
+    "@stacksjs/stx": "^0.2.251",
     "@system-cleaner/clean": "workspace:*",
     "@system-cleaner/core": "workspace:*",
     "@system-cleaner/disk": "workspace:*",
     "@system-cleaner/monitor": "workspace:*",
     "@system-cleaner/uninstall": "workspace:*",
-    "@stacksjs/desktop": "^0.2.249",
     "@ts-charts/format": "^0.2.7",
     "@ts-charts/scale": "^0.2.7",
     "@ts-charts/shape": "^0.2.7",
