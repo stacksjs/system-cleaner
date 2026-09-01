@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "@stacksjs/desktop": "^0.2.249",
-    "@stacksjs/stx": "^0.2.252",
+    "@stacksjs/stx": "^0.2.256",
     "@system-cleaner/clean": "workspace:*",
     "@system-cleaner/core": "workspace:*",
     "@system-cleaner/disk": "workspace:*",
