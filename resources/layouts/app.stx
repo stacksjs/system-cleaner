@@ -283,9 +283,17 @@ const localAgent = isLocalAgent()
       pointer-events: none;
     }
     /* The window buttons stay where AppKit drew them, so the strip has to keep
-       their room clear once the rail is no longer doing it. */
+       their room clear once the rail is no longer doing it.
+
+       `--craft-window-controls-width` is already the room to leave, measured
+       from the viewport's left edge rather than from the buttons — so adding
+       the inset to it counted the same gap twice. It also covers Craft's own
+       toolbar row now (the sidebar toggle and the history arrows), which the
+       runtime under-reported until craft#cc781de: it answered 69 for a row
+       that reaches 189, and anything placed in between sat under real
+       NSButtons. */
     :root[data-sidebar-collapsed] .topnav {
-      padding-left: calc(var(--craft-window-controls-inset-x, 0px) + var(--craft-window-controls-width, 0px) + 16px);
+      padding-left: calc(var(--craft-window-controls-width, 0px) + 16px);
     }
     :root[data-sidebar-collapsed] .app-column { border-left: 0; }
     .rail { transition: width .2s ease, opacity .2s ease, padding .2s ease; }
