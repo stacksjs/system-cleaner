@@ -106,22 +106,33 @@ const localAgent = isLocalAgent()
        a neutral fill and its icons desaturate, so the whole sidebar recedes
        together.
 
-       `data-window-active="false"` is stamped on the root element by the block
-       at the bottom of this file. Colour is the only thing that changes —
+       `data-craft-window-active="false"` is stamped on the root element by the
+       Craft runtime, which is the only thing that can see the window server. Colour is the only thing that changes —
        nothing moves, so returning to the window does not reflow it. */
-    :root[data-window-active='false'] .rail-item[data-active] {
+    /* Colour, not opacity. Fading an icon that is `color: var(--accent)`
+       leaves it pale blue, which reads as a disabled control rather than an
+       inactive window — Finder's icons go grey at full strength. So the rail
+       drops to the neutral it would have had if it had never been tinted. */
+    :root[data-craft-window-active='false'] .rail-item { color: var(--secondary); }
+    :root[data-craft-window-active='false'] .rail-item[data-active] {
       background: var(--surface-soft);
-      color: var(--secondary);
+      color: var(--ink);
       box-shadow: none;
     }
-    :root[data-window-active='false'] .rail-icon { opacity: .55; }
-    :root[data-window-active='false'] .topnav-item { color: var(--tertiary); }
-    :root[data-window-active='false'] .topnav-item[data-active] { background: var(--surface-soft); }
-    .rail-item, .rail-icon, .topnav-item {
-      transition: background .18s ease, color .18s ease, opacity .18s ease, box-shadow .18s ease;
+    /* The mark is artwork rather than a tinted glyph, so `color` cannot reach
+       it and it would sit there as the one saturated thing left in a sidebar
+       that has otherwise stood down. */
+    :root[data-craft-window-active='false'] .rail-brand img { filter: grayscale(1); opacity: .75; }
+    :root[data-craft-window-active='false'] .topnav-item { color: var(--secondary); }
+    :root[data-craft-window-active='false'] .topnav-item[data-active] {
+      background: var(--surface-soft);
+      color: var(--ink);
+    }
+    .rail-item, .rail-icon, .topnav-item, .rail-brand img {
+      transition: background .18s ease, color .18s ease, opacity .18s ease, box-shadow .18s ease, filter .18s ease;
     }
     @media (prefers-reduced-motion: reduce) {
-      .rail-item, .rail-icon, .topnav-item { transition: none; }
+      .rail-item, .rail-icon, .topnav-item, .rail-brand img { transition: none; }
     }
     .app-column { display: flex; flex: 1; flex-direction: column; min-width: 0; }
     .main { min-width: 0; flex: 1; overflow-y: auto; background: var(--app-bg); }
@@ -518,50 +529,21 @@ function moveWindowFrom(event: Event): void {
 useEventListener('mousedown', moveWindowFrom, { target: document })
 
 /*
- * Whether this window is the one in front.
+ * Whether this window is the one in front is Craft's answer now.
  *
- * `document.hasFocus()` is the obvious reading and the wrong one inside a
- * WKWebView: it reports whether the *web view* holds first responder, not
- * whether the window is key. A window can be perfectly in front with the web
- * view not first responder, and the page then paints itself inactive — the
- * whole sidebar greyed out on a window the user is looking straight at.
+ * The runtime stamps `data-craft-window-active` on the root element from its
+ * NSWindowDelegate, seeded at document-start and restated whenever a window is
+ * attached, so the CSS above needs nothing from this file.
  *
- * Craft re-emits its NSWindowDelegate as `craft:window:focus` and
- * `craft:window:blur`, which come from `windowDidBecomeKey:` and
- * `windowDidResignKey:`. That is the actual answer, so take it when it is
- * there and keep `hasFocus` for the browser, where this shell also renders and
- * where the tab either has focus or is not on screen at all.
- *
- * Neither has fired yet on a cold load, so the default is active. A window
- * that launches behind something then looks active until the first blur, which
- * is a far better way to be wrong than a focused window that looks dead.
+ * What stood here was forty lines reaching the same conclusion badly. It read
+ * `document.hasFocus()`, which inside a WKWebView reports whether the *web
+ * view* holds first responder rather than whether the window is key — a window
+ * perfectly in front with focus elsewhere painted itself grey. It then branched
+ * on whether `craft.window` existed to tell a Craft window from a browser tab.
+ * And it had not run at all since the edit that left `}: void {` in the middle
+ * of it: one syntax error took the whole client block with it, which is why the
+ * rail stayed blue behind other windows no matter what the CSS said.
  */
-function setWindowActive(active: boolean): void {
-  document.documentElement.setAttribute('data-window-active', active ? 'true' : 'false')
-}
-
-setWindowActive(true)
-
-useEventListener('craft:window:focus', () => setWindowActive(true), { target: window })
-useEventListener('craft:window:blur', () => setWindowActive(false), { target: window })
-
-// The browser path, and only the browser path: in a Craft window these fire on
-// web-view focus changes that have nothing to do with which window is key.
-if (typeof (globalThis as { craft?: { window?: unknown } }).craft?.window === 'undefined') {
-  setWindowActive(document.hasFocus())
-  useEventListener('focus', () => setWindowActive(true), { target: window })
-  useEventListener('blur', () => setWindowActive(false), { target: window })
-}: void {
-  document.documentElement.setAttribute(
-    'data-window-active',
-    document.hasFocus() ? 'true' : 'false',
-  )
-}
-
-useEventListener('focus', syncWindowActive, { target: window })
-useEventListener('blur', syncWindowActive, { target: window })
-useEventListener('stx:load', syncWindowActive)
-syncWindowActive()
 </script>
 <!-- Loaded for every app page: `nativeConfirm` and `nativeAlert` replace the
      web dialogs on the destructive actions, and every screen has one. -->
