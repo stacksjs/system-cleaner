@@ -69,6 +69,7 @@ const localAgent = isLocalAgent()
     }
     ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .1s; }
     ::view-transition-group(root) { background: var(--app-bg); }
+    :root[data-craft-native-sidebar] ::view-transition-group(root) { background: transparent; }
     [data-stx-content] { min-height: 100%; background: var(--app-bg); }
     [x-cloak] { display: none !important; }
     ::-webkit-scrollbar { width: 6px; }
@@ -78,21 +79,48 @@ const localAgent = isLocalAgent()
     .app-chrome { display: flex; width: 100vw; height: 100vh; flex-direction: column; overflow: hidden; background: var(--app-bg); }
     .app-body { display: flex; min-width: 0; flex: 1; overflow: hidden; }
 
-    /* ---------- Vibrant rail ---------- */
-    /* Craft draws an NSVisualEffectView behind the leftmost 74px of the web
-       view when the launcher asks for `--web-sidebar-material`, and stamps
-       `data-craft-native-sidebar` on the root element when it has. That marker
-       is the whole switch: in a Craft window the shell goes transparent so the
-       material shows through under the rail, and in a browser — the marketing
-       site renders this same shell — nothing changes and the rail keeps the
-       page's own fill.
+    /* ---------- Vibrant window ---------- */
+    /* Craft draws an NSVisualEffectView behind the web view when the launcher
+       asks for one, and stamps two markers on the root element:
+       `data-craft-native-sidebar` whenever there is a material at all, and
+       `data-craft-web-material` — "window" or "sidebar" — for how far it
+       reaches. The second is newer, so the first is what the transparency
+       keys on: every runtime that draws a material sets it, and a browser,
+       where the marketing site renders this same shell, sets neither and
+       every surface keeps its own fill.
 
-       Only the rail strip is uncovered. The content column paints `--app-bg`
-       over itself, so the material stops where Finder's sidebar stops, with a
-       hairline in the same place Finder puts one. */
+       The window span is what this app asks for. The rail carries no fill of
+       its own, so a material that stopped at 74px put the only hard edge in
+       the window exactly where there was otherwise no boundary at all. One
+       material behind everything, and the cards are what have edges.
+
+       Every band between the material and the page goes transparent so the
+       wash is applied exactly once. `body` is where it lands, because it is
+       the one element that spans the window and sits under all of them. */
     :root[data-craft-native-sidebar] body,
-    :root[data-craft-native-sidebar] .app-chrome { background: transparent; }
-    :root[data-craft-native-sidebar] .app-column {
+    :root[data-craft-native-sidebar] .app-chrome,
+    :root[data-craft-native-sidebar] [data-stx-content],
+    :root[data-craft-native-sidebar] .main,
+    :root[data-craft-native-sidebar] .topnav { background: transparent; }
+
+    /* The wash. A material with nothing over it shows the desktop straight
+       through and no text on it is readable; at this strength the surface
+       still moves with what is behind the window, which is the whole reason
+       for asking AppKit rather than painting a grey rectangle.
+
+       A native tint would be the other way to do this, and it cannot work
+       here: AppKit would have to be told light or dark, and the page owns that
+       choice. `--app-bg` already flips with the colour mode, so one rule
+       covers both. */
+    :root[data-craft-web-material='window'] body {
+      background: color-mix(in srgb, var(--app-bg) 62%, transparent);
+    }
+
+    /* A sidebar-span material — what a runtime older than the window span
+       gives us — keeps the arrangement it was built for: vibrancy under the
+       rail, an opaque content column beside it, and the hairline Finder puts
+       in the same place. */
+    :root[data-craft-native-sidebar]:not([data-craft-web-material='window']) .app-column {
       background: var(--app-bg);
       border-left: 0.5px solid var(--line-soft);
     }
@@ -137,50 +165,45 @@ const localAgent = isLocalAgent()
        over the rail's top-left corner, and this strip fills the rest of that
        same band, which is where a Mac app with a sidebar puts its toolbar.
 
-       The height is what puts the two on one line, and it is a centring
-       problem rather than a clearance one. Craft publishes where the buttons
-       start (`inset-y`) and how tall they are, so their centre is
-       `inset-y + height / 2` — and a flex row centres its children on
-       `height / 2`. Equate the two and the height falls out as
-       `2 * inset-y + height`. What stood here was `inset-y + height + 12`,
-       which is the buttons' *bottom* plus a margin: it clears them, which is a
-       different question from sitting on their line.
+       Putting the two on one line is a centring problem, not a clearance one.
+       The lights' centre is `buttons-y + buttons-height / 2`, and a flex row
+       centres its children on `height / 2`, so the band that puts a row on
+       their line is `2 * buttons-y + buttons-height` tall.
 
-       `max()` keeps a 52px floor for the browser, where the marketing site
-       renders this same shell, there are no window controls, and both
-       variables read as 0.
+       Those are the buttons' *own* numbers, and using them is the whole fix.
+       `--craft-window-controls-height` is not the buttons' height and never
+       was: it is the bottom edge of everything a page has to keep clear, which
+       since Craft 0.0.86 spans its own toolbar row as well — 30 where the
+       lights end at 23. Feeding that into a centring formula centred the row
+       on a rectangle taller than the thing it was meant to line up with, and
+       the 52px floor below was hiding most of the error.
 
-       That floor is the normal case here, not an edge one, which the height
-       alone does not survive. Measured in the window, the lights' centre sits
-       about 16pt below the top, so `2 * inset-y + height` comes to roughly 31
-       — under the floor. The band is then 52 tall and a centred row lands
-       about 11pt *below* the lights rather than on them.
+       The fallbacks chain so a runtime that publishes only the reserve keeps
+       the answer it had before the buttons were published separately, and
+       `max()` keeps a 52px floor for the browser — the marketing site renders
+       this same shell, where every one of these variables is absent.
 
-       (The 23px quoted further down this file is not a measurement of this
-       window — it is what Craft's own overlay test fixture produces, inset-y 9
-       plus button height 14. It happens to give the rail a clearance that
-       works, so it stays; do not "correct" this band to match it.)
-
-       So when the floor wins, take the difference back off the bottom: the
-       content box becomes exactly the lights' own band, and a centred row
-       lands on their centre.
+       That floor wins in a real window too: the lights' band comes to 32,
+       which is under it. So when it wins, take the difference back off the
+       bottom — the content box becomes exactly the lights' own band, and a
+       centred row lands on their centre.
 
        The `min()` is what keeps that honest in a browser. The correction
-       `52px - 2*inset-y - height` is 52 when both variables are absent, which
-       would pad the entire strip away on the marketing site; `2*inset-y +
-       height` is 0 in that same case. Taking the smaller of the two gives 0
-       where there are no window controls, the real correction where the floor
-       wins, and a negative that `max()` clamps to 0 where it does not. No
-       attribute gate, so this does not depend on which Craft version is
-       bundled. */
+       `52px - band` is 52 when nothing is published, which would pad the whole
+       strip away on the marketing site; `band` is 0 in that same case. Taking
+       the smaller gives 0 where there are no window controls, the real
+       correction where the floor wins, and a negative that `max()` clamps to 0
+       where it does not. No attribute gate, so none of this depends on which
+       Craft version is bundled. */
     .topnav {
+      --chrome-band: calc(
+        2 * var(--craft-window-buttons-y, var(--craft-window-controls-inset-y, 0px))
+        + var(--craft-window-buttons-height, var(--craft-window-controls-height, 0px))
+      );
       display: flex; align-items: center; justify-content: flex-end;
-      flex: none; gap: 4px; padding: 0 20px;
-      height: max(52px, calc(2 * var(--craft-window-controls-inset-y, 0px) + var(--craft-window-controls-height, 0px)));
-      padding-bottom: max(0px, min(
-        calc(52px - 2 * var(--craft-window-controls-inset-y, 0px) - var(--craft-window-controls-height, 0px)),
-        calc(2 * var(--craft-window-controls-inset-y, 0px) + var(--craft-window-controls-height, 0px))
-      ));
+      flex: none; padding: 0 20px;
+      height: max(52px, var(--chrome-band));
+      padding-bottom: max(0px, min(calc(52px - var(--chrome-band)), var(--chrome-band)));
       background: var(--app-bg);
     }
     /* Below this the name and host would start crowding the page title, and
@@ -341,6 +364,25 @@ const localAgent = isLocalAgent()
     }
     .main-header { position: sticky; top: 0; z-index: 10; padding: 18px 28px 12px; background: linear-gradient(to bottom, var(--app-bg) 72%, transparent); }
 
+    /* Over a material the header cannot paint `--app-bg`: that is a second
+       wash on top of the one `body` already applies, and the band it makes is
+       visible before a single pixel has scrolled.
+
+       So the fill moves to a layer of its own, behind the text, that can be
+       masked to nothing at the bottom edge — a blur with a hard edge is worse
+       than no blur, and masking the element itself would fade the subtitle
+       sitting in that same bottom band. The blur is what actually hides
+       scrolled content; the wash is only enough to keep contrast up. */
+    :root[data-craft-web-material='window'] .main-header { background: transparent; isolation: isolate; }
+    :root[data-craft-web-material='window'] .main-header::before {
+      position: absolute; inset: 0; z-index: -1; content: '';
+      background: color-mix(in srgb, var(--app-bg) 26%, transparent);
+      backdrop-filter: blur(18px) saturate(180%);
+      -webkit-backdrop-filter: blur(18px) saturate(180%);
+      mask-image: linear-gradient(to bottom, #000 74%, transparent);
+      -webkit-mask-image: linear-gradient(to bottom, #000 74%, transparent);
+    }
+
     /* ---------- Icon rail ---------- */
     /* No fill and no divider: the rail sits on the same surface as the
        content column so the two read as one canvas, and the only thing that
@@ -351,15 +393,20 @@ const localAgent = isLocalAgent()
        sidebar uses. Two consequences, and neither of them is a number typed in
        here:
 
-       1. The first rail button starts below them. Craft publishes the buttons'
-          size *and* their inset from the corner, and the clearance needs both:
-          height alone put the brand mark 5px into the buttons, because the
-          inset is where they start, not where the window does. The rail adds its own
-          breathing room to that. On macOS 27 the measurement is 23px, which
-          puts the brand mark at 31px — where 16px would have run it under the
-          buttons by seven. `max()` keeps the old 16px wherever nothing is
-          published: a browser, which has no window buttons, or a Craft old
-          enough not to say where its own are.
+       1. The brand mark starts below them, and below *them* is the point.
+          Craft publishes two rectangles: `--craft-window-buttons-*`, the
+          traffic lights themselves, and `--craft-window-controls-*`, the room
+          to leave — which spans Craft's own toolbar row as well, since 0.0.86.
+          That row starts around x=78 and never reaches this 74px rail, so
+          reserving it here cost the mark 16px of height for a row that is not
+          above it. The buttons' own bottom (`y + height`, because the inset is
+          where they start rather than where the window does) plus the rail's
+          breathing room is the real clearance.
+
+          The fallbacks chain deliberately: a runtime that publishes only the
+          reserve gets the old, safe answer rather than nothing, and `max()`
+          keeps 16px where neither is published — a browser, which has no
+          window buttons at all.
        2. This rail is part of the window's drag handle, which the script at
           the end of this file wires up. Not `-webkit-app-region: drag`: that
           property is Chromium's, WebKit does not implement it, and a WKWebView
@@ -369,7 +416,11 @@ const localAgent = isLocalAgent()
     .rail {
       display: flex; width: 74px; min-width: 74px; height: 100%;
       flex-direction: column; align-items: center; gap: 22px;
-      padding: max(16px, calc(var(--craft-window-controls-inset-y, 0px) + var(--craft-window-controls-height, 0px) + 8px)) 0 14px;
+      padding: max(16px, calc(
+        var(--craft-window-buttons-y, var(--craft-window-controls-inset-y, 0px))
+        + var(--craft-window-buttons-height, var(--craft-window-controls-height, 0px))
+        + 8px
+      )) 0 14px;
       background: transparent;
     }
     .rail-brand { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 13px; color: var(--ink); }

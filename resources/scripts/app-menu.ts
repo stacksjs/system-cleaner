@@ -68,15 +68,15 @@ function go(href: string): void {
  * Craft's toolbar has a sidebar button and it does nothing in this window.
  * It is wired to `toggleSidebar:` on an NSSplitViewController, which is what a
  * `--native-sidebar` window has; this app draws its own rail in the page and
- * asks the runtime only for the vibrancy behind it (`--web-sidebar-material`),
+ * asks the runtime only for the material behind it (`--web-window-material`),
  * so there is no split view for that selector to act on and no event the page
  * can hear. Verified by clicking it against a build whose CSS does honour
  * `data-sidebar-collapsed`: the rail stayed put.
  *
  * So the menu carries the real one, on the shortcut every Mac app uses for it.
  * Setting the attribute is the whole job — the stylesheet takes the rail to
- * zero and the content column, which paints its own background, expands over
- * the material strip that was behind it.
+ * zero and the content column takes the width. The material is behind the
+ * whole window either way, so nothing is uncovered by collapsing the rail.
  *
  * The attribute is the same one Craft stamps for native sidebars, deliberately:
  * if a future runtime does wire that button up for web sidebars, it will set

@@ -191,7 +191,36 @@ const port = await readPort()
 await waitForHealth(port)
 
 /**
- * Whether the bundled runtime can host this app's chrome.
+ * Whether the bundled runtime takes a given flag.
+ *
+ * This used to ask the binary its version and compare it against the release
+ * that introduced the behaviour. That works for the runtime this app ships,
+ * which is signed during the bundle build and answers `--version` properly. It
+ * does not work for one that is not yet signed: macOS kills an unsigned Mach-O
+ * on exec, so the probe reads an empty stdout, the regex finds no version, and
+ * the runtime is judged incapable. The pantry download behaves exactly that
+ * way before the build signs it, and a local `zig build` reports 0.0.0.
+ *
+ * So ask the binary what it *supports* rather than what it is called, without
+ * running it at all. The flag name appears in its own argument table, which is
+ * the fact the version number was standing in for and cannot drift away from
+ * the behaviour. A runtime that cannot be read is treated as incapable, which
+ * is the safe answer for every flag below.
+ */
+function runtimeSupports(flag: string): boolean {
+  try {
+    // `grep -q` on the binary, rather than reading 13 MB into this process to
+    // search it. Exit code 0 means the flag is in the runtime's option table.
+    const probe = Bun.spawnSync(['grep', '-qa', '--', flag, craftBinary])
+    return probe.exitCode === 0
+  }
+  catch {
+    return false
+  }
+}
+
+/**
+ * Whether the runtime can host this app's chrome.
  *
  * Hiding the titlebar puts the window's own buttons over the page's top-left
  * corner, which is where this app's chrome belongs — every Mac app with a
@@ -205,66 +234,43 @@ await waitForHealth(port)
  *      `-webkit-app-region: drag` — a WKWebView discards the declaration — so
  *      without `startDrag` a titlebar-less window cannot be moved at all.
  *
- * This used to ask the binary its version and compare it against the release
- * that introduced both. That works for the runtime this app ships, which is
- * signed during the bundle build and answers `--version` properly. It does not
- * work for one that is not yet signed: macOS kills an unsigned Mach-O on exec,
- * so the probe reads an empty stdout, the regex finds no version, and the
- * runtime is judged incapable. The pantry download behaves exactly that way
- * before the build signs it, and a local `zig build` reports 0.0.0. In both
- * cases the answer is "no titlebar-hidden", and the window comes up with an
- * ordinary titlebar and no buttons over the rail.
- *
- * So ask the binary what it *supports* rather than what it is called, without
- * running it at all. The flag name appears in its own argument table, which is
- * the fact the version number was standing in for and cannot drift away from
- * the behaviour. A runtime that cannot be read is treated as incapable: a
- * window with a titlebar is the wrong look, and a window that cannot be moved
- * is a broken app.
+ * Both arrived with `--titlebar-hidden`, so the flag stands for all three. A
+ * runtime without it opens an ordinary titlebar and no buttons over the rail,
+ * which is plain but not broken.
  */
-function runtimeCanHostChrome(): boolean {
-  try {
-    // `grep -q` on the binary, rather than reading 13 MB into this process to
-    // search it. Exit code 0 means the flag is in the runtime's option table.
-    const probe = Bun.spawnSync(['grep', '-qa', '--', '--titlebar-hidden', craftBinary])
-    return probe.exitCode === 0
-  }
-  catch {
-    return false
-  }
-}
+const canHostChrome = runtimeSupports('--titlebar-hidden')
 
 /**
- * The vibrancy behind the icon rail.
+ * The vibrancy the whole window sits on.
  *
  * Hiding the titlebar puts the real window buttons over the rail's top-left
  * corner, which is the right half of the arrangement. The other half is what
- * they sit ON. In Finder the buttons rest on a translucent sidebar that is
- * visibly a different surface from the content beside it; here the rail was
- * the same flat fill as the page, so three AppKit buttons floated on a white
- * rectangle and the corner read as a web page wearing a Mac window's buttons.
- * They are the genuine article — they show the ×/−/⤢ glyphs on hover and grey
- * out when the window loses focus — but nothing around them said so.
+ * they sit ON. In Finder the buttons rest on a translucent sidebar rather than
+ * on a flat page, and without a material under them three AppKit buttons float
+ * on a white rectangle: they are the genuine article — ×/−/⤢ on hover, grey
+ * when the window loses focus — but nothing around them says so.
  *
- * `--web-sidebar-material` puts an NSVisualEffectView behind the leftmost
- * strip of the web view, which is exactly the surface Finder's buttons sit on.
- * The dev runner has been passing it all along, from the framework's defaults,
- * which is why the window has looked right under `buddy dev` and wrong once
- * installed — the launcher this app substitutes for the framework's never
- * carried it across.
+ * `--web-window-material` puts one NSVisualEffectView behind the entire web
+ * view. It started as `--web-sidebar-material`, which covers a leading strip
+ * and paints the rest opaque — Finder's arrangement, and the right one for a
+ * window whose sidebar is a different surface from its content. This one is
+ * not: the rail carries no fill of its own, and the seam between a translucent
+ * rail and an opaque page was the only thing in the window that drew a line
+ * there. One material behind everything removes the seam and gives the whole
+ * app the same surface the buttons already sit on.
  *
- * The width is the rail's own 74px rather than the 286px default, which is
- * sized for a sidebar with labels in it. The tint is what the material is
- * washed with: the framework's 0.78 washes it almost white, and
- * Finder's sidebar is plainly greyer and more translucent than the pane beside
- * it. 0.25 lands on that, and the window buttons read as buttons sitting on a
- * sidebar rather than on a white page.
+ * Nothing is tinted natively. A material behind the whole page has to be
+ * washed in the page's own colour, and the page is the only thing that knows
+ * whether it is light or dark — so `app.stx` paints a translucent `--app-bg`
+ * over it, in whichever mode it is in, and tells Craft which mode that is
+ * (`settings-panel.ts`) so the material resolves to match.
  *
- * The page has to get out of the way for any of this to be visible — an opaque
- * `.app-chrome` covers the material completely. It does that by keying on the
- * marker Craft stamps on the root element when this flag is on, so a browser,
- * which has no material to show, keeps its ordinary fill.
+ * The older flags stay as the fallback: an installed copy is only rebuilt when
+ * this app ships, and a runtime predating the window span should still put a
+ * material under the buttons rather than none at all.
  */
+const WINDOW_MATERIAL = ['--web-window-material']
+
 const SIDEBAR_MATERIAL = [
   '--web-sidebar-material',
   '--web-sidebar-width',
@@ -273,12 +279,14 @@ const SIDEBAR_MATERIAL = [
   '0.25',
 ]
 
+const material = runtimeSupports('--web-window-material') ? WINDOW_MATERIAL : SIDEBAR_MATERIAL
+
 const craft = Bun.spawn([
   craftBinary,
   `http://127.0.0.1:${port}/app`,
   '--title',
   APP_NAME,
-  ...(runtimeCanHostChrome() ? ['--titlebar-hidden', ...SIDEBAR_MATERIAL] : []),
+  ...(canHostChrome ? ['--titlebar-hidden', ...material] : []),
   '--width',
   '1400',
   '--height',

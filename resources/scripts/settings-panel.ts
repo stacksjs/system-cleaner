@@ -61,12 +61,47 @@ function currentColorMode(): ColorMode {
 }
 
 /**
+ * The one piece of the window this page does not draw.
+ *
+ * Craft puts an NSVisualEffectView behind the whole web view, and AppKit
+ * resolves that material against the *window's* appearance, not the page's.
+ * Choosing dark here without saying so left a dark page washed over a light
+ * material — and the window buttons, which AppKit also draws, stayed light
+ * beside it.
+ *
+ * `setAppearance` is Craft's answer to that, and 'system' is a real value
+ * rather than a synonym for light: it hands the window back to the Mac, so it
+ * keeps following a sunset switch as it did before anything pinned it.
+ *
+ * Absent in a browser — the marketing site renders this same shell — and
+ * absent in a Craft too old to have it. Optional chaining covers both; there
+ * is nothing to fall back to and nothing that needs one.
+ */
+interface CraftWindowAppearance {
+  window?: { setAppearance?: (appearance: ColorMode) => Promise<void> }
+}
+
+function applyNativeAppearance(mode: ColorMode): void {
+  const craft = (window as unknown as { craft?: CraftWindowAppearance }).craft
+  craft?.window?.setAppearance?.(mode)?.catch(() => {})
+}
+
+/**
  * Apply a colour mode now, the way the bootstrap applies it at load.
  *
- * The attribute and the class have to move together: the stylesheet keys its
- * palette off `:root.dark`, and `data-color-mode` is what the bootstrap reads
- * back. Setting one without the other leaves the next load disagreeing with
- * what is on screen.
+ * Everything the bootstrap writes has to move together: the stylesheet keys
+ * its palette off `:root.dark`, `data-color-mode` is what the bootstrap reads
+ * back, and `data-theme` is the resolved answer for anything that wants it
+ * without computing `prefers-color-scheme` itself. Writing some and not others
+ * leaves the document disagreeing with itself — which it did, silently, for
+ * `data-theme`: only the bootstrap ever set it, so it described the mode the
+ * window opened in rather than the one it was in.
+ *
+ * This is a second copy of the bootstrap's rules, and a second copy is how
+ * they came apart in the first place. `@appearanceBootstrap` publishes
+ * `window.__stxAppearance` from the STX release after 0.2.258; when this app
+ * is on it, this function and `setColorMode` below become calls to
+ * `setColorMode` there and there is one implementation again.
  */
 function applyColorMode(mode: ColorMode): void {
   const root = document.documentElement
@@ -76,6 +111,8 @@ function applyColorMode(mode: ColorMode): void {
     || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
 
   root.classList.toggle('dark', dark)
+  root.dataset.theme = dark ? 'dark' : 'light'
+  applyNativeAppearance(mode)
 }
 
 function setColorMode(mode: ColorMode): void {
