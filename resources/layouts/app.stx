@@ -339,7 +339,7 @@ const localAgent = isLocalAgent()
     @media (prefers-reduced-motion: reduce) {
       .rail { transition: none; }
     }
-    .main-header { position: sticky; top: 0; z-index: 10; padding: 24px 28px 12px; background: linear-gradient(to bottom, var(--app-bg) 72%, transparent); }
+    .main-header { position: sticky; top: 0; z-index: 10; padding: 18px 28px 12px; background: linear-gradient(to bottom, var(--app-bg) 72%, transparent); }
 
     /* ---------- Icon rail ---------- */
     /* No fill and no divider: the rail sits on the same surface as the
