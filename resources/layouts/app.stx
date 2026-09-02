@@ -122,17 +122,17 @@ const localAgent = isLocalAgent()
     /* The mark is artwork rather than a tinted glyph, so `color` cannot reach
        it and it would sit there as the one saturated thing left in a sidebar
        that has otherwise stood down. */
-    :root[data-craft-window-active='false'] .rail-brand img { filter: grayscale(1); opacity: .75; }
+    :root[data-craft-window-active='false'] .rail-brand .brand-mark { filter: grayscale(1); opacity: .75; }
     :root[data-craft-window-active='false'] .topnav-item { color: var(--secondary); }
     :root[data-craft-window-active='false'] .topnav-item[data-active] {
       background: var(--surface-soft);
       color: var(--ink);
     }
-    .rail-item, .rail-icon, .topnav-item, .rail-brand img {
+    .rail-item, .rail-icon, .topnav-item, .rail-brand .brand-mark {
       transition: background .18s ease, color .18s ease, opacity .18s ease, box-shadow .18s ease, filter .18s ease;
     }
     @media (prefers-reduced-motion: reduce) {
-      .rail-item, .rail-icon, .topnav-item, .rail-brand img { transition: none; }
+      .rail-item, .rail-icon, .topnav-item, .rail-brand .brand-mark { transition: none; }
     }
     .app-column { display: flex; flex: 1; flex-direction: column; min-width: 0; }
     .main { min-width: 0; flex: 1; overflow-y: auto; background: var(--app-bg); }
@@ -333,8 +333,8 @@ const localAgent = isLocalAgent()
       padding: max(16px, calc(var(--craft-window-controls-inset-y, 0px) + var(--craft-window-controls-height, 0px) + 8px)) 0 14px;
       background: transparent;
     }
-    .rail-brand { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 13px; }
-    .rail-brand img { width: 28px; height: 28px; }
+    .rail-brand { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 13px; color: var(--ink); }
+    .rail-brand .brand-mark { width: 28px; height: 28px; }
     /* Groups are separated by space alone. A rule between 46px buttons reads
        as a stray underline rather than a divider. */
     .rail-groups { display: flex; flex: 1; flex-direction: column; gap: 22px; min-height: 0; overflow-y: auto; scrollbar-width: none; }
@@ -710,7 +710,7 @@ const localAgent = isLocalAgent()
     @else
       <main class='main' data-stx-content>
         <div class='offsite-shell'>
-          <img src='/images/systemcleaner-mark.svg' width='52' height='52' alt='' />
+          <BrandMark :size="52" />
           <h1>SystemCleaner runs on your Mac</h1>
           <p>
             This screen is the app's interface. It reads disks, processes, and

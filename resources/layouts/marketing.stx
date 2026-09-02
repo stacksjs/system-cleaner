@@ -122,7 +122,8 @@
       }
       .site-nav { display: flex; align-items: center; justify-content: space-between; gap: 24px; height: 68px; }
       .brand { display: inline-flex; align-items: center; gap: 10px; flex: none; font-size: 15px; font-weight: 650; letter-spacing: -0.02em; }
-      .brand img { width: 32px; height: 32px; }
+      .brand { color: var(--ink); }
+      .brand .brand-mark { width: 32px; height: 32px; }
       .desktop-nav { display: flex; align-items: center; align-self: stretch; gap: 2px; }
       .nav-link {
         display: inline-flex; align-items: center; gap: 6px;

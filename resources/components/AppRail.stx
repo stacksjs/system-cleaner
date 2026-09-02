@@ -95,7 +95,7 @@ useIntervalFn(syncScanning, 2000, { immediate: true })
 
 <nav class="rail" aria-label="SystemCleaner sections">
   <a class="rail-brand" href="/app" data-stx-link aria-label="SystemCleaner dashboard">
-    <img src="/images/systemcleaner-mark.svg" width="30" height="30" alt="" />
+    <BrandMark :size="30" />
   </a>
 
   <div class="rail-groups">

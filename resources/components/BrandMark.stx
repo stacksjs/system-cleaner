@@ -1,0 +1,53 @@
+<script server>
+/**
+ * The SystemCleaner mark, drawn inline.
+ *
+ * It was an `<img src="/images/systemcleaner-mark.svg">` everywhere, and the
+ * file carries the rule that makes it legible on a dark surface:
+ *
+ *   @media (prefers-color-scheme: dark) { .systemcleaner-ink { fill: #f4f5f7 } }
+ *
+ * That rule never fired. An SVG referenced by `<img>` renders in its own
+ * isolated document, and a browser does not hand that document the embedding
+ * page's colour scheme — so the ink stayed #20242b and, on the app's dark
+ * surface, the ring simply was not there. Only the blue arc showed. Proven in
+ * the running app, with the Mac itself in dark mode: fetch the same file,
+ * inline it, and its ink computes to rgb(244, 245, 247) — the light value the
+ * `<img>` never reached.
+ *
+ * Inline, it is part of the page's cascade, so `currentColor` reaches it and
+ * the ink follows `--ink` — which is better than the media query it replaces.
+ * The app's light/dark is its own setting, not always the system's, and
+ * `prefers-color-scheme` cannot see a page that has chosen dark on a light Mac.
+ *
+ * `public/images/systemcleaner-mark.svg` stays, and keeps its media query: it
+ * is the favicon, where an isolated document is all there is and the system
+ * preference is the only signal available.
+ *
+ * Paths are duplicated between the two, which is the trade this makes. The mark
+ * is four numbers and two arcs that change when the brand changes; a build step
+ * to inline one file would be more machinery than the drift it prevents.
+ */
+export const size = Number($props.size) || 30
+</script>
+
+<svg
+  class="brand-mark"
+  width="{{ size }}"
+  height="{{ size }}"
+  viewBox="0 0 64 64"
+  role="img"
+  aria-label="SystemCleaner"
+  fill="none"
+>
+  <!-- The ring. `currentColor` so it follows the page's ink in either mode. -->
+  <path
+    fill="currentColor"
+    d="M53.67 28.18 A22 22 0 1 1 35.82 10.33 L33.91 21.17 A11 11 0 1 0 42.83 30.09 Z"
+  />
+  <!-- The arc is the brand colour in both modes, so it is not themed. -->
+  <path
+    fill="#087cf0"
+    d="M40.73 6.81 A24 24 0 0 1 57.19 23.27 L46.62 26.30 A13 13 0 0 0 37.70 17.38 Z"
+  />
+</svg>

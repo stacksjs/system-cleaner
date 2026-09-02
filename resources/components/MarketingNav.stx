@@ -35,7 +35,7 @@ useEventListener('keydown', (event) => {
 <header class="site-nav-wrap">
   <nav class="site-container site-nav" aria-label="Primary navigation">
     <a class="brand" href="/" data-stx-link aria-label="SystemCleaner home">
-      <img src="/images/systemcleaner-mark.svg" width="32" height="32" alt="" />
+      <BrandMark :size="32" />
       <span>SystemCleaner</span>
     </a>
 

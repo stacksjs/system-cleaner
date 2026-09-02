@@ -11,7 +11,7 @@ export const year = new Date().getFullYear()
   <div class="footer-inner site-container">
     <div class="footer-brand">
       <a class="brand" href="/" data-stx-link>
-        <img src="/images/systemcleaner-mark.svg" width="30" height="30" alt="" />
+        <BrandMark :size="30" />
         <span>SystemCleaner</span>
       </a>
       <p>A native macOS utility for understanding, cleaning, and maintaining your Mac. Nothing leaves the machine.</p>
