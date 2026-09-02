@@ -99,9 +99,10 @@ function applyNativeAppearance(mode: ColorMode): void {
  *
  * This is a second copy of the bootstrap's rules, and a second copy is how
  * they came apart in the first place. `@appearanceBootstrap` publishes
- * `window.__stxAppearance` from the STX release after 0.2.258; when this app
- * is on it, this function and `setColorMode` below become calls to
- * `setColorMode` there and there is one implementation again.
+ * `window.__stxAppearance` from the first STX release after 0.2.263, which is
+ * where the runtime landed on main. When this app is on it, this function and
+ * `setColorMode` below become calls to `setColorMode` there, and there is one
+ * implementation again.
  */
 function applyColorMode(mode: ColorMode): void {
   const root = document.documentElement
