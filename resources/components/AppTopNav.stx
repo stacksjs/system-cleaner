@@ -2,11 +2,23 @@
 // The window's top strip, to the right of the icon rail.
 //
 // Nothing here is a place you go to look at your Mac, which is what separates
-// this strip from the rail beside it. The rail scans; this bar acts on the
-// machine (Updates, Maintenance) or sets how the app behaves when you are not
-// watching (Privacy, Schedule). Mixing the four into a rail of scanners made
-// it read as a list of thirteen equal things when it was really nine scanners
-// and four errands.
+// this strip from the rail beside it. The rail scans; these four act on the
+// machine (Updates, Maintenance) or set how the app behaves when you are not
+// watching (Privacy, Schedule). Mixing them into a rail of scanners made it
+// read as a list of thirteen equal things when it was really nine scanners and
+// four errands.
+//
+// They are now items in the menu the profile chip opens, rather than four
+// links laid out across the band. Two reasons, and the second is the one that
+// decided it:
+//
+//   1. They were the only labelled text in a strip whose whole job is to sit
+//      on the traffic lights' line, so they competed with the page title
+//      directly below them for the same reading.
+//   2. Settings belongs with them and could not be one of them. It opens a
+//      panel rather than going anywhere, so as a fifth link it would have
+//      been the one that did not navigate; as a menu item beneath a rule it
+//      is exactly what every Mac app's account menu puts there.
 //
 // The order runs from the thing with news for you to the thing you set once:
 // Updates carries a count, Maintenance is a job you run, and the last two are
@@ -82,15 +94,23 @@ function loadProfile(): void {
 }
 
 /**
- * The count on Updates.
+ * The count on Updates, in two places.
  *
  * Promoting Updates out of the rail cost it the scanning dot the rail gives
  * its items, and an errand you cannot see the size of is one you never run.
+ * Moving it again, into a menu, would have cost it the badge as well — a
+ * number nobody opens the menu to find is the same as no number.
+ *
+ * So the count stays on the item and a dot goes on the chip that opens it.
+ * The dot says only "there is something in here", which is all a closed menu
+ * can honestly say and all it needs to.
+ *
  * The summary endpoint is cached on the agent side, so this is cheap enough to
  * ask for on every load.
  */
 function loadUpdateCount(): void {
   const badge = document.querySelector<HTMLElement>('[data-updates-badge]')
+  const dot = document.querySelector<HTMLElement>('[data-updates-dot]')
   if (!badge)
     return
 
@@ -100,8 +120,130 @@ function loadUpdateCount(): void {
       const total = d?.success ? (d.total || 0) : 0
       badge.textContent = total > 99 ? '99+' : String(total)
       badge.toggleAttribute('hidden', total === 0)
+      dot?.toggleAttribute('hidden', total === 0)
     })
     .catch(() => {})
+}
+
+/**
+ * The account menu.
+ *
+ * A `role="menu"` rather than a popover of links, because that is what it is:
+ * one control that opens a short list, closes on Escape, on a click outside,
+ * on a choice, and on navigating away. Arrow keys move between items — a menu
+ * that traps the keyboard at its first item is a menu only the mouse can use.
+ *
+ * Bound directly rather than delegated: this bar is rendered once into the
+ * shell and outlives every SPA navigation, so there is no second copy to
+ * rebind to and nothing to go stale.
+ */
+function menuParts(): { chip: HTMLElement, menu: HTMLElement } | null {
+  const chip = document.querySelector<HTMLElement>('[data-profile-chip]')
+  const menu = document.querySelector<HTMLElement>('[data-profile-menu]')
+  return chip && menu ? { chip, menu } : null
+}
+
+function menuIsOpen(): boolean {
+  const parts = menuParts()
+  return !!parts && !parts.menu.hasAttribute('hidden')
+}
+
+function setMenuOpen(open: boolean): void {
+  const parts = menuParts()
+  if (!parts)
+    return
+
+  parts.menu.toggleAttribute('hidden', !open)
+  parts.chip.setAttribute('aria-expanded', String(open))
+}
+
+function closeMenu(options?: { restoreFocus?: boolean }): void {
+  if (!menuIsOpen())
+    return
+
+  setMenuOpen(false)
+  if (options?.restoreFocus)
+    menuParts()?.chip.focus()
+}
+
+/** Every item, in the order they are drawn — the order the arrow keys follow. */
+function menuItems(): HTMLElement[] {
+  const menu = menuParts()?.menu
+  return menu ? Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"]')) : []
+}
+
+function focusMenuItem(step: number): void {
+  const items = menuItems()
+  if (!items.length)
+    return
+
+  const current = items.indexOf(document.activeElement as HTMLElement)
+  // From the chip — nothing in the list focused yet — Down opens on the first
+  // item and Up on the last, which is what an AppKit menu does.
+  const next = current === -1
+    ? (step > 0 ? 0 : items.length - 1)
+    : (current + step + items.length) % items.length
+
+  items[next].focus()
+}
+
+function onMenuKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape' && menuIsOpen()) {
+    event.preventDefault()
+    closeMenu({ restoreFocus: true })
+    return
+  }
+
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp')
+    return
+
+  // An arrow on the chip opens the menu on its first or last item, which is
+  // what a menu button does on every platform. Anywhere else with the menu
+  // shut, the arrows are the page's.
+  const target = event.target instanceof Element ? event.target : null
+  const onChip = !!target?.closest('[data-profile-chip]')
+  if (!menuIsOpen() && !onChip)
+    return
+
+  event.preventDefault()
+  setMenuOpen(true)
+  focusMenuItem(event.key === 'ArrowDown' ? 1 : -1)
+}
+
+function onDocumentPointerDown(event: Event): void {
+  const target = event.target
+  if (!(target instanceof Element) || !menuIsOpen())
+    return
+
+  // A click on the chip is the toggle's business, not the dismisser's.
+  if (!target.closest('[data-profile]'))
+    closeMenu()
+}
+
+function onMenuClick(event: Event): void {
+  const target = event.target
+  if (!(target instanceof Element))
+    return
+
+  if (target.closest('[data-profile-chip]')) {
+    event.preventDefault()
+    const opening = !menuIsOpen()
+    setMenuOpen(opening)
+    if (opening)
+      focusMenuItem(1)
+    return
+  }
+
+  // Anything picked inside the menu has done its job by the time it bubbles
+  // here: a link is navigating, and Settings has raised its own event.
+  if (target.closest('[role="menuitem"]'))
+    closeMenu()
+}
+
+function wireMenu(): void {
+  document.addEventListener('click', onMenuClick)
+  document.addEventListener('pointerdown', onDocumentPointerDown)
+  document.addEventListener('keydown', onMenuKeydown)
 }
 
 function syncTopNav(): void {
@@ -120,6 +262,11 @@ function syncTopNav(): void {
 useEventListener('stx:navigate', syncTopNav)
 useEventListener('stx:load', syncTopNav)
 
+// An open menu describing the screen you just left is worse than no menu.
+useEventListener('stx:navigate', () => closeMenu())
+
+wireMenu()
+
 // The bar outlives navigation, so these run once rather than per screen.
 useEventListener('stx:load', loadProfile)
 loadProfile()
@@ -131,46 +278,73 @@ useIntervalFn(loadUpdateCount, 300_000, { immediate: true })
 </script>
 
 <div class="topnav">
-  <nav class="topnav-items" aria-label="SystemCleaner tools and settings">
-    @foreach (items as item)
-      <a
-        class="topnav-item"
-        data-topnav-item="{{ item.id }}"
-        href="{{ item.href }}"
-        data-stx-link
-        @if(active === item.id)data-active aria-current="page"@endif
-      >
-        <span class="topnav-icon {{ item.icon }}" aria-hidden="true"></span>
-        <span>{{ item.label }}</span>
-        @if(item.id === 'updates')
-          <span class="topnav-badge" data-updates-badge hidden></span>
-        @endif
-      </a>
-    @endforeach
-  </nav>
-
   <!--
-    The chip goes last, and that is a placement forced by the window rather
-    than a preference.
+    The chip sits at the trailing end, and that is a placement forced by the
+    window rather than a preference.
 
     Craft draws its own toolbar over the top-left of the web view — the
     sidebar button and the back/forward arrows — and it reaches about 196pt in
     from the window's left edge, well past the 74pt rail and into this strip.
-    A chip at the leading edge sat underneath it: the arrows drew straight
-    through the name. Nothing published says how wide that toolbar is, so
-    clearing it would mean a hardcoded gap that a future runtime silently
-    invalidates. The right-hand end is the one part of this band Craft never
-    draws in.
+    Anything at the leading edge sat underneath it: the arrows drew straight
+    through the name. The right-hand end is the one part of this band Craft
+    never draws in.
 
     Hidden until the account answers, so a Mac with no picture and no full name
-    never shows an empty circle where a face should be.
+    never shows an empty circle where a face should be. The menu is hidden with
+    it — there is nothing to open a menu from until then.
   -->
-  <button class="profile-chip" type="button" data-profile-chip hidden
-          data-open-settings aria-label="Settings">
-    <span class="profile-avatar" data-profile-avatar aria-hidden="true"></span>
-    <span class="profile-text">
-      <span class="profile-name" data-profile-name></span>
-      <span class="profile-host" data-profile-host></span>
-    </span>
-  </button>
+  <div class="profile" data-profile>
+    <button
+      class="profile-chip"
+      type="button"
+      data-profile-chip
+      hidden
+      aria-haspopup="menu"
+      aria-expanded="false"
+      aria-controls="account-menu"
+      aria-label="Account and settings"
+    >
+      <span class="profile-avatar" data-profile-avatar aria-hidden="true">
+        <span class="profile-dot" data-updates-dot hidden></span>
+      </span>
+      <span class="profile-text">
+        <span class="profile-name" data-profile-name></span>
+        <span class="profile-host" data-profile-host></span>
+      </span>
+      <span class="profile-caret i-f7-chevron-down" aria-hidden="true"></span>
+    </button>
+
+    <div class="menu" id="account-menu" role="menu" data-profile-menu hidden>
+      @foreach (items as item)
+        <a
+          class="menu-item"
+          role="menuitem"
+          data-topnav-item="{{ item.id }}"
+          href="{{ item.href }}"
+          data-stx-link
+          @if(active === item.id)data-active aria-current="page"@endif
+        >
+          <span class="menu-icon {{ item.icon }}" aria-hidden="true"></span>
+          <span class="menu-label">{{ item.label }}</span>
+          @if(item.id === 'updates')
+            <span class="menu-badge" data-updates-badge hidden></span>
+          @endif
+        </a>
+      @endforeach
+
+      <div class="menu-rule" role="separator"></div>
+
+      <!--
+        Settings opens a panel instead of navigating, which is why it is below
+        the rule rather than a fifth link above it. `data-open-settings` is the
+        same hook the ⌘, menu item uses; `settings-panel.ts` listens for it on
+        the document.
+      -->
+      <button class="menu-item" type="button" role="menuitem" data-open-settings>
+        <span class="menu-icon i-f7-gear-alt-fill" aria-hidden="true"></span>
+        <span class="menu-label">Settings</span>
+        <span class="menu-shortcut">&#8984;,</span>
+      </button>
+    </div>
+  </div>
 </div>
