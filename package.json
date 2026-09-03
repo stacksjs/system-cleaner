@@ -48,7 +48,7 @@
     "@fontsource-variable/geist": "^5.3.0",
     "@iconify-json/f7": "^1.2.2",
     "better-dx": "^0.2.25",
-    "puppeteer": "^24.43.1"
+    "puppeteer": "^25.10.0"
   },
   "overrides": {
     "@stacksjs/stx": "^0.2.259"
