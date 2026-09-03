@@ -126,6 +126,21 @@ export interface DiskEntry {
   children?: DiskEntry[]
   fileCount?: number
   modifiedAt?: Date
+  /**
+   * True when this directory's size is the exact size of its whole subtree,
+   * rather than the sum of the children that happened to be measured.
+   *
+   * A scan that runs out of time has to say which folders it never got to:
+   * a folder reported at zero because nobody looked is not the same claim as
+   * a folder that is genuinely empty, and the chart cannot tell them apart.
+   */
+  unmeasured?: boolean
+  /**
+   * True for a stand-in node covering what its siblings do not: the loose
+   * files in a folder `du` measured whole, plus any folder too small to draw.
+   * It is a bucket, not a file, so anything looking for real files skips it.
+   */
+  aggregate?: boolean
 }
 
 export interface ScanOptions {
@@ -139,14 +154,24 @@ export interface ScanOptions {
    */
   maxEntries?: number
   skipPatterns?: Set<string>
-  includeHidden?: boolean
-  onProgress?: (scanned: number, currentPath: string) => void
+  /**
+   * How deep the directory walk itself goes before `du` takes over sizing
+   * the rest. Shallow on purpose — see `scanDirectory`.
+   */
+  structureDepth?: number
+  /** How many `du` processes may run at once. */
+  concurrency?: number
+  onProgress?: (scanned: number, currentPath: string, measuredBytes?: number) => void
 }
 
 export interface ScanResult {
   tree: DiskEntry
   totalFiles: number
   totalFolders: number
+  /** Folders whose size the scan never got to measure. */
+  unmeasuredFolders: number
+  /** Folders the OS refused to read. Almost always a Full Disk Access gap. */
+  unreadableFolders: number
   scanTimeMs: number
   aborted: boolean
 }

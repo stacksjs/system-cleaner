@@ -48,6 +48,11 @@ export type TreeScanResult = {
   tree?: unknown
   folderCount?: number
   fileCount?: number
+  totalBytes?: number
+  /** Folders the scan ran out of time before measuring. */
+  unmeasured?: number
+  /** Folders macOS refused to read — a Full Disk Access gap. */
+  unreadable?: number
   scanTime?: string
   /** True when the walk ran out of time or entries before finishing. */
   truncated?: boolean
@@ -98,6 +103,8 @@ type ScanResult = TreeScanResult | LargeFilesResult | DuplicatesResult
 export interface ScanProgress {
   scanned: number
   path: string
+  /** Bytes the scan has measured exactly so far. Climbs as `du` reports in. */
+  measuredBytes: number
   startedAt: number
   kind: ScanRequest['kind']
 }
@@ -142,16 +149,18 @@ export function scanProgress(): ScanProgress | null {
 
   let scanned = 0
   let path = ''
+  let measuredBytes = 0
   try {
-    const parsed = JSON.parse(fs.readFileSync(running.file, 'utf8')) as { scanned?: number, path?: string }
+    const parsed = JSON.parse(fs.readFileSync(running.file, 'utf8')) as { scanned?: number, path?: string, measuredBytes?: number }
     scanned = parsed.scanned ?? 0
     path = parsed.path ?? ''
+    measuredBytes = parsed.measuredBytes ?? 0
   }
   catch {
     // Not written yet, or caught mid-write. Zero is the honest answer.
   }
 
-  return { scanned, path, startedAt: running.startedAt, kind: running.kind }
+  return { scanned, path, measuredBytes, startedAt: running.startedAt, kind: running.kind }
 }
 
 let scannerCommand: string[] | null = null

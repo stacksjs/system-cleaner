@@ -53,8 +53,17 @@
   metaText() {
     if (this.scanState === 'scanning') return this.scanProgress || 'Scanning disk…';
     if (this.scanState === 'error') return this.scanError || 'Scan failed';
-    if (this.scanInfo) return this.scanInfo.folderCount + ' folders · ' + this.scanInfo.fileCount + ' files · ' + this.scanInfo.scanTime + (this.scanInfo.truncated ? ' · partial' : '') + (this.scanInfo.cached ? ' (cached)' : '');
+    if (this.scanInfo) return this.scanInfo.folderCount + ' folders · ' + this.scanInfo.scanTime + (this.scanInfo.truncated ? ' · partial' : '') + (this.scanInfo.cached ? ' (cached)' : '');
     return 'Click Scan Disk to analyze';
+  },
+  unmeasuredNote() {
+    var n = this.scanInfo ? (this.scanInfo.unmeasured || 0) : 0;
+    if (!n) return 'This scan ran out of time before it finished. Everything shown here was measured exactly.';
+    return 'This scan ran out of time with ' + n + (n === 1 ? ' folder' : ' folders') + ' still unmeasured, so the total is lower than the real one. Everything shown here was measured exactly.';
+  },
+  unreadableNote() {
+    var n = this.scanInfo ? (this.scanInfo.unreadable || 0) : 0;
+    return 'macOS would not let SystemCleaner read ' + n + (n === 1 ? ' folder' : ' folders') + ', so what is inside them is missing from these numbers. Grant Full Disk Access in System Settings › Privacy & Security to include them.';
   },
 }">
 
@@ -87,14 +96,18 @@
       <div style='font-size: 10px; color: var(--tertiary);' x-text="metaText()">Click 'Scan Disk' to analyze</div>
     </div>
 
-    <!-- A tree that ran out of time is a real answer, but only if it says so:
-         52 GB of a 490 GB disk looks like the whole picture otherwise. -->
+    <!-- A scan that ran out of time is a real answer, but only if it says so:
+         52 GB of a 490 GB disk looks like the whole picture otherwise. It now
+         also says how many folders it never got to, because "partial" without
+         a number is impossible to weigh. -->
     <div class='disk-notice-wrap' x-show='scanInfo && scanInfo.truncated' x-cloak>
-      <div class='disk-notice'>
-        This scan hit its time limit, so folders deeper down are still
-        unmeasured. Everything shown is real, and the sizes here are compared
-        fairly against each other.
-      </div>
+      <div class='disk-notice' x-text='unmeasuredNote()'></div>
+    </div>
+
+    <!-- Unreadable folders are a permission problem, not a scan problem, and
+         the fix is somewhere else entirely. -->
+    <div class='disk-notice-wrap' x-show='scanInfo && scanInfo.unreadable > 0' x-cloak>
+      <div class='disk-notice' x-text='unreadableNote()'></div>
     </div>
 
     <div class='disk-sidebar-section' style='padding-bottom: 4px;'>
@@ -134,7 +147,7 @@
         <div style='margin-top: 8px; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink);'
              x-show='scanProgress' x-text='scanProgress'></div>
         <div class='scan-path' x-show='scanProgressPath' x-text='scanProgressPath'></div>
-        <div style='margin-top: 8px; font-size: 10px; color: var(--tertiary);' x-show='!scanStalled'>A first scan of a large home folder can take up to a minute</div>
+        <div style='margin-top: 8px; font-size: 10px; color: var(--tertiary);' x-show='!scanStalled'>Measuring every folder on a large home directory takes a minute or two. The total on the left climbs as it goes.</div>
         <!-- Counted nothing for eight seconds: macOS is holding the read until
              someone answers, and no amount of waiting changes that. -->
         <div class='scan-blocked' x-show='scanStalled' x-cloak>

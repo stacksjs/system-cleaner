@@ -148,12 +148,12 @@ function formatDuration(ms: number): string {
  * once the stream closes, which is to say once the scan is already over. A file
  * the parent reads when asked is both simpler and actually live.
  */
-function progressReporter(file: string | undefined): ((scanned: number, path: string) => void) | undefined {
+function progressReporter(file: string | undefined): ((scanned: number, path: string, measuredBytes?: number) => void) | undefined {
   if (!file) return undefined
 
-  return (scanned, currentPath) => {
+  return (scanned, currentPath, measuredBytes) => {
     try {
-      fs.writeFileSync(file, JSON.stringify({ scanned, path: currentPath }))
+      fs.writeFileSync(file, JSON.stringify({ scanned, path: currentPath, measuredBytes: measuredBytes ?? 0 }))
     }
     catch {
       // Progress is decoration. A scan must never fail because it could not
@@ -162,7 +162,7 @@ function progressReporter(file: string | undefined): ((scanned: number, path: st
   }
 }
 
-export function runScan(request: ScanRequest): Record<string, unknown> {
+export async function runScan(request: ScanRequest): Promise<Record<string, unknown>> {
   const onProgress = progressReporter(request.progressFile)
 
   if (request.kind === 'duplicates') {
@@ -209,7 +209,7 @@ export function runScan(request: ScanRequest): Record<string, unknown> {
     }
   }
 
-  const result = scanDirectory(request.home, {
+  const result = await scanDirectory(request.home, {
     maxDepth: request.maxDepth,
     timeoutMs: request.timeoutMs,
     onProgress,
@@ -220,6 +220,11 @@ export function runScan(request: ScanRequest): Record<string, unknown> {
     tree: result.tree,
     folderCount: result.totalFolders,
     fileCount: result.totalFiles,
+    totalBytes: result.tree.sizeBytes,
+    // Two different kinds of gap, and the UI says something different about
+    // each: folders the clock ran out on, and folders macOS refused to read.
+    unmeasured: result.unmeasuredFolders,
+    unreadable: result.unreadableFolders,
     scanTime: formatDuration(result.scanTimeMs),
     truncated: result.aborted,
   }
@@ -258,7 +263,7 @@ export async function runScannerCli(input: string): Promise<never> {
     await emit({ success: false, error: 'Invalid scan request' })
 
   try {
-    return await emit(runScan(parsed as ScanRequest))
+    return await emit(await runScan(parsed as ScanRequest))
   }
   catch (e: any) {
     return await emit({ success: false, error: e?.message || 'Scan failed' })

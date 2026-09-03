@@ -14,7 +14,7 @@ export function analyzeByCategory(tree: DiskEntry): DiskUsageByCategory[] {
   let totalSize = 0
 
   for (const entry of allEntries) {
-    if (entry.isDirectory)
+    if (entry.isDirectory || entry.aggregate)
       continue
     const cat = categorizeFile(entry.name)
     const existing = totals.get(cat) || { size: 0, count: 0 }
@@ -68,7 +68,9 @@ export function findLargestFiles(tree: DiskEntry, count = 50): LargeFile[] {
   const files: LargeFile[] = []
 
   function walk(entry: DiskEntry): void {
-    if (!entry.isDirectory) {
+    // `aggregate` nodes stand for "everything else in this folder". Listing one
+    // as the largest file on the disk would be a lie with a real path on it.
+    if (!entry.isDirectory && !entry.aggregate) {
       files.push({
         path: entry.path,
         name: entry.name,
@@ -175,11 +177,10 @@ async function scanForArtifacts(
 /**
  * Get a summary of disk usage for the home directory
  */
-export function getHomeDirSummary(): { tree: DiskEntry, scanTimeMs: number } {
-  const result = scanDirectory(HOME, {
+export async function getHomeDirSummary(): Promise<{ tree: DiskEntry, scanTimeMs: number }> {
+  const result = await scanDirectory(HOME, {
     maxDepth: 2,
     timeoutMs: 5000,
-    includeHidden: true,
   })
   return { tree: result.tree, scanTimeMs: result.scanTimeMs }
 }

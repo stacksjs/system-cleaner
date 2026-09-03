@@ -238,12 +238,18 @@ export default async function (router: Router) {
       maxDepth = body.maxDepth;
     }
 
-    // The gap is deliberate and wide: the scanner returns whatever tree it
-    // built when its own budget runs out, and killing it at the hard timeout
-    // throws that away. The hard timeout is the backstop for a scan wedged in
-    // a blocking syscall, not the normal path.
-    const HARD_TIMEOUT_MS = 75_000;
-    const WORKER_TIMEOUT_MS = 45_000;
+    // Long, because the honest answer takes this long. Measuring a 294 GB home
+    // directory — every inode of it — ran 46s here with sixteen `du` processes
+    // in parallel, and a slower disk or a colder cache is well past that. The
+    // old 45s budget did not make the scan faster; it made it stop early and
+    // report a third of the disk as the whole of it.
+    //
+    // The gap between the two is deliberate and wide: the scanner returns
+    // whatever it has measured when its own budget runs out, and killing it at
+    // the hard timeout throws that away. The hard timeout is the backstop for a
+    // scan wedged in a blocking syscall, not the normal path.
+    const HARD_TIMEOUT_MS = 240_000;
+    const WORKER_TIMEOUT_MS = 180_000;
 
     diskScanInFlight = true;
     try {
@@ -301,6 +307,7 @@ export default async function (router: Router) {
       scanning: true,
       scanned: progress.scanned,
       path: progress.path,
+      measuredBytes: progress.measuredBytes,
       kind: progress.kind,
       elapsedMs: Date.now() - progress.startedAt,
     });

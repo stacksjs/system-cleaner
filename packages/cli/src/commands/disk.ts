@@ -1,5 +1,5 @@
 import type { CLI } from '@stacksjs/clapp'
-import { scanDirectory, findLargestFiles, analyzeByCategory, findProjectArtifacts } from '@system-cleaner/disk'
+import { scanDirectory, getTopItems, analyzeByCategory, findProjectArtifacts } from '@system-cleaner/disk'
 import { formatBytes, HOME } from '@system-cleaner/core'
 
 export function registerDiskCommand(app: CLI): void {
@@ -56,12 +56,11 @@ export function registerDiskCommand(app: CLI): void {
       const s = spinner()
       s.start(`Scanning ${scanPath}...`)
 
-      const result = scanDirectory(scanPath, {
+      const result = await scanDirectory(scanPath, {
         maxDepth: depth,
-        timeoutMs: 30_000,
-        onProgress: (count, current) => {
-          if (count % 1000 === 0)
-            s.message(`Scanned ${count} items...`)
+        timeoutMs: 120_000,
+        onProgress: (count, current, measured) => {
+          s.message(`Measured ${formatBytes(measured || 0)} — ${count} items`)
         },
       })
 
@@ -69,7 +68,10 @@ export function registerDiskCommand(app: CLI): void {
         ? `${result.scanTimeMs}ms`
         : `${(result.scanTimeMs / 1000).toFixed(1)}s`
 
-      s.stop(`Scanned ${result.totalFiles} files, ${result.totalFolders} folders in ${timeStr}${result.aborted ? ` (timeout after ${timeStr} — increase with --depth)` : ''}`)
+      s.stop(`${formatBytes(result.tree.sizeBytes)} across ${result.totalFolders} folders in ${timeStr}${result.aborted ? ` — ran out of time with ${result.unmeasuredFolders} folder(s) unmeasured` : ''}`)
+
+      if (result.unreadableFolders > 0)
+        log.warn(`${result.unreadableFolders} folder(s) could not be read. Grant Full Disk Access for the whole picture.`)
 
       if (options.json) {
         // eslint-disable-next-line no-console
@@ -79,8 +81,16 @@ export function registerDiskCommand(app: CLI): void {
           totalSizeFormatted: formatBytes(result.tree.sizeBytes),
           totalFiles: result.totalFiles,
           totalFolders: result.totalFolders,
+          unmeasuredFolders: result.unmeasuredFolders,
+          unreadableFolders: result.unreadableFolders,
           scanTimeMs: result.scanTimeMs,
-          largestFiles: findLargestFiles(result.tree, topCount),
+          largestItems: getTopItems(result.tree, topCount).map(item => ({
+            path: item.path,
+            name: item.name,
+            isDirectory: item.isDirectory,
+            sizeBytes: item.sizeBytes,
+            sizeFormatted: formatBytes(item.sizeBytes),
+          })),
         }, null, 2))
         return
       }
@@ -111,15 +121,16 @@ export function registerDiskCommand(app: CLI): void {
         }
       }
 
-      // Show largest files
+      // Largest items rather than largest files: sizes below the walk's own
+      // depth come from `du`, which reports directories. `disk:large-files`
+      // is the command that ranks individual files.
       log.info('')
-      log.info(`Top ${topCount} largest files:`)
-      const largeFiles = findLargestFiles(result.tree, topCount)
-      for (const file of largeFiles) {
-        const sizeStr = formatBytes(file.sizeBytes).padStart(10)
-        // Shorten path for display
-        const shortPath = file.path.replace(HOME, '~')
-        log.info(`  ${sizeStr}  ${shortPath}`)
+      log.info(`Top ${topCount} largest items:`)
+      for (const item of getTopItems(result.tree, topCount)) {
+        if (item.aggregate) continue
+        const sizeStr = formatBytes(item.sizeBytes).padStart(10)
+        const icon = item.isDirectory ? '📁' : '📄'
+        log.info(`  ${sizeStr}  ${icon} ${item.path.replace(HOME, '~')}`)
       }
 
       outro(`Scan complete — ${formatBytes(result.tree.sizeBytes)} analyzed`)

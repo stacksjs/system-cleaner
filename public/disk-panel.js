@@ -262,6 +262,10 @@
       fileCount: data.fileCount,
       scanTime: data.scanTime,
       truncated: !!data.truncated,
+      // How much of the picture is missing, and for which of the two reasons.
+      // "Partial" on its own tells nobody whether to trust the number.
+      unmeasured: data.unmeasured || 0,
+      unreadable: data.unreadable || 0,
       cached: !!cached,
     };
     stopProgressPoll();
@@ -503,7 +507,7 @@
   // instead of discarding it and waiting for the next tick.
   function applyProgress(d) {
     if (!d || !d.scanning) return;
-    patchDiskScope({
+    var fields = {
       scanProgress: fmtCount(d.scanned) + ' items · ' + Math.round(d.elapsedMs / 1000) + 's',
       scanProgressPath: shortenPath(d.path),
       // A walk that has counted nothing after several seconds is not slow, it
@@ -511,7 +515,13 @@
       // someone answers a permission prompt. Saying so beats counting seconds
       // up to a timeout the user cannot interpret.
       scanStalled: isStalled(d),
-    });
+    };
+    // The headline climbs while the scan runs. Every byte in it has been
+    // measured exactly, so it is the answer so far rather than an estimate —
+    // and watching it pass the number the old scanner used to stop at is the
+    // clearest possible statement that the scan is still doing something.
+    if (d.measuredBytes > 0) fields.scanTotalLabel = fmtBytes(d.measuredBytes) + ' so far';
+    patchDiskScope(fields);
   }
 
   function pollProgressOnce() {
