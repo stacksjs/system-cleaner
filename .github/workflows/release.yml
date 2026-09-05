@@ -43,7 +43,7 @@ jobs:
       # extracts this tag's section from CHANGELOG.md (written by
       # `buddy release`), attaches the binaries, and generates checksums.
       - name: Publish release
-        uses: pantry-pm/pantry/packages/action@v0.11.45
+        uses: pantry-pm/pantry/packages/action@v0.11.55
         with:
           install: 'false'
           release: 'true'
@@ -89,7 +89,7 @@ jobs:
       # certificate at all and stopped with "Apple code signing requires an
       # application certificate" before a single build step ran.
       - name: Setup Pantry
-        uses: pantry-pm/pantry/packages/action@v0.11.45
+        uses: pantry-pm/pantry/packages/action@v0.11.55
         with:
           apple-signing: 'true'
           apple-signing-application-certificate: ${{ secrets.DEVELOPER_ID_CERTIFICATE_BASE64 }}
@@ -120,7 +120,7 @@ jobs:
       # file, and the pantry action treats an empty match as nothing to upload,
       # so the job went green having attached no installer at all.
       - name: Attach the DMG to the release
-        uses: pantry-pm/pantry/packages/action@v0.11.45
+        uses: pantry-pm/pantry/packages/action@v0.11.55
         with:
           install: 'false'
           release: 'true'
