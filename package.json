@@ -32,8 +32,8 @@
     "test": "bun ./scripts/build-client-scripts.ts && ./buddy test"
   },
   "dependencies": {
-    "@stacksjs/desktop": "^0.2.257",
-    "@stacksjs/stx": "^0.2.257",
+    "@stacksjs/desktop": "^0.2.274",
+    "@stacksjs/stx": "^0.2.274",
     "@system-cleaner/clean": "workspace:*",
     "@system-cleaner/core": "workspace:*",
     "@system-cleaner/disk": "workspace:*",
@@ -42,7 +42,7 @@
     "@ts-charts/format": "^0.2.7",
     "@ts-charts/scale": "^0.2.7",
     "@ts-charts/shape": "^0.2.7",
-    "stacks": "^0.73.3"
+    "stacks": "^0.74.24"
   },
   "devDependencies": {
     "@fontsource-variable/geist": "^5.3.0",
@@ -51,6 +51,6 @@
     "puppeteer": "^24.43.1"
   },
   "overrides": {
-    "@stacksjs/stx": "^0.2.259"
+    "@stacksjs/stx": "^0.2.274"
   }
 }
