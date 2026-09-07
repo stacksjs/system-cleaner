@@ -39,9 +39,19 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import process from 'node:process'
+import { createGitHubUpdateManifest, UPDATE_MANIFEST_ASSET } from '@stacksjs/desktop'
 
 const ROOT = process.cwd()
 const APP_NAME = process.env.DESKTOP_APP_NAME || 'SystemCleaner'
+
+/** Where releases live. The installed app reads its manifest from here. */
+const UPDATE_REPOSITORY = 'stacksjs/system-cleaner'
+
+/**
+ * The version being built. `Info.plist` gets this from the same place, so the
+ * manifest cannot claim a version the bundle does not report.
+ */
+const APP_VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version as string
 const RESOURCES = path.join(ROOT, 'app/Desktop/Resources')
 
 if (process.platform !== 'darwin') {
@@ -357,9 +367,36 @@ if (process.env.NOTARY_PROFILE) {
   run('xcrun', ['stapler', 'staple', dmgPath])
 }
 
+// ── 7. Update manifest ──────────────────────────────────────────
+/**
+ * `update.json`, next to the DMG.
+ *
+ * The installed app fetches this from
+ * `releases/latest/download/update.json` to learn whether it is behind, so it
+ * has to be attached to the same release as the DMG it points at — and it has
+ * to be written *after* notarization, because stapling the ticket changes the
+ * file and therefore its SHA-256. Generating it earlier produced a manifest
+ * whose hash no downloaded DMG could ever match.
+ */
+const manifest = createGitHubUpdateManifest({
+  repository: UPDATE_REPOSITORY,
+  version: APP_VERSION,
+  artifacts: { darwin: dmgPath },
+})
+
+const manifestPath = path.join(dmgDir, UPDATE_MANIFEST_ASSET)
+fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+console.log(`[desktop] ${manifestPath}`)
+
 if (!process.env.DESKTOP_SIGNING_IDENTITY)
   console.warn('[desktop] DESKTOP_SIGNING_IDENTITY is unset — the bundle is unsigned and will not launch on another Mac')
 else if (!process.env.NOTARY_PROFILE)
   console.warn('[desktop] NOTARY_PROFILE is unset — the DMG is signed but not notarized')
+
+// A self-update the running app cannot verify is one it will refuse to
+// install, so an unsigned build is not merely undistributable — the manifest
+// beside it describes an update nobody can take.
+if (!process.env.NOTARY_PROFILE)
+  console.warn(`[desktop] ${UPDATE_MANIFEST_ASSET} describes an un-notarized DMG; installed copies will refuse it`)
 
 console.log(`[desktop] ${dmgPath}`)

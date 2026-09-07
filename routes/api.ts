@@ -71,6 +71,12 @@ import {
   runScheduledClean,
   saveSchedule,
 } from '../app/Support/Cleanup/schedule';
+import {
+  checkForUpdate,
+  downloadUpdate,
+  installUpdate,
+  updateStatus,
+} from '../app/Support/Update/self-update';
 import CleanupRun from '../app/Models/CleanupRun';
 import KeptCookie from '../app/Models/KeptCookie';
 
@@ -1285,6 +1291,34 @@ export default async function (router: Router) {
     const tier = body?.tier === 'quick' ? 'quick' : 'full';
     const result = await runUpdatesCheck(fullScan, forceRefresh, tier);
     return Response.json(result);
+  });
+
+  // ── SystemCleaner's own updates ─────────────────────────────
+
+  /**
+   * These four are deliberately separate from `/updates-check`, which is about
+   * everything *else* on the machine — macOS, Homebrew, other apps. This is
+   * the app replacing itself, and it is the one update flow where a mistake
+   * takes the app with it.
+   *
+   * Split into check / download / install rather than one call, because each
+   * step is a decision the user should get to make: a check is free, a
+   * download is 40 MB of someone's bandwidth, and an install quits the app.
+   */
+  await router.post('/self-update/status', async () => {
+    return Response.json({ success: true, ...(await updateStatus()) });
+  });
+
+  await router.post('/self-update/check', async () => {
+    return Response.json({ success: true, ...(await checkForUpdate()) });
+  });
+
+  await router.post('/self-update/download', async () => {
+    return Response.json({ success: true, ...(await downloadUpdate()) });
+  });
+
+  await router.post('/self-update/install', async () => {
+    return Response.json({ success: true, ...(await installUpdate()) });
   });
 
   // ── Uninstaller ─────────────────────────────────────────────

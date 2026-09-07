@@ -141,3 +141,41 @@ half-configured signing setup.
 
 These are a different certificate from the Mac App Store pipeline: Developer ID
 Application, not Mac App Distribution.
+
+## Updating itself
+
+The app checks GitHub for a newer release from the **Updates** screen, next to
+the macOS, Homebrew and Pantry sections. It is deliberately three steps —
+check, download, install — because each one costs something different: a check
+is free, a download is 40 MB of the user's bandwidth, and an install quits the
+app.
+
+`build:app` writes `update.json` beside the DMG, and the Releaser attaches
+both. The manifest is generated **after** notarization: stapling the ticket
+rewrites the DMG, so a manifest built earlier carries a hash no download can
+match.
+
+### What has to be true before the app replaces itself
+
+The manifest's SHA-256 is the weakest of the checks, not the strongest —
+whoever can rewrite the manifest can rewrite the hash with it. So the
+downloaded bundle is unpacked to a staging directory and put through the same
+questions Gatekeeper asks at launch, before anything at
+`~/Applications/SystemCleaner.app` is touched:
+
+| Check | Rejects |
+|---|---|
+| `codesign --verify --deep --strict` | a tampered or re-packed bundle |
+| `spctl -a -t exec` | anything Apple has not notarized |
+| `TeamIdentifier` matches the running copy | notarized builds from other developers |
+
+The team is not configured anywhere — it is read from the signature on the copy
+already installed, so the app can only ever be updated by whoever shipped it.
+
+Only then is the quarantine flag cleared and the bundle swapped, and the swap
+is two renames inside the install directory rather than a delete and a copy, so
+an interrupted update never leaves the user without an app.
+
+An unsigned local build still produces a manifest, and `build:app` says so: an
+installed copy will refuse that update, which is the correct outcome and a
+confusing one to debug without the warning.

@@ -14,6 +14,23 @@ window.updatesXData = function () {
     macosVersion: null,
     macosRelease: null,
 
+    // SystemCleaner updating itself. Separate from everything above, which is
+    // about the rest of the machine: this is the one update that quits the app.
+    self: {
+      stage: 'idle',
+      currentVersion: '',
+      latestVersion: null,
+      releaseNotes: null,
+      percent: 0,
+      bytesDownloaded: 0,
+      bytesTotal: 0,
+      speed: 0,
+      error: null,
+      unsupportedReason: null,
+      teamId: null,
+    },
+    selfPollTimer: null,
+
     // On a beta the marketing version never moves — 27.0 upgrades to 27.0 —
     // so the build is the only thing that says which beta is installed and
     // which one is on offer.
@@ -41,6 +58,91 @@ window.updatesXData = function () {
 
     init() {
       this.loadUpdates(false, false)
+      this.loadSelfStatus()
+    },
+
+    // ── SystemCleaner's own update ──────────────────────────────────
+
+    selfPost(endpoint) {
+      var self = this
+      return fetch('/api/self-update/' + endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      })
+        .then(function (r) { return r.json() })
+        .then(function (r) {
+          // Assigned wholesale rather than field by field: STX tracks
+          // assignment to `self`, not writes into the object it points at.
+          self.self = Object.assign({}, self.self, r)
+          self.syncSelfPolling()
+          return r
+        })
+    },
+
+    loadSelfStatus() {
+      var self = this
+      return this.selfPost('status').catch(function () {
+        self.self = Object.assign({}, self.self, { stage: 'error', error: 'Could not read update status' })
+      })
+    },
+
+    // A download reports progress through the status endpoint, so the screen
+    // polls only while there is something moving. Polling an idle app forever
+    // is how a settings screen ends up costing a request a second.
+    syncSelfPolling() {
+      var busy = this.self.stage === 'downloading' || this.self.stage === 'installing'
+      if (busy && !this.selfPollTimer) {
+        var self = this
+        this.selfPollTimer = setInterval(function () { self.selfPost('status') }, 500)
+      } else if (!busy && this.selfPollTimer) {
+        clearInterval(this.selfPollTimer)
+        this.selfPollTimer = null
+      }
+    },
+
+    checkSelfUpdate() {
+      var self = this
+      this.self = Object.assign({}, this.self, { stage: 'checking', error: null })
+      this.selfPost('check').then(function (r) {
+        if (r.stage === 'up-to-date') self.toast('SystemCleaner is up to date', 'success')
+        else if (r.stage === 'available') self.toast('Version ' + r.latestVersion + ' is available', 'info')
+        else if (r.stage === 'error') self.toast('Update check failed: ' + (r.error || 'Unknown'), 'error')
+      })
+    },
+
+    downloadSelfUpdate() {
+      this.selfPost('download')
+    },
+
+    async installSelfUpdate() {
+      if (!await window.nativeConfirm({
+        title: 'Install SystemCleaner ' + this.self.latestVersion + '?',
+        message: 'SystemCleaner will quit and reopen on the new version.',
+        confirmLabel: 'Install and Restart',
+      })) return
+      this.selfPost('install')
+    },
+
+    selfStatusLine() {
+      var s = this.self
+      if (s.stage === 'unsupported') return s.unsupportedReason || 'Updates are unavailable for this copy'
+      if (s.stage === 'checking') return 'Checking for updates...'
+      if (s.stage === 'up-to-date') return 'SystemCleaner ' + s.currentVersion + ' is the latest version'
+      if (s.stage === 'available') return 'Version ' + s.latestVersion + ' is available'
+      if (s.stage === 'downloading') return 'Downloading ' + s.latestVersion + ' - ' + s.percent + '%'
+      if (s.stage === 'ready') return 'Version ' + s.latestVersion + ' is ready to install'
+      if (s.stage === 'installing') return 'Verifying and installing...'
+      if (s.stage === 'error') return s.error || 'Something went wrong'
+      return 'SystemCleaner ' + s.currentVersion
+    },
+
+    selfProgressLabel() {
+      var s = this.self
+      if (s.stage !== 'downloading' || !s.bytesTotal) return ''
+      var mb = function (n) { return (n / 1e6).toFixed(1) }
+      var rate = s.speed > 0 ? ' - ' + mb(s.speed) + ' MB/s' : ''
+      return mb(s.bytesDownloaded) + ' of ' + mb(s.bytesTotal) + ' MB' + rate
     },
 
     systemOutdatedCount() {

@@ -119,13 +119,19 @@ jobs:
       # binaries that go *inside* the bundle. Globbing the latter matched no
       # file, and the pantry action treats an empty match as nothing to upload,
       # so the job went green having attached no installer at all.
-      - name: Attach the DMG to the release
+      #
+      # `update.json` rides along because installed copies fetch it from
+      # `releases/latest/download/update.json` to learn they are behind. A
+      # release with the DMG and without the manifest ships an update nobody
+      # already running the app will ever be offered.
+      - name: Attach the DMG and update manifest to the release
         uses: pantry-pm/pantry/packages/action@v0.11.45
         with:
           install: 'false'
           release: 'true'
           release-files: |
             storage/framework/desktop-dmg/*.dmg
+            storage/framework/desktop-dmg/update.json
           release-checksums: sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
