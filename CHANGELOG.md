@@ -1,5 +1,54 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.2.2...v0.3.0)
+
+## ✨ Features
+
+- **window**: one material behind the whole window ([0bcd527](https://github.com/stacksjs/system-cleaner/commit/0bcd527)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **topnav**: the four errands become the menu the profile chip opens ([038004d](https://github.com/stacksjs/system-cleaner/commit/038004d)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **app**: move the errands to the top strip, lead the rail with Quick Clean ([f13c361](https://github.com/stacksjs/system-cleaner/commit/f13c361)) _(by Chris <chrisbreuer93@gmail.com>)_
+- browser extension audit, duplicate finder, privacy keep-list and schedule work ([e4c6b58](https://github.com/stacksjs/system-cleaner/commit/e4c6b58)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **app**: fold the Uninstaller into an Applications screen, lift Privacy and Schedule into a top strip ([e3ae93e](https://github.com/stacksjs/system-cleaner/commit/e3ae93e)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## 🐛 Bug Fixes
+
+- **disk**: measure the whole home directory, not the part a walk reached ([45ecf14](https://github.com/stacksjs/system-cleaner/commit/45ecf14)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **brand**: draw the mark inline, so dark mode can reach it ([bb4571f](https://github.com/stacksjs/system-cleaner/commit/bb4571f)) _(by Chris <chrisbreuer93@gmail.com>)_ ([#20242](https://github.com/stacksjs/system-cleaner/issues/20242))
+- **app**: turn on the SPA router so navigation stops rebuilding the shell ([9c63b6f](https://github.com/stacksjs/system-cleaner/commit/9c63b6f)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: pin one @stacksjs/stx so builds use the version we ship ([175fea3](https://github.com/stacksjs/system-cleaner/commit/175fea3)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **app**: the window-controls reserve already includes its own inset ([3ae41c0](https://github.com/stacksjs/system-cleaner/commit/3ae41c0)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **test**: ask the icon rules of this project's source, not of bundled output ([8304008](https://github.com/stacksjs/system-cleaner/commit/8304008)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **app**: get the top strip off Craft's toolbar and onto the lights' line ([59d3169](https://github.com/stacksjs/system-cleaner/commit/59d3169)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **app**: let the window recede when it is not the one in front ([e95b9fc](https://github.com/stacksjs/system-cleaner/commit/e95b9fc)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **desktop**: take the Craft runtime built against a current macOS SDK ([86540bf](https://github.com/stacksjs/system-cleaner/commit/86540bf)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **desktop**: ship a runtime whose window buttons match the system ([71045d3](https://github.com/stacksjs/system-cleaner/commit/71045d3)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **app**: make actions visibly finish — blank toasts, Clean Selected, traffic lights ([d04a993](https://github.com/stacksjs/system-cleaner/commit/d04a993)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **ci**: build the two generated inputs the test job reads off disk ([ec68b1d](https://github.com/stacksjs/system-cleaner/commit/ec68b1d)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## 📝 Documentation
+
+- **settings**: name the release the appearance runtime actually lands in ([a322b6a](https://github.com/stacksjs/system-cleaner/commit/a322b6a)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **desktop**: correct what the runtime capability check actually fixes ([5e39a10](https://github.com/stacksjs/system-cleaner/commit/5e39a10)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## 💄 Styles
+
+- **app**: start every page's header six pixels higher ([9892c77](https://github.com/stacksjs/system-cleaner/commit/9892c77)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## 🔧 Chores
+
+- **deps**: write bun.lock with the Bun this repo declares ([db501b4](https://github.com/stacksjs/system-cleaner/commit/db501b4)) _(by Chris <chrisbreuer93@gmail.com>)_
+- update deps ([f1074f2](https://github.com/stacksjs/system-cleaner/commit/f1074f2)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: craft-native.org 0.0.86, so the toolbar row is reserved ([c4b55e3](https://github.com/stacksjs/system-cleaner/commit/c4b55e3)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: @stacksjs/stx 0.2.257, injecting browser imports on the include path ([6b1fec6](https://github.com/stacksjs/system-cleaner/commit/6b1fec6)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: @stacksjs/stx 0.2.256 ([aa1cd5b](https://github.com/stacksjs/system-cleaner/commit/aa1cd5b)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: @stacksjs/stx 0.2.252, so SPA-navigated lists render ([ba91fa1](https://github.com/stacksjs/system-cleaner/commit/ba91fa1)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: @stacksjs/stx 0.2.251, which keeps container scripts across a nav ([4065e50](https://github.com/stacksjs/system-cleaner/commit/4065e50)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: stacks 0.73.3, which minifies the desktop launcher ([4947014](https://github.com/stacksjs/system-cleaner/commit/4947014)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## Contributors
+
+- _Chris <chrisbreuer93@gmail.com>_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.2.1...v0.2.2)
 
 ## 🐛 Bug Fixes
