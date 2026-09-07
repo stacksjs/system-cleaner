@@ -137,6 +137,39 @@ window.updatesXData = function () {
       return 'SystemCleaner ' + s.currentVersion
     },
 
+    // The name and version, as a heading. `selfStatusLine` is the sentence
+    // under it and repeats the version, which reads fine in the Updates
+    // screen's table bar and badly in a card that already has a title — so the
+    // two are separate, and the Settings window's Software Update pane uses
+    // both.
+    selfHeadline() {
+      var s = this.self
+      if (s.stage === 'available' || s.stage === 'downloading' || s.stage === 'ready')
+        return 'SystemCleaner ' + s.latestVersion
+      return s.currentVersion ? 'SystemCleaner ' + s.currentVersion : 'SystemCleaner'
+    },
+
+    // The line under that heading, when there is one to add.
+    //
+    // `selfStatusLine` is written for the Updates screen's table bar, where the
+    // app's name is not already on screen — so at rest it answers with the name
+    // and version, which under a heading that is the name and version reads as
+    // a stutter. Saying nothing is better than saying it twice; every other
+    // stage has something of its own to report.
+    selfDetailLine() {
+      var line = this.selfStatusLine()
+      return line === this.selfHeadline() ? '' : line
+    },
+
+    // When the machine was last scanned for everything that is not this app.
+    // Null until the first check answers, and "Not yet" is the honest reading
+    // of that rather than an empty cell.
+    lastCheckedLabel() {
+      if (!this.updateScannedAt) return 'Not yet'
+      var when = new Date(this.updateScannedAt)
+      return Number.isNaN(when.getTime()) ? 'Not yet' : when.toLocaleString()
+    },
+
     selfProgressLabel() {
       var s = this.self
       if (s.stage !== 'downloading' || !s.bytesTotal) return ''

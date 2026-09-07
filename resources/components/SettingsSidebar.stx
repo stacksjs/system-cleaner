@@ -1,0 +1,114 @@
+<script server>
+// The Settings window's sidebar.
+//
+// System Settings' sidebar, with SystemCleaner's own rows in it: a search
+// field under the window buttons, whose Mac this is, an alert row that only
+// appears when there is news, and grouped rows with coloured icon tiles.
+//
+// The groups are the same three questions the app itself is organised around,
+// in the order a person meets them:
+//
+//   1. How the app behaves — General, Appearance, Notifications.
+//   2. What it is allowed to do to the Mac — Cleaning, Schedule, Privacy.
+//   3. What it can tell you about itself — Software Update, Storage, About.
+//
+// Every row's `id` is also the id of a `.set-pane` in the view, which is what
+// `settings-window.ts` matches them up by. Adding a row without adding a pane
+// selects nothing, so the two lists are meant to be read together.
+//
+// Tones are macOS's own tile colours for the nearest equivalent row: grey for
+// the machine's own settings, red for notifications, blue for the thing the
+// app does, orange for anything on a timer.
+export const groups = [
+  [
+    { id: 'general', label: 'General', icon: 'i-f7-gear-alt-fill', tone: 'grey' },
+    { id: 'appearance', label: 'Appearance', icon: 'i-f7-circle-lefthalf-fill', tone: 'ink' },
+    { id: 'notifications', label: 'Notifications', icon: 'i-f7-bell-fill', tone: 'red' },
+  ],
+  [
+    { id: 'cleaning', label: 'Cleaning', icon: 'i-f7-sparkles', tone: 'blue' },
+    { id: 'schedule', label: 'Schedule', icon: 'i-f7-clock-fill', tone: 'orange' },
+    { id: 'privacy', label: 'Privacy', icon: 'i-f7-hand-raised-fill', tone: 'indigo' },
+  ],
+  [
+    { id: 'software-update', label: 'Software Update', icon: 'i-f7-arrow-down-circle-fill', tone: 'grey' },
+    { id: 'storage', label: 'Storage', icon: 'i-f7-tray-2-fill', tone: 'grey' },
+  ],
+  [
+    { id: 'about', label: 'About', icon: 'i-f7-info-circle-fill', tone: 'grey' },
+  ],
+]
+</script>
+
+<aside class='set-sidebar'>
+  <!-- Also the window's second drag handle: the strip above the search field
+       is where the traffic lights sit, and there is nothing else up there. -->
+  <div class='set-sidebar-top' data-window-drag>
+    <div class='set-search' data-search-field>
+      <span class='i-f7-search set-search-glyph' aria-hidden='true'></span>
+      <input
+        type='search'
+        placeholder='Search'
+        aria-label='Search settings'
+        autocomplete='off'
+        spellcheck='false'
+        data-search-input
+      >
+      <button class='set-search-clear' type='button' aria-label='Clear search' data-search-clear>
+        <span class='i-f7-xmark-circle-fill' aria-hidden='true'></span>
+      </button>
+    </div>
+  </div>
+
+  <nav class='set-nav' aria-label='Settings sections'>
+    <!--
+      Whose Mac this is. Hidden until `/api/user-profile` answers, because the
+      fallback for a name that never arrives is a row with an empty circle and
+      no text in it — worse than the row not being there.
+    -->
+    <button class='set-account' type='button' data-account hidden>
+      <span class='set-avatar' data-account-avatar aria-hidden='true'>
+        <span class='i-f7-person-crop-circle-fill' style='width: 22px; height: 22px;'></span>
+      </span>
+      <span class='set-account-text'>
+        <span class='set-account-name' data-account-name>This Mac</span>
+        <span class='set-account-sub' data-account-sub>Local account</span>
+      </span>
+    </button>
+
+    <!-- News, not navigation, so no icon tile — the sentence is the icon. It
+         appears only when the count is above zero. -->
+    <button class='set-alert' type='button' data-update-alert data-pane-link='software-update'>
+      <span class='set-alert-label'>Software Update Available</span>
+      <span class='set-alert-count' data-update-count>0</span>
+    </button>
+
+    <div class='set-notice'>
+      <p class='set-notice-title'>Everything stays on this Mac</p>
+      <p class='set-notice-body'>
+        Scans, history and settings are stored locally. SystemCleaner never
+        uploads what it finds.
+      </p>
+    </div>
+
+    @foreach (groups as group)
+      <div class='set-group' data-nav-group>
+        @foreach (group as item)
+          <button
+            class='set-row'
+            type='button'
+            data-pane-link='{{ item.id }}'
+            data-search-terms='{{ item.label }}'
+          >
+            <span class='set-tile' data-tone='{{ item.tone }}' aria-hidden='true'>
+              <span class='{{ item.icon }}'></span>
+            </span>
+            <span class='set-row-label'>{{ item.label }}</span>
+          </button>
+        @endforeach
+      </div>
+    @endforeach
+
+    <p class='set-empty'>No settings match that search.</p>
+  </nav>
+</aside>

@@ -1,6 +1,7 @@
 import type { Router } from '@stacksjs/bun-router';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import process from 'node:process';
 import {
   isPathSafe,
   getDirSize,
@@ -1263,6 +1264,52 @@ export default async function (router: Router) {
     catch (err: any) {
       return Response.json({ success: false, error: err.message || 'Could not open System Settings' });
     }
+  });
+
+  /**
+   * System Settings › Privacy & Security › Full Disk Access.
+   *
+   * The one permission this app cannot ask for itself. macOS never lets a
+   * process add itself to that list, and without it every scan silently misses
+   * the caches inside protected folders — which reads as SystemCleaner finding
+   * nothing rather than as SystemCleaner not being allowed to look.
+   *
+   * The anchor is the pane's own identifier; an older macOS that does not know
+   * it opens Privacy & Security at the top, which is still the right window.
+   */
+  await router.post('/open-privacy-settings', async () => {
+    try {
+      const proc = Bun.spawn(
+        ['open', 'x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles'],
+        { stdout: 'ignore', stderr: 'ignore' },
+      );
+      const exitCode = await proc.exited;
+      return Response.json({ success: exitCode === 0 });
+    }
+    catch (err: any) {
+      return Response.json({ success: false, error: err.message || 'Could not open System Settings' });
+    }
+  });
+
+  /**
+   * Where this app keeps its own data, in the Finder.
+   *
+   * The launcher decides that directory and tells the agent about it through
+   * `DB_DATABASE_PATH`, so the database's parent is the authoritative answer
+   * rather than a second copy of the launcher's rule. The fallback is that
+   * rule, for `bun run dev`, where nothing set the variable.
+   */
+  await router.post('/reveal-app-data', async () => {
+    const fromDatabase = process.env.DB_DATABASE_PATH;
+    const dir = fromDatabase && path.isAbsolute(fromDatabase)
+      ? path.dirname(fromDatabase)
+      : path.join(HOME, 'Library/Application Support/SystemCleaner');
+
+    try {
+      Bun.spawn(['open', dir], { stdout: 'ignore', stderr: 'ignore' });
+    }
+    catch {}
+    return Response.json({ success: true, path: dir });
   });
 
   await router.post('/open-app-store-updates', async () => {

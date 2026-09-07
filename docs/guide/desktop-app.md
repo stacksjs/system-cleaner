@@ -120,6 +120,54 @@ The reasons shown in each prompt are the `NS*UsageDescription` strings in
 Until Automation is allowed, "Move to Trash" fails and reports why; "Delete
 Permanently" needs no Apple Events and works regardless.
 
+## The Settings window
+
+⌘, opens a second window rather than a sheet, because that is what Settings is
+on a Mac — its own window, closed without disturbing what you were looking at.
+It is `/app/settings`, served by the same agent as everything else, opened
+through Craft's window bridge:
+
+```ts
+craft.window.open({
+  name: 'settings',
+  url: 'http://127.0.0.1:<port>/app/settings',
+  width: 715,
+  height: 640,
+  titlebarHidden: true,
+  webWindowMaterial: true,
+  chromeControls: false,
+})
+```
+
+Four of those are the whole design, and each is a decision:
+
+| Option | Why |
+|---|---|
+| `name: 'settings'` | Craft brings an already-open window of that name forward instead of opening a second one, which is what ⌘, twice does in every Mac app. |
+| `titlebarHidden` | Puts the window buttons over the sidebar's top-left corner, where System Settings has them. |
+| `webWindowMaterial` | One material behind the whole view. The `webSidebarMaterial` span looks closer to this window and is pinned to vibrant light, so it would leave a pale sidebar in dark mode; the page paints both surfaces instead, and they flip with the theme. |
+| `chromeControls: false` | Craft otherwise draws a sidebar toggle and two history arrows beside the window buttons. This window draws its own history in the detail pane's toolbar, and two pairs of arrows mean two different things. |
+
+Requires Craft 0.0.89 — `window.open`, per-window action routing and
+`chromeControls` all landed there. On anything older `craft.window.open` is
+absent and ⌘, falls back to a browser tab, which is what happens on the
+marketing site too.
+
+The window is four files that have to agree, and `tests/settings-window.test.ts`
+is what makes them:
+
+| Path | What it holds |
+|---|---|
+| `resources/layouts/settings.stx` | the shell: two columns, the toolbar, the whole stylesheet |
+| `resources/components/SettingsSidebar.stx` | the rows, their icons and their grouping |
+| `resources/views/app/settings.stx` | one `.set-pane` per row |
+| `resources/scripts/settings-window.ts` | the wiring — what each control reads and writes |
+
+The main window keeps `resources/scripts/settings-panel.ts`, which is now only
+the opener plus its own half of the appearance work: Craft routes a window
+action to the window that asked for it, so each window sets its own
+`setAppearance`, and both read the one stored colour mode.
+
 ## Releasing
 
 The **Releaser** workflow builds the DMG on a tag push and attaches it to the

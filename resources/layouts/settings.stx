@@ -1,0 +1,476 @@
+<script server>
+// The Settings window's shell.
+//
+// This is a *second* window, not a panel inside the first one, because that is
+// what Settings is on a Mac: its own window, its own size, its own place in
+// the Window menu, opened by Cmd+, and closed without touching what you were
+// doing. The panel that used to answer Cmd+, was a sheet over the dashboard,
+// which meant the app could not be looked at while it was being configured.
+//
+// Craft opens it — `craft.window.open({ name: 'settings', … })` from
+// `resources/scripts/settings-panel.ts` — and the name is what makes a second
+// Cmd+, bring this window forward instead of stacking another one behind it.
+//
+// The shape is System Settings': a vibrant sidebar with a search field, the
+// account this Mac belongs to, and grouped rows with coloured icon tiles; an
+// opaque detail pane beside it with a history row above it. Every measurement
+// below is that window's, so the two sit side by side without one of them
+// looking like a drawing of the other.
+const { isLocalAgent } = require('~/app/Support/Runtime/local-agent')
+const localAgent = isLocalAgent()
+</script>
+
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+  <meta charset='UTF-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+  <title>Settings</title>
+  <!--
+    The same storage key the main window uses. Two windows reading two keys
+    would let the app be light in one and dark in the other, and the theme
+    control lives in this one — so the window it does not affect would be the
+    one the user was looking at when they changed it.
+  -->
+  @appearanceBootstrap({
+    storageKey: 'systemcleaner-appearance',
+    appearance: { key: 'sidebarStyle', attribute: 'appearance', allowed: ['macos'], default: 'macos' },
+    colorMode: { key: 'colorMode', attribute: 'color-mode', default: 'system' },
+  })
+  <style>
+    :root {
+      color-scheme: light;
+      --app-bg: #f5f5f7;
+      --surface: #ffffff;
+      --surface-soft: #eeeef1;
+      --surface-inset: #e9e9ed;
+      --line: rgba(60, 60, 67, .14);
+      --line-soft: rgba(60, 60, 67, .08);
+      --ink: #1d1d1f;
+      --secondary: #6e6e73;
+      --tertiary: #8e8e93;
+      --track: #d8d8dd;
+      --hover: rgba(0, 0, 0, .04);
+      --pressed: rgba(0, 0, 0, .075);
+      --accent: #007aff;
+      --green: #248a3d;
+      --orange: #c45d00;
+      --red: #d70015;
+      --purple: #8944ab;
+
+      /* The two surfaces this window is made of. System Settings puts a
+         vibrant sidebar against a flat, opaque content pane — the sidebar
+         moves with the desktop behind it and the content does not. */
+      --set-detail: #ffffff;
+      --set-card: #f2f2f4;
+      --set-card-line: rgba(60, 60, 67, .08);
+      --set-sidebar-wash: rgba(246, 246, 248, .62);
+      --set-search: rgba(0, 0, 0, .045);
+    }
+    :root.dark {
+      color-scheme: dark;
+      --app-bg: #1a1a1c;
+      --surface: #242426;
+      --surface-soft: #2c2c2e;
+      --surface-inset: #202022;
+      --line: rgba(255, 255, 255, .1);
+      --line-soft: rgba(255, 255, 255, .055);
+      --ink: #f5f5f7;
+      --secondary: #98989d;
+      --tertiary: #6c6c70;
+      --track: #3a3a3c;
+      --hover: rgba(255, 255, 255, .055);
+      --pressed: rgba(255, 255, 255, .1);
+      --accent: #0a84ff;
+      --green: #30d158;
+      --orange: #ff9f0a;
+      --red: #ff453a;
+      --purple: #bf5af2;
+
+      --set-detail: #1e1e1f;
+      --set-card: #2a2a2c;
+      --set-card-line: rgba(255, 255, 255, .06);
+      --set-sidebar-wash: rgba(28, 28, 30, .55);
+      --set-search: rgba(255, 255, 255, .07);
+    }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      height: 100%; overflow: hidden;
+      background: var(--set-detail); color: var(--ink);
+      font-family: -apple-system, 'SF Pro Text', BlinkMacSystemFont, system-ui, sans-serif;
+      font-size: 13px;
+      -webkit-font-smoothing: antialiased;
+    }
+    [x-cloak] { display: none !important; }
+    /* Every row in this window sets its own `display`, which outranks the user
+       agent's `[hidden]` rule — so the account row, which is hidden until
+       `/api/user-profile` answers, showed its placeholder name to everyone. */
+    [hidden] { display: none !important; }
+    ::-webkit-scrollbar { width: 7px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { border-radius: 4px; background: transparent; }
+    :hover::-webkit-scrollbar-thumb { background: var(--line); }
+
+    /* ---------- The two columns ---------- */
+    /* System Settings is a vibrant sidebar against a flat content pane, and
+       both of those are painted here rather than by AppKit. Craft's material
+       spans the whole web view; the sidebar lets it through at
+       `--set-sidebar-wash` and the content pane covers it completely. Drawing
+       the seam in the page rather than at the edge of a native strip is what
+       lets it flip with the theme — Craft's sidebar-span material is pinned to
+       vibrant light and would stay pale in dark mode. */
+    .set-window { display: flex; width: 100vw; height: 100vh; overflow: hidden; }
+    .set-sidebar {
+      display: flex; flex-direction: column;
+      flex: none; width: 250px; min-width: 250px;
+      background: var(--app-bg);
+    }
+    .set-detail-pane {
+      display: flex; flex-direction: column;
+      flex: 1; min-width: 0;
+      background: var(--set-detail);
+      border-left: .5px solid var(--line-soft);
+    }
+
+    /* Craft stamps `data-craft-native-sidebar` on the root element when it has
+       drawn a material at all. Only then does the sidebar drop its own fill
+       for a wash — in a browser, where this page also renders and there is no
+       material, an opaque sidebar is the correct answer.
+
+       `body` goes transparent so the wash is applied exactly once: it is the
+       one element spanning the window under both columns, and a fill there
+       would sit between the material and the sidebar. */
+    :root[data-craft-native-sidebar] .set-sidebar { background: var(--set-sidebar-wash); }
+    :root[data-craft-native-sidebar] body { background: transparent; }
+
+    /* ---------- Clearing the window buttons ---------- */
+    /* The window has no titlebar, so AppKit's three buttons sit over the
+       sidebar's top-left corner and the search field has to start below them.
+       `--craft-window-buttons-*` are the buttons' own numbers; the older
+       `--craft-window-controls-*` are the room to leave, which is the same
+       thing on this window and the only answer an older runtime gives.
+
+       The 44px floor is what the band is worth when nothing is published — a
+       browser, or a runtime that does not measure — and `min()` keeps the
+       correction from padding the field off the top there. */
+    .set-sidebar-top {
+      --chrome-band: calc(
+        var(--craft-window-buttons-y, var(--craft-window-controls-inset-y, 0px))
+        + var(--craft-window-buttons-height, var(--craft-window-controls-height, 0px))
+      );
+      flex: none;
+      padding: max(14px, calc(var(--chrome-band) + 10px)) 10px 6px;
+    }
+
+    /* ---------- Search ---------- */
+    .set-search {
+      display: flex; align-items: center; gap: 5px;
+      height: 28px; padding: 0 9px;
+      border-radius: 9px; background: var(--set-search);
+      color: var(--tertiary);
+    }
+    .set-search:focus-within {
+      background: var(--surface);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+    }
+    .set-search-glyph { width: 13px; height: 13px; flex: none; }
+    .set-search input {
+      flex: 1; min-width: 0; border: 0; outline: 0; background: transparent;
+      color: var(--ink); font: inherit; font-size: 13px;
+    }
+    .set-search input::placeholder { color: var(--tertiary); }
+    .set-search-clear {
+      display: none; flex: none; border: 0; padding: 0; background: none;
+      color: var(--tertiary); cursor: default;
+    }
+    .set-search[data-filled] .set-search-clear { display: block; }
+    .set-search-clear span { width: 13px; height: 13px; display: block; }
+
+    /* ---------- The scrolling list ---------- */
+    .set-nav {
+      flex: 1; min-height: 0; overflow-y: auto;
+      padding: 4px 10px 14px;
+    }
+
+    /* ---------- Account ---------- */
+    /* System Settings opens its sidebar with whose Mac this is, and so does
+       this: the same picture and name the login window shows, read off the
+       directory by `/api/user-profile`. A window that lists your processes and
+       reads your disks and cannot say whose they are looks like a tool aimed
+       at a stranger's computer. */
+    .set-account {
+      display: flex; align-items: center; gap: 10px; width: 100%;
+      padding: 7px 8px; margin-bottom: 2px;
+      border: 0; border-radius: 8px; background: none;
+      color: inherit; font: inherit; text-align: left; cursor: default;
+    }
+    .set-account:hover { background: var(--hover); }
+    .set-avatar {
+      display: grid; place-items: center; flex: none;
+      width: 38px; height: 38px; border-radius: 50%;
+      background: var(--surface-inset); color: var(--secondary);
+      font-size: 16px; font-weight: 600; overflow: hidden;
+    }
+    .set-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .set-account-text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+    .set-account-name {
+      font-size: 15px; font-weight: 600; letter-spacing: -.015em;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .set-account-sub {
+      font-size: 12px; color: var(--secondary);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    /* ---------- Rows ---------- */
+    .set-group { padding: 9px 0; }
+    .set-group:first-of-type { padding-top: 2px; }
+    .set-row {
+      display: flex; align-items: center; gap: 9px; width: 100%;
+      height: 28px; padding: 0 8px;
+      border: 0; border-radius: 7px; background: none;
+      color: var(--ink); font: inherit; font-size: 13px; text-align: left;
+      cursor: default;
+    }
+    .set-row:hover { background: var(--hover); }
+    .set-row[data-active] { background: var(--accent); color: #fff; }
+    .set-row[data-active]:hover { background: var(--accent); }
+    .set-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .set-row-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* The tile keeps its own colour on a selected row, exactly as it does in
+       System Settings — the fill behind the row changes, the icon does not. */
+    .set-tile {
+      display: grid; place-items: center; flex: none;
+      width: 20px; height: 20px; border-radius: 5px;
+      color: #fff;
+    }
+    .set-tile span { width: 13px; height: 13px; }
+    .set-tile[data-tone='grey']   { background: linear-gradient(#8e8e93, #7c7c81); }
+    .set-tile[data-tone='blue']   { background: linear-gradient(#0a84ff, #0060df); }
+    .set-tile[data-tone='indigo'] { background: linear-gradient(#5e5ce6, #4a48c6); }
+    .set-tile[data-tone='red']    { background: linear-gradient(#ff453a, #e02f24); }
+    .set-tile[data-tone='orange'] { background: linear-gradient(#ff9f0a, #ef8300); }
+    .set-tile[data-tone='green']  { background: linear-gradient(#32d74b, #23b93b); }
+    .set-tile[data-tone='purple'] { background: linear-gradient(#bf5af2, #a13ed6); }
+    .set-tile[data-tone='ink']    { background: linear-gradient(#3a3a3c, #1d1d1f); }
+    :root.dark .set-tile[data-tone='ink'] { background: linear-gradient(#f0f0f2, #cfcfd4); color: #1d1d1f; }
+
+    /* ---------- The alert row ---------- */
+    /* Apple's "Software Update Available" sits above the groups and carries the
+       count. It is the one thing in the sidebar that is news rather than
+       navigation, so it gets no icon tile — the sentence is the icon.
+       Unselected it is a plain row with a red badge, the way an unread count
+       is drawn everywhere else on the system; selected it is a row of blue and
+       the badge drops its disc, because a red circle on blue is two alarms for
+       one fact. */
+    .set-alert {
+      display: none; align-items: center; gap: 8px; width: 100%;
+      padding: 7px 10px; margin: 4px 0 2px;
+      border: 0; border-radius: 8px;
+      background: none; color: var(--ink);
+      font: inherit; font-size: 14px; font-weight: 600; letter-spacing: -.015em;
+      text-align: left; cursor: default;
+    }
+    .set-alert[data-visible] { display: flex; }
+    .set-alert:hover { background: var(--hover); }
+    /* One line. Wrapped, the badge floats beside a two-line sentence and the
+       row stops reading as a row. */
+    .set-alert-label {
+      flex: 1; min-width: 0;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .set-alert-count {
+      display: grid; place-items: center; flex: none;
+      min-width: 19px; height: 19px; padding: 0 6px;
+      border-radius: 10px; background: var(--red); color: #fff;
+      font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
+    }
+
+    /* ---------- The notice under it ---------- */
+    .set-notice { padding: 6px 10px 4px; }
+    .set-notice-title { font-size: 15px; font-weight: 600; letter-spacing: -.015em; }
+    .set-notice-body { margin-top: 1px; font-size: 13px; line-height: 1.35; color: var(--secondary); }
+
+    /* Nothing matched the search. */
+    .set-empty {
+      display: none; padding: 18px 10px; color: var(--tertiary); font-size: 12px;
+    }
+    .set-nav[data-empty] .set-empty { display: block; }
+
+    /* ---------- The detail pane's history row ---------- */
+    /* System Settings puts back/forward here and the pane's name beside them.
+       The row is as tall as the window buttons' band for the same reason the
+       main window's strip is: they are on the same line, and the lights are
+       over the sidebar, not over this. */
+    .set-toolbar {
+      --chrome-band: calc(
+        2 * var(--craft-window-buttons-y, var(--craft-window-controls-inset-y, 0px))
+        + var(--craft-window-buttons-height, var(--craft-window-controls-height, 0px))
+      );
+      display: flex; align-items: center; gap: 14px;
+      flex: none; padding: 0 20px;
+      height: max(52px, var(--chrome-band));
+      padding-bottom: max(0px, min(calc(52px - var(--chrome-band)), var(--chrome-band)));
+    }
+    .set-history {
+      display: flex; align-items: center; flex: none;
+      border-radius: 8px; background: var(--set-card);
+    }
+    .set-history-btn {
+      display: grid; place-items: center;
+      width: 30px; height: 26px; border: 0; border-radius: 8px;
+      background: none; color: var(--ink); cursor: default;
+    }
+    .set-history-btn span { width: 12px; height: 12px; }
+    .set-history-btn:hover:not(:disabled) { background: var(--hover); }
+    .set-history-btn:disabled { color: var(--tertiary); opacity: .55; }
+    .set-history-rule { width: .5px; height: 14px; background: var(--line); }
+    .set-pane-title { font-size: 17px; font-weight: 600; letter-spacing: -.02em; }
+
+    .set-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 20px 28px; }
+
+    /* ---------- Cards ---------- */
+    /* One rounded card per group of rows, rows divided by a hairline that
+       stops short of the card's edge — the shape every list in System
+       Settings has. */
+    .set-card { border-radius: 10px; background: var(--set-card); overflow: hidden; }
+    .set-card + .set-card { margin-top: 12px; }
+    .set-section-title {
+      margin: 22px 0 8px; font-size: 13px; font-weight: 600; color: var(--secondary);
+    }
+    .set-section-title:first-child { margin-top: 8px; }
+    .set-card-row {
+      display: flex; align-items: center; gap: 12px;
+      min-height: 42px; padding: 9px 14px;
+    }
+    .set-card-row + .set-card-row { box-shadow: inset 0 .5px 0 var(--set-card-line); }
+    .set-card-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .set-card-label { font-size: 13px; }
+    .set-card-hint { font-size: 11px; line-height: 1.35; color: var(--secondary); }
+    .set-card-value { flex: none; font-size: 13px; color: var(--secondary); font-variant-numeric: tabular-nums; }
+    .set-card-note { margin: 8px 2px 0; font-size: 11px; line-height: 1.4; color: var(--tertiary); }
+    .set-card-foot {
+      margin: 18px auto 0; max-width: 460px;
+      color: var(--tertiary); font-size: 11px; line-height: 1.45; text-align: center;
+    }
+
+    /* ---------- Controls ---------- */
+    .set-switch {
+      position: relative; flex: none;
+      width: 38px; height: 22px; padding: 0;
+      border: 0; border-radius: 11px; background: var(--track);
+      cursor: default; transition: background .16s ease;
+    }
+    .set-switch[data-on] { background: var(--green); }
+    .set-switch:disabled { opacity: .5; }
+    .set-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .set-knob {
+      position: absolute; top: 2px; left: 2px;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .28);
+      transition: transform .16s ease;
+    }
+    .set-switch[data-on] .set-knob { transform: translateX(16px); }
+
+    .set-segmented {
+      display: inline-flex; flex: none; gap: 2px; padding: 2px;
+      border-radius: 8px; background: var(--surface-inset);
+    }
+    .set-segment {
+      border: 0; border-radius: 6px; padding: 4px 12px;
+      background: none; color: var(--secondary);
+      font: inherit; font-size: 12px; cursor: default;
+    }
+    .set-segment:hover { color: var(--ink); }
+    .set-segment[data-active] {
+      background: var(--surface); color: var(--ink);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, .14);
+    }
+    .set-segment:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+    .set-select {
+      flex: none; border: .5px solid var(--line); border-radius: 7px;
+      padding: 4px 8px; background: var(--surface); color: var(--ink);
+      font: inherit; font-size: 12px;
+    }
+
+    .set-btn {
+      flex: none; border: .5px solid var(--line); border-radius: 7px;
+      padding: 5px 12px; background: var(--surface); color: var(--ink);
+      font: inherit; font-size: 12px; font-weight: 500; cursor: default;
+      white-space: nowrap;
+    }
+    .set-btn:hover:not(:disabled) { background: var(--surface-soft); }
+    .set-btn:disabled { opacity: .45; }
+    .set-btn-primary { border-color: transparent; background: var(--accent); color: #fff; }
+    .set-btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, #000); }
+    .set-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .set-switch, .set-knob { transition: none; }
+    }
+
+    /* ---------- Panes ---------- */
+    .set-pane { display: none; }
+    .set-pane[data-active] { display: block; }
+
+    /* ---------- Inactive window ---------- */
+    /* A window that is not in front goes quiet: AppKit greys its own buttons,
+       and a saturated blue selection pill beside three stood-down buttons is
+       the thing that gives a web-drawn sidebar away. */
+    :root[data-craft-window-active='false'] .set-row[data-active] {
+      background: var(--surface-inset); color: var(--ink);
+    }
+    :root[data-craft-window-active='false'] .set-tile { filter: saturate(.15); }
+
+    @yield('styles')
+  </style>
+</head>
+<body>
+@if (localAgent)
+  <div class='set-window'>
+    <SettingsSidebar />
+
+    <section class='set-detail-pane'>
+      <!--
+        The whole row is a window drag handle. A titlebar-less window has no
+        other one, and `-webkit-app-region: drag` is Chromium's — WebKit
+        discards it — so the press is handed to AppKit by `startDrag()` in the
+        client block at the foot of this file.
+      -->
+      <header class='set-toolbar' data-window-drag>
+        <div class='set-history'>
+          <button class='set-history-btn' type='button' data-history-back aria-label='Back' disabled>
+            <span class='i-f7-chevron-left' aria-hidden='true'></span>
+          </button>
+          <span class='set-history-rule' aria-hidden='true'></span>
+          <button class='set-history-btn' type='button' data-history-forward aria-label='Forward' disabled>
+            <span class='i-f7-chevron-right' aria-hidden='true'></span>
+          </button>
+        </div>
+        <h1 class='set-pane-title' data-pane-title>General</h1>
+      </header>
+
+      <div class='set-body'>
+        @yield('body')
+      </div>
+    </section>
+  </div>
+@else
+  <div class='set-window'>
+    <section class='set-detail-pane'>
+      <div class='set-body' style='padding-top: 40px; text-align: center;'>
+        <p class='set-card-foot'>
+          SystemCleaner's settings describe the Mac the app is installed on.
+          There is nothing here for a web server to configure.
+        </p>
+      </div>
+    </section>
+  </div>
+@endif
+
+<script src="/settings-window.js"></script>
+</body>
+</html>

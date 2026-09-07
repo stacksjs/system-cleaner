@@ -1,0 +1,430 @@
+@extends('layouts/settings')
+@section('body')
+
+<!--
+  Every pane in the window, rendered once and shown one at a time.
+
+  Panes rather than routes: this window is 715px wide and never navigates —
+  System Settings does not either. `settings-window.ts` matches a sidebar row's
+  `data-pane-link` to a pane's `data-pane`, keeps a history so the back and
+  forward arrows in the toolbar mean something, and remembers the last pane so
+  reopening Settings lands where it was left.
+
+  The markup describes; the wiring lives in `resources/scripts/settings-window.ts`.
+  That is the split the rest of this app uses for anything that talks to the
+  native side, and this window talks to it for the login item, the appearance
+  the window itself resolves against, and its own version.
+-->
+
+<section class='set-pane' data-pane='general' data-pane-title='General'>
+  <div class='set-card'>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'>
+        <span class='set-card-label'>Open at login</span>
+        <span class='set-card-hint'>Adds SystemCleaner to your login items.</span>
+      </span>
+      <button class='set-switch' type='button' role='switch' aria-checked='false'
+              aria-label='Open at login' data-switch='openAtLogin'>
+        <span class='set-knob' aria-hidden='true'></span>
+      </button>
+    </div>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'>
+        <span class='set-card-label'>Check for updates automatically</span>
+        <span class='set-card-hint'>Once a day, in the background. Nothing installs on its own.</span>
+      </span>
+      <button class='set-switch' type='button' role='switch' aria-checked='false'
+              aria-label='Check for updates automatically' data-switch='autoCheckUpdates'>
+        <span class='set-knob' aria-hidden='true'></span>
+      </button>
+    </div>
+  </div>
+
+  <div class='set-section-title'>Reset</div>
+  <div class='set-card'>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'>
+        <span class='set-card-label'>Restore default settings</span>
+        <span class='set-card-hint'>Puts every switch on this window back where it started. Nothing on your disks is touched.</span>
+      </span>
+      <button class='set-btn' type='button' data-action='resetPrefs'>Reset</button>
+    </div>
+  </div>
+</section>
+
+<section class='set-pane' data-pane='appearance' data-pane-title='Appearance'>
+  <div class='set-card'>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'>
+        <span class='set-card-label'>Theme</span>
+        <span class='set-card-hint'>Both windows, and the material behind them.</span>
+      </span>
+      <div class='set-segmented' role='radiogroup' aria-label='Theme'>
+        <button class='set-segment' type='button' role='radio' aria-checked='false'
+                data-option='colorMode' data-value='light'>Light</button>
+        <button class='set-segment' type='button' role='radio' aria-checked='false'
+                data-option='colorMode' data-value='dark'>Dark</button>
+        <button class='set-segment' type='button' role='radio' aria-checked='false'
+                data-option='colorMode' data-value='system'>Auto</button>
+      </div>
+    </div>
+  </div>
+  <p class='set-card-note'>
+    Auto follows the Mac, including a sunset switch. Light and Dark pin the app
+    and tell the window to resolve its material the same way, so the page and
+    the window buttons never disagree.
+  </p>
+</section>
+
+<section class='set-pane' data-pane='notifications' data-pane-title='Notifications'>
+  <div class='set-card'>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'>
+        <span class='set-card-label'>When a long scan finishes</span>
+        <span class='set-card-hint'>Only when SystemCleaner is not the window in front.</span>
+      </span>
+      <button class='set-switch' type='button' role='switch' aria-checked='false'
+              aria-label='Notify when a long scan finishes' data-switch='notifyOnFinish'>
+        <span class='set-knob' aria-hidden='true'></span>
+      </button>
+    </div>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'>
+        <span class='set-card-label'>When scheduled cleaning runs</span>
+        <span class='set-card-hint'>What it reclaimed, after the fact.</span>
+      </span>
+      <button class='set-switch' type='button' role='switch' aria-checked='false'
+              aria-label='Notify when scheduled cleaning runs' data-switch='notifyOnSchedule'>
+        <span class='set-knob' aria-hidden='true'></span>
+      </button>
+    </div>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'>
+        <span class='set-card-label'>When an update is available</span>
+        <span class='set-card-hint'>For SystemCleaner itself, not for the rest of the Mac.</span>
+      </span>
+      <button class='set-switch' type='button' role='switch' aria-checked='false'
+              aria-label='Notify when an update is available' data-switch='notifyOnUpdate'>
+        <span class='set-knob' aria-hidden='true'></span>
+      </button>
+    </div>
+  </div>
+  <p class='set-card-note'>
+    macOS decides whether a notification is shown at all. If none arrive, look
+    for SystemCleaner in System Settings › Notifications.
+  </p>
+</section>
+
+<section class='set-pane' data-pane='cleaning' data-pane-title='Cleaning'>
+  <div class='set-card'>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'>
+        <span class='set-card-label'>Confirm before deleting</span>
+        <span class='set-card-hint'>Ask once more before anything leaves the disk.</span>
+      </span>
+      <button class='set-switch' type='button' role='switch' aria-checked='false'
+              aria-label='Confirm before deleting' data-switch='confirmDeletes'>
+        <span class='set-knob' aria-hidden='true'></span>
+      </button>
+    </div>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'>
+        <span class='set-card-label'>Reveal what a clean removed</span>
+        <span class='set-card-hint'>Writes each run to the cleanup history the Quick Clean screen reads.</span>
+      </span>
+      <button class='set-switch' type='button' role='switch' aria-checked='false'
+              aria-label='Reveal what a clean removed' data-switch='recordHistory'>
+        <span class='set-knob' aria-hidden='true'></span>
+      </button>
+    </div>
+  </div>
+
+  <div class='set-section-title'>Never Touched</div>
+  <div class='set-card'>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'>
+        <span class='set-card-label'>Protected paths</span>
+        <span class='set-card-hint'>Folders no clean is allowed to enter.</span>
+      </span>
+      <span class='set-card-value' data-value='protectedCount'>&mdash;</span>
+    </div>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'>
+        <span class='set-card-label'>Kept cookies</span>
+        <span class='set-card-hint'>Sites that stay signed in when browser data is cleaned.</span>
+      </span>
+      <span class='set-card-value' data-value='keptCookieCount'>&mdash;</span>
+    </div>
+  </div>
+  <p class='set-card-note'>
+    Both lists are edited where the things in them are: the Privacy screen in
+    the main window.
+  </p>
+</section>
+
+<section class='set-pane' data-pane='schedule' data-pane-title='Schedule'>
+  <div class='set-card'>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'>
+        <span class='set-card-label'>Scheduled cleaning</span>
+        <span class='set-card-hint'>Runs Quick Clean on its own, over the targets the Schedule screen picked.</span>
+      </span>
+      <button class='set-switch' type='button' role='switch' aria-checked='false'
+              aria-label='Scheduled cleaning' data-switch='scheduleEnabled'>
+        <span class='set-knob' aria-hidden='true'></span>
+      </button>
+    </div>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'><span class='set-card-label'>How often</span></span>
+      <select class='set-select' data-select='scheduleFrequency' aria-label='How often'>
+        <option value='daily'>Daily</option>
+        <option value='weekly'>Weekly</option>
+        <option value='monthly'>Monthly</option>
+      </select>
+    </div>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'>
+        <span class='set-card-label'>Include browser data</span>
+        <span class='set-card-hint'>Caches and histories, minus anything on the keep-list.</span>
+      </span>
+      <button class='set-switch' type='button' role='switch' aria-checked='false'
+              aria-label='Include browser data' data-switch='scheduleIncludePrivacy'>
+        <span class='set-knob' aria-hidden='true'></span>
+      </button>
+    </div>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'>
+        <span class='set-card-label'>Empty the Trash afterwards</span>
+        <span class='set-card-hint'>A scheduled clean moves what it can to the Trash; this is what finishes the job.</span>
+      </span>
+      <button class='set-switch' type='button' role='switch' aria-checked='false'
+              aria-label='Empty the Trash afterwards' data-switch='scheduleEmptyTrash'>
+        <span class='set-knob' aria-hidden='true'></span>
+      </button>
+    </div>
+  </div>
+
+  <div class='set-card'>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'>
+        <span class='set-card-label'>When it runs</span>
+      </span>
+      <span class='set-card-value' data-value='scheduleDescription'>&mdash;</span>
+    </div>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'>
+        <span class='set-card-label'>Last run</span>
+      </span>
+      <span class='set-card-value' data-value='scheduleLastRun'>Never</span>
+    </div>
+  </div>
+  <p class='set-card-note'>
+    The time of day, and which folders it cleans, are set on the Schedule
+    screen in the main window.
+  </p>
+</section>
+
+<section class='set-pane' data-pane='privacy' data-pane-title='Privacy'>
+  <div class='set-card'>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'>
+        <span class='set-card-label'>Everything stays on this Mac</span>
+        <span class='set-card-hint'>Scans, results and cleanup history are written to this machine and never sent anywhere.</span>
+      </span>
+      <span class='set-card-value'>
+        <span class='i-f7-lock-shield-fill' style='width: 16px; height: 16px; color: var(--green);' aria-hidden='true'></span>
+      </span>
+    </div>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'>
+        <span class='set-card-label'>Share anonymous usage data</span>
+        <span class='set-card-hint'>There is nothing to share. SystemCleaner collects no analytics.</span>
+      </span>
+      <button class='set-switch' type='button' role='switch' aria-checked='false'
+              aria-label='Share anonymous usage data' data-switch='analytics' disabled>
+        <span class='set-knob' aria-hidden='true'></span>
+      </button>
+    </div>
+  </div>
+
+  <div class='set-section-title'>Access</div>
+  <div class='set-card'>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'>
+        <span class='set-card-label'>Full Disk Access</span>
+        <span class='set-card-hint'>Without it, caches in protected folders are invisible to every scan.</span>
+      </span>
+      <button class='set-btn' type='button' data-action='openFullDiskAccess'>Open</button>
+    </div>
+  </div>
+  <p class='set-card-note'>
+    Opens System Settings › Privacy &amp; Security. macOS does not let an app
+    grant itself access, so the switch there is the only one that counts.
+  </p>
+</section>
+
+<!--
+  Software Update.
+
+  The same shape System Settings gives it, and the same data the Updates screen
+  in the main window already reads: `updatesXData()` is that screen's state,
+  loaded here unchanged. What differs is the arrangement — the app's own update
+  is the card at the top, and everything else on the Mac is a row under "Also
+  Available", which is where a person looks for it.
+-->
+<section class='set-pane' data-pane='software-update' data-pane-title='Software Update'>
+  <script src='/updates-xdata.js'></script>
+  <div x-data='updatesXData()'>
+    <div class='set-card'>
+      <div class='set-card-row' style='align-items: flex-start; padding-top: 14px;'>
+        <span class='set-tile' data-tone='blue' aria-hidden='true'
+              style='width: 38px; height: 38px; border-radius: 9px;'>
+          <span class='i-f7-arrow-down-circle-fill' style='width: 22px; height: 22px;'></span>
+        </span>
+        <span class='set-card-row-text' style='gap: 3px;'>
+          <span class='set-card-label' style='font-size: 15px; font-weight: 600; letter-spacing: -.01em;'
+                x-text='selfHeadline()'>SystemCleaner</span>
+          <span class='set-card-hint' x-show='selfDetailLine()' x-cloak x-text='selfDetailLine()'></span>
+        </span>
+        <button class='set-btn' type='button' @click='checkSelfUpdate()'
+                :disabled="self.stage === 'checking' || self.stage === 'downloading' || self.stage === 'installing'">
+          Check Now
+        </button>
+        <button class='set-btn set-btn-primary' type='button' x-show="self.stage === 'available'" x-cloak
+                @click='downloadSelfUpdate()'>
+          Download
+        </button>
+        <button class='set-btn set-btn-primary' type='button' x-show="self.stage === 'ready'" x-cloak
+                @click='installSelfUpdate()'>
+          Restart to Install
+        </button>
+      </div>
+      <div class='set-card-row' x-show="self.stage === 'downloading'" x-cloak>
+        <span class='set-card-row-text'>
+          <span class='set-card-hint' x-text='selfProgressLabel()'></span>
+        </span>
+      </div>
+      <div class='set-card-row' x-show='self.releaseNotes' x-cloak>
+        <span class='set-card-row-text'>
+          <span class='set-card-hint' style='white-space: pre-wrap;' x-text='self.releaseNotes'></span>
+        </span>
+      </div>
+    </div>
+
+    <div class='set-section-title'>Also Available</div>
+    <div class='set-card'>
+      <div class='set-card-row'>
+        <span class='set-card-row-text'>
+          <span class='set-card-label'>macOS</span>
+          <span class='set-card-hint' x-text="systemOutdatedCount() > 0 ? systemOutdatedCount() + ' update available' : 'Up to date'"></span>
+        </span>
+        <button class='set-btn' type='button' data-action='openSoftwareUpdate'>Open</button>
+      </div>
+      <div class='set-card-row'>
+        <span class='set-card-row-text'>
+          <span class='set-card-label'>Homebrew</span>
+          <span class='set-card-hint' x-text="brewTotal() + ' outdated'"></span>
+        </span>
+        <span class='set-card-value' x-text="brewFormulae.length + ' formulae · ' + brewCasks.length + ' casks'"></span>
+      </div>
+      <div class='set-card-row'>
+        <span class='set-card-row-text'>
+          <span class='set-card-label'>Pantry</span>
+          <span class='set-card-hint' x-text="pantryOutdated.length + ' outdated'"></span>
+        </span>
+        <span class='set-card-value' x-text="pantryTrackedCount + ' tracked'"></span>
+      </div>
+      <div class='set-card-row'>
+        <span class='set-card-row-text'>
+          <span class='set-card-label'>Applications</span>
+          <span class='set-card-hint' x-text="desktopOutdated.length + ' outdated'"></span>
+        </span>
+        <span class='set-card-value' x-text="desktopApps.length + ' scanned'"></span>
+      </div>
+    </div>
+
+    <div class='set-section-title'>This Mac</div>
+    <div class='set-card'>
+      <div class='set-card-row'>
+        <span class='set-card-row-text'><span class='set-card-label'>Installed</span></span>
+        <span class='set-card-value' x-text="macosVersion ? 'macOS ' + installedLabel() : '—'"></span>
+      </div>
+      <div class='set-card-row'>
+        <span class='set-card-row-text'><span class='set-card-label'>Command Line Tools</span></span>
+        <span class='set-card-value' x-text="clToolsInfo.version || 'Not installed'"></span>
+      </div>
+      <div class='set-card-row'>
+        <span class='set-card-row-text'>
+          <span class='set-card-label'>Last checked</span>
+        </span>
+        <span class='set-card-value' x-text='lastCheckedLabel()'>—</span>
+      </div>
+    </div>
+
+    <p class='set-card-foot'>
+      Updating SystemCleaner quits it and relaunches the new copy. Everything
+      else here is a count of what the rest of your Mac has waiting; the
+      Updates screen in the main window is where you act on it.
+    </p>
+  </div>
+</section>
+
+<section class='set-pane' data-pane='storage' data-pane-title='Storage'>
+  <div class='set-card'>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'>
+        <span class='set-card-label'>Startup disk</span>
+        <span class='set-card-hint' data-value='diskUsage'>&mdash;</span>
+      </span>
+      <span class='set-card-value' data-value='diskAvail'>&mdash;</span>
+    </div>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'>
+        <span class='set-card-label'>SystemCleaner's own data</span>
+        <span class='set-card-hint'>~/Library/Application Support/SystemCleaner</span>
+      </span>
+      <button class='set-btn' type='button' data-action='revealDataDir'>Show</button>
+    </div>
+  </div>
+  <p class='set-card-note'>
+    What is taking up the rest of it, and the scans that work it out, are on
+    the Disk Usage screen in the main window.
+  </p>
+</section>
+
+<section class='set-pane' data-pane='about' data-pane-title='About'>
+  <div class='set-card'>
+    <div class='set-card-row' style='padding-top: 16px; padding-bottom: 16px;'>
+      <span class='set-tile' data-tone='blue' aria-hidden='true'
+            style='width: 44px; height: 44px; border-radius: 10px;'>
+        <span class='i-f7-sparkles' style='width: 24px; height: 24px;'></span>
+      </span>
+      <span class='set-card-row-text' style='gap: 3px;'>
+        <span class='set-card-label' style='font-size: 16px; font-weight: 600; letter-spacing: -.015em;'>SystemCleaner</span>
+        <span class='set-card-hint' data-value='appVersion'>—</span>
+      </span>
+    </div>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'><span class='set-card-label'>Computer</span></span>
+      <span class='set-card-value' data-value='hostName'>—</span>
+    </div>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'><span class='set-card-label'>macOS</span></span>
+      <span class='set-card-value' data-value='osVersion'>—</span>
+    </div>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'><span class='set-card-label'>Chip</span></span>
+      <span class='set-card-value' data-value='cpuModel'>—</span>
+    </div>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'><span class='set-card-label'>Memory</span></span>
+      <span class='set-card-value' data-value='memory'>—</span>
+    </div>
+  </div>
+  <p class='set-card-foot'>
+    SystemCleaner is a local tool. It reads this Mac, writes to this Mac, and
+    talks to nothing else.
+  </p>
+</section>
+
+@endsection
