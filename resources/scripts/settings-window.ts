@@ -197,15 +197,15 @@ function panes(): HTMLElement[] {
 }
 
 function showPane(id: string): void {
-  let shown: HTMLElement | null = null
-  for (const pane of panes()) {
-    const active = pane.getAttribute('data-pane') === id
-    pane.toggleAttribute('data-active', active)
-    if (active)
-      shown = pane
-  }
+  // Found before anything is hidden. Switching to a pane that does not exist
+  // would otherwise leave the window blank under a title that did not change,
+  // which looks like the app broke rather than like a row pointing at nothing.
+  const shown = panes().find(pane => pane.getAttribute('data-pane') === id)
   if (!shown)
     return
+
+  for (const pane of panes())
+    pane.toggleAttribute('data-active', pane === shown)
 
   // The list rows only. The alert row above them points at the same pane, and
   // lighting both up shows one selection twice — the row in the list is where
@@ -230,7 +230,7 @@ function showPane(id: string): void {
 }
 
 function goTo(id: string): void {
-  if (trail[trailIndex] === id)
+  if (!id || trail[trailIndex] === id)
     return
   // Anything ahead of the cursor is a future that was replaced by this choice,
   // exactly as a browser drops its forward stack on a new navigation.

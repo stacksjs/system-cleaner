@@ -147,9 +147,10 @@ Four of those are the whole design, and each is a decision:
 | `titlebarHidden` | Puts the window buttons over the sidebar's top-left corner, where System Settings has them. |
 | `webWindowMaterial` | One material behind the whole view. The `webSidebarMaterial` span looks closer to this window and is pinned to vibrant light, so it would leave a pale sidebar in dark mode; the page paints both surfaces instead, and they flip with the theme. |
 | `chromeControls: false` | Craft otherwise draws a sidebar toggle and two history arrows beside the window buttons. This window draws its own history in the detail pane's toolbar, and two pairs of arrows mean two different things. |
+| `persistentStorage: true` | The same website data store the main window uses. Without it the window writes preferences nothing else can read — see below. |
 
-Requires Craft 0.0.89 — `window.open`, per-window action routing and
-`chromeControls` all landed there. On anything older `craft.window.open` is
+Requires Craft 0.0.89 — `window.open`, per-window action routing,
+`chromeControls` and `persistentStorage` all landed there. On anything older `craft.window.open` is
 absent and ⌘, falls back to a browser tab, which is what happens on the
 marketing site too.
 
@@ -167,6 +168,30 @@ The main window keeps `resources/scripts/settings-panel.ts`, which is now only
 the opener plus its own half of the appearance work: Craft routes a window
 action to the window that asked for it, so each window sets its own
 `setAppearance`, and both read the one stored colour mode.
+
+### Why the app's preferences used to evaporate
+
+Two separate things had to be true before a setting written on the page could
+survive being written, and neither was:
+
+1. **Craft's website data store is ephemeral by default**, and each window gets
+   one of its own — no disk I/O at startup, which is right for a window that
+   only renders. `localStorage.setItem` succeeds, and the value is gone at the
+   next launch and invisible to every other window meanwhile. Nothing reports
+   it. `--persistent-storage` on the launcher and `persistentStorage: true` on
+   the Settings window opt into the shared, durable store.
+
+2. **The agent's port is the page's origin.** Asking the OS for a free port is
+   right — a fixed one collides with whatever else is running, and with a
+   second copy of the app — but asking for a *different* one every launch makes
+   `http://127.0.0.1:<port>` a different origin every launch, and browser
+   storage is scoped to an origin. The launcher now writes the number to
+   `agent-port` in the data directory and asks for it again;
+   `app/Support/Runtime/agent-port.ts` is that file's reader and writer, and
+   the agent falls back to a fresh port when it is taken.
+
+Both are needed. Either one alone leaves the colour mode resetting to "system"
+on every start, along with every switch in the Settings window.
 
 ## Releasing
 

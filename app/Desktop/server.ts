@@ -159,8 +159,11 @@ export async function startAgentServer(options: AgentServerOptions) {
 
   const notFound = new Response('Not found', { status: 404 })
 
-  const server = Bun.serve({
-    port: options.port ?? 0,
+  // A port that is asked for and refused is not fatal — see `runAgent` for why
+  // the launcher asks for one at all. Anything else is a real failure and is
+  // rethrown, because an agent that cannot bind has nothing to serve.
+  const listen = (port: number) => Bun.serve({
+    port,
     hostname: options.hostname ?? '127.0.0.1',
     idleTimeout: 255,
 
@@ -200,7 +203,19 @@ export async function startAgentServer(options: AgentServerOptions) {
     },
   })
 
-  return server
+  const wanted = options.port ?? 0
+  try {
+    return listen(wanted)
+  }
+  catch (err) {
+    // Someone else has it — another copy of the app, or whatever happened to
+    // take the number since the last launch. Falling back to a fresh port
+    // costs the page its stored preferences and is still far better than
+    // refusing to start.
+    if (wanted !== 0 && String(err).includes('EADDRINUSE'))
+      return listen(0)
+    throw err
+  }
 }
 
 /**
@@ -244,6 +259,14 @@ export async function runAgent(): Promise<void> {
   // Deliberately not `PORT`: that name is already the frontend port in
   // `config/ports.ts`, and setting it to 0 makes the config validator complain
   // about a value it was never meant to see.
+  //
+  // The launcher passes the port this app used last time, and 0 — ask the OS —
+  // only on a first run or when that one is taken. That matters more than it
+  // looks: the page's origin is `http://127.0.0.1:<port>`, so a port that
+  // changes every launch is an origin that changes every launch, and every
+  // preference the app keeps in `localStorage` is wiped by starting it. The
+  // colour mode was the visible half of that; the Settings window's switches
+  // are the rest.
   const server = await startAgentServer({
     webRoot,
     port: Number(process.env.SYSTEM_CLEANER_PORT ?? 0),

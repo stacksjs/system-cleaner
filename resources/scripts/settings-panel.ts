@@ -151,6 +151,11 @@ function openSettings(): void {
     // pane's toolbar — which is where this window draws its own. Left on,
     // there are two pairs of arrows in one window meaning different things.
     chromeControls: false,
+    // The same website data store the main window uses. Craft's default is an
+    // ephemeral store *per window*, so without this the Settings window would
+    // write every preference somewhere only it can read, and lose them on
+    // quit — which is exactly what it did.
+    persistentStorage: true,
   })
 }
 

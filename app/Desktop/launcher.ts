@@ -8,7 +8,8 @@
  * the window has to be a server running *here*.
  *
  * So this launcher owns the whole lifecycle:
- *   1. start the bundled agent server on a loopback port the OS picks,
+ *   1. start the bundled agent server on a loopback port — the one it used
+ *      last time, or one the OS picks,
  *   2. wait until it answers,
  *   3. open the Craft window on it,
  *   4. shut the server down when the window closes.
@@ -22,6 +23,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import process from 'node:process'
+import { readRememberedPort, rememberPort } from '../Support/Runtime/agent-port'
 
 /**
  * One executable, three jobs.
@@ -89,6 +91,15 @@ const migrationsDir = path.join(contentsDir, 'Resources/migrations')
 const dataDir = path.join(os.homedir(), 'Library/Application Support', APP_NAME)
 const databasePath = path.join(dataDir, 'system-cleaner.sqlite')
 
+/**
+ * The port this app used last time.
+ *
+ * See `app/Support/Runtime/agent-port.ts` for why an app on a loopback port
+ * has to keep the same one: the port is the page's origin, and an origin that
+ * changes every launch empties everything the page has stored against it.
+ */
+const portFile = path.join(dataDir, 'agent-port')
+
 function fail(message: string): never {
   console.error(`[${APP_NAME}] ${message}`)
   process.exit(1)
@@ -117,7 +128,7 @@ const agent = Bun.spawn([process.execPath, 'agent'], {
     SYSTEM_CLEANER_AGENT: '1',
     SYSTEM_CLEANER_WEB_ROOT: webRoot,
     SYSTEM_CLEANER_MIGRATIONS: migrationsDir,
-    SYSTEM_CLEANER_PORT: '0',
+    SYSTEM_CLEANER_PORT: String(readRememberedPort(portFile)),
     DB_CONNECTION: 'sqlite',
     DB_DATABASE_PATH: databasePath,
   },
@@ -188,6 +199,7 @@ async function waitForHealth(port: number): Promise<void> {
 }
 
 const port = await readPort()
+rememberPort(portFile, port)
 await waitForHealth(port)
 
 /**
@@ -281,12 +293,31 @@ const SIDEBAR_MATERIAL = [
 
 const material = runtimeSupports('--web-window-material') ? WINDOW_MATERIAL : SIDEBAR_MATERIAL
 
+/**
+ * Let the page keep what it stores.
+ *
+ * Craft gives a window a *non-persistent* website data store by default — no
+ * disk I/O at startup, and right for a window that only renders. It is wrong
+ * for this one. Everything the app remembers on the page's side lives in
+ * `localStorage`: the colour mode the appearance bootstrap reads before first
+ * paint, and every switch in the Settings window. In an ephemeral store those
+ * are emptied on quit, and each window gets a store of its own — so the
+ * Settings window wrote preferences the dashboard could not read, and both
+ * forgot them at the next launch. Nothing failed; the values were simply never
+ * there.
+ *
+ * Guarded because it arrived in craft-native.org 0.0.89, and an older runtime
+ * given an unknown flag refuses to start.
+ */
+const persistentStorage = runtimeSupports('--persistent-storage') ? ['--persistent-storage'] : []
+
 const craft = Bun.spawn([
   craftBinary,
   `http://127.0.0.1:${port}/app`,
   '--title',
   APP_NAME,
   ...(canHostChrome ? ['--titlebar-hidden', ...material] : []),
+  ...persistentStorage,
   '--width',
   '1400',
   '--height',

@@ -116,6 +116,16 @@ describe('the Settings window', () => {
     expect(opener).not.toContain('webSidebarMaterial:')
   })
 
+  it('opens on the store the main window writes to', async () => {
+    const opener = await read(OPENER)
+
+    // Craft's default is an ephemeral website data store *per window*. Without
+    // this the Settings window's preferences land somewhere only it can read
+    // and are gone at the next launch — and nothing reports it, because
+    // nothing failed.
+    expect(opener).toContain('persistentStorage: true')
+  })
+
   it('draws its own history row, so Craft does not draw a second one', async () => {
     const opener = await read(OPENER)
     const layout = await read(LAYOUT)
