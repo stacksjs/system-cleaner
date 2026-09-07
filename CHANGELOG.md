@@ -1,5 +1,30 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.0...v0.3.1)
+
+## ✨ Features
+
+- **settings**: a Settings window, not a sheet over the app ([c7b1c7b](https://github.com/stacksjs/system-cleaner/commit/c7b1c7b)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **updates**: SystemCleaner updates itself ([2745573](https://github.com/stacksjs/system-cleaner/commit/2745573)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## 🐛 Bug Fixes
+
+- **desktop**: let the app keep what the user tells it ([7c5f29f](https://github.com/stacksjs/system-cleaner/commit/7c5f29f)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## ✅ Tests
+
+- **deps**: catch a lockfile written by the wrong Bun ([c5109d3](https://github.com/stacksjs/system-cleaner/commit/c5109d3)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## 🔧 Chores
+
+- **deps**: craft-native.org 0.0.90, which the Settings window needs ([e54beb1](https://github.com/stacksjs/system-cleaner/commit/e54beb1)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: stacks 0.74.29, for the craft and stx the Settings window needs ([95f3956](https://github.com/stacksjs/system-cleaner/commit/95f3956)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: stacks 0.74.28, which fixes the release this app hit ([863a6c0](https://github.com/stacksjs/system-cleaner/commit/863a6c0)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## Contributors
+
+- _Chris <chrisbreuer93@gmail.com>_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.2.2...v0.3.0)
 
 ## ✨ Features
