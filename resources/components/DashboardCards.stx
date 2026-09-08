@@ -42,7 +42,7 @@
           <span class='signal-text'>Disk <b>{{ stats.diskUsed }} / {{ stats.diskTotal }}</b> <span class='signal-aside'>({{ stats.diskAvail }} free)</span></span>
         </li>
         <li x-show='!stats'>
-          <span class='statusbar-dot' style='background: #6c6c70'></span>
+          <span class='statusbar-dot' style='background: var(--tertiary)'></span>
           <span class='signal-text'>Disk <b>loading...</b></span>
         </li>
         <li x-show='stats' x-cloak>
@@ -50,11 +50,11 @@
           <span class='signal-text'>Startup <b>{{ stats.enabledStartup }} of {{ stats.totalStartup }}</b> enabled</span>
         </li>
         <li x-show='stats' x-cloak>
-          <span class='statusbar-dot' style='background: #0a84ff'></span>
+          <span class='statusbar-dot' style='background: var(--accent)'></span>
           <span class='signal-text'>Extensions <b>{{ stats.extensions }}</b> installed</span>
         </li>
         <li>
-          <span class='statusbar-dot' style='background: #30d158'></span>
+          <span class='statusbar-dot' style='background: var(--green)'></span>
           <span class='signal-text'>Uptime <b>{{ stats ? stats.uptimeStr : uptimeStr }}</b></span>
         </li>
       </ul>

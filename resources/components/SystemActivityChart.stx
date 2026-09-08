@@ -82,12 +82,12 @@ useIntervalFn(refreshActivity, 5000)
     <svg viewBox="0 0 960 200" role="img" aria-label="CPU and memory usage over the recent sampling window, as a percentage">
       <defs>
         <linearGradient id="activity-fill-cpu" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#0a84ff" stop-opacity=".3" />
-          <stop offset="100%" stop-color="#0a84ff" stop-opacity="0" />
+          <stop offset="0%" stop-opacity=".3" />
+          <stop offset="100%" stop-opacity="0" />
         </linearGradient>
         <linearGradient id="activity-fill-memory" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#64d2ff" stop-opacity=".24" />
-          <stop offset="100%" stop-color="#64d2ff" stop-opacity="0" />
+          <stop offset="0%" stop-opacity=".24" />
+          <stop offset="100%" stop-opacity="0" />
         </linearGradient>
       </defs>
 
@@ -134,8 +134,10 @@ useIntervalFn(refreshActivity, 5000)
 .activity-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .activity-legend b { color: var(--ink, #f5f5f7); font-weight: 600; font-variant-numeric: tabular-nums; }
 .legend-swatch { width: 10px; height: 3px; border-radius: 2px; }
-.legend-swatch.cpu { background: #0a84ff; }
-.legend-swatch.memory { background: #64d2ff; }
+#activity-fill-cpu stop { stop-color: var(--accent); }
+#activity-fill-memory stop { stop-color: var(--cyan); }
+.legend-swatch.cpu { background: var(--accent); }
+.legend-swatch.memory { background: var(--cyan); }
 .activity-plot { padding: 4px 20px 16px; }
 .activity-plot svg { display: block; width: 100%; height: auto; }
 .grid-line { stroke: color-mix(in srgb, var(--secondary, #8e8e93) 26%, transparent); stroke-width: 1; }
@@ -146,8 +148,8 @@ useIntervalFn(refreshActivity, 5000)
 .activity-area.cpu { fill: url(#activity-fill-cpu); }
 .activity-area.memory { fill: url(#activity-fill-memory); }
 .activity-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.activity-line.cpu { stroke: #0a84ff; }
-.activity-line.memory { stroke: #64d2ff; }
+.activity-line.cpu { stroke: var(--accent); }
+.activity-line.memory { stroke: var(--cyan); }
 .activity-state { min-height: 180px; display: grid; place-items: center; margin: 0; color: var(--secondary, #8e8e93); font-size: 12px; }
 @media (max-width: 720px) {
   .activity-header { align-items: stretch; flex-direction: column; gap: 10px; }

@@ -3,7 +3,7 @@
 <div class='card-row'>
   <div class='card'>
     <div class='card-label'>Processes</div>
-    <div class='card-value' style='color: #ff453a;'>{{ processes.length }}</div>
+    <div class='card-value' style='color: var(--red);'>{{ processes.length }}</div>
     <div class='card-detail'>Above threshold</div>
   </div>
   <div class='card'>
@@ -75,10 +75,10 @@
           <td>
             <div class="cpu-bar">
               <span
-                :style="'font-size:11px;font-weight:500;min-width:36px;' + (p.cpu > 50 ? 'color:#ff453a;' : p.cpu > 20 ? 'color:#ff9f0a;' : '')">{{ p.cpu.toFixed(1) + '%' }}</span>
+                :style="'font-size:11px;font-weight:500;min-width:36px;' + (p.cpu > 50 ? 'color:var(--red);' : p.cpu > 20 ? 'color:var(--orange);' : '')">{{ p.cpu.toFixed(1) + '%' }}</span>
               <div class="cpu-track">
                 <div class="cpu-fill"
-                  :style="'width:' + Math.min(100, p.cpu) + '%;background:' + (p.cpu > 50 ? '#ff453a' : p.cpu > 20 ? '#ff9f0a' : '#30d158') + ';'"></div>
+                  :style="'width:' + Math.min(100, p.cpu) + '%;background:' + (p.cpu > 50 ? 'var(--red)' : p.cpu > 20 ? 'var(--orange)' : 'var(--green)') + ';'"></div>
               </div>
             </div>
           </td>

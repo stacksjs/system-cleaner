@@ -38,6 +38,7 @@ const localAgent = isLocalAgent()
       --orange: #c45d00;
       --red: #d70015;
       --purple: #8944ab;
+      --cyan: #32ade6;
       --shadow: 0 10px 30px rgba(0, 0, 0, .12);
     }
     :root.dark {
@@ -59,6 +60,7 @@ const localAgent = isLocalAgent()
       --orange: #ff9f0a;
       --red: #ff453a;
       --purple: #bf5af2;
+      --cyan: #64d2ff;
       --shadow: 0 14px 38px rgba(0, 0, 0, .38);
     }
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }

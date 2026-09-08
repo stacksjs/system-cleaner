@@ -2,7 +2,7 @@
 <div class='card-row'>
   <div class='card'>
     <div class='card-label'>Active</div>
-    <div class='card-value' style='color: #ff9f0a;'>{{ enabledStartup().length }}</div>
+    <div class='card-value' style='color: var(--orange);'>{{ enabledStartup().length }}</div>
     <div class='card-detail'>Running at startup</div>
   </div>
   <div class='card'>
