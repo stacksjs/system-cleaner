@@ -121,7 +121,7 @@
 
     <!-- A determinate bar, because the manifest carries the byte count. -->
     <div x-show="self.stage === 'downloading'" style='display: flex; flex-direction: column; gap: var(--space-1);'>
-      <div style='height: 4px; border-radius: 2px; background: var(--hairline); overflow: hidden;'>
+      <div style='height: 4px; border-radius: 2px; background: var(--track); overflow: hidden;'>
         <div style='height: 100%; background: var(--accent); transition: width 200ms linear;'
              :style="'width: ' + self.percent + '%'"></div>
       </div>
