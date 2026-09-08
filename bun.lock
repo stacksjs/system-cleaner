@@ -36,7 +36,7 @@
         "system-cleaner": "./bin/system-cleaner.ts",
       },
       "dependencies": {
-        "@stacksjs/clapp": "^0.2.8",
+        "@stacksjs/clapp": "^0.2.16",
         "@system-cleaner/clean": "workspace:*",
         "@system-cleaner/core": "workspace:*",
         "@system-cleaner/disk": "workspace:*",
@@ -131,7 +131,7 @@
 
     "@stacksjs/chat": ["@stacksjs/chat@0.74.29", "", { "dependencies": { "@stacksjs/logging": "0.74.29" } }, "sha512-c7USe90cibjl3778+pzckk4w9Y/jWB82T+DLcwiMAVWw702B4bmnO19vWbwXmit2rqDNwV/DZQMmMw6ehAAoMw=="],
 
-    "@stacksjs/clapp": ["@stacksjs/clapp@0.2.15", "", {}, "sha512-EM2fWrFZaU+paHZ4X0RGNZTnBYVgwdkbTnYdLD72yoc8JXUH5Wl88IZcn/JZoFPrViNgXlhYgI3xEK4Fryd3Xw=="],
+    "@stacksjs/clapp": ["@stacksjs/clapp@0.2.16", "", {}, "sha512-g/5HUXGxD9QffyPKGdywZODte0DJYwzNhSmrPime1z7TLxWPodJ9IYfIwr2G6Wco+fAQISgaVQUtVf0pUNGV0w=="],
 
     "@stacksjs/clarity": ["@stacksjs/clarity@0.3.33", "", { "dependencies": { "bunfig": "^0.15.6" }, "bin": { "clarity": "./dist/bin/cli.js" } }, "sha512-+5GLKnAI/M/z64UfNLLfQqx/kp+frmRY+NZXYwwGwbrkud/xlsEGDWEExdhqOhqEDMWdb1oafw/ubGAPg1PaFw=="],
 
