@@ -1,5 +1,14 @@
 {
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": [
+    "Renovate is off here: dependency updates are buddy-bot's job, via .github/workflows/buddy-bot.yml.",
+    "Both ran for months and proposed the same upgrades independently — puppeteer arrived as #9 (buddy-bot) and #10 (renovate) 45 seconds apart, and 'all non-major dependencies' as #6 and #2 — plus a Dependency Dashboard each, on top of the ones buddy-bot already keeps.",
+    "buddy-bot wins because it is this org's own tool (stacksjs/buddy-bot) and the workflow here drives it with rebase handling and dashboard management; the Renovate side was a three-line preset extend.",
+    "The file is kept rather than deleted on purpose: with no config at all Renovate re-onboards and opens a fresh onboarding PR. Setting enabled:false stops it acting while leaving the config addressable.",
+    "This only stops Renovate acting. The GitHub App may still be installed on the repo — removing it is a repo/org settings change, not a config one."
+  ],
   "extends": [
     "github>ow3org/renovate-config"
-  ]
+  ],
+  "enabled": false
 }
