@@ -15,7 +15,7 @@
         <svg viewBox='0 0 100 100'>
           <circle class='ring-bg' cx='50' cy='50' r='40' />
           <circle class='ring-fill' cx='50' cy='50' r='40'
-            :stroke='healthColor()'
+            :style="'stroke: ' + healthColor()"
             :stroke-dasharray='{{ healthDasharray }}'
             :stroke-dashoffset='healthDashoffset()' />
         </svg>

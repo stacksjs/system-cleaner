@@ -41,9 +41,9 @@ const config = {
         // the values currently scattered across `app.stx`'s <style> block
         // so utility-class migration is a one-to-one swap, not a redesign.
         'apple-blue': '#0a84ff',
-        'apple-green': '#30d158',
-        'apple-orange': '#ff9f0a',
-        'apple-red': '#ff453a',
+        'apple-green': 'var(--green, #30d158)',
+        'apple-orange': 'var(--orange, #ff9f0a)',
+        'apple-red': 'var(--red, #ff453a)',
         'apple-purple': '#bf5af2',
         'apple-yellow': '#ffd60a',
         'apple-teal': '#64d2ff',

@@ -32,7 +32,7 @@ window.dashboardXData = function () {
     },
     healthColor() {
       var s = this.healthScore()
-      return s >= 90 ? '#34c759' : s >= 75 ? '#30d158' : s >= 60 ? '#ff9f0a' : '#ff453a'
+      return s >= 60 ? (s >= 75 ? 'var(--green)' : 'var(--orange)') : 'var(--red)'
     },
     healthDashoffset() {
       return String(2 * Math.PI * 40 * (1 - this.healthScore() / 100))
@@ -41,9 +41,15 @@ window.dashboardXData = function () {
     // Memory colour is derived here rather than baked into the HTML: the
     // packaged app serves prerendered pages, so a server-rendered colour would
     // describe the build machine's memory forever.
+    //
+    // These helpers return a `var(--token)`, not a hex, so the dashboard
+    // follows the colour mode. That constrains where the value may land: a
+    // custom property resolves in a CSS declaration but NOT in an SVG
+    // presentation attribute, so every consumer must bind through `:style`
+    // and never through `:stroke` / `:fill`.
     memColor() {
       var p = this.stats ? this.stats.memPercent : 0
-      return p > 80 ? '#ff453a' : p > 60 ? '#ff9f0a' : '#30d158'
+      return p > 80 ? 'var(--red)' : p > 60 ? 'var(--orange)' : 'var(--green)'
     },
     memDotStyle() { return 'background: ' + this.memColor() },
     memFillStyle() {
@@ -52,14 +58,14 @@ window.dashboardXData = function () {
     },
 
     diskDotColor(pct) {
-      if (pct > 90) return '#ff453a'
-      if (pct > 75) return '#ff9f0a'
-      return '#30d158'
+      if (pct > 90) return 'var(--red)'
+      if (pct > 75) return 'var(--orange)'
+      return 'var(--green)'
     },
     startupDotColor(count) {
-      if (count > 30) return '#ff453a'
-      if (count > 15) return '#ff9f0a'
-      return '#30d158'
+      if (count > 30) return 'var(--red)'
+      if (count > 15) return 'var(--orange)'
+      return 'var(--green)'
     },
     cpuTextClass(cpu) {
       if (cpu > 50) return 'text-apple-red'
