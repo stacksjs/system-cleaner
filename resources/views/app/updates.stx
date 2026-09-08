@@ -4,12 +4,12 @@
 
 <style>
 /* The installed build, with the mark that says whose OS it is. */
-.upd-installed { display: inline-flex; align-items: center; gap: 5px; }
+.upd-installed { display: inline-flex; align-items: center; gap: var(--space-1); }
 
 /* Both ends of the upgrade, each under its own word. A bare "27.0 → 27.0" is
    what this looked like before the build was shown, and on a beta the build is
    the only part that moves. */
-.upd-versions { display: inline-flex; align-items: center; gap: 10px; }
+.upd-versions { display: inline-flex; align-items: center; gap: var(--space-3); }
 .upd-version-side { display: inline-flex; flex-direction: column; gap: 1px; }
 .upd-version-tag {
   font-family: -apple-system, system-ui, sans-serif;
@@ -29,7 +29,7 @@
 </div>
 
 <div class='main-header'>
-  <div style='display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;'>
+  <div style='display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3);'>
     <div>
       <div class='main-title'>Updates</div>
       <div class='main-subtitle'>
@@ -37,7 +37,7 @@
         <span x-show='!loading' x-cloak>{{ totalOutdated() + ' outdated item' + (totalOutdated() !== 1 ? 's' : '') + ' found' }}</span>
       </div>
     </div>
-    <div x-show='!loading' x-cloak style='display: flex; gap: 6px; flex-shrink: 0;'>
+    <div x-show='!loading' x-cloak style='display: flex; gap: var(--space-tight); flex-shrink: 0;'>
       <button class='btn btn-sm' data-rescan @click='refresh(false)'>Refresh</button>
       <button class='btn btn-sm' @click='refresh(true)' title='Full Apple Software Update scan'>Deep Scan</button>
     </div>
@@ -45,7 +45,7 @@
 </div>
 <div class='main-content'>
 
-<div x-show='loading' style='text-align: center; padding: 60px 16px; color: var(--tertiary); font-size: 13px;'>
+<div x-show='loading' style='text-align: center; padding: var(--space-10) var(--space-4); color: var(--tertiary); font-size: 13px;'>
   Checking for updates...
 </div>
 
@@ -60,8 +60,8 @@
         <span class='i-f7-logo-apple' aria-hidden='true'></span>
         <span>{{ 'macOS ' + installedLabel() }}</span>
       </span>
-      <span x-show='clToolsInfo.version' style='display: block; margin-top: 2px;'>{{ 'CLT ' + clToolsInfo.version }}</span>
-      <span x-show='updateScanCached' style='display: block; margin-top: 2px;'>cached scan</span>
+      <span x-show='clToolsInfo.version' style='display: block; margin-top: var(--space-half);'>{{ 'CLT ' + clToolsInfo.version }}</span>
+      <span x-show='updateScanCached' style='display: block; margin-top: var(--space-half);'>cached scan</span>
     </div>
   </div>
   <div class='card'>
@@ -97,7 +97,7 @@
       <span class='tbl-title'>SystemCleaner</span>
       <span class='tbl-count'>{{ 'v' + self.currentVersion }}</span>
     </div>
-    <div style='display: flex; gap: 6px; align-items: center;'>
+    <div style='display: flex; gap: var(--space-tight); align-items: center;'>
       <button class='btn btn-sm'
               @click='checkSelfUpdate()'
               :disabled="self.stage === 'checking' || self.stage === 'downloading' || self.stage === 'installing'">
@@ -115,12 +115,12 @@
       </button>
     </div>
   </div>
-  <div style='padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;'>
+  <div style='padding: var(--space-3) var(--space-4); display: flex; flex-direction: column; gap: var(--space-2);'>
     <div style='font-size: 12px;'
          :style="self.stage === 'error' ? 'color: var(--red)' : ''">{{ selfStatusLine() }}</div>
 
     <!-- A determinate bar, because the manifest carries the byte count. -->
-    <div x-show="self.stage === 'downloading'" style='display: flex; flex-direction: column; gap: 4px;'>
+    <div x-show="self.stage === 'downloading'" style='display: flex; flex-direction: column; gap: var(--space-1);'>
       <div style='height: 4px; border-radius: 2px; background: var(--hairline); overflow: hidden;'>
         <div style='height: 100%; background: var(--accent); transition: width 200ms linear;'
              :style="'width: ' + self.percent + '%'"></div>
@@ -148,7 +148,7 @@
       <span class='tbl-count' x-show='systemOutdatedCount() > 0'>{{ systemOutdatedCount() + ' available' }}</span>
       <span class='tbl-count' x-show='systemOutdatedCount() === 0'>up to date</span>
     </div>
-    <div style='display: flex; gap: 6px;'>
+    <div style='display: flex; gap: var(--space-tight);'>
       <button class='btn btn-sm' @click='openSystemSettings()'>Open System Settings</button>
     </div>
   </div>
@@ -169,7 +169,7 @@
           <tr>
             <td>
               <span class='item-name'>{{ upd.title }}</span>
-              <span class='badge badge-orange' style='margin-left: 4px; font-size: 9px;'
+              <span class='badge badge-orange' style='margin-left: var(--space-1); font-size: 9px;'
                     x-show="upd.kind === 'macos' && isBetaRelease()">from beta</span>
             </td>
             <td><span class='badge' :class="kindBadgeClass(upd.kind)">{{ kindLabel(upd.kind) }}</span></td>
@@ -199,9 +199,9 @@
             </td>
             <td class='dim mono' style='font-size: 11px;'>{{ upd.sizeLabel }}</td>
             <td>
-              <span class='badge badge-orange' style='font-size: 9px; margin-right: 4px;' x-show='upd.restartRequired'>Restart</span>
+              <span class='badge badge-orange' style='font-size: 9px; margin-right: var(--space-1);' x-show='upd.restartRequired'>Restart</span>
               <span class='badge badge-green' style='font-size: 9px;' x-show='upd.recommended'>Recommended</span>
-              <span x-show='upd.kind === "cltools" && clToolsInfo.version' class='dim' style='font-size: 10px; display: block; margin-top: 2px;'>{{ 'Installed: ' + clToolsInfo.version }}</span>
+              <span x-show='upd.kind === "cltools" && clToolsInfo.version' class='dim' style='font-size: 10px; display: block; margin-top: var(--space-half);'>{{ 'Installed: ' + clToolsInfo.version }}</span>
             </td>
             <td>
               <button class='btn btn-sm' @click='openSystemSettings()'>Install</button>
@@ -211,10 +211,10 @@
       </tbody>
     </table>
   </div>
-  <div x-show='systemOutdatedCount() === 0' class='empty-state' style='padding: 20px;'>
-    <div style='font-size: 13px; color: var(--green); margin-bottom: 4px;'>&#10004; No pending macOS or system updates</div>
+  <div x-show='systemOutdatedCount() === 0' class='empty-state' style='padding: var(--space-5);'>
+    <div style='font-size: 13px; color: var(--green); margin-bottom: var(--space-1);'>&#10004; No pending macOS or system updates</div>
     <div class='dim' style='font-size: 11px;' x-show='clToolsInfo.version'>{{ 'Command Line Tools ' + clToolsInfo.version + ' installed' }}</div>
-    <div class='dim' style='font-size: 11px; margin-top: 4px;' x-show='updateScanCached'>Use Deep Scan for a fresh Apple catalog check</div>
+    <div class='dim' style='font-size: 11px; margin-top: var(--space-1);' x-show='updateScanCached'>Use Deep Scan for a fresh Apple catalog check</div>
   </div>
 </div>
 
@@ -225,7 +225,7 @@
       <span class='tbl-count'>{{ brewTotal() + ' outdated' }}</span>
       <span class='tbl-count' x-show='selected.length > 0'>{{ ' \u00B7 ' + selected.length + ' selected' }}</span>
     </div>
-    <div style='display: flex; gap: 6px;'>
+    <div style='display: flex; gap: var(--space-tight);'>
       <button class='btn btn-sm' x-show='selected.length > 0' @click='doUpdateSelected()'>
         Update Selected (<span x-text='selected.length'>0</span>)
       </button>
@@ -266,7 +266,7 @@
           <td><input type='checkbox' class='check' :checked='isOn(pkg.name)' @click='toggle(pkg.name)' /></td>
           <td>
             <span class='item-name'>{{ pkg.name }}</span>
-            <span class='badge badge-gray' style='margin-left: 4px;' x-show='pkg.pinned'>pinned</span>
+            <span class='badge badge-gray' style='margin-left: var(--space-1);' x-show='pkg.pinned'>pinned</span>
           </td>
           <td><span class='badge badge-green'>Formula</span></td>
           <td class='dim mono' style='font-size: 11px;'>{{ pkg.current }}</td>
@@ -331,14 +331,14 @@
       </tbody>
     </table>
   </div>
-  <div x-show='pantryOutdated.length === 0 && pantryPackages.length > 0' style='padding: 12px 16px;'>
-    <div style='display: flex; flex-wrap: wrap; gap: 6px;'>
+  <div x-show='pantryOutdated.length === 0 && pantryPackages.length > 0' style='padding: var(--space-3) var(--space-4);'>
+    <div style='display: flex; flex-wrap: wrap; gap: var(--space-tight);'>
       <template x-for='pkg in pantryPackages' :key='pkg'>
         <span class='badge badge-green'>{{ pkg }}</span>
       </template>
     </div>
   </div>
-  <div x-show='pantryOutdated.length === 0 && pantryTrackedCount === 0' class='empty-state' style='padding: 20px;'>No Pantry packages in this project</div>
+  <div x-show='pantryOutdated.length === 0 && pantryTrackedCount === 0' class='empty-state' style='padding: var(--space-5);'>No Pantry packages in this project</div>
 </div>
 
 <div x-show='desktopApps.length > 0' class='tbl-wrap'>
@@ -348,7 +348,7 @@
       <span class='tbl-count' x-show='desktopOutdated.length > 0'>{{ desktopOutdated.length + ' update' + (desktopOutdated.length !== 1 ? 's' : '') + ' available' }}</span>
       <span class='tbl-count' x-show='desktopOutdated.length === 0'>{{ desktopApps.length + ' apps' }}</span>
     </div>
-    <div style='display: flex; gap: 4px;'>
+    <div style='display: flex; gap: var(--space-1);'>
       <button class='btn btn-sm' :class="{ 'btn-active': appFilter === 'all' }" @click="appFilter = 'all'">{{ 'All (' + desktopApps.length + ')' }}</button>
       <button class='btn btn-sm' x-show='desktopOutdated.length > 0' :class="{ 'btn-active': appFilter === 'outdated' }" @click="appFilter = 'outdated'">{{ 'Outdated (' + desktopOutdated.length + ')' }}</button>
       <button class='btn btn-sm' :class="{ 'btn-active': appFilter === 'uptodate' }" @click="appFilter = 'uptodate'">Up to date</button>
@@ -419,7 +419,7 @@
 </div>
 
 <div x-show='totalOutdated() === 0 && !loading' class='empty-state'>
-  <div style='font-size: 32px; margin-bottom: 8px;'>&#10004;</div>
+  <div style='font-size: 32px; margin-bottom: var(--space-2);'>&#10004;</div>
   Everything is up to date!
 </div>
 

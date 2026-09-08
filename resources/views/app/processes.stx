@@ -6,7 +6,7 @@
 .live-indicator {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-1);
   font-size: 10px;
   /* Auto rather than 8px: it is the right-hand item in the bar now, not a
      trailing word after "sorted by CPU". */

@@ -71,7 +71,7 @@
   <div class='disk-sidebar'>
     <div class='disk-sidebar-section'>
       <div class='disk-card'>
-        <div style='display: flex; align-items: center; gap: 8px; margin-bottom: 8px;'>
+        <div style='display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2);'>
           <div style='width: 30px; height: 30px; background: linear-gradient(135deg, var(--surface-soft), var(--track)); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--secondary);'>HD</div>
           <div>
             <div style='font-size: 12px; font-weight: 600;'>Macintosh HD</div>
@@ -91,8 +91,8 @@
     </div>
 
     <div class='disk-sidebar-section'>
-      <div style='font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--tertiary); margin-bottom: 8px;' x-text="(drilled ? 'Folder: ' : 'Home: ') + rootName">Home</div>
-      <div style='font-size: 18px; font-weight: 700; margin-bottom: 2px;' x-text="scanTotalLabel">-</div>
+      <div style='font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--tertiary); margin-bottom: var(--space-2);' x-text="(drilled ? 'Folder: ' : 'Home: ') + rootName">Home</div>
+      <div style='font-size: 18px; font-weight: 700; margin-bottom: var(--space-half);' x-text="scanTotalLabel">-</div>
       <div style='font-size: 10px; color: var(--tertiary);' x-text="metaText()">Click 'Scan Disk' to analyze</div>
     </div>
 
@@ -110,7 +110,7 @@
       <div class='disk-notice' x-text='unreadableNote()'></div>
     </div>
 
-    <div class='disk-sidebar-section' style='padding-bottom: 4px;'>
+    <div class='disk-sidebar-section' style='padding-bottom: var(--space-1);'>
       <div style='font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--tertiary);'>Largest Items</div>
     </div>
     <div class='folder-list'>
@@ -136,18 +136,18 @@
         <span class='i-f7-chart-pie-fill' aria-hidden='true'></span>
       </div>
       <div x-show="scanState === 'idle'">
-        <div style='margin-bottom: 12px;'>Analyze disk usage with an interactive sunburst chart</div>
-        <button class='btn' onclick='startDiskScan()' style='padding: 8px 20px; font-size: 13px;'>Scan Disk</button>
-        <div style='margin-top: 8px; font-size: 10px; color: var(--tertiary);'>Results are cached for 10 minutes</div>
+        <div style='margin-bottom: var(--space-3);'>Analyze disk usage with an interactive sunburst chart</div>
+        <button class='btn' onclick='startDiskScan()' style='padding: var(--space-2) var(--space-5); font-size: 13px;'>Scan Disk</button>
+        <div style='margin-top: var(--space-2); font-size: 10px; color: var(--tertiary);'>Results are cached for 10 minutes</div>
       </div>
       <div x-show="scanState === 'scanning'">
         <div>Scanning disk&hellip;</div>
         <!-- The count and the current directory are what distinguish a slow
              scan from a hung one. Both come from /api/scan-progress. -->
-        <div style='margin-top: 8px; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink);'
+        <div style='margin-top: var(--space-2); font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink);'
              x-show='scanProgress' x-text='scanProgress'></div>
         <div class='scan-path' x-show='scanProgressPath' x-text='scanProgressPath'></div>
-        <div style='margin-top: 8px; font-size: 10px; color: var(--tertiary);' x-show='!scanStalled'>Measuring every folder on a large home directory takes a minute or two. The total on the left climbs as it goes.</div>
+        <div style='margin-top: var(--space-2); font-size: 10px; color: var(--tertiary);' x-show='!scanStalled'>Measuring every folder on a large home directory takes a minute or two. The total on the left climbs as it goes.</div>
         <!-- Counted nothing for eight seconds: macOS is holding the read until
              someone answers, and no amount of waiting changes that. -->
         <div class='scan-blocked' x-show='scanStalled' x-cloak>
@@ -159,9 +159,9 @@
       <!-- A failed scan used to drop straight back to the idle state, so the
            button simply reappeared and the user was left to guess. -->
       <div x-show="scanState === 'error'" x-cloak>
-        <div style='margin-bottom: 8px; color: var(--red); font-weight: 600;'>Scan failed</div>
-        <div style='margin-bottom: 12px; max-width: 42ch; color: var(--secondary);' x-text='scanError'></div>
-        <button class='btn' onclick='startDiskScan()' style='padding: 8px 20px; font-size: 13px;'>Try Again</button>
+        <div style='margin-bottom: var(--space-2); color: var(--red); font-weight: 600;'>Scan failed</div>
+        <div style='margin-bottom: var(--space-3); max-width: 42ch; color: var(--secondary);' x-text='scanError'></div>
+        <button class='btn' onclick='startDiskScan()' style='padding: var(--space-2) var(--space-5); font-size: 13px;'>Try Again</button>
       </div>
     </div>
     <svg class='sunburst-svg' id='sunburst' viewBox='-320 -320 640 640' x-show="scanState === 'done'" x-cloak>
@@ -224,13 +224,13 @@
 
 <style>
 @keyframes pulse { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
-.disk-empty-glyph { margin-bottom: 14px; color: var(--tertiary); }
+.disk-empty-glyph { margin-bottom: var(--space-4); color: var(--tertiary); }
 .disk-empty-glyph span { display: inline-block; width: 30px; height: 30px; }
 .disk-empty-glyph.is-scanning { animation: pulse 1.5s ease-in-out infinite; }
-.scan-blocked { margin: 10px auto 0; max-width: 42ch; padding: 8px 12px; border: .5px solid color-mix(in srgb, var(--orange) 32%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--orange) 10%, var(--surface)); color: var(--secondary); font-size: 11px; line-height: 1.5; }
-.scan-blocked strong { display: block; margin-bottom: 2px; color: var(--ink); }
+.scan-blocked { margin: var(--space-3) auto 0; max-width: 42ch; padding: var(--space-2) var(--space-3); border: .5px solid color-mix(in srgb, var(--orange) 32%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--orange) 10%, var(--surface)); color: var(--secondary); font-size: 11px; line-height: 1.5; }
+.scan-blocked strong { display: block; margin-bottom: var(--space-half); color: var(--ink); }
 /* Centred like everything else in this column: a max-width block with no auto
    margin sits left, which read as misaligned against the text above it. */
-.scan-path { margin: 3px auto 0; max-width: 46ch; overflow: hidden; color: var(--tertiary); font: 10px/1.5 'SF Mono', Menlo, monospace; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.scan-path { margin: var(--space-1) auto 0; max-width: 46ch; overflow: hidden; color: var(--tertiary); font: 10px/1.5 'SF Mono', Menlo, monospace; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .disk-empty-glyph.is-scanning { animation: none; } }
 </style>

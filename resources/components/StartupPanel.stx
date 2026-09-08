@@ -32,7 +32,7 @@
 <div class='tbl-wrap'>
   <div class='tbl-bar'>
     <span class='tbl-title'>Launch Agents & Daemons</span>
-    <div style='display: flex; gap: 6px;'>
+    <div style='display: flex; gap: var(--space-tight);'>
       <button class='btn btn-sm' x-cloak x-show='false' aria-hidden='true'>
         Disable Selected (<span x-text='selected.length'>0</span>)
       </button>
@@ -71,7 +71,7 @@
           </td>
           <td>
             <span x-show="item.category === 'system'" class='dim' style='font-size: 10px;'>Apple</span>
-            <div x-show="item.category !== 'system'" style='display: flex; gap: 4px;' x-cloak>
+            <div x-show="item.category !== 'system'" style='display: flex; gap: var(--space-1);' x-cloak>
               <button x-show="!isDisabled(item.id)" class="btn btn-sm" @click="doToggle(item.filepath, item.name, 'disable', item.id)">Disable</button>
               <button x-show="isDisabled(item.id)" x-cloak class="btn btn-sm" @click="doToggle(item.filepath, item.name, 'enable', item.id)">Enable</button>
               <button class='btn btn-danger btn-sm' @click="doRemove(item.filepath, item.name, item.id)">Delete</button>

@@ -276,12 +276,12 @@
   <script src='/updates-xdata.js'></script>
   <div x-data='updatesXData()'>
     <div class='set-card'>
-      <div class='set-card-row' style='align-items: flex-start; padding-top: 14px;'>
+      <div class='set-card-row' style='align-items: flex-start; padding-top: var(--space-4);'>
         <span class='set-tile' data-tone='blue' aria-hidden='true'
               style='width: 38px; height: 38px; border-radius: 9px;'>
           <span class='i-f7-arrow-down-circle-fill' style='width: 22px; height: 22px;'></span>
         </span>
-        <span class='set-card-row-text' style='gap: 3px;'>
+        <span class='set-card-row-text' style='gap: var(--space-1);'>
           <span class='set-card-label' style='font-size: 15px; font-weight: 600; letter-spacing: -.01em;'
                 x-text='selfHeadline()'>SystemCleaner</span>
           <span class='set-card-hint' x-show='selfDetailLine()' x-cloak x-text='selfDetailLine()'></span>
@@ -394,12 +394,12 @@
 
 <section class='set-pane' data-pane='about' data-pane-title='About'>
   <div class='set-card'>
-    <div class='set-card-row' style='padding-top: 16px; padding-bottom: 16px;'>
+    <div class='set-card-row' style='padding-top: var(--space-4); padding-bottom: var(--space-4);'>
       <span class='set-tile' data-tone='blue' aria-hidden='true'
             style='width: 44px; height: 44px; border-radius: 10px;'>
         <span class='i-f7-sparkles' style='width: 24px; height: 24px;'></span>
       </span>
-      <span class='set-card-row-text' style='gap: 3px;'>
+      <span class='set-card-row-text' style='gap: var(--space-1);'>
         <span class='set-card-label' style='font-size: 16px; font-weight: 600; letter-spacing: -.015em;'>SystemCleaner</span>
         <span class='set-card-hint' data-value='appVersion'>—</span>
       </span>

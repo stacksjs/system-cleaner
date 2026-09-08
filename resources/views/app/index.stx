@@ -41,7 +41,7 @@ const healthDasharray = String(2 * Math.PI * 40)
 
   <SystemActivityChart />
 
-  <div x-show='pendingUpdates != null && pendingUpdates' x-cloak style='margin-bottom: 20px;'>
+  <div x-show='pendingUpdates != null && pendingUpdates' x-cloak style='margin-bottom: var(--space-5);'>
     <a href='/app/updates' data-stx-link class='card' style='display: flex; align-items: center; justify-content: space-between; text-decoration: none; color: inherit; border-color: color-mix(in srgb, var(--orange) 25%, transparent);'>
       <div>
         <div class='card-label'>Pending Updates</div>
@@ -72,7 +72,7 @@ const healthDasharray = String(2 * Math.PI * 40)
       </thead>
       <tbody>
         <tr x-show='statsLoading'>
-          <td colspan='5' class='dim' style='text-align: center; padding: 16px;'>Loading processes...</td>
+          <td colspan='5' class='dim' style='text-align: center; padding: var(--space-4);'>Loading processes...</td>
         </tr>
         <tr x-show='!statsLoading && !(stats && stats.processes && stats.processes.length)'>
           <td colspan='5' class='empty-state'>No processes to show</td>

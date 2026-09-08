@@ -35,7 +35,7 @@
       <span class='tbl-title'>What <span x-text="scan ? scan.app.name : 'this app'"></span> left behind</span>
       <span class='tbl-count' x-text="scan ? (scan.remnants.length + ' items · ' + scan.totalRemnantFormatted) : ''"></span>
     </div>
-    <div style='display: flex; gap: 6px;'>
+    <div style='display: flex; gap: var(--space-tight);'>
       <button class='btn btn-sm' @click='toggleAllRemnants()'
         x-text="allRemnantsChosen() ? 'Deselect Leftovers' : 'Select Leftovers'">Select Leftovers</button>
       <button class='btn btn-sm' @click='close()'>Close</button>
@@ -235,7 +235,7 @@
       <span class='tbl-count'
         x-text="orphansLoading ? 'scanning…' : (orphans.length + ' items · ' + fmtBytes(orphanBytes))">scanning…</span>
     </div>
-    <div style='display: flex; gap: 6px;'>
+    <div style='display: flex; gap: var(--space-tight);'>
       <button class='btn btn-sm' @click='toggleAllOrphans()' x-show='orphans.length > 0'
         x-text="allOrphansSelected() ? 'Deselect All' : 'Select All'">Select All</button>
       <button class='btn btn-sm' @click='loadOrphans()' :disabled='orphansLoading'>Rescan</button>
@@ -301,7 +301,7 @@
 </div>
 
 <style>
-.un-bar-actions { display: flex; align-items: center; gap: 8px; }
+.un-bar-actions { display: flex; align-items: center; gap: var(--space-2); }
 
 /* The count that says the list has news in it. Orange rather than red: an out
    of date app is a thing to get to, not a fault. */
@@ -313,11 +313,11 @@
 .un-update-done { color: var(--green); font-weight: 600; }
 .un-update-manual { color: var(--secondary); }
 
-.un-search { height: 28px; width: 220px; padding: 0 8px; border: .5px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-family: inherit; font-size: 12px; }
+.un-search { height: 28px; width: 220px; padding: 0 var(--space-2); border: .5px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-family: inherit; font-size: 12px; }
 .un-search:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .un-row-on { background: color-mix(in srgb, var(--accent) 8%, transparent); }
-.un-actions { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-top: .5px solid var(--line); background: var(--surface-soft); }
+.un-actions { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-top: .5px solid var(--line); background: var(--surface-soft); }
 .un-summary { margin-right: auto; font-size: 12px; font-variant-numeric: tabular-nums; }
-.un-note { padding: 10px 16px; border-top: .5px solid var(--line); color: var(--secondary); font-size: 11px; line-height: 1.5; }
-.un-footnote { margin-top: 12px; padding: 12px 16px; border: .5px solid var(--line); border-radius: 8px; background: var(--surface-soft); color: var(--tertiary); font-size: 11px; line-height: 1.5; }
+.un-note { padding: var(--space-3) var(--space-4); border-top: .5px solid var(--line); color: var(--secondary); font-size: 11px; line-height: 1.5; }
+.un-footnote { margin-top: var(--space-3); padding: var(--space-3) var(--space-4); border: .5px solid var(--line); border-radius: 8px; background: var(--surface-soft); color: var(--tertiary); font-size: 11px; line-height: 1.5; }
 </style>

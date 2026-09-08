@@ -161,14 +161,14 @@
 </div>
 
 <style>
-.mt-output { margin-top: 6px; max-height: 120px; overflow: auto; padding: 6px 8px; border-radius: 5px; background: var(--surface-soft); color: var(--secondary); font: 10px/1.5 'SF Mono', Menlo, monospace; white-space: pre-wrap; }
-.mt-shred { padding: 14px 16px; }
-.mt-shred-list { display: flex; flex-direction: column; gap: 6px; }
-.mt-shred-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: .5px solid var(--line); border-radius: 6px; background: var(--surface-soft); }
+.mt-output { margin-top: var(--space-tight); max-height: 120px; overflow: auto; padding: var(--space-tight) var(--space-2); border-radius: 5px; background: var(--surface-soft); color: var(--secondary); font: 10px/1.5 'SF Mono', Menlo, monospace; white-space: pre-wrap; }
+.mt-shred { padding: var(--space-3) var(--space-4); }
+.mt-shred-list { display: flex; flex-direction: column; gap: var(--space-tight); }
+.mt-shred-row { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-tight) var(--space-2); border: .5px solid var(--line); border-radius: 6px; background: var(--surface-soft); }
 .mt-shred-glyph { width: 13px; height: 13px; flex-shrink: 0; color: var(--red); }
 .mt-shred-path { flex: 1; overflow: hidden; font: 11px 'SF Mono', Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
-.mt-shred-actions { margin-top: 6px; }
+.mt-shred-actions { margin-top: var(--space-tight); }
 .mt-shred-note { max-width: 60ch; color: var(--secondary); font-size: 11px; line-height: 1.6; }
-.mt-shred-caveat { margin-top: 12px; max-width: 74ch; padding: 10px 12px; border: .5px solid color-mix(in srgb, var(--orange) 30%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--orange) 8%, var(--surface)); color: var(--secondary); font-size: 11px; line-height: 1.6; }
+.mt-shred-caveat { margin-top: var(--space-3); max-width: 74ch; padding: var(--space-3); border: .5px solid color-mix(in srgb, var(--orange) 30%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--orange) 8%, var(--surface)); color: var(--secondary); font-size: 11px; line-height: 1.6; }
 .mt-shred-caveat strong { color: var(--ink); }
 </style>

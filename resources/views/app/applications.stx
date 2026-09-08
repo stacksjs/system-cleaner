@@ -2,13 +2,13 @@
 @section('nav', 'applications')
 
 @section('styles')
-.vol-card { background: var(--surface); border: .5px solid var(--line); border-radius: 12px; padding: 14px 18px; margin-bottom: 16px; }
-.vol-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.vol-card { background: var(--surface); border: .5px solid var(--line); border-radius: 12px; padding: var(--space-3) var(--space-4); margin-bottom: var(--space-4); }
+.vol-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
 .vol-name { font-size: 14px; font-weight: 650; letter-spacing: -.01em; }
 .vol-pct { font-size: 12px; color: var(--tertiary); white-space: nowrap; }
 .vol-bar { height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
 .vol-fill { height: 100%; border-radius: 3px; background: var(--accent); }
-.vol-stats { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 10px; font-size: 11px; color: var(--tertiary); }
+.vol-stats { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-3); font-size: 11px; color: var(--tertiary); }
 .vol-stats strong { color: var(--ink); font-weight: 600; }
 @endsection
 
