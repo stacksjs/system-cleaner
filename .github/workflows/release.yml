@@ -64,7 +64,7 @@ jobs:
     name: Desktop app
     needs: release
     if: ${{ vars.DESKTOP_SIGNING_IDENTITY_NAME != '' }}
-    runs-on: macos-15
+    runs-on: macos-26
 
     permissions:
       contents: write
