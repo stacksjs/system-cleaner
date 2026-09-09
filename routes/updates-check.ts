@@ -228,13 +228,29 @@ export function invalidateUpdatesCaches(): void {
   brewOutdatedCache.clear()
 }
 
+/**
+ * Where a (fullScan, tier) pair files its result.
+ *
+ * The tier has to reach the key, not just pick the cache. A quick tier skips
+ * desktop app enumeration entirely, so filing its result where the full tier
+ * reads hands the page an empty app list. That is what a Deep Scan used to do:
+ * the page fires a quick call and then a full one, both with `fullScan: true`,
+ * and under a tier-blind key the first answered the second — leaving Desktop
+ * Apps reading "0 apps scanned" until the next reload.
+ */
+export function updatesCacheKey(fullScan: boolean, tier: UpdatesTier): string {
+  if (fullScan)
+    return tier === 'quick' ? 'full-quick' : 'full'
+  return tier === 'quick' ? 'tier-quick' : 'quick'
+}
+
 export async function runUpdatesCheck(
   fullScan = false,
   forceRefresh = false,
   tier: UpdatesTier = 'full',
 ): Promise<UpdatesCheckResult> {
   const cache = fullScan ? fullScanCache : (tier === 'quick' ? quickTierCache : responseCache)
-  const cacheKey = fullScan ? 'full' : (tier === 'quick' ? 'tier-quick' : 'quick')
+  const cacheKey = updatesCacheKey(fullScan, tier)
 
   if (!forceRefresh) {
     const hit = cache.get(cacheKey)
