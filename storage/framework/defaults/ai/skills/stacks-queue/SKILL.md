@@ -1,6 +1,6 @@
 ---
 name: stacks-queue
-description: Use when working with job queues in a Stacks application — creating jobs, dispatching, workers, batches, failed jobs, queue events, health checks, testing, Redis/database/sync drivers, rate limiting, or scheduled jobs. Covers @stacksjs/queue, config/queue.ts, and app/Jobs/.
+description: Use when working with job queues in a Stacks application - creating jobs, dispatching, workers, batches, failed jobs, queue events, health checks, testing, Redis/database/sync drivers, rate limiting, or scheduled jobs. Covers @stacksjs/queue, config/queue.ts, and app/Jobs/.
 license: MIT
 compatibility: Bun >= 1.3.0, TypeScript
 allowed-tools: Read Edit Write Bash Grep Glob
@@ -101,7 +101,7 @@ The `job()` helper loads job modules from `app/Jobs/{name}.ts` via `runJob()`.
 
 ### runJob(name, options)
 Dynamically imports `app/Jobs/{name}.ts` and executes:
-1. `jobConfig.handle(payload)` if handle is a function
+1. `jobConfig.handle(payload, context)` if handle is a function (`context` is what `.withContext()` attached, on every driver)
 2. `runAction(jobConfig.action)` if action is a string
 3. `jobConfig.action()` if action is a function
 4. `jobConfig(payload, context)` if default export is a function

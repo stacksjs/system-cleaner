@@ -1,6 +1,6 @@
 ---
 name: stacks-desktop
-description: Use when building or publishing desktop applications with Stacks — Craft native windows, system tray, desktop packaging, or Mac App Store delivery.
+description: Use when building or publishing desktop applications with Stacks - Craft native windows, system tray, desktop packaging, or Mac App Store delivery.
 license: MIT
 compatibility: Bun >= 1.3.0, TypeScript
 allowed-tools: Read Edit Write Bash Grep Glob
@@ -37,9 +37,17 @@ navigation otherwise appears as a blank native window.
 
 ## API
 
+Two packages carry "desktop" in their name. `@stacksjs/desktop-build` (this
+repo, `storage/framework/core/desktop`) holds the build and launch helpers
+below. `@stacksjs/desktop` (the stx repo) wraps the Craft bridge for code
+running inside the window; import it from `@stacksjs/desktop/browser` there,
+since its root entry also carries host-side modules that pull in Node builtins
+and fail a browser bundle. Attic (`~/Code/Apps/attic`) uses it for native
+menus, context menus and alerts.
+
 ```typescript
-import { openDevWindow } from '@stacksjs/desktop'
-import type { Desktop, OpenDevWindowOptions } from '@stacksjs/desktop'
+import { openDevWindow } from '@stacksjs/desktop-build'
+import type { Desktop, OpenDevWindowOptions } from '@stacksjs/desktop-build'
 
 interface OpenDevWindowOptions {
   title?: string
@@ -149,6 +157,62 @@ Application data belongs in `~/Library/Application Support/<AppName>`, never
 inside the bundle — `/Applications` is not writable by the user, and the bundle
 is replaced wholesale on update.
 
+## Helper processes: one binary, not three
+
+An app that owns its launcher usually needs more than the launcher — an agent
+serving on loopback, a worker doing something slow out of process. Compile each
+as its own binary and the bundle gets very large very quietly.
+
+`bun build --compile` embeds the entire Bun runtime in **every** executable it
+writes. `console.log("hi")` measures **60.5 MB**. So three binaries means three
+copies of the same runtime, and nothing says so — the bundle is simply big, and
+a big desktop app looks unremarkable. One real app shipped 230 MB this way, of
+which about 180 MB was the runtime repeated; its own code plus the native Craft
+runtime came to under 40 MB.
+
+Compile **one** binary and dispatch on a subcommand. The helpers stay separate
+*processes* — which is what actually matters for isolation and for killing one
+that wedges — they just stop being separate *files*.
+
+```ts
+// app/Desktop/launcher.ts — before anything else at module scope
+const subcommand = process.argv[2]
+
+if (subcommand === 'agent' || subcommand === 'scan') {
+  if (subcommand === 'agent') {
+    const { runAgent } = await import('./server')
+    await runAgent()
+  }
+  else {
+    const { runScannerCli } = await import('../Workers/scan')
+    await runScannerCli(process.argv[3] ?? '')
+  }
+
+  // Park. Everything below is the launcher, and a subcommand reaching it would
+  // spawn a second agent and open a second window.
+  await new Promise(() => {})
+}
+```
+
+Then spawn `process.execPath` instead of a sibling path:
+
+```ts
+const agent = Bun.spawn([process.execPath, 'agent'], { stdout: 'pipe' })
+```
+
+Two things that bite, both silently:
+
+- **The dispatch must come first.** A launcher's body is top-level code that
+  starts a server and opens a window as a side effect of loading.
+- **Do not `process.exit()` after starting a server.** A `runAgent()` that
+  returns once `Bun.serve` is listening has not finished — `Bun.serve` is what
+  holds the process open. Exiting after it kills the agent one line after it
+  printed the port the launcher is still waiting for, and the launcher reports
+  a timeout that says nothing about the cause.
+
+`buddy build:dmg` warns when a finished bundle contains more than one
+Bun-compiled executable, naming them and what the repetition costs.
+
 ## CLI Commands
 
 ```bash
@@ -158,7 +222,19 @@ buddy desktop:apple:init       # generate the reusable GitHub Actions caller
 buddy desktop:apple:doctor     # validate Apple tooling, identities, profile, and API key
 buddy desktop:apple:package    # build, sandbox, sign, and create a Store .pkg
 buddy desktop:apple:publish    # validate or upload the package to App Store Connect
+buddy desktop:probe            # measure what a Craft window offers interactive/game content
 ```
+
+`desktop:probe` opens a visible Craft window (not `--headless`, which stops
+requestAnimationFrame) and measures WebGL2/WebGPU, frame pacing under load,
+input and audio latency, the Gamepad API, fullscreen and pointer lock.
+`--browser[=Safari]` runs the same page in a browser for comparison, and
+`--record` writes the result into `storage/framework/core/desktop/src/probe/results/`,
+which `buddy docs:capabilities` publishes in `docs/features/capabilities.md`.
+Probes that need a real click or key press are recorded as
+`requires-interaction`, never as a number. Stacks ships no game engine,
+physics or asset pipeline; this only says what an engine someone else wrote
+would get.
 
 ## Mac App Store
 
@@ -171,6 +247,15 @@ uses App Store Connect API-key authentication for validation/upload.
 
 Start with `validate-only: true`. Upload only after the signed artifact passes
 local launch and UI QA.
+
+To package on a developer machine without importing distribution keys into the
+login keychain, generate keys and certificates with `buddy desktop:apple:csr`
+and `buddy desktop:apple:provision --apply`, import the two `.p12` files into a
+throwaway keychain file, and point `--keychain <path>` (or `APPLE_KEYCHAIN`) at
+it. `codesign` and `productbuild` then look for identities in that file only,
+so the search list never changes. The Mac App Distribution identity is named
+`3rd Party Mac Developer Application: ...` and the installer one
+`3rd Party Mac Developer Installer: ...`.
 
 Human-owned prerequisites that Buddy does not pretend to automate:
 
@@ -189,6 +274,7 @@ Repository variables:
 - `DESKTOP_URL`
 - `APPLE_APP_SIGNING_IDENTITY`
 - `APPLE_INSTALLER_SIGNING_IDENTITY`
+- `APPLE_KEYCHAIN` (local only, optional): sign from this keychain file instead of the search list
 
 Repository secrets:
 

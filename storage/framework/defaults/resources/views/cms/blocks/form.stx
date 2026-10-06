@@ -2,11 +2,13 @@
   Form block: renders a @stacksjs/forms form inline on a CMS page.
   `props.formUuid` names the form; the client script fetches the public
   definition (same-origin), renders the fields, evaluates conditions live,
-  and submits with the CSRF header the page response seeded.
+  and submits through useMutation, which repeats the page's CSRF cookie in
+  the header the submit route checks.
 --}}
 <div class="cms-form mx-auto max-w-xl px-6 py-8" data-form-uuid="{{ props.formUuid }}">
   <script client>
   import type { PublicFormDefinition, PublicFormField, SubmissionErrors } from '@stacksjs/forms'
+  import { moneyInputError, moneyInputStep, parseMoneyInput } from '@stacksjs/commerce/money'
 
   // `_form` carries a whole-form failure; the rest are keyed by field name.
   type FormErrors = SubmissionErrors & { _form?: string }
@@ -18,6 +20,12 @@
   const sending = state(false)
   const done = state('')
   const openedAt = Date.now()
+  // Field names with an upload in flight, so each file input can disable
+  // itself and the submit button can wait for all of them.
+  const uploading = reactive<Record<string, boolean>>({})
+  // The chosen file's name per field, so the person can see what was attached
+  // rather than only the storage path the server answered with.
+  const attached = reactive<Record<string, string>>({})
 
   effect(() => {
     if (!host() || definition())
@@ -52,29 +60,153 @@
     return conditions.action === 'show' ? matched : !matched
   }
 
+  /**
+   * Upload one file and record the storage path it returns.
+   *
+   * The submitted value for a `file` field is that path, not the file: the
+   * server checks it sits under this form's upload prefix before accepting the
+   * submission, so a path this endpoint did not issue is rejected.
+   *
+   * Size and type are enforced server-side from `config/forms.ts`; `accept` on
+   * the input is only a picker convenience, since a file dialog filter is a
+   * suggestion and not a check.
+   */
+  async function uploadFile(field: PublicFormField, event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement
+    const file = input.files?.[0]
+    if (!file)
+      return
+
+    uploading[field.name] = true
+    errors.set({ ...errors(), [field.name]: '' })
+
+    try {
+      const uuid = host()?.dataset.formUuid
+      const payload = new FormData()
+      payload.append('field', field.name)
+      payload.append('file', file)
+
+      // Through the data layer rather than a bare fetch(): it is what echoes
+      // the CSRF cookie the submit routes require, and it passes FormData
+      // through untouched.
+      let body: { path?: string }
+      try {
+        body = await useMutation(`/api/forms/${uuid}/uploads`).mutate(payload)
+      }
+      catch (failure) {
+        // Clear the input as well as the value: leaving a rejected file
+        // showing next to its own error message reads as though it was taken.
+        input.value = ''
+        delete values[field.name]
+        delete attached[field.name]
+        errors.set({ ...errors(), [field.name]: (failure as { data?: { message?: string } }).data?.message ?? 'That file could not be uploaded.' })
+        return
+      }
+
+      values[field.name] = body.path ?? ''
+      attached[field.name] = file.name
+    }
+    catch {
+      input.value = ''
+      errors.set({ ...errors(), [field.name]: 'That file could not be uploaded.' })
+    }
+    finally {
+      uploading[field.name] = false
+    }
+  }
+
+  /**
+   * The currency a `currency` field is typed in: the form's payment currency,
+   * or USD, which is what the server's public definition defaults to.
+   */
+  function formCurrency(): string {
+    return definition()?.payment?.currency ?? 'USD'
+  }
+
+  /** What a text-like input records: the typed text, or minor units for a `currency` field. */
+  function setInput(field: PublicFormField, raw: string): void {
+    if (field.type === 'currency')
+      setAmount(field, raw)
+    else
+      values[field.name] = raw
+  }
+
+  /**
+   * Record what was typed into a `currency` field as integer minor units.
+   *
+   * The server takes a currency field as a whole number of minor units
+   * (`"19.99"` in USD is `1999`). This used to multiply the typed float by
+   * a hundred and round, which is float math (`1.005` came out as 100 cents,
+   * not 101), assumed two decimals for every currency, and turned an empty
+   * field into 0. The conversion is `@stacksjs/commerce/money`'s, at the
+   * form currency's precision.
+   *
+   * An amount the currency cannot hold (`19.999` in USD) is kept as typed and
+   * shown as an error, rather than rounded into a different amount, and the
+   * server rejects it on submit as well.
+   */
+  function setAmount(field: PublicFormField, raw: string): void {
+    const currency = formCurrency()
+    const error = moneyInputError(raw, currency, { required: false })
+    if (error) {
+      values[field.name] = raw
+      errors.set({ ...errors(), [field.name]: error })
+      return
+    }
+
+    const minor = parseMoneyInput(raw, currency, { required: false })
+    if (minor === null)
+      delete values[field.name]
+    else
+      values[field.name] = minor
+    if (errors()[field.name])
+      errors.set({ ...errors(), [field.name]: '' })
+  }
+
+  /**
+   * The `accept` attribute for a field's picker.
+   *
+   * A convenience only - a file dialog filter is a suggestion, and the server
+   * enforces the real allowlist from `config/forms.ts`. Built here rather than
+   * inline in the template so the extension parameter has a type.
+   */
+  function acceptAttr(field: PublicFormField): string {
+    return (field.options.accept ?? []).map((extension: string) => `.${extension}`).join(',')
+  }
+
+  /** True while any upload is still in flight. */
+  function anyUploading(): boolean {
+    return Object.values(uploading).some(Boolean)
+  }
+
   async function submit(event: Event): Promise<void> {
     event.preventDefault()
     if (sending())
       return
+    // A submission sent mid-upload would carry no path for that field and read
+    // as a missing required answer, which is not what happened.
+    if (anyUploading()) {
+      errors.set({ _form: 'Please wait for the upload to finish.' })
+      return
+    }
     sending.set(true)
     errors.set({})
 
     try {
       const uuid = host()?.dataset.formUuid
-      const reply = await fetch(`/api/forms/${uuid}/submissions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ ...values, _renderedMs: Date.now() - openedAt }),
-      })
-      const body = await reply.json().catch(() => ({}))
-
-      if (reply.status === 422) {
-        errors.set(body.errors ?? {})
-        return
+      // useMutation, not fetch(): the submit route is CSRF-protected and the
+      // data layer is what repeats the cookie in the header. A bare fetch got
+      // 403 "CSRF token mismatch" on every submission.
+      let body: { message?: string, redirect?: string }
+      try {
+        body = await useMutation(`/api/forms/${uuid}/submissions`).mutate({ ...values, _renderedMs: Date.now() - openedAt })
       }
-      if (!reply.ok) {
-        errors.set({ _form: body.message ?? 'Something went wrong. Please try again.' })
+      catch (failure) {
+        const { status, data } = failure as { status?: number, data?: { errors?: FormErrors, message?: string } }
+        if (status === 422)
+          errors.set(data?.errors ?? {})
+        else
+          errors.set({ _form: data?.message ?? 'Something went wrong. Please try again.' })
         return
       }
       if (body.redirect) {
@@ -119,7 +251,15 @@
                 <input type="checkbox" @change="values[field.name] = $event.target.checked" class="h-4 w-4 rounded">
                 {{ field.options.placeholder ?? 'Yes' }}
               </label>
-              <input :else type="{{ field.type === 'email' ? 'email' : (field.type === 'phone' ? 'tel' : (field.type === 'date' ? 'date' : (field.type === 'currency' ? 'number' : 'text'))) }}" :required="field.required" placeholder="{{ field.options.placeholder ?? '' }}" @input="values[field.name] = field.type === 'currency' ? Math.round(Number($event.target.value) * 100) : $event.target.value" class="mt-1.5 w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-[15px]">
+              {{-- A file field used to fall through to the text input below, so
+                   a person typed prose into what should have been a picker and
+                   the submission could never satisfy it. --}}
+              <div :else-if="field.type === 'file'" class="mt-1.5">
+                <input type="file" :required="field.required && !values[field.name]" :disabled="uploading[field.name]" accept="{{ acceptAttr(field) }}" @change="uploadFile(field, $event)" class="block w-full text-[15px] file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3.5 file:py-2 file:text-[14px] file:font-medium">
+                <p :if="uploading[field.name]" class="mt-1.5 text-[13px] text-gray-500">Uploading...</p>
+                <p :else-if="attached[field.name]" class="mt-1.5 text-[13px] text-green-700">Attached {{ attached[field.name] }}</p>
+              </div>
+              <input :else type="{{ field.type === 'email' ? 'email' : (field.type === 'phone' ? 'tel' : (field.type === 'date' ? 'date' : (field.type === 'currency' ? 'number' : 'text'))) }}" :required="field.required" placeholder="{{ field.options.placeholder ?? '' }}" :step="field.type === 'currency' ? moneyInputStep(formCurrency()) : null" @input="setInput(field, $event.target.value)" class="mt-1.5 w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-[15px]">
               <p :if="errors()[field.name]" class="mt-1.5 text-[13px] text-red-600">{{ errors()[field.name] }}</p>
             </template>
           </div>
@@ -128,7 +268,7 @@
 
       <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" class="hidden" @input="values._hp = $event.target.value">
 
-      <button type="submit" :disabled="sending()" class="mt-7 rounded-lg px-6 py-3 font-medium bg-gray-900 text-white transition-transform active:scale-[0.98] disabled:opacity-60">
+      <button type="submit" :disabled="sending() || anyUploading()" class="mt-7 rounded-lg px-6 py-3 font-medium bg-gray-900 text-white transition-transform active:scale-[0.98] disabled:opacity-60">
         {{ sending() ? 'Sending...' : (definition()?.submitLabel ?? 'Submit') }}
       </button>
     </form>

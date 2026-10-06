@@ -1,6 +1,6 @@
 ---
 name: stacks-auto-imports
-description: Use when working with the Stacks auto-import system — understanding how browser and server auto-imports work, configuring auto-imported functions/models/composables, the auto-import manifests, type generation, or how globals are injected. Covers the auto-import pipeline at storage/framework/auto-imports/.
+description: Use when working with the Stacks auto-import system - understanding how browser and server auto-imports work, configuring auto-imported functions/models/composables, the auto-import manifests, type generation, or how globals are injected. Covers the auto-import pipeline at storage/framework/auto-imports/.
 license: MIT
 compatibility: Bun >= 1.3.0, TypeScript
 allowed-tools: Read Edit Write Bash Grep Glob
@@ -66,7 +66,7 @@ globalThis.toggleDark = toggleDark
 - **Custom Functions**: From `resources/functions/` (counter, dark mode, GPX, geo utilities)
 
 ### Server Auto-Imports (100+)
-- **All ORM Models**: User, Post, Author, Product, Order, Payment, Customer, etc. (60+ models)
+- **All ORM Models**: User, Post, Author, Product, Order, Payment, Customer, etc. (105 models)
 - **Request Models**: UserRequest, PostRequest, OrderRequest, etc.
 - **Actions**: Action types and helpers
 - **Schema**: validation schema builder

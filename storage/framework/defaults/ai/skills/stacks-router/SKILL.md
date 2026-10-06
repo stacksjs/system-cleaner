@@ -1,6 +1,6 @@
 ---
 name: stacks-router
-description: Use when working with routing in a Stacks application — defining routes, HTTP methods, route groups, middleware, named routes, URL generation, request enhancement (Laravel-style input/query/file helpers), response helpers, error responses, route model binding, or rate limiting. Covers @stacksjs/router, routes/, and app/Routes.ts.
+description: Use when working with routing in a Stacks application - defining routes, HTTP methods, route groups, middleware, named routes, URL generation, request enhancement (Laravel-style input/query/file helpers), response helpers, error responses, route model binding, or rate limiting. Covers @stacksjs/router, routes/, and app/Routes.ts.
 license: MIT
 compatibility: Bun >= 1.3.0, TypeScript
 allowed-tools: Read Edit Write Bash Grep Glob
@@ -31,6 +31,28 @@ route.delete('/users/{id}', handler)
 route.options('/users', handler)
 route.health()  // GET /health endpoint
 ```
+
+### Zero-allocation static responses
+
+Use `staticResponse()` only when the response is final at registration time and
+must bypass the request pipeline entirely:
+
+```typescript
+route.staticResponse('GET', '/ready', new Response('{"ready":true}', {
+  headers: { 'content-type': 'application/json' },
+}))
+```
+
+Bun serves that `Response` directly from its native route table. No handler,
+middleware, request ID, CSRF check or cookie, rate limit, request context,
+security or CORS header mutation, compression, or response formatting runs.
+Supply the final status, headers, and body bytes yourself.
+
+Static responses return the router, not a chainable route, so `.middleware()`,
+`.name()`, `.skipCsrf()`, `.requireCsrf()`, and `.rateLimit()` cannot be attached
+and silently bypassed. A static response inside a group with middleware or
+`apiResponse: true` throws during registration. Prefix-only groups are valid.
+Duplicate method and path registrations keep the first response.
 
 ### Chainable Methods
 ```typescript

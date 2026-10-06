@@ -417,7 +417,7 @@ export function buildNavSections(
         'manufacturer', 'review', 'coupon', 'gift-card', 'payment', 'category',
         'cart', 'cart-item', 'order-item', 'tax-rate',
         'shipping-method', 'shipping-rate', 'shipping-zone',
-        'delivery-route', 'driver', 'license-key', 'digital-delivery',
+        'delivery-route', 'courier', 'license-key', 'digital-delivery',
         'print-device', 'receipt',
         'waitlist-product', 'waitlist-restaurant',
       ])),
@@ -431,7 +431,7 @@ export function buildNavSections(
       { to: '/commerce/delivery/shipping-methods', icon: 'truck', text: 'Shipping Methods' },
       { to: '/commerce/delivery/shipping-rates', icon: 'percent', text: 'Shipping Rates' },
       { to: '/commerce/delivery/shipping-zones', icon: 'globe', text: 'Shipping Zones' },
-      { to: '/commerce/delivery/drivers', icon: 'user', text: 'Drivers' },
+      { to: '/commerce/delivery/couriers', icon: 'user', text: 'Couriers' },
       { to: '/commerce/delivery/delivery-routes', icon: 'globe', text: 'Routes' },
       { to: '/commerce/delivery/license-keys', icon: 'lock', text: 'License Keys' },
       { to: '/commerce/delivery/digital-delivery', icon: 'package', text: 'Digital Delivery' },
@@ -443,6 +443,7 @@ export function buildNavSections(
       { to: '/marketing/lists', icon: 'list-settings', text: 'Lists' },
       { to: '/marketing/social-posts', icon: 'clock', text: 'Social Posts' },
       { to: '/marketing/campaigns', icon: 'rocket', text: 'Campaigns' },
+      { to: '/marketing/abandoned-carts', icon: 'cart', text: 'Abandoned Carts' },
       { to: '/marketing/reviews', icon: 'star', text: 'Reviews' },
       ...categoryNavItems(discoveredModels, 'marketing', new Set(['campaign'])),
     ]])
@@ -476,6 +477,9 @@ export function buildNavSections(
     const managementItems: NavItem[] = [
       { to: '/cloud', icon: 'cloud', text: 'Cloud' },
       { to: '/servers', icon: 'server', text: 'Servers' },
+      // Named commands and terminals on configured hosts (stacksjs/stacks#960).
+      // Hidden from client-role viewers; the gates decide who may use it.
+      { to: '/remote', icon: 'terminal', text: 'Remote', roles: ['admin', 'dev'] },
       { to: '/serverless', icon: 'zap', text: 'Serverless' },
       { to: '/dns', icon: 'globe-search', text: 'DNS' },
       { to: '/management/permissions', icon: 'lock', text: 'Permissions' },

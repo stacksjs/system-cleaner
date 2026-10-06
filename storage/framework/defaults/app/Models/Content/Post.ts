@@ -1,5 +1,5 @@
-import { defineModel } from '@stacksjs/orm'
-import { schema } from '@stacksjs/validation'
+import { defineModel, siteOwnership } from '@stacksjs/orm'
+import { schema } from '@stacksjs/validation/runtime'
 
 export default defineModel({
   name: 'Post',
@@ -7,14 +7,20 @@ export default defineModel({
   primaryKey: 'id',
   autoIncrement: true,
 
+  // Owned through the site, which belongs to a team, so the owner is the set of
+  // site ids the caller's team owns rather than a single id (stacksjs/stacks#2375).
+  ownership: siteOwnership(),
+
   traits: {
     useUuid: true,
     useTimestamps: true,
     useSearch: {
-      displayable: ['id', 'title', 'slug', 'author', 'views', 'status', 'poster', 'focusKeyword', 'metaDescription', 'canonicalUrl'],
+      displayable: ['id', 'title', 'slug', 'authorId', 'views', 'status', 'poster', 'focusKeyword', 'metaDescription', 'canonicalUrl'],
       // `content`, not `body` - the column is `content`, and the old spelling
-      // silently indexed nothing. `comments` likewise was never a column.
-      searchable: ['title', 'slug', 'author', 'content', 'excerpt', 'focusKeyword', 'metaDescription'],
+      // silently indexed nothing. `comments` likewise was never a column, and
+      // nor was `author`: the column is `author_id`, which is worth showing and
+      // filtering on but is not free text to search.
+      searchable: ['title', 'slug', 'content', 'excerpt', 'focusKeyword', 'metaDescription'],
       sortable: ['published_at', 'views'],
       filterable: ['status'],
     },
@@ -38,7 +44,7 @@ export default defineModel({
   belongsTo: ['Author', 'Site'],
   belongsToMany: {
     categories: {
-      model: 'Category',
+      model: 'Categorizable',
       table: 'categorizable_models',
       foreignKey: 'categorizable_id',
       relatedKey: 'category_id',
