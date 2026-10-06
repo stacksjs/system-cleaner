@@ -40,6 +40,96 @@ export interface ConfirmOptions {
  * read OK and Cancel makes the reader go back and re-read the body to work out
  * which one does the thing.
  */
+/**
+ * The sheet we draw ourselves when there is no host to ask.
+ *
+ * Deliberately not `window.confirm`. In a browser that works; in the packaged
+ * app it is inert, and the packaged app is the one place a confirm has to be
+ * right. One implementation that behaves the same in both beats two that
+ * differ exactly where it matters.
+ *
+ * Returns the same `{ response }` shape the bridge does, so the caller reads
+ * one result either way. Escape, the backdrop and Cancel all answer with the
+ * cancel index; nothing resolves it twice.
+ */
+function inPageConfirm(
+  options: ConfirmOptions,
+  buttons: string[],
+  cancelIndex: number,
+): Promise<{ response: number }> {
+  return new Promise((resolve) => {
+    const host = document.createElement('div')
+    host.setAttribute('data-native-confirm', '')
+    host.style.cssText = 'position:fixed;inset:0;z-index:10000;display:grid;place-items:center;'
+      + 'background:color-mix(in srgb, #000 32%, transparent);backdrop-filter:blur(2px);'
+
+    const card = document.createElement('div')
+    card.setAttribute('role', 'alertdialog')
+    card.setAttribute('aria-modal', 'true')
+    card.style.cssText = 'min-width:300px;max-width:min(420px,calc(100vw - 48px));'
+      + 'padding:20px;border:.5px solid var(--line);border-radius:12px;'
+      + 'background:var(--surface);color:var(--ink);box-shadow:var(--shadow);'
+      + "font-family:-apple-system,'SF Pro Text',system-ui,sans-serif;"
+
+    const h = document.createElement('div')
+    h.textContent = options.title
+    h.style.cssText = 'font-size:13px;font-weight:600;margin-bottom:6px;'
+    card.appendChild(h)
+
+    if (options.message) {
+      const p = document.createElement('div')
+      p.textContent = options.message
+      p.style.cssText = 'font-size:12px;line-height:1.45;color:var(--secondary);margin-bottom:16px;'
+      card.appendChild(p)
+    }
+
+    const row = document.createElement('div')
+    row.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;'
+
+    let settled = false
+    const done = (response: number) => {
+      if (settled)
+        return
+      settled = true
+      document.removeEventListener('keydown', onKey, true)
+      host.remove()
+      resolve({ response })
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        done(cancelIndex)
+      }
+    }
+
+    buttons.forEach((label, i) => {
+      const b = document.createElement('button')
+      b.type = 'button'
+      b.textContent = label
+      const isAction = i !== cancelIndex
+      const tint = options.destructive ? 'var(--red)' : 'var(--accent)'
+      b.style.cssText = 'padding:5px 14px;border-radius:6px;font:inherit;font-size:12px;'
+        + 'font-weight:500;cursor:pointer;border:.5px solid var(--line);'
+        + (isAction
+          ? `background:${tint};color:#fff;border-color:transparent;`
+          : 'background:var(--surface-soft);color:var(--ink);')
+      b.addEventListener('click', () => done(i))
+      row.appendChild(b)
+    })
+
+    card.appendChild(row)
+    host.appendChild(card)
+    // Clicking the backdrop is a dismissal; clicking the card is not.
+    host.addEventListener('mousedown', (e) => { if (e.target === host) done(cancelIndex) })
+    document.addEventListener('keydown', onKey, true)
+    document.body.appendChild(host)
+
+    const focusIndex = buttons.findIndex((_, i) => i !== cancelIndex)
+    const first = row.children[focusIndex >= 0 ? focusIndex : 0] as HTMLButtonElement | undefined
+    first?.focus()
+  })
+}
+
 async function nativeConfirm(options: ConfirmOptions): Promise<boolean> {
   const buttons = [options.confirmLabel || 'OK', 'Cancel']
   const CANCEL = 1
@@ -57,14 +147,36 @@ async function nativeConfirm(options: ConfirmOptions): Promise<boolean> {
   // So say it once. `cancelButton` already carries the whole intent: Escape
   // dismisses, and a host that keys Return to the cancel button honours the
   // safe default without a second field to disagree about.
-  const { response } = await showMessageBox({
-    type: options.destructive ? 'warning' : 'question',
+  const request = {
+    type: (options.destructive ? 'warning' : 'question') as 'warning' | 'question',
     title: APP_NAME,
     message: options.title,
     detail: options.message,
     buttons,
     cancelButton: CANCEL,
-  })
+  }
+
+  // Ask the host directly when there is a host, rather than going through
+  // `showMessageBox`'s fallback chain.
+  //
+  // That chain ends in `window.confirm`, and `window.confirm` inside a Craft
+  // window is not a dialog — WKWebView only draws one if the host implements
+  // `runJavaScriptConfirmPanel`, and when it does not the call returns `false`
+  // immediately, having shown nothing. `showMessageBox` catches a failing
+  // bridge, warns to a console nobody is reading, and falls through to exactly
+  // that. So a broken bridge and a user pressing Cancel arrive at the caller as
+  // the same `false`, and every confirm in the packaged app answered itself No:
+  // Clean Selected did nothing, Empty Trash did nothing, and neither said why.
+  //
+  // Calling the bridge here lets its failure throw, so callers that already
+  // handle a dialog that cannot be drawn can say so. And where there is no
+  // bridge at all we draw our own sheet rather than trusting `confirm`, which
+  // is the one path that is inert precisely where the app ships.
+  const bridge = (window as unknown as { craft?: { dialog?: { showMessageBox?: (o: typeof request) => Promise<{ response: number }> } } }).craft?.dialog
+
+  const { response } = bridge?.showMessageBox
+    ? await bridge.showMessageBox(request)
+    : await inPageConfirm(options, buttons, CANCEL)
 
   // Index into the array rather than comparing the number, so an index the
   // host never should have sent reads as "not the action" instead of as a
