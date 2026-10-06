@@ -375,5 +375,26 @@ function scanCleanupSizes(force) {
 }
 
 // Load after targets render (init() triggers scanCleanupSizes).
+
+// Hand the click handlers to `window`.
+//
+// The buttons call these from `onclick="..."` attributes, which the browser
+// evaluates in global scope. This block is `data-stx-scoped`, and stx runs a
+// scoped block in a scope of its own — so a bare `function doCleanSelected()`
+// declared here is not a global, and the attribute cannot see it.
+//
+// The dev server inlines this block and it resolves; the packaged build
+// extracts it to a chunk and it does not. So every one of these buttons
+// worked locally and threw `ReferenceError: Can't find variable` in the
+// shipped app, where there is no console to show it — Clean Selected, Empty
+// Trash and Rescan all did nothing, and said nothing.
+//
+// `public/disk-panel.js` already assigns `window.startDiskScan` for the same
+// reason, which is why the disk panel's buttons kept working.
+window.doCleanSelected = doCleanSelected
+window.doEmptyTrash = doEmptyTrash
+window.doCleanDir = doCleanDir
+window.scanCleanupSizes = scanCleanupSizes
+
 </script>
 @endsection
