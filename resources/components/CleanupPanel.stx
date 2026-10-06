@@ -31,8 +31,17 @@
     <button class='btn' @click='toggleAllSafe()'>
       <span x-text="allSafeSelected() ? 'Deselect All' : 'Select All Safe'">Select All Safe</span>
     </button>
-    <button class='btn btn-danger' x-cloak x-show='selected.length > 0' onclick='doCleanSelected()'>
+    <button class='btn btn-danger' x-cloak x-show='selected.length > 0 && !cleanProgress' onclick='doCleanSelected()'>
       Clean Selected (<span x-text='selected.length'>0</span>)
+    </button>
+    <!-- Same slot, swapped while a run is in flight. The per-row '...' is the
+         only other signal and it is invisible past the fold on a list this
+         long, so a click on ninety-one categories looked like nothing had
+         happened until the toast landed. -->
+    <button class='btn btn-danger' x-cloak x-show='!!cleanProgress' disabled>
+      <span class='cleaning-dot' aria-hidden='true'></span>
+      Cleaning <span x-text='cleanProgress ? cleanProgress.done : 0'>0</span>
+      of <span x-text='cleanProgress ? cleanProgress.total : 0'>0</span>&hellip;
     </button>
     <button class='btn btn-danger btn-icon' onclick='doEmptyTrash()'>
       <span class='i-f7-trash-fill' aria-hidden='true'></span>
@@ -42,6 +51,13 @@
       <span class='i-f7-arrow-clockwise' aria-hidden='true'></span>
       Rescan
     </button>
+  </div>
+
+  <div class='clean-progress' x-cloak x-show='!!cleanProgress' aria-live='polite'>
+    <div class='progress'>
+      <div class='progress-fill clean-progress-fill'
+        :style="'width: ' + (cleanProgress && cleanProgress.total ? Math.round(cleanProgress.done / cleanProgress.total * 100) : 0) + '%'"></div>
+    </div>
   </div>
 
   <div class='tbl-wrap'>
@@ -105,3 +121,22 @@
     <div class='empty-state'>Your system is clean! No cache directories found.</div>
   </div>
 </div>
+
+<style>
+/* Clean-in-progress. `.progress-fill` carries no colour of its own — callers
+   supply one — and the width transition it already has is what animates the
+   bar forward as each category settles. */
+.clean-progress { margin-bottom: var(--space-4); }
+.clean-progress .progress { height: var(--space-tight); }
+.clean-progress-fill { background: var(--accent); }
+
+.cleaning-dot {
+  display: inline-block; width: 5px; height: 5px; margin-right: var(--space-tight);
+  border-radius: 50%; background: currentColor; animation: cleaningPulse 1s ease-in-out infinite;
+}
+@keyframes cleaningPulse { 0%, 100% { opacity: 1 } 50% { opacity: .35 } }
+
+/* A run is not cancellable, so the swapped button is inert by design rather
+   than merely disabled-looking. */
+.btn[disabled] { cursor: default; opacity: .75; }
+</style>

@@ -10,6 +10,7 @@ function esc(str) { return escapeHtml(str || '') }
 <div x-data="{
   selected: [],
   cleaning: {},
+  cleanProgress: null,
   toasts: [],
   toastId: 0,
   cleanCategories: [],
@@ -215,9 +216,16 @@ async function doCleanSelected() {
   if (!confirmed) return;
 
   var freed = 0, failed = 0, done = 0;
+  // A new object each tick: stx tracks assignment, not a field written on the
+  // old one, so `cleanProgress.done++` would move the number and leave the bar
+  // where it was.
+  _exec("cleanProgress = { done: 0, total: " + targets.length + " }");
+
   function settle(id) {
     _exec("delete cleaning['" + id + "']");
-    if (++done < targets.length) return;
+    done++;
+    _exec("cleanProgress = { done: " + done + ", total: " + targets.length + " }");
+    if (done < targets.length) return;
     try { localStorage.removeItem(CACHE_KEY); } catch (e) {}
     var cleaned = targets.length - failed;
     var msg = cleaned > 0
@@ -225,7 +233,7 @@ async function doCleanSelected() {
       : 'Nothing could be cleaned';
     if (failed > 0) msg += ' - ' + failed + ' failed';
     if (unknown.length > 0) msg += ' - ' + unknown.length + ' no longer listed';
-    _exec("toast('" + msg.replace(/'/g, "\\'") + "', '" + (cleaned > 0 ? (failed > 0 ? 'info' : 'success') : 'error') + "'); selected = []");
+    _exec("toast('" + msg.replace(/'/g, "\\'") + "', '" + (cleaned > 0 ? (failed > 0 ? 'info' : 'success') : 'error') + "'); selected = []; cleanProgress = null");
     scanCleanupSizes(true);
   }
 
