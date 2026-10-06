@@ -57,7 +57,62 @@ async function nativeConfirm(options: ConfirmOptions): Promise<boolean> {
   // So say it once. `cancelButton` already carries the whole intent: Escape
   // dismisses, and a host that keys Return to the cancel button honours the
   // safe default without a second field to disagree about.
-  const { response } = await showMessageBox({
+  // Ask the host for a yes/no, not for a button index.
+  //
+  // `showMessageBox` answers `{ response: n }`, and n does not mean what the
+  // Electron-shaped type implies. Pressing the action button on
+  // ['Clean Selected', 'Cancel'] returns 1 — the index of Cancel — so every
+  // confirmed dialog read as a cancellation and the caller did nothing.
+  //
+  // Two readings fit that one observation: the host is 1-based
+  // (NSAlertFirstButtonReturn), or it adds buttons in the AppKit order with
+  // the default first. They disagree about what Cancel returns, and picking
+  // wrong maps Cancel onto the destructive action. So do not pick: the bridge
+  // also exposes `showConfirm`, documented as "true if OK was clicked, false
+  // if cancelled", which carries no index to misread. It takes okLabel and
+  // cancelLabel, so the action button keeps its name.
+  // The injected `craft.dialog.showConfirm` takes a message STRING, not the
+  // options object craft-native's own wrapper accepts — passing an object
+  // renders "[object Object]" and falls back to OK/Cancel. So compose the
+  // question and the consequence into one string.
+  //
+  // The cost is the named action button: this path can only offer OK/Cancel,
+  // where `showMessageBox` could say "Clean Selected". That is a real loss and
+  // it is worth it, because showMessageBox's answer cannot be trusted. It
+  // returns `{ response: 1 }` when the action is pressed on a two-button
+  // sheet, and the two readings that explain it — 1-based indexing, or AppKit
+  // button order — disagree about what Cancel returns. Picking wrong maps
+  // Cancel onto the destructive action. `showConfirm` answers a boolean, which
+  // has no index to misread, so it cannot be wrong in that direction.
+  const dialogApi = (window as unknown as {
+    craft?: { dialog?: { showConfirm?: (message: string) => Promise<unknown> } }
+  }).craft?.dialog
+
+  if (typeof dialogApi?.showConfirm === 'function') {
+    const prompt = options.message
+      ? `${options.title}\n\n${options.message}`
+      : options.title
+    const answer = await dialogApi.showConfirm(prompt)
+
+    // Craft answers `{ ok: true }`, not a bare boolean — craft-native's own
+    // wrapper reads `!!(payload && payload.ok === true)` for this exact
+    // reason. Accept either, because the documented return type is boolean
+    // and a host that honours it should also work.
+    //
+    // Everything else declines. A host answering in a third shape costs a
+    // click; reading an unknown shape as consent costs a folder.
+    if (answer === true)
+      return true
+    if (answer && typeof answer === 'object')
+      return (answer as { ok?: unknown }).ok === true
+    return false
+  }
+
+  // No showConfirm on this host. Fall back to the index comparison, which
+  // reads the documented 0-based convention and so fails closed on a host
+  // that means something else — a second click, rather than a deletion
+  // nobody asked for.
+  const raw = await showMessageBox({
     type: options.destructive ? 'warning' : 'question',
     title: APP_NAME,
     message: options.title,
@@ -65,12 +120,13 @@ async function nativeConfirm(options: ConfirmOptions): Promise<boolean> {
     buttons,
     cancelButton: CANCEL,
   })
+  const { response } = raw as { response?: number }
 
   // Index into the array rather than comparing the number, so an index the
   // host never should have sent reads as "not the action" instead of as a
   // confirmation. Being wrong in that direction costs a second click; being
   // wrong in the other empties a folder nobody asked about.
-  return buttons[response] === buttons[0]
+  return typeof response === 'number' && buttons[response] === buttons[0]
 }
 
 /** Report something that already happened and cannot be undone from here. */
