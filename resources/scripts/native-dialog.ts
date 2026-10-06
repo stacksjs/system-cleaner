@@ -172,17 +172,32 @@ async function nativeConfirm(options: ConfirmOptions): Promise<boolean> {
   // handle a dialog that cannot be drawn can say so. And where there is no
   // bridge at all we draw our own sheet rather than trusting `confirm`, which
   // is the one path that is inert precisely where the app ships.
-  const bridge = (window as unknown as { craft?: { dialog?: { showMessageBox?: (o: typeof request) => Promise<{ response: number }> } } }).craft?.dialog
+  type BoxResult = { response?: number, buttonIndex?: number }
+  const bridge = (window as unknown as { craft?: { dialog?: { showMessageBox?: (o: typeof request) => Promise<BoxResult> } } }).craft?.dialog
 
-  const { response } = bridge?.showMessageBox
+  const raw: BoxResult = bridge?.showMessageBox
     ? await bridge.showMessageBox(request)
     : await inPageConfirm(options, buttons, CANCEL)
+
+  // Craft answers `{ buttonIndex }`; the web shapes answer `{ response }`.
+  // Nothing in the chain reconciled the two, so `const { response } = ...`
+  // read `undefined` off every native dialog, `buttons[undefined]` was
+  // `undefined`, and the comparison below said "not the action" no matter
+  // which button was pressed. That is the whole reason a confirmed sheet
+  // cleaned nothing: the dialog was drawn, the user pressed the action, and
+  // the answer was discarded on the way back.
+  //
+  // Read both, and fall back to the cancel index when neither is a number, so
+  // a host that answers in some third shape declines rather than proceeds.
+  const index = typeof raw.response === 'number'
+    ? raw.response
+    : typeof raw.buttonIndex === 'number' ? raw.buttonIndex : CANCEL
 
   // Index into the array rather than comparing the number, so an index the
   // host never should have sent reads as "not the action" instead of as a
   // confirmation. Being wrong in that direction costs a second click; being
   // wrong in the other empties a folder nobody asked about.
-  return buttons[response] === buttons[0]
+  return buttons[index] === buttons[0]
 }
 
 /** Report something that already happened and cannot be undone from here. */
