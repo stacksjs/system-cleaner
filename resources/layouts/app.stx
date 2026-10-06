@@ -790,6 +790,45 @@ useEventListener('mousedown', moveWindowFrom, { target: document })
 </script>
 <!-- Loaded for every app page: `nativeConfirm` and `nativeAlert` replace the
      web dialogs on the destructive actions, and every screen has one. -->
+<!-- An uncaught error in a packaged app goes nowhere: there is no console
+     open, no tab to inspect, and the click that caused it simply does nothing.
+     That is how Clean Selected and Empty Trash came to fail in silence for a
+     whole release. Surface it instead — a banner the user can read and quote
+     beats a stack trace nobody will ever see. -->
+<script data-stx-scoped data-stx-run="always">
+(function () {
+  if (window.__errSurfaceInstalled) return;
+  window.__errSurfaceInstalled = true;
+
+  function show(kind, detail) {
+    try {
+      var bar = document.getElementById('__err_surface');
+      if (!bar) {
+        bar = document.createElement('div');
+        bar.id = '__err_surface';
+        bar.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:99999;'
+          + 'padding:10px 12px;border-radius:8px;border:.5px solid var(--red);'
+          + 'background:var(--surface);color:var(--ink);box-shadow:var(--shadow);'
+          + "font:11px/1.45 'SF Mono',Menlo,monospace;white-space:pre-wrap;"
+          + 'max-height:30vh;overflow:auto;cursor:pointer;';
+        bar.title = 'Click to dismiss';
+        bar.addEventListener('click', function () { bar.remove(); });
+        document.body.appendChild(bar);
+      }
+      bar.textContent = (bar.textContent ? bar.textContent + '\n' : '') + kind + ': ' + detail;
+    }
+    catch (_) {}
+  }
+
+  window.addEventListener('error', function (e) {
+    show('error', (e.message || 'unknown') + '  @' + (e.filename || '?') + ':' + (e.lineno || '?'));
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e.reason;
+    show('unhandled rejection', (r && (r.stack || r.message)) || String(r));
+  });
+})();
+</script>
 <script src="/native-dialog.js"></script>
 <!-- Replaces AppKit's default menubar with one that knows this app: every
      screen on Cmd+1..9, Rescan on Cmd+R, and Edit's roles wired so Copy and
