@@ -376,21 +376,24 @@ function scanCleanupSizes(force) {
 
 // Load after targets render (init() triggers scanCleanupSizes).
 
-// Hand the click handlers to `window`.
+
+
+// Hand the click handlers to `window`. Still needed, for now.
 //
-// The buttons call these from `onclick="..."` attributes, which the browser
-// evaluates in global scope. This block is `data-stx-scoped`, and stx runs a
-// scoped block in a scope of its own — so a bare `function doCleanSelected()`
-// declared here is not a global, and the attribute cannot see it.
+// The buttons call these from `onclick="..."`, which is evaluated in global
+// scope. stx's router re-runs a route's script wrapped in a bare block, to
+// stop two pages' `const` declarations colliding across a navigation. Annex
+// B.3.3 hoists a plain `function` out of a block; it was never extended to
+// `async function`, which is what three of these are — so they were reachable
+// in dev, where the browser parses the page's script itself, and undefined in
+// the packaged build, where the router re-runs it.
 //
-// The dev server inlines this block and it resolves; the packaged build
-// extracts it to a chunk and it does not. So every one of these buttons
-// worked locally and threw `ReferenceError: Can't find variable` in the
-// shipped app, where there is no console to show it — Clean Selected, Empty
-// Trash and Rescan all did nothing, and said nothing.
-//
-// `public/disk-panel.js` already assigns `window.startDiskScan` for the same
-// reason, which is why the disk panel's buttons kept working.
+// Fixed upstream in stacksjs/stx 0d85f7895b (stacksjs/stx#2041), which
+// republishes block-scoped function values after the wrap. Not yet released:
+// stx-router@0.2.383, the newest published, still carries the wrap with no
+// republish guard. Delete this block once a release contains it — the test is
+// whether `stx-router/dist/client.js` has a `typeof ...[...] === "function"`
+// guard beside `alreadyScoped`.
 window.doCleanSelected = doCleanSelected
 window.doEmptyTrash = doEmptyTrash
 window.doCleanDir = doCleanDir
