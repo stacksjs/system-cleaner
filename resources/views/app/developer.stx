@@ -124,7 +124,7 @@
       <table>
         <thead>
           <tr>
-            <th style='width: 28px;'><input type='checkbox' class='check' @click='toggleAllSafe()' /></th>
+            <th style='width: 28px;'><input type='checkbox' class='check' :checked='allSafeSelected()' @click='toggleAllSafe()' /></th>
             <th>Directory</th>
             <th>Project</th>
             <th>Size</th>
@@ -133,7 +133,7 @@
         </thead>
         <tbody>
           <template x-for='a in artifacts' :key='a.path'>
-            <tr :data-path='a.path' :data-label='a.label'>
+            <tr :data-path='a.path' :data-label='a.label' :data-risk='a.risk'>
               <td><input type='checkbox' class='check' :checked='isOn(a.path)' @change='toggle(a.path)' /></td>
               <td>
                 <span x-text='a.name'></span>
@@ -144,7 +144,7 @@
               <td x-text='a.sizeFormatted'></td>
               <td>
                 <button class='btn btn-sm' :disabled='cleaning[a.path]'
-                  onclick="doCleanOne(this.closest('tr').getAttribute('data-path'), this.closest('tr').getAttribute('data-label'))">
+                  onclick="doCleanOne(this.closest('tr').getAttribute('data-path'), this.closest('tr').getAttribute('data-label'), this.closest('tr').getAttribute('data-risk'))">
                   <span x-show='!cleaning[a.path]'>Clean</span>
                   <span x-show='cleaning[a.path]'>...</span>
                 </button>
@@ -215,11 +215,17 @@ function scanArtifacts(refresh) {
   });
 }
 
-async function doCleanOne(p, label) {
+// The dialog is the last thing between a click and an unrecoverable delete,
+// so it has to say which kind of directory this is. It used to promise "a
+// build regenerates it" for every row, including the `caution` ones the
+// pattern table singles out precisely because that promise may be false.
+async function doCleanOne(p, label, risk) {
   if (!p) return;
   if (!await window.nativeConfirm({
     title: 'Delete ' + (label || 'this directory') + '?',
-    message: 'Removes ' + p + '. A build regenerates it; nothing else does.',
+    message: risk === 'caution'
+      ? 'Removes ' + p + '. This is the kind of directory a release can be cut from, and nothing here proves a build reproduces it. There is no undo and it does not go to the Trash.'
+      : 'Removes ' + p + '. A build regenerates it; nothing else does.',
     confirmLabel: 'Delete',
     destructive: true,
   })) return;
@@ -247,15 +253,19 @@ async function doCleanSelected() {
   const paths = (state.selected || []).slice();
   if (paths.length === 0) return;
 
-  const bytes = (state.artifacts || []).reduce(function(n, a) {
-    return paths.indexOf(a.path) !== -1 ? n + a.sizeBytes : n;
-  }, 0);
+  const chosen = (state.artifacts || []).filter(function(a) { return paths.indexOf(a.path) !== -1; });
+  const bytes = chosen.reduce(function(n, a) { return n + a.sizeBytes; }, 0);
+  const cautionCount = chosen.filter(function(a) { return a.risk === 'caution'; }).length;
 
   let ok = false;
   try {
     ok = await window.nativeConfirm({
       title: 'Clean ' + paths.length + (paths.length === 1 ? ' directory?' : ' directories?'),
-      message: 'Frees about ' + _fmtBytes(bytes) + '. Every one of these is rebuilt by a build command, and the first build after this will be slower.',
+      message: 'Frees about ' + _fmtBytes(bytes) + '. '
+        + (cautionCount > 0
+          ? cautionCount + (cautionCount === 1 ? ' of these is marked' : ' of these are marked') + ' keep?, meaning a build may not reproduce it. '
+          : 'Each one is rebuilt by a build command. ')
+        + 'Nothing goes to the Trash and there is no undo.',
       confirmLabel: 'Clean',
       destructive: true,
     });

@@ -26,8 +26,12 @@ function artifactDir(parent: string, name: string, bytes: number): string {
 beforeAll(() => {
   ROOT = fs.mkdtempSync(path.join(TMP_ROOT, 'system-cleaner-artifacts-'))
 
+  // Both fixtures carry a manifest: since the safety gates landed, a directory
+  // only counts as build output when its parent shows some sign of being a
+  // project. A bare folder of the right name is exactly what must NOT match.
   const alpha = path.join(ROOT, 'alpha')
   fs.mkdirSync(alpha, { recursive: true })
+  fs.writeFileSync(path.join(alpha, 'package.json'), '{"name":"alpha"}')
   artifactDir(alpha, 'node_modules', 4_000_000)
   artifactDir(alpha, 'pantry', 3_000_000)
   artifactDir(alpha, 'dist', 2_000_000)
@@ -38,6 +42,7 @@ beforeAll(() => {
 
   const beta = path.join(ROOT, 'beta')
   fs.mkdirSync(beta, { recursive: true })
+  fs.writeFileSync(path.join(beta, 'build.zig'), '// marker')
   artifactDir(beta, '.zig-cache', 6_000_000)
 })
 
@@ -131,5 +136,76 @@ describe('findProjectArtifacts', () => {
   it('skips a root that does not exist rather than throwing', async () => {
     const found = await findProjectArtifacts([path.join(ROOT, 'nope')], 4, 0)
     expect(found).toEqual([])
+  })
+})
+
+/**
+ * These two gates exist because the scanner matched on directory name alone,
+ * and on a real machine that offered a 665 MB clone of pantry-pm/pantry as
+ * `safe` — one click on Select All from losing the repository and anything
+ * unpushed in it, since nothing here goes through the Trash. A synthetic
+ * non-developer tree produced `Insurance/2024/coverage` and `Music/Pods` the
+ * same way. `coverage`, `Pods`, `build`, `dist`, `vendor` and `target` are
+ * ordinary words before they are build output.
+ */
+describe('findProjectArtifacts safety gates', () => {
+  let GATE: string
+
+  beforeAll(() => {
+    GATE = fs.mkdtempSync(path.join(TMP_ROOT, 'system-cleaner-gates-'))
+
+    // A folder of documents that happens to use build-output words.
+    artifactDir(path.join(GATE, 'Insurance', '2024'), 'coverage', 3_000_000)
+    artifactDir(path.join(GATE, 'Music'), 'Pods', 3_000_000)
+
+    // A checkout whose own name is a pattern.
+    const clone = path.join(GATE, 'checkout', 'pantry')
+    fs.mkdirSync(path.join(clone, '.git'), { recursive: true })
+    fs.writeFileSync(path.join(clone, '.git', 'config'), '[remote "origin"]\n')
+    fs.writeFileSync(path.join(clone, 'blob.bin'), Buffer.alloc(3_000_000))
+    // ...and make its parent look like a project, so only the checkout gate saves it.
+    fs.writeFileSync(path.join(GATE, 'checkout', 'package.json'), '{"name":"parent"}')
+
+    // A genuine project.
+    const proj = path.join(GATE, 'realproj')
+    fs.mkdirSync(proj, { recursive: true })
+    fs.writeFileSync(path.join(proj, 'package.json'), '{"name":"realproj"}')
+    artifactDir(proj, 'node_modules', 3_000_000)
+    artifactDir(proj, 'pantry', 3_000_000)
+  })
+
+  afterAll(() => {
+    safeCleanup(GATE)
+  })
+
+  it('does not offer a directory whose parent shows no sign of being a project', async () => {
+    const found = await findProjectArtifacts([GATE], 5, 0)
+    const paths = found.map(a => a.path)
+    expect(paths.some(p => p.includes(`Insurance${path.sep}2024${path.sep}coverage`))).toBe(false)
+    expect(paths.some(p => p.endsWith(`Music${path.sep}Pods`))).toBe(false)
+  })
+
+  it('never offers a git checkout, whatever its directory is called', async () => {
+    const found = await findProjectArtifacts([GATE], 5, 0)
+    const clone = path.join(GATE, 'checkout', 'pantry')
+    expect(found.some(a => a.path === clone)).toBe(false)
+  })
+
+  it('still offers build output that sits beside a project manifest', async () => {
+    const found = await findProjectArtifacts([GATE], 5, 0)
+    const names = found
+      .filter(a => a.path.includes(`${path.sep}realproj${path.sep}`))
+      .map(a => path.basename(a.path))
+      .sort()
+    expect(names).toEqual(['node_modules', 'pantry'])
+  })
+
+  it('treats a .git directory as a project marker, so a repo\'s own output still counts', async () => {
+    const repo = path.join(GATE, 'gitproj')
+    fs.mkdirSync(path.join(repo, '.git'), { recursive: true })
+    artifactDir(repo, 'node_modules', 3_000_000)
+
+    const found = await findProjectArtifacts([GATE], 5, 0)
+    expect(found.some(a => a.path === path.join(repo, 'node_modules'))).toBe(true)
   })
 })

@@ -94,6 +94,61 @@ export function findLargestFiles(tree: DiskEntry, count = 50): LargeFile[] {
 /**
  * Scan for project build artifacts that can be cleaned up
  */
+/**
+ * Files that mean "a build happens here", so a directory beside one of them
+ * was probably produced rather than written.
+ *
+ * Matching a bare directory name is not enough on its own, and the gap is not
+ * theoretical: with `Documents` among the roots, a synthetic non-developer
+ * tree produced `Insurance/2024/coverage` and `Music/Pods` as `safe`, one
+ * click from deletion. `coverage`, `Pods`, `build`, `dist`, `vendor` and
+ * `target` are ordinary English words before they are build output.
+ */
+const PROJECT_MARKERS = [
+  'package.json',
+  'bun.lock',
+  'deps.yaml',
+  'Cargo.toml',
+  'go.mod',
+  'build.zig',
+  'pyproject.toml',
+  'requirements.txt',
+  'Gemfile',
+  'composer.json',
+  'pom.xml',
+  'build.gradle',
+  'build.gradle.kts',
+  'Package.swift',
+  'Podfile',
+  'pubspec.yaml',
+  'mix.exs',
+  'CMakeLists.txt',
+  'Makefile',
+  'tsconfig.json',
+]
+
+/** True when this directory is plausibly the root of a project. */
+function looksLikeProject(dir: string): boolean {
+  if (fs.existsSync(path.join(dir, '.git')))
+    return true
+  return PROJECT_MARKERS.some(marker => fs.existsSync(path.join(dir, marker)))
+}
+
+/**
+ * True when the candidate is itself a checkout rather than build output.
+ *
+ * `pantry` is a vendored runtime directory in this project and the name of a
+ * repository, and on the machine this was written against both existed:
+ * fourteen vendored directories, and a 665 MB clone of pantry-pm/pantry whose
+ * parent folder simply collects repositories. The clone matched on name, was
+ * classified `safe`, and `cleanDirectory` would have removed every entry
+ * including `.git`. Nothing in this app goes through the Trash, so that is a
+ * repository and any unpushed work in it, gone.
+ */
+function isCheckout(dir: string): boolean {
+  return fs.existsSync(path.join(dir, '.git'))
+}
+
 export const DEFAULT_PROJECT_ROOTS: string[] = [
   // Checked in order and skipped when absent, so listing several conventions
   // costs nothing. The original four were `Code`, `Projects`, `Developer` and
@@ -173,6 +228,14 @@ async function scanForArtifacts(
     const fullPath = path.join(dirPath, entry.name)
 
     if (patternNames.has(entry.name)) {
+      // Two gates before this counts as build output. Without them the
+      // scanner offered a 665 MB git clone and a folder of insurance PDFs,
+      // both marked safe, both one click from an unrecoverable delete.
+      if (!looksLikeProject(dirPath) || isCheckout(fullPath)) {
+        await scanForArtifacts(fullPath, depth + 1, maxDepth, patternNames, patterns, artifacts)
+        continue
+      }
+
       const pattern = patterns.find(p => p.dirName === entry.name)!
       let mtime = new Date()
       try {
