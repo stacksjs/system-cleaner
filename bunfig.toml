@@ -4,12 +4,26 @@ preload = [
 ]
 
 [test]
-# Without an explicit root, `bun test` walks the whole workspace and runs the
-# test suites vendored inside `pantry/` (zod, pino, ...), which fail on their
-# own missing devDependencies. A bare path argument does not help: bun treats
-# it as a substring filter, so `bun test tests/` still matches
-# `pantry/zod/src/v4/classic/tests/`.
-root = "tests"
+# `bun test` walks from `root`, and the thing it must not walk into is
+# `pantry/`: ~700 vendored packages carrying 876 test files of their own, which
+# fail on devDependencies this project never installs. Measured with the
+# patterns below removed: 680 files, 887 tests, 484 failures, 894k errors, 72
+# seconds. With them: 35 files, 258 tests, 0 failures, 2 seconds.
+#
+# This used to read `root = "tests"`, which did stop that — and also excluded
+# `packages/*/test/`, so ten files and 75 cases were maintained and never run
+# once. Among them the `sanitize`, `paths` and `exec` suites, which cover the
+# path-safety helpers guarding an app that deletes directories: exactly the
+# tests you least want silently skipped. All 75 passed the first time they were
+# run, so nothing had rotted; they had simply never been looked at.
+#
+# A bare path argument is not an alternative: bun treats it as a substring
+# filter, so `bun test tests/` still matches `pantry/zod/src/v4/classic/tests/`.
+# `pathIgnorePatterns` is the only knob that both widens the root and keeps
+# `pantry/` out, and it is honoured from here, which matters because CI runs a
+# bare `bun test` with no flags to pass.
+root = "."
+pathIgnorePatterns = ["**/pantry/**", "**/node_modules/**", "**/storage/**", "**/dist/**", "**/app/Desktop/Resources/**"]
 preload = [
   "@stacksjs/env/plugin.js",
 ]

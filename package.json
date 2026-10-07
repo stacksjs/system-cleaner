@@ -29,7 +29,7 @@
     "typecheck": "bun x --bun tsc --noEmit -p tsconfig.json --pretty false",
     "typecheck:app": "bun x --bun tsc --noEmit -p tsconfig.json --pretty false",
     "types:check": "bun x --bun tsc --noEmit -p tsconfig.json --pretty false",
-    "test": "bun ./scripts/build-client-scripts.ts && ./buddy test"
+    "test": "bun ./scripts/build-client-scripts.ts && bun test --timeout 30000"
   },
   "dependencies": {
     "@system-cleaner/clean": "workspace:*",

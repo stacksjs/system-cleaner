@@ -2,8 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
-import { findProjectArtifacts } from '../packages/disk/src/analysis'
-import { getProjectArtifactPatterns, isProjectArtifact } from '../packages/disk/src/categories'
+import { findProjectArtifacts } from '../src/analysis'
+import { getProjectArtifactPatterns, isProjectArtifact } from '../src/categories'
 
 const TMP_ROOT = fs.realpathSync(os.tmpdir())
 let ROOT: string
