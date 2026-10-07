@@ -160,7 +160,17 @@ async function doEmptyTrash() {
     destructive: true,
   })) return;
   _api('/api/empty-trash', {}).then(function(r) {
-    if (r.success) _exec("toast(" + JSON.stringify('Trash emptied - freed ' + _fmtBytes(r.freedBytes)) + ", 'success')");
+    if (r.success) {
+      // Same two steps doCleanDir takes, and for the same reason. The server
+      // forgets its measured sizes, but the client keeps its own five-minute
+      // copy in localStorage; without dropping that and rescanning, the next
+      // render redraws the Trash row at its pre-empty size and Space
+      // Recoverable never moves. The toast says 12 GB freed, the table
+      // disagrees, and the server-side fix is invisible from here.
+      try { localStorage.removeItem(CACHE_KEY); } catch (e) {}
+      _exec("toast(" + JSON.stringify('Trash emptied - freed ' + _fmtBytes(r.freedBytes)) + ", 'success')");
+      scanCleanupSizes(true);
+    }
     else _exec("toast('Failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");
   }).catch(_apiCatch('Empty Trash failed'));
 }
@@ -369,24 +379,42 @@ function scanCleanupSizes(force) {
   var totalEl = document.getElementById('total-cleanable');
   if (totalEl) totalEl.textContent = 'Scanning...';
 
+  // A forced rescan supersedes a walk already in flight instead of being
+  // dropped by the single-flight guard. Deduping is right for two cold loads
+  // racing each other; it is wrong straight after a clean, because the one
+  // request that could report the new size is the one being skipped. The
+  // in-flight walk then lands holding pre-delete numbers and writes them to
+  // the table and to localStorage - the "nothing happened" bug, seen from the
+  // client side rather than the server's.
+  if (force) window._cleanupScanGen = (window._cleanupScanGen || 0) + 1;
+  else if (window._cleanupScanPromise) return;
+
+  var gen = window._cleanupScanGen || 0;
+
   // Run scan detached so navigation doesn't kill it
-  if (!window._cleanupScanPromise) {
-    window._cleanupScanPromise = _api('/api/dir-sizes', { paths: paths }).then(function(r) {
-      window._cleanupScanPromise = null;
-      if (!r.success || !r.sizes) return;
-      setCachedSizes(r.sizes);
-      if (document.getElementById('total-cleanable')) {
-        applySizes(r.sizes);
-      }
-    }).catch(function(err) {
-      window._cleanupScanPromise = null;
-      if (totalEl) {
-        totalEl.textContent = '—';
-        totalEl.classList.remove('is-scanning');
-      }
-      _exec("toast('Scan failed: " + (err && err.message || 'network').replace(/'/g, "\\'") + "', 'error')");
-    });
-  }
+  var pending = null;
+  pending = _api('/api/dir-sizes', { paths: paths }).then(function(r) {
+    if (window._cleanupScanPromise === pending) window._cleanupScanPromise = null;
+    // Superseded: a clean happened after this walk was asked for, so what it
+    // measured describes a disk that no longer exists.
+    if (gen !== (window._cleanupScanGen || 0)) return;
+    if (!r.success || !r.sizes) return;
+    // The server reports it cleared its own cache mid-walk, so don't persist
+    // these for five minutes - show them until the next scan replaces them.
+    if (!r.stale) setCachedSizes(r.sizes);
+    if (document.getElementById('total-cleanable')) {
+      applySizes(r.sizes);
+    }
+  }).catch(function(err) {
+    if (window._cleanupScanPromise === pending) window._cleanupScanPromise = null;
+    if (gen !== (window._cleanupScanGen || 0)) return;
+    if (totalEl) {
+      totalEl.textContent = '—';
+      totalEl.classList.remove('is-scanning');
+    }
+    _exec("toast('Scan failed: " + (err && err.message || 'network').replace(/'/g, "\\'") + "', 'error')");
+  });
+  window._cleanupScanPromise = pending;
 }
 
 // Load after targets render (init() triggers scanCleanupSizes).

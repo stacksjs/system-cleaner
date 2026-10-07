@@ -355,6 +355,7 @@
 
         var gone = {};
         (r.succeeded || []).forEach(function(p) { gone[p] = true; });
+        self.loadOrphans();
         if (gone[self.scan.app.path]) {
           self.apps = self.apps.filter(function(app) { return app.path !== self.scan.app.path; });
           self.close();

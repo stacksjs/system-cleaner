@@ -120,6 +120,20 @@ const dashboardStatsCache = new TtlCache<Record<string, unknown>>(30_000);
 const dirSizesCache = new TtlCache<Record<string, number>>(5 * 60_000);
 
 /**
+ * Bumped by every invalidation, so a walk can tell whether what it measured
+ * still describes the disk.
+ *
+ * Clearing the map is not enough by itself. `/dir-sizes` reads the cache,
+ * spends tens of seconds walking ~76 directories, then writes what it found.
+ * A delete landing inside that window clears an entry the walk is not holding
+ * and cannot reach the numbers already in flight, so the walk stores its
+ * pre-delete measurement afterwards under a fresh five-minute TTL - restoring
+ * the stale total the clear existed to prevent. Comparing the generation
+ * before storing drops exactly those results.
+ */
+let sizeCacheGeneration = 0;
+
+/**
  * Forget every measured size, because something on disk just stopped existing.
  *
  * `/dir-sizes` keys on the sorted path list, and the cleanup screen sends the
@@ -136,6 +150,7 @@ const dirSizesCache = new TtlCache<Record<string, number>>(5 * 60_000);
  */
 function invalidateSizeCaches(): void {
   dirSizesCache.clear();
+  sizeCacheGeneration++;
 }
 // A full orphan sweep reads every bundle id under ~/Library and sizes what it
 // finds, which is seconds of work for an answer that changes when an app is
@@ -361,10 +376,15 @@ export default async function (router: Router) {
     catch {
       return badRequest('Path does not exist', 404);
     }
+    // Invalidate on both paths. A recursive delete is not atomic: one
+    // undeletable entry throws after the other nine are already gone, so the
+    // error path can have freed gigabytes. Leaving the size cached there keeps
+    // the directory at its old figure for five minutes.
     try {
       fs.rmSync(resolved, { recursive: true, force: true });
     }
     catch (err: any) {
+      invalidateSizeCaches();
       return badRequest(err.message || 'Delete failed', 500);
     }
     invalidateSizeCaches();
@@ -485,6 +505,7 @@ export default async function (router: Router) {
     const cached = dirSizesCache.get(cacheKey);
     if (cached) return Response.json({ success: true, sizes: cached, cached: true });
 
+    const generation = sizeCacheGeneration;
     const results: Record<string, number> = {};
     // Bound parallelism so we don't fire 1024 simultaneous `du` walks.
     const CONCURRENCY = 8;
@@ -499,8 +520,13 @@ export default async function (router: Router) {
         }),
       );
     }
-    dirSizesCache.set(cacheKey, results);
-    return Response.json({ success: true, sizes: results, cached: false });
+    // Only store this if nothing was deleted while we walked. Caching a
+    // measurement taken before a delete is the stale number all over again,
+    // and it would outlive the invalidation meant to kill it. `stale` lets the
+    // caller drop a payload it can already tell is out of date.
+    const current = sizeCacheGeneration === generation;
+    if (current) dirSizesCache.set(cacheKey, results);
+    return Response.json({ success: true, sizes: results, cached: false, stale: !current });
   });
 
   await router.post('/empty-trash', async () => {
@@ -1027,6 +1053,11 @@ export default async function (router: Router) {
 
     const outcome = await removeExtensions(ids);
 
+    // Before the history write, not after. The extensions are already gone by
+    // here, and a rejected insert - locked database, unapplied migration, full
+    // disk - must not take the invalidation down with it.
+    invalidateSizeCaches();
+
     if (outcome.removed.length > 0) {
       invalidateExtensionsCache();
       await CleanupRun.create({
@@ -1038,7 +1069,6 @@ export default async function (router: Router) {
       });
     }
 
-    invalidateSizeCaches();
     return Response.json({ success: outcome.failed.length === 0, ...outcome });
   });
 
@@ -1490,6 +1520,14 @@ export default async function (router: Router) {
     const result = await uninstall(path.resolve(body.path), paths, mode);
     if (!result) return badRequest('No app bundle at that path', 404);
 
+    // An uninstall takes the bundle and its remnants under ~/Library/Caches,
+    // ~/Library/Application Support and ~/Library/Containers - inside targets
+    // the cleanup screen measures, and inside the orphan sweep. Both caches
+    // now describe directories that are gone, and a stale orphan row sends the
+    // Leftovers tab's Clean button at a path the scan no longer returns.
+    invalidateSizeCaches();
+    orphanCache.clear();
+
     return Response.json({
       success: result.outcome.failed.length === 0,
       app: result.app,
@@ -1531,6 +1569,11 @@ export default async function (router: Router) {
 
     const kept = await KeptCookie.all() as Array<{ domain: string }>;
     const outcome = await cleanPrivacyItems(ids, { keepDomains: kept.map(row => row.domain) });
+
+    // The browser cache and service-worker directories this removes are the
+    // same paths as the chrome-cache, chrome-sw and safari-cache targets, so
+    // the cleanup screen's figures are now wrong by whatever was freed.
+    invalidateSizeCaches();
 
     if (outcome.cleaned.length > 0) {
       await CleanupRun.create({
@@ -1633,6 +1676,9 @@ export default async function (router: Router) {
     const mode = body.mode === 'permanent' ? 'permanent' : 'trash';
     const outcome = await bulkDelete(targets, mode, 'orphans');
     orphanCache.clear();
+    // Orphan rows live under ~/Library/Caches and ~/Library/Application
+    // Support, which the cleanup screen sizes as targets in their own right.
+    invalidateSizeCaches();
 
     return Response.json({ success: outcome.failed.length === 0, mode, ...outcome });
   });
@@ -1660,11 +1706,14 @@ export default async function (router: Router) {
 
   await router.post('/clean-ds-store', async () => {
     const result = await cleanDsStoreFiles();
+    invalidateSizeCaches();
     return Response.json({ success: result.errors === 0, ...result });
   });
 
   await router.post('/clean-incomplete-downloads', async () => {
     const result = await cleanIncompleteDownloads();
+
+    invalidateSizeCaches();
 
     if (result.removed > 0) {
       await CleanupRun.create({
@@ -1767,6 +1816,9 @@ export default async function (router: Router) {
       return badRequest('Unknown maintenance task');
 
     const result = await runMaintenanceTask(body.id);
+    // Several tasks empty directories under ~/Library. One invariant is easier
+    // to hold than a list of which ones: a route that deletes, invalidates.
+    invalidateSizeCaches();
     return Response.json(result);
   });
 
@@ -1790,6 +1842,10 @@ export default async function (router: Router) {
 
     const outcome = shredPaths(paths, { passes });
 
+    // Same ordering as /remove-extensions: the bytes are overwritten and
+    // unlinked by now, so the invalidation cannot sit behind a failable write.
+    invalidateSizeCaches();
+
     if (outcome.shredded.length > 0) {
       await CleanupRun.create({
         source: 'shred',
@@ -1800,7 +1856,6 @@ export default async function (router: Router) {
       });
     }
 
-    invalidateSizeCaches();
     return Response.json({ success: outcome.failed.length === 0, passes, ...outcome });
   });
 
@@ -1841,6 +1896,10 @@ export default async function (router: Router) {
 
   await router.post('/schedule-run', async () => {
     const outcome = await runScheduledClean();
+    // The widest delete in the app: every configured target, then privacy
+    // items, .DS_Store droppings and the Trash. Tens of gigabytes can go, so
+    // every measured size is suspect afterwards.
+    invalidateSizeCaches();
     return Response.json({ success: outcome.errors.length === 0, ...outcome });
   });
 }
