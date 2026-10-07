@@ -1,5 +1,56 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.1...v0.3.2)
+
+## ✨ Features
+
+- **cleanup**: show a run in progress instead of going quiet ([1eccbe0](https://github.com/stacksjs/system-cleaner/commit/1eccbe0)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **app**: show uncaught errors instead of swallowing them ([f16dc8c](https://github.com/stacksjs/system-cleaner/commit/f16dc8c)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+
+## 🐛 Bug Fixes
+
+- **updates**: assign `selected` instead of mutating it ([0557b81](https://github.com/stacksjs/system-cleaner/commit/0557b81)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **cleanup**: make the per-row buttons and the Trash toast actually fire ([db37173](https://github.com/stacksjs/system-cleaner/commit/db37173)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **dialogs**: stop the bridge reaping a sheet the user is still reading ([825f308](https://github.com/stacksjs/system-cleaner/commit/825f308)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **dialogs**: ask the host for a yes/no, and read the shape it answers in ([767c0fa](https://github.com/stacksjs/system-cleaner/commit/767c0fa)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **dialogs**: read the button Craft actually reports ([2e22700](https://github.com/stacksjs/system-cleaner/commit/2e22700)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **cleanup**: export the click handlers so the buttons can find them ([be4e0c9](https://github.com/stacksjs/system-cleaner/commit/be4e0c9)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **dialogs**: stop every confirm in the packaged app answering itself No ([6b738b1](https://github.com/stacksjs/system-cleaner/commit/6b738b1)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **dashboard**: give Top Processes the same dim tier as the Processes panel ([def505e](https://github.com/stacksjs/system-cleaner/commit/def505e)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#6](https://github.com/stacksjs/system-cleaner/issues/6), [#6](https://github.com/stacksjs/system-cleaner/issues/6), [#6](https://github.com/stacksjs/system-cleaner/issues/6), [#98989](https://github.com/stacksjs/system-cleaner/issues/98989))
+- **updates**: paint the self-update progress track with a token that exists ([236306a](https://github.com/stacksjs/system-cleaner/commit/236306a)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **app**: let the light theme reach the dashboard too ([900aa5a](https://github.com/stacksjs/system-cleaner/commit/900aa5a)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **app**: let the light theme reach the panels ([0e33605](https://github.com/stacksjs/system-cleaner/commit/0e33605)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#20](https://github.com/stacksjs/system-cleaner/issues/20), [#000](https://github.com/stacksjs/system-cleaner/issues/000))
+
+## 💄 Styles
+
+- **app**: snap spacing to the macOS 4/8pt grid ([2e0b8c9](https://github.com/stacksjs/system-cleaner/commit/2e0b8c9)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#19](https://github.com/stacksjs/system-cleaner/issues/19))
+
+## ✅ Tests
+
+- **xdata**: catch an _exec statement that names a closure-local ([23b1d20](https://github.com/stacksjs/system-cleaner/commit/23b1d20)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+
+## 🔧 Chores
+
+- **buddy**: take the launcher PATH reorder from 0.75.82 ([3d2a520](https://github.com/stacksjs/system-cleaner/commit/3d2a520)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- sync framework defaults to 0.75.82 ([6711df0](https://github.com/stacksjs/system-cleaner/commit/6711df0)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **deps**: stacks 0.75.82, and drop the dialog workaround it makes redundant ([faefe36](https://github.com/stacksjs/system-cleaner/commit/faefe36)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#2040](https://github.com/stacksjs/system-cleaner/issues/2040), [#2041](https://github.com/stacksjs/system-cleaner/issues/2041))
+- drop the orphaned TopProcesses component ([cfcafc9](https://github.com/stacksjs/system-cleaner/commit/cfcafc9)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **deps**: stacks 0.74.32, @stacksjs/clapp 0.2.16 ([0555057](https://github.com/stacksjs/system-cleaner/commit/0555057)) _(by [github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>](https://github.com/github-actions[bot]))_
+- **deps**: release runner to macos-26 ([25d5556](https://github.com/stacksjs/system-cleaner/commit/25d5556)) _(by [renovate[bot] <29139614+renovate[bot]@users.noreply.github.com>](https://github.com/renovate[bot]))_
+- **deps**: actions/checkout v7, actions/cache v6 ([562b5e6](https://github.com/stacksjs/system-cleaner/commit/562b5e6)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#13](https://github.com/stacksjs/system-cleaner/issues/13), [#14](https://github.com/stacksjs/system-cleaner/issues/14), [#17](https://github.com/stacksjs/system-cleaner/issues/17))
+- wip ([c1405a0](https://github.com/stacksjs/system-cleaner/commit/c1405a0)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: retire Renovate, leave dependency updates to buddy-bot ([b829533](https://github.com/stacksjs/system-cleaner/commit/b829533)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#9](https://github.com/stacksjs/system-cleaner/issues/9), [#10](https://github.com/stacksjs/system-cleaner/issues/10), [#6](https://github.com/stacksjs/system-cleaner/issues/6), [#2](https://github.com/stacksjs/system-cleaner/issues/2))
+
+## ⏪ Reverts
+
+- drop the uncaught-error banner ([a01d4c0](https://github.com/stacksjs/system-cleaner/commit/a01d4c0)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+
+## Contributors
+
+- _Chris <chrisbreuer93@gmail.com>_
+- _[renovate[bot] <29139614+renovate[bot]@users.noreply.github.com>](https://github.com/renovate[bot])_
+- _glennmichael123 <gtorregosa@gmail.com>_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.0...v0.3.1)
 
 ## ✨ Features
