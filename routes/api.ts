@@ -118,6 +118,25 @@ const systemAppsListCache = new TtlCache<{ name: string; sizeBytes: number | nul
 const systemAppsSizesCache = new TtlCache<{ name: string; sizeBytes: number }[]>(15 * 60_000);
 const dashboardStatsCache = new TtlCache<Record<string, unknown>>(30_000);
 const dirSizesCache = new TtlCache<Record<string, number>>(5 * 60_000);
+
+/**
+ * Forget every measured size, because something on disk just stopped existing.
+ *
+ * `/dir-sizes` keys on the sorted path list, and the cleanup screen sends the
+ * same ~76 paths every time, so one entry answers every rescan for five
+ * minutes. Deleting a directory and immediately asking again therefore
+ * returned the size measured *before* the delete: the row kept its old number,
+ * the total never moved, and the screen looked like the button had done
+ * nothing. It had — `~/.bun/install/cache` and `~/.cache/codex-runtimes` were
+ * both empty on disk while the UI still showed 245 MB and 1.7 GB.
+ *
+ * Clearing wholesale rather than evicting one path is deliberate: the key is a
+ * whole path list, so there is no entry that corresponds to the one directory
+ * that changed. The next scan re-walks, which is the point.
+ */
+function invalidateSizeCaches(): void {
+  dirSizesCache.clear();
+}
 // A full orphan sweep reads every bundle id under ~/Library and sizes what it
 // finds, which is seconds of work for an answer that changes when an app is
 // uninstalled and not otherwise.
@@ -348,6 +367,7 @@ export default async function (router: Router) {
     catch (err: any) {
       return badRequest(err.message || 'Delete failed', 500);
     }
+    invalidateSizeCaches();
     return Response.json({ success: true, freedBytes: size });
   });
 
@@ -386,6 +406,7 @@ export default async function (router: Router) {
     }
 
     const result = await cleanDirectory(target);
+    invalidateSizeCaches();
     return Response.json({
       success: result.errors.length === 0,
       freedBytes: result.freedBytes,
@@ -484,6 +505,7 @@ export default async function (router: Router) {
 
   await router.post('/empty-trash', async () => {
     const result = await emptyTrash();
+    invalidateSizeCaches();
     return Response.json({
       success: result.success,
       freedBytes: result.freedBytes,
@@ -614,6 +636,7 @@ export default async function (router: Router) {
       : 'large-files';
 
     const result = await bulkDelete(paths, mode, source);
+    invalidateSizeCaches();
     return Response.json({
       success: result.failed.length === 0,
       mode,
@@ -1015,6 +1038,7 @@ export default async function (router: Router) {
       });
     }
 
+    invalidateSizeCaches();
     return Response.json({ success: outcome.failed.length === 0, ...outcome });
   });
 
@@ -1776,6 +1800,7 @@ export default async function (router: Router) {
       });
     }
 
+    invalidateSizeCaches();
     return Response.json({ success: outcome.failed.length === 0, passes, ...outcome });
   });
 
