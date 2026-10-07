@@ -9,12 +9,12 @@
 ## 🐛 Bug Fixes
 
 - **developer**: require evidence of a project before offering to delete ([4867105](https://github.com/stacksjs/system-cleaner/commit/4867105)) _(by glennmichael123 <gtorregosa@gmail.com>)_
-- **ci**: pin the pantry action to a build whose bundled catalog knows bun 1.4.1 ([6b2e0d9](https://github.com/stacksjs/system-cleaner/commit/6b2e0d9)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#242](https://github.com/stacksjs/system-cleaner/issues/242))
 - **core**: make exec's timeout bound the call, not just the shell ([304e013](https://github.com/stacksjs/system-cleaner/commit/304e013)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **ci**: pin the pantry action to a build whose bundled catalog knows bun 1.4.1 ([6b2e0d9](https://github.com/stacksjs/system-cleaner/commit/6b2e0d9)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([pantry-pm/pantry#242](https://github.com/pantry-pm/pantry/issues/242))
 
 ## 📝 Documentation
 
-- **changelog**: correct the v0.3.2 notes to what the tag actually shipped ([69d0ee7](https://github.com/stacksjs/system-cleaner/commit/69d0ee7)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#20](https://github.com/stacksjs/system-cleaner/issues/20), [#6](https://github.com/stacksjs/system-cleaner/issues/6), [#98989](https://github.com/stacksjs/system-cleaner/issues/98989), [#000](https://github.com/stacksjs/system-cleaner/issues/000), [#2040](https://github.com/stacksjs/system-cleaner/issues/2040), [#2041](https://github.com/stacksjs/system-cleaner/issues/2041))
+- **changelog**: correct the v0.3.2 notes to what the tag actually shipped ([69d0ee7](https://github.com/stacksjs/system-cleaner/commit/69d0ee7)) _(by glennmichael123 <gtorregosa@gmail.com>)_
 
 ## ✅ Tests
 
