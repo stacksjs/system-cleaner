@@ -20,9 +20,41 @@ describe('exec', () => {
     expect(r.stderr).toBe('to-stderr')
   })
 
-  it('honors timeout', async () => {
+  /**
+   * Asserting only `ok === false` let a broken timeout pass: the command ran
+   * its full five seconds and then reported failure, which is the same answer
+   * for the wrong reason. It took running this on Linux, where it blew bun's
+   * own 5s per-test limit, for anyone to notice. So assert the clock.
+   */
+  it('honors timeout, and returns within it', async () => {
+    const started = Date.now()
     const r = await exec('sleep 5', { timeout: 200 })
     expect(r.ok).toBe(false)
+    expect(Date.now() - started).toBeLessThan(2000)
+  })
+
+  /**
+   * `sh -c` execs a lone simple command away, so killing the shell killed it
+   * and the case above passed even while the timeout did nothing. Give the
+   * shell something it has to fork for and the grandchild keeps the pipes
+   * open, which is what actually hung the caller.
+   */
+  it.each([
+    ['a pipeline', 'sleep 5 | cat'],
+    ['two statements', 'sleep 5; echo done'],
+    ['a subshell', '(sleep 5)'],
+  ])('honors timeout for %s, which the shell cannot exec away', async (_name, command) => {
+    const started = Date.now()
+    const r = await exec(command, { timeout: 200 })
+    expect(r.ok).toBe(false)
+    expect(Date.now() - started).toBeLessThan(2000)
+  })
+
+  it('reports why it gave up, rather than looking like an empty success', async () => {
+    const r = await exec('sleep 5 | cat', { timeout: 150 })
+    expect(r.ok).toBe(false)
+    expect(r.exitCode).toBe(-1)
+    expect(r.stderr).toContain('timed out')
   })
 
   it('passes env vars to the command', async () => {
