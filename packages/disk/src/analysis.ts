@@ -94,9 +94,33 @@ export function findLargestFiles(tree: DiskEntry, count = 50): LargeFile[] {
 /**
  * Scan for project build artifacts that can be cleaned up
  */
+export const DEFAULT_PROJECT_ROOTS: string[] = [
+  // Checked in order and skipped when absent, so listing several conventions
+  // costs nothing. The original four were `Code`, `Projects`, `Developer` and
+  // `Work` under HOME, which found 11 artifacts on a machine that had 2012:
+  // the repositories were in `~/Documents/Projects`, and a scanner that finds
+  // nothing reads exactly like a machine that is already clean.
+  'Code',
+  'Projects',
+  'Developer',
+  'Work',
+  'src',
+  'dev',
+  'repos',
+  'git',
+  'Sites',
+  'Documents',
+].map(dir => path.join(HOME, dir))
+
 export async function findProjectArtifacts(
-  searchPaths: string[] = [path.join(HOME, 'Code'), path.join(HOME, 'Projects'), path.join(HOME, 'Developer'), path.join(HOME, 'Work')],
+  searchPaths: string[] = DEFAULT_PROJECT_ROOTS,
   maxDepth = 4,
+  /**
+   * Below this, an artifact is noise rather than a finding. On a real machine
+   * 1803 `dist` directories came to 2.9 GB and 82% of them were under a
+   * megabyte — a list nobody can read, hiding the dozen entries that matter.
+   */
+  minSizeBytes = 1_000_000,
 ): Promise<ProjectArtifact[]> {
   const artifacts: ProjectArtifact[] = []
   const patterns = getProjectArtifactPatterns()
@@ -116,7 +140,9 @@ export async function findProjectArtifacts(
     }),
   )
 
-  return artifacts.sort((a, b) => b.sizeBytes - a.sizeBytes)
+  return artifacts
+    .filter(a => a.sizeBytes >= minSizeBytes)
+    .sort((a, b) => b.sizeBytes - a.sizeBytes)
 }
 
 async function scanForArtifacts(
@@ -124,7 +150,7 @@ async function scanForArtifacts(
   depth: number,
   maxDepth: number,
   patternNames: Set<string>,
-  patterns: { dirName: string, type: string, label: string }[],
+  patterns: { dirName: string, type: string, label: string, risk: 'safe' | 'caution' }[],
   artifacts: ProjectArtifact[],
 ): Promise<void> {
   if (depth > maxDepth)
@@ -164,6 +190,8 @@ async function scanForArtifacts(
         sizeFormatted: '...',
         projectName,
         lastModified: mtime,
+        label: pattern.label,
+        risk: pattern.risk,
       })
       // Don't recurse into artifact directories
       continue

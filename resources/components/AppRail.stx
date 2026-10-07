@@ -34,6 +34,7 @@ export const groups = [
     { id: 'disk', label: 'Disk Usage', icon: 'i-f7-chart-pie-fill', href: '/app/disk' },
     { id: 'large-files', label: 'Large Files', icon: 'i-f7-doc-on-doc-fill', href: '/app/large-files' },
     { id: 'duplicates', label: 'Duplicates', icon: 'i-f7-square-on-square', href: '/app/duplicates' },
+    { id: 'developer', label: 'Developer Junk', icon: 'i-f7-chevron-left-slash-chevron-right', href: '/app/developer' },
   ],
   [
     { id: 'applications', label: 'Applications', icon: 'i-f7-app-fill', href: '/app/applications' },

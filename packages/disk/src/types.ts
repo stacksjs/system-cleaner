@@ -20,4 +20,8 @@ export interface ProjectArtifact {
   sizeFormatted: string
   projectName: string
   lastModified: Date
+  /** Human label for the pattern that matched, e.g. "Node.js dependencies". */
+  label: string
+  /** See PROJECT_ARTIFACT_PATTERNS: `caution` is excluded from Select All. */
+  risk: 'safe' | 'caution'
 }

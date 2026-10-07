@@ -1,0 +1,307 @@
+@extends('layouts/app')
+@section('nav', 'developer')
+@section('body')
+
+<!--
+  Developer junk: build output and dependency trees that live inside
+  repositories rather than at a fixed cache path.
+
+  Why this is a screen and not more rows in Quick Clean: every clean target is
+  a known path with a known meaning, and these are discovered by walking
+  project roots. The paths differ on every machine, there are hundreds of them,
+  and the useful unit is the project rather than the directory. On the machine
+  this was built against, the fixed table offered 6.3 GB while 50.8 GB sat in
+  162 of these.
+
+  No `//` comments and no double quotes inside this `x-data`: STX flattens the
+  attribute onto one line before evaluating it, and either takes the whole
+  object down silently. `tests/xdata-parses.test.ts` guards both.
+
+  Commentary that belongs to this state:
+
+  - `selected` holds paths. Never push to it — stx tracks assignment, not
+    Array.prototype, and a pushed element updates the array while leaving the
+    DOM showing the old one.
+  - `cleaning` is written through markCleaning/clearCleaning for the same
+    reason: a field written on the held object notifies nothing.
+  - Select All takes `safe` only. `caution` covers `dist`, `build`, `vendor`
+    and virtualenvs — directories that look regenerable and are the ones most
+    likely to hold something nothing rebuilds. Same rule as the clean targets.
+-->
+<div x-data="{
+  artifacts: [],
+  artifactCount: 0,
+  totalFormatted: '0 B',
+  safeFormatted: '0 B',
+  selected: [],
+  cleaning: {},
+  cleanProgress: null,
+  loading: true,
+  toasts: [],
+  toastId: 0,
+
+  init() {
+    scanArtifacts(false);
+  },
+
+  toggle(p) { this.selected = this.selected.indexOf(p) === -1 ? this.selected.concat([p]) : this.selected.filter(function(x) { return x !== p; }); },
+  isOn(p) { return this.selected.includes(p); },
+
+  safePaths() { return this.artifacts.filter(function(a) { return a.risk === 'safe'; }).map(function(a) { return a.path; }); },
+  allSafeSelected() { var s = this.selected; var ids = this.safePaths(); return ids.length > 0 && ids.every(function(p) { return s.indexOf(p) !== -1; }); },
+  toggleAllSafe() { this.selected = this.allSafeSelected() ? [] : this.safePaths(); },
+
+  selectedBytes() { var s = this.selected; return this.artifacts.reduce(function(n, a) { return s.indexOf(a.path) !== -1 ? n + a.sizeBytes : n; }, 0); },
+  selectedFormatted() { return this.fmtBytes(this.selectedBytes()); },
+
+  markCleaning(p) { this.cleaning = Object.assign({}, this.cleaning, { [p]: true }); },
+  clearCleaning(p) { var next = Object.assign({}, this.cleaning); delete next[p]; this.cleaning = next; },
+
+  toast(msg, type) {
+    const id = ++this.toastId;
+    this.toasts = [...this.toasts, { id, msg, type: type || 'info' }];
+    setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 4000);
+  },
+
+  fmtBytes(b) { if (b >= 1e12) return (b/1e12).toFixed(1)+' TB'; if (b >= 1e9) return (b/1e9).toFixed(1)+' GB'; if (b >= 1e6) return (b/1e6).toFixed(1)+' MB'; if (b >= 1e3) return (b/1e3).toFixed(1)+' KB'; return b+' B'; }
+}">
+
+<div class='toast-area'>
+  <template x-for='note in toasts' :key='note.id'>
+    <div class='toast'><span class='toast-glyph' :class="note.type === 'success' ? 'i-f7-checkmark-alt-circle-fill' : note.type === 'error' ? 'i-f7-xmark-circle-fill' : 'i-f7-exclamationmark-triangle-fill'" aria-hidden='true'></span><span x-text='note.msg'></span></div>
+  </template>
+</div>
+
+<div class='main-header'>
+  <div class='main-title'>Developer Junk</div>
+  <div class='main-subtitle'>Build output, vendored runtimes and dependency trees inside your projects</div>
+</div>
+
+<div class='main-content'>
+  <div x-show='loading' class='empty-state'>Walking your project folders...</div>
+
+  <div x-cloak x-show='!loading && artifactCount === 0' class='empty-state'>
+    Nothing found. Either your projects are clean, or they live somewhere this does not look yet.
+  </div>
+
+  <div x-cloak x-show='!loading && artifactCount > 0'>
+    <div style='display: flex; gap: var(--space-2); margin-bottom: var(--space-4); align-items: center; flex-wrap: wrap;'>
+      <button class='btn' @click='toggleAllSafe()'>
+        <span x-text="allSafeSelected() ? 'Deselect All' : 'Select All Safe'">Select All Safe</span>
+      </button>
+      <button class='btn btn-danger' x-cloak x-show='selected.length > 0 && !cleanProgress' onclick='doCleanSelected()'>
+        Clean Selected (<span x-text='selected.length'>0</span>) &middot; <span x-text='selectedFormatted()'>0 B</span>
+      </button>
+      <button class='btn btn-danger' x-cloak x-show='!!cleanProgress' disabled>
+        <span class='cleaning-dot' aria-hidden='true'></span>
+        Cleaning <span x-text='cleanProgress ? cleanProgress.done : 0'>0</span>
+        of <span x-text='cleanProgress ? cleanProgress.total : 0'>0</span>&hellip;
+      </button>
+      <button class='btn btn-icon btn-sm' style='margin-left: auto;' onclick='scanArtifacts(true)'>
+        <span class='i-f7-arrow-clockwise' aria-hidden='true'></span>
+        Rescan
+      </button>
+    </div>
+
+    <div class='clean-progress' x-cloak x-show='!!cleanProgress' aria-live='polite'>
+      <div class='progress'>
+        <div class='progress-fill clean-progress-fill'
+          :style="'width: ' + (cleanProgress && cleanProgress.total ? Math.round(cleanProgress.done / cleanProgress.total * 100) : 0) + '%'"></div>
+      </div>
+    </div>
+
+    <div class='tbl-wrap'>
+      <div class='tbl-bar'>
+        <div>
+          <span class='tbl-title'>Project Artifacts</span>
+          <span class='tbl-count'>
+            <span x-text='artifactCount'>0</span> directories &middot;
+            <span x-text='totalFormatted'>0 B</span> &middot;
+            <span x-text='safeFormatted'>0 B</span> rebuilds from a command
+          </span>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th style='width: 28px;'><input type='checkbox' class='check' @click='toggleAllSafe()' /></th>
+            <th>Directory</th>
+            <th>Project</th>
+            <th>Size</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for='a in artifacts' :key='a.path'>
+            <tr :data-path='a.path' :data-label='a.label'>
+              <td><input type='checkbox' class='check' :checked='isOn(a.path)' @change='toggle(a.path)' /></td>
+              <td>
+                <span x-text='a.name'></span>
+                <span class='badge' x-text='a.type'></span>
+                <span class='badge badge-orange' x-cloak x-show="a.risk === 'caution'">keep?</span>
+              </td>
+              <td x-text='a.project'></td>
+              <td x-text='a.sizeFormatted'></td>
+              <td>
+                <button class='btn btn-sm' :disabled='cleaning[a.path]'
+                  onclick="doCleanOne(this.closest('tr').getAttribute('data-path'), this.closest('tr').getAttribute('data-label'))">
+                  <span x-show='!cleaning[a.path]'>Clean</span>
+                  <span x-show='cleaning[a.path]'>...</span>
+                </button>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</div>
+
+<script data-stx-scoped>
+// Same shape as cleanup.stx: these are `@click`/`onclick` targets, and the SPA
+// router wraps this block so a plain declaration is not reachable by name from
+// the markup. The explicit window assignments at the bottom are what make them
+// callable; see the note there.
+
+function _scope() {
+  return document.querySelector('[data-stx-xdata]') || document.querySelector('[x-data]');
+}
+
+function _exec(stmt) {
+  const el = _scope();
+  if (!el) return;
+  try {
+    if (typeof window.__stx_execute === 'function') window.__stx_execute(el, stmt);
+    else if (typeof el.__stx_execute === 'function') el.__stx_execute(stmt);
+  }
+  catch (e) { /* stx logs it */ }
+}
+
+function _api(endpoint, data) {
+  return fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data || {}) })
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+}
+
+function _fmtBytes(b) {
+  if (b >= 1e12) return (b/1e12).toFixed(1)+' TB';
+  if (b >= 1e9) return (b/1e9).toFixed(1)+' GB';
+  if (b >= 1e6) return (b/1e6).toFixed(1)+' MB';
+  if (b >= 1e3) return (b/1e3).toFixed(1)+' KB';
+  return b+' B';
+}
+
+function scanArtifacts(refresh) {
+  _exec('loading = true');
+  _api('/api/project-artifacts', { refresh: refresh === true }).then(function(r) {
+    if (!r || !r.success) {
+      _exec('loading = false');
+      _exec("toast('Scan failed', 'error')");
+      return;
+    }
+    _exec('artifacts = ' + JSON.stringify(r.artifacts || []));
+    _exec('artifactCount = ' + (r.artifacts || []).length);
+    _exec('totalBytes = ' + (r.totalBytes || 0));
+    _exec('totalFormatted = ' + JSON.stringify(_fmtBytes(r.totalBytes || 0)));
+    _exec('safeBytes = ' + (r.safeBytes || 0));
+    _exec('safeFormatted = ' + JSON.stringify(_fmtBytes(r.safeBytes || 0)));
+    _exec('loading = false');
+  }).catch(function() {
+    _exec('loading = false');
+    _exec("toast('Scan failed', 'error')");
+  });
+}
+
+async function doCleanOne(p, label) {
+  if (!p) return;
+  if (!await window.nativeConfirm({
+    title: 'Delete ' + (label || 'this directory') + '?',
+    message: 'Removes ' + p + '. A build regenerates it; nothing else does.',
+    confirmLabel: 'Delete',
+    destructive: true,
+  })) return;
+  _exec('markCleaning(' + JSON.stringify(p) + ')');
+  _api('/api/clean-dir', { path: p }).then(function(r) {
+    _exec('clearCleaning(' + JSON.stringify(p) + ')');
+    if (r && r.success) {
+      const freed = r.measured === false ? '' : ' - freed ' + _fmtBytes(r.freedBytes || 0);
+      _exec('toast(' + JSON.stringify('Cleaned' + freed) + ", 'success')");
+      scanArtifacts(true);
+    }
+    else {
+      _exec('toast(' + JSON.stringify('Clean failed: ' + ((r && r.error) || 'Unknown')) + ", 'error')");
+    }
+  }).catch(function() {
+    _exec('clearCleaning(' + JSON.stringify(p) + ')');
+    _exec("toast('Clean failed', 'error')");
+  });
+}
+
+async function doCleanSelected() {
+  const scope = _scope();
+  if (!scope || !scope.__stx_state) return;
+  const state = scope.__stx_state;
+  const paths = (state.selected || []).slice();
+  if (paths.length === 0) return;
+
+  const bytes = (state.artifacts || []).reduce(function(n, a) {
+    return paths.indexOf(a.path) !== -1 ? n + a.sizeBytes : n;
+  }, 0);
+
+  let ok = false;
+  try {
+    ok = await window.nativeConfirm({
+      title: 'Clean ' + paths.length + (paths.length === 1 ? ' directory?' : ' directories?'),
+      message: 'Frees about ' + _fmtBytes(bytes) + '. Every one of these is rebuilt by a build command, and the first build after this will be slower.',
+      confirmLabel: 'Clean',
+      destructive: true,
+    });
+  }
+  catch (e) {
+    _exec("toast('Could not open the confirmation dialog, so nothing was cleaned.', 'error')");
+    return;
+  }
+  if (!ok) return;
+
+  let done = 0, failed = 0, freed = 0;
+  _exec('cleanProgress = { done: 0, total: ' + paths.length + ' }');
+
+  function settle(p) {
+    _exec('clearCleaning(' + JSON.stringify(p) + ')');
+    done++;
+    _exec('cleanProgress = { done: ' + done + ', total: ' + paths.length + ' }');
+    if (done < paths.length) return;
+    const cleaned = paths.length - failed;
+    let msg = cleaned > 0
+      ? 'Cleaned ' + cleaned + (cleaned === 1 ? ' directory' : ' directories') + ' - freed ' + _fmtBytes(freed)
+      : 'Nothing could be cleaned';
+    if (failed > 0) msg += ' - ' + failed + ' failed';
+    _exec('toast(' + JSON.stringify(msg) + ', ' + (cleaned > 0 ? (failed > 0 ? "'info'" : "'success'") : "'error'") + '); selected = []; cleanProgress = null');
+    scanArtifacts(true);
+  }
+
+  paths.forEach(function(p) {
+    _exec('markCleaning(' + JSON.stringify(p) + ')');
+    _api('/api/clean-dir', { path: p }).then(function(r) {
+      if (r && r.success) freed += r.freedBytes || 0;
+      else failed++;
+      settle(p);
+    }).catch(function() {
+      failed++;
+      settle(p);
+    });
+  });
+}
+
+// The SPA router wraps this block, so a plain `function` declaration is not
+// reachable by name from an inline `onclick`. Assigning each one to `window`
+// is what makes the buttons work in the packaged app; dropping these is the
+// bug that made every button on the cleanup screen silently do nothing.
+window.scanArtifacts = scanArtifacts;
+window.doCleanOne = doCleanOne;
+window.doCleanSelected = doCleanSelected;
+</script>
+@endsection

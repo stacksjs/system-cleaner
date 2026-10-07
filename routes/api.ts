@@ -48,7 +48,7 @@ import {
   toggleStartupItem,
   removeStartupItem,
 } from '@system-cleaner/uninstall';
-import { categoryPresentation, shredPaths } from '@system-cleaner/disk';
+import { categoryPresentation, findProjectArtifacts, shredPaths } from '@system-cleaner/disk';
 import { getTopProcesses, summarizeProcesses } from '@system-cleaner/monitor';
 import { recordSystemActivity } from '../app/Support/System/activity-chart';
 import { isLocalAgent } from '../app/Support/Runtime/local-agent';
@@ -122,6 +122,10 @@ const dirSizesCache = new TtlCache<Record<string, number>>(5 * 60_000);
 // finds, which is seconds of work for an answer that changes when an app is
 // uninstalled and not otherwise.
 const orphanCache = new TtlCache<{ items: unknown[]; totalBytes: number }>(5 * 60_000);
+// Walking every project root and sizing what it finds is ~8s of disk work for
+// an answer that only moves when a build runs. Long TTL, with an explicit
+// refresh for the person who just deleted something and wants to see it gone.
+const projectArtifactsCache = new TtlCache<{ artifacts: unknown[], totalBytes: number, safeBytes: number }>(10 * 60_000);
 
 /**
  * The account picture and name.
@@ -1176,6 +1180,43 @@ export default async function (router: Router) {
   await router.post('/cleanup-targets', async () => {
     const { targets, cached } = getCleanupTargetsCached();
     return Response.json({ success: true, targets, cached });
+  });
+
+  // Developer junk: the build output, vendored runtimes and dependency trees
+  // that live *inside* repositories rather than at a fixed cache path.
+  //
+  // The clean-target table cannot express these — it maps a known path to a
+  // known meaning, and these are discovered by walking project roots. On the
+  // machine this was written against the fixed table offered 6.3 GB while 50.8
+  // GB sat in 162 of these directories.
+  await router.post('/project-artifacts', async (req: Request) => {
+    const body = await readJsonBody<{ refresh?: unknown }>(req);
+    if (body === null) return badJson();
+
+    if (body.refresh !== true) {
+      const hit = projectArtifactsCache.get('artifacts');
+      if (hit) return Response.json({ success: true, ...hit, cached: true });
+    }
+
+    const found = await findProjectArtifacts();
+    // `lastModified` is a Date and would serialize to an ISO string the UI has
+    // no use for; the rest is already JSON-shaped.
+    const artifacts = found.map(a => ({
+      path: a.path,
+      name: path.basename(a.path),
+      project: a.projectName,
+      type: a.type,
+      label: a.label,
+      risk: a.risk,
+      sizeBytes: a.sizeBytes,
+      sizeFormatted: a.sizeFormatted,
+    }));
+    const totalBytes = found.reduce((n, a) => n + a.sizeBytes, 0);
+    const safeBytes = found.filter(a => a.risk === 'safe').reduce((n, a) => n + a.sizeBytes, 0);
+
+    const payload = { artifacts, totalBytes, safeBytes };
+    projectArtifactsCache.set('artifacts', payload);
+    return Response.json({ success: true, ...payload, cached: false });
   });
 
   await router.post('/system-apps', async (req: Request) => {
