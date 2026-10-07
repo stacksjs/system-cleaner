@@ -22,6 +22,45 @@ import { clipboard, notifications, showMessageBox, showOpenDialog } from '@stack
 
 const APP_NAME = 'SystemCleaner'
 
+/**
+ * Run a call that blocks on the user, with the bridge's reaper switched off.
+ *
+ * The injected bridge reaps every in-flight request after
+ * `__craftBridgeRequestTimeoutMs` — 30s by default — and rejects it. That is
+ * right for a native side that has gone quiet and wrong for a sheet the user
+ * is still reading. Past 30s the answer is thrown away: the sheet is still up,
+ * the user clicks the action, and the reply arrives to find no pending entry
+ * and is dropped. The handler dies on the rejection with nothing on screen to
+ * say so — the same silent nothing this file exists to stop.
+ *
+ * The bridge reads the knob once per call and treats 0 as "no reaper", and its
+ * own comment names modal dialogs as the case for bumping it. Set it only
+ * around these calls rather than globally, so a native call that really has
+ * stranded anywhere else is still reaped. Depth-counted because the pickers go
+ * through the same helper and a sheet can open over one.
+ */
+let decisionsInFlight = 0
+
+async function whileUserDecides<T>(call: () => Promise<T>): Promise<T> {
+  const host = window as unknown as { __craftBridgeRequestTimeoutMs?: number }
+  const previous = host.__craftBridgeRequestTimeoutMs
+  if (decisionsInFlight === 0)
+    host.__craftBridgeRequestTimeoutMs = 0
+  decisionsInFlight++
+  try {
+    return await call()
+  }
+  finally {
+    decisionsInFlight--
+    if (decisionsInFlight === 0) {
+      if (previous === undefined)
+        delete host.__craftBridgeRequestTimeoutMs
+      else
+        host.__craftBridgeRequestTimeoutMs = previous
+    }
+  }
+}
+
 export interface ConfirmOptions {
   /** The question, as the bold first line of the sheet. */
   title: string
@@ -92,7 +131,17 @@ async function nativeConfirm(options: ConfirmOptions): Promise<boolean> {
     const prompt = options.message
       ? `${options.title}\n\n${options.message}`
       : options.title
-    const answer = await dialogApi.showConfirm(prompt)
+    // Reaping this one would discard an answer the user did give; and an
+    // error escaping here kills the @click handler that called us, with no
+    // banner since a01d4c0 to show for it. Decline instead: a question we
+    // could not hear the answer to is not a yes.
+    let answer: unknown
+    try {
+      answer = await whileUserDecides(() => dialogApi.showConfirm!(prompt))
+    }
+    catch {
+      return false
+    }
 
     // Craft answers `{ ok: true }`, not a bare boolean — craft-native's own
     // wrapper reads `!!(payload && payload.ok === true)` for this exact
@@ -112,14 +161,14 @@ async function nativeConfirm(options: ConfirmOptions): Promise<boolean> {
   // reads the documented 0-based convention and so fails closed on a host
   // that means something else — a second click, rather than a deletion
   // nobody asked for.
-  const raw = await showMessageBox({
+  const raw = await whileUserDecides(() => showMessageBox({
     type: options.destructive ? 'warning' : 'question',
     title: APP_NAME,
     message: options.title,
     detail: options.message,
     buttons,
     cancelButton: CANCEL,
-  })
+  }))
   const { response } = raw as { response?: number }
 
   // Index into the array rather than comparing the number, so an index the
@@ -166,11 +215,11 @@ async function nativeCopy(text: string): Promise<boolean> {
  */
 async function nativeChooseFolder(title?: string): Promise<string | null> {
   try {
-    const result = await showOpenDialog({
+    const result = await whileUserDecides(() => showOpenDialog({
       title: title || 'Choose a folder to scan',
       canChooseDirectories: true,
       buttonLabel: 'Scan',
-    })
+    }))
     return result.canceled ? null : (result.filePaths?.[0] ?? null)
   }
   catch {
@@ -187,13 +236,13 @@ async function nativeChooseFolder(title?: string): Promise<string | null> {
  */
 async function nativeChooseItems(title?: string): Promise<string[]> {
   try {
-    const result = await showOpenDialog({
+    const result = await whileUserDecides(() => showOpenDialog({
       title: title || 'Choose files or folders',
       canChooseFiles: true,
       canChooseDirectories: true,
       multiSelections: true,
       buttonLabel: 'Choose',
-    })
+    }))
     return result.canceled ? [] : (result.filePaths ?? [])
   }
   catch {
