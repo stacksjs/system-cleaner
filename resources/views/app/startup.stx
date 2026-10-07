@@ -135,7 +135,7 @@ async function doRemove(fp, name, itemId) {
   })) return;
   _api('/api/remove-startup', { filepath: fp }).then(function(r) {
     if (r.success) {
-      _exec("removedItems = [...removedItems, '' + itemId + '']");
+      _exec("removedItems = [...removedItems, " + JSON.stringify(itemId) + "]");
       _exec("toast('" + name.replace(/'/g, "\\'") + " removed', 'success')");
     } else {
       _exec("toast('Failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");

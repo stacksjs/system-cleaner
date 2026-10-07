@@ -44,6 +44,9 @@ function esc(str) { return escapeHtml(str || '') }
   safeIds() { return this.cleanCategories.filter(function(c) { return c.risk !== 'caution'; }).map(function(c) { return c.id; }); },
   allSafeSelected() { var s = this.selected; var ids = this.safeIds(); return ids.length > 0 && ids.every(function(id) { return s.indexOf(id) !== -1; }); },
   toggleAllSafe() { this.selected = this.allSafeSelected() ? [] : this.safeIds(); },
+
+  markCleaning(id) { this.cleaning = Object.assign({}, this.cleaning, { [id]: true }); },
+  clearCleaning(id) { var next = Object.assign({}, this.cleaning); delete next[id]; this.cleaning = next; },
   categoriesPresent() { var seen = []; this.cleanCategories.forEach(function(c) { if (seen.indexOf(c.category) === -1) seen.push(c.category); }); return seen.sort(); },
   setFilter(c) { this.filter = c; applyCleanupFilter(c); },
   shortPath(p) {
@@ -97,7 +100,7 @@ function _api(endpoint, data) {
 // permanently and the UI button stayed frozen with no message.
 function _apiCatch(label, opts) {
   return function(err) {
-    if (opts && opts.clearCleaning) _exec("delete cleaning['' + " + JSON.stringify(opts.clearCleaning) + " + '']");
+    if (opts && opts.clearCleaning) _exec("clearCleaning(" + JSON.stringify(opts.clearCleaning) + ")");
     var msg = (err && err.message) ? err.message : 'Network error';
     _exec("toast(" + JSON.stringify(label + ': ' + msg) + ", 'error')");
   };
@@ -132,9 +135,9 @@ async function doCleanDir(p, name, id, risk) {
     confirmLabel: 'Clean',
     destructive: true,
   })) return;
-  _exec("cleaning['' + id + ''] = true");
+  _exec("markCleaning(" + JSON.stringify(id) + ")");
   _api('/api/clean-dir', { path: p }).then(function(r) {
-    _exec("delete cleaning['' + id + '']");
+    _exec("clearCleaning(" + JSON.stringify(id) + ")");
     if (r.success) {
       try { localStorage.removeItem(CACHE_KEY); } catch (e) {}
       // An unmeasured clean really did happen; only its size is unknown.
@@ -157,7 +160,7 @@ async function doEmptyTrash() {
     destructive: true,
   })) return;
   _api('/api/empty-trash', {}).then(function(r) {
-    if (r.success) _exec("toast('Trash emptied - freed ' + _fmtBytes(r.freedBytes) + '', 'success')");
+    if (r.success) _exec("toast(" + JSON.stringify('Trash emptied - freed ' + _fmtBytes(r.freedBytes)) + ", 'success')");
     else _exec("toast('Failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");
   }).catch(_apiCatch('Empty Trash failed'));
 }
@@ -222,7 +225,7 @@ async function doCleanSelected() {
   _exec("cleanProgress = { done: 0, total: " + targets.length + " }");
 
   function settle(id) {
-    _exec("delete cleaning['" + id + "']");
+    _exec("clearCleaning(" + JSON.stringify(id) + ")");
     done++;
     _exec("cleanProgress = { done: " + done + ", total: " + targets.length + " }");
     if (done < targets.length) return;
@@ -238,10 +241,14 @@ async function doCleanSelected() {
   }
 
   targets.forEach(function(t) {
-    // The id has to be interpolated into the statement here rather than left
-    // as `'' + id + ''` inside the quoted string: the statement is evaluated
-    // in the x-data scope, which has no `id` of its own to read.
-    _exec("cleaning['" + t.id + "'] = true");
+    // Two rules at once, and doCleanDir broke both for a release. The
+    // statement is evaluated in the x-data scope, so a name only this closure
+    // has — `t`, `id`, `_fmtBytes`, a fetch result — is not in scope and the
+    // whole statement throws, caught and turned into a console.warn nobody
+    // sees. And `cleaning[x] = true` writes a field on the object the signal
+    // already holds, which stx does not track. So pass the id as an argument
+    // to a method that assigns a new object.
+    _exec("markCleaning(" + JSON.stringify(t.id) + ")");
     _api('/api/clean-dir', { path: t.path }).then(function(r) {
       if (r && r.success) freed += r.freedBytes || 0;
       else failed++;
