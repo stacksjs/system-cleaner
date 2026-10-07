@@ -1,5 +1,15 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.2...v0.3.3)
+
+## 🐛 Bug Fixes
+
+- **deps**: ask for the bun the release registry can actually serve ([4361ce7](https://github.com/stacksjs/system-cleaner/commit/4361ce7)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+
+## Contributors
+
+- _glennmichael123 <gtorregosa@gmail.com>_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.1...v0.3.2)
 
 ## ✨ Features
