@@ -322,7 +322,7 @@ const craft = Bun.spawn([
   '1400',
   '--height',
   '900',
-  '--no-devtools',
+  ...(process.env.SYSTEM_CLEANER_DEVTOOLS === '1' ? [] : ['--no-devtools']),
 ], {
   stdin: 'inherit',
   stdout: 'inherit',
