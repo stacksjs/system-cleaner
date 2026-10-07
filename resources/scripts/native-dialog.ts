@@ -23,36 +23,35 @@ import { clipboard, notifications, showMessageBox, showOpenDialog } from '@stack
 const APP_NAME = 'SystemCleaner'
 
 /**
- * Run a call that blocks on the user, with the bridge's reaper switched off.
+ * How long someone gets to answer before the bridge abandons the request.
  *
  * The injected bridge reaps every in-flight request after
  * `__craftBridgeRequestTimeoutMs` — 30s by default — and rejects it. That is
  * right for a native side that has gone quiet and wrong for a sheet the user
- * is still reading. Past 30s the answer is thrown away: the sheet is still up,
- * the user clicks the action, and the reply arrives to find no pending entry
- * and is dropped. The handler dies on the rejection with nothing on screen to
- * say so — the same silent nothing this file exists to stop.
+ * is still reading: past 30s the sheet is still up, the user clicks the
+ * action, and the reply arrives to find no pending entry and is dropped.
  *
- * The bridge reads the knob once per call and treats 0 as "no reaper", and its
- * own comment names modal dialogs as the case for bumping it. Set it only
- * around these calls rather than globally, so a native call that really has
- * stranded anywhere else is still reaped. Depth-counted because the pickers go
- * through the same helper and a sheet can open over one.
- */
-/**
- * How long someone gets to answer before the bridge abandons the request.
- *
- * This used to pass 0, which switches the reaper off entirely. That does stop
- * a slow reader's answer being thrown away, and it also means a reply that
- * never arrives hangs the click forever with nothing on screen — no error, no
- * toast, no way to tell a wedged dialog from one nobody clicked. Five minutes
- * is far longer than anyone spends on a two-line sheet and short enough that a
- * bridge which has stopped answering still surfaces as a failure.
+ * Passing 0 switches the reaper off entirely, which does stop an answer being
+ * thrown away and also means a reply that never arrives hangs the click
+ * forever with nothing on screen — no error, no toast, no way to tell a wedged
+ * dialog from one nobody clicked. Five minutes is far longer than anyone
+ * spends on a two-line sheet and short enough that a bridge which has stopped
+ * answering still surfaces as a failure. A reap inside that window costs a
+ * re-ask rather than the answer, which is what `nativeConfirm` does with it.
  */
 const DECISION_TIMEOUT_MS = 300_000
 
 let decisionsInFlight = 0
 
+/**
+ * Run a call that blocks on the user, with the bridge's reaper held back.
+ *
+ * The bridge reads the knob once per call, and its own comment names modal
+ * dialogs as the case for raising it. Set it only around these calls rather
+ * than globally, so a native call that really has stranded anywhere else is
+ * still reaped on the usual 30s. Depth-counted because the pickers go through
+ * the same helper and a sheet can open over one.
+ */
 async function whileUserDecides<T>(call: () => Promise<T>): Promise<T> {
   const host = window as unknown as { __craftBridgeRequestTimeoutMs?: number }
   const previous = host.__craftBridgeRequestTimeoutMs
@@ -148,30 +147,59 @@ async function nativeConfirm(options: ConfirmOptions): Promise<boolean> {
     // reason. Accept either, because the documented return type is boolean
     // and a host that honours it should also work.
     //
-    // Anything else falls through to `showMessageBox` below rather than being
-    // read as a decision. Returning false here instead is what made a sheet
-    // the user had already confirmed do nothing at all: a rejected call and a
-    // shape this does not recognise both became a silent "no", which is
-    // indistinguishable from a dead button. An unrecognised answer is not a
-    // refusal, it is a reason to ask again by another route.
-    try {
-      const answer = await whileUserDecides(() => dialogApi.showConfirm!(prompt))
+    // Returning false on anything else is what made a sheet the user had
+    // already confirmed do nothing at all: a rejected call became a silent
+    // "no", indistinguishable from a dead button. An answer nobody could read
+    // is not a refusal, it is a reason to ask again.
+    //
+    // Two attempts, and which failure happened decides what comes next.
+    //
+    // A rejection means the reply was lost, not that the route is wrong: the
+    // reaper fired while the sheet was still up, or the bridge threw. Asking
+    // again through `showConfirm` puts the question back by the one route this
+    // host answers readably, so the second answer is honoured. Falling through
+    // to `showMessageBox` instead would ask a second time and then discard
+    // whatever was clicked — the injected bridge routes a two-button
+    // `showMessageBox` to the same native action, which replies `{ ok: true }`,
+    // and the normalizer looks for `response`/`buttonIndex`, finds neither and
+    // synthesizes the cancel index. On the packaged host that path cannot
+    // return true, so it is a second prompt rather than a second chance, and a
+    // slow reader's confirmed delete would do nothing twice over.
+    //
+    // An unreadable answer is the opposite case: the route answered, and
+    // answered in a shape no retry will change. That one does fall through,
+    // because `showMessageBox` is then a genuinely different question.
+    let unreadable = false
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let answer: unknown
+      try {
+        answer = await whileUserDecides(() => dialogApi.showConfirm!(prompt))
+      }
+      catch {
+        continue
+      }
 
       if (answer === true)
         return true
       if (answer && typeof answer === 'object' && 'ok' in (answer as object))
         return (answer as { ok?: unknown }).ok === true
+
+      unreadable = true
+      break
     }
-    catch {
-      // Bridge unavailable, reaped, or threw. Fall through.
-    }
+
+    // Both attempts failed outright. `showMessageBox` rides the same
+    // transport, so a third sheet fails the same way — or throws out of here
+    // and kills the `@click` handler with nothing on screen to show for it.
+    // Decline: a question nobody could hear the answer to is not a yes.
+    if (!unreadable)
+      return false
   }
 
-  // Reached when the host has no `showConfirm`, and also when it has one that
-  // failed or answered in a shape this cannot read. Fall back to the index
-  // comparison, which
-  // reads the documented 0-based convention and so fails closed on a host
-  // that means something else — a second click, rather than a deletion
+  // Reached when the host has no `showConfirm`, and when it has one that
+  // answered in a shape this cannot read. Fall back to the index comparison,
+  // which reads the documented 0-based convention and so fails closed on a
+  // host that means something else — a second click, rather than a deletion
   // nobody asked for.
   const raw = await whileUserDecides(() => showMessageBox({
     type: options.destructive ? 'warning' : 'question',
