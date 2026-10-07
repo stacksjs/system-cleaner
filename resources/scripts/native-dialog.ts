@@ -39,13 +39,25 @@ const APP_NAME = 'SystemCleaner'
  * stranded anywhere else is still reaped. Depth-counted because the pickers go
  * through the same helper and a sheet can open over one.
  */
+/**
+ * How long someone gets to answer before the bridge abandons the request.
+ *
+ * This used to pass 0, which switches the reaper off entirely. That does stop
+ * a slow reader's answer being thrown away, and it also means a reply that
+ * never arrives hangs the click forever with nothing on screen — no error, no
+ * toast, no way to tell a wedged dialog from one nobody clicked. Five minutes
+ * is far longer than anyone spends on a two-line sheet and short enough that a
+ * bridge which has stopped answering still surfaces as a failure.
+ */
+const DECISION_TIMEOUT_MS = 300_000
+
 let decisionsInFlight = 0
 
 async function whileUserDecides<T>(call: () => Promise<T>): Promise<T> {
   const host = window as unknown as { __craftBridgeRequestTimeoutMs?: number }
   const previous = host.__craftBridgeRequestTimeoutMs
   if (decisionsInFlight === 0)
-    host.__craftBridgeRequestTimeoutMs = 0
+    host.__craftBridgeRequestTimeoutMs = DECISION_TIMEOUT_MS
   decisionsInFlight++
   try {
     return await call()
@@ -131,33 +143,33 @@ async function nativeConfirm(options: ConfirmOptions): Promise<boolean> {
     const prompt = options.message
       ? `${options.title}\n\n${options.message}`
       : options.title
-    // Reaping this one would discard an answer the user did give; and an
-    // error escaping here kills the @click handler that called us, with no
-    // banner since a01d4c0 to show for it. Decline instead: a question we
-    // could not hear the answer to is not a yes.
-    let answer: unknown
-    try {
-      answer = await whileUserDecides(() => dialogApi.showConfirm!(prompt))
-    }
-    catch {
-      return false
-    }
-
     // Craft answers `{ ok: true }`, not a bare boolean — craft-native's own
     // wrapper reads `!!(payload && payload.ok === true)` for this exact
     // reason. Accept either, because the documented return type is boolean
     // and a host that honours it should also work.
     //
-    // Everything else declines. A host answering in a third shape costs a
-    // click; reading an unknown shape as consent costs a folder.
-    if (answer === true)
-      return true
-    if (answer && typeof answer === 'object')
-      return (answer as { ok?: unknown }).ok === true
-    return false
+    // Anything else falls through to `showMessageBox` below rather than being
+    // read as a decision. Returning false here instead is what made a sheet
+    // the user had already confirmed do nothing at all: a rejected call and a
+    // shape this does not recognise both became a silent "no", which is
+    // indistinguishable from a dead button. An unrecognised answer is not a
+    // refusal, it is a reason to ask again by another route.
+    try {
+      const answer = await whileUserDecides(() => dialogApi.showConfirm!(prompt))
+
+      if (answer === true)
+        return true
+      if (answer && typeof answer === 'object' && 'ok' in (answer as object))
+        return (answer as { ok?: unknown }).ok === true
+    }
+    catch {
+      // Bridge unavailable, reaped, or threw. Fall through.
+    }
   }
 
-  // No showConfirm on this host. Fall back to the index comparison, which
+  // Reached when the host has no `showConfirm`, and also when it has one that
+  // failed or answered in a shape this cannot read. Fall back to the index
+  // comparison, which
   // reads the documented 0-based convention and so fails closed on a host
   // that means something else — a second click, rather than a deletion
   // nobody asked for.
