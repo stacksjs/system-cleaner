@@ -1,5 +1,26 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.4...v0.3.5)
+
+## 🐛 Bug Fixes
+
+- **dialogs**: re-ask when the bridge loses an answer, by the route that works ([2ef66a2](https://github.com/stacksjs/system-cleaner/commit/2ef66a2)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **api**: forget measured sizes everywhere something is deleted ([836ac71](https://github.com/stacksjs/system-cleaner/commit/836ac71)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **dialogs**: bound the decision timeout and stop swallowing an unreadable answer ([8df0584](https://github.com/stacksjs/system-cleaner/commit/8df0584)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **api**: forget measured sizes when something is deleted ([e8fa993](https://github.com/stacksjs/system-cleaner/commit/e8fa993)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+
+## 📝 Documentation
+
+- **changelog**: repair the links the generator invented for v0.3.4 ([032b866](https://github.com/stacksjs/system-cleaner/commit/032b866)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#242](https://github.com/stacksjs/system-cleaner/issues/242), [#98989](https://github.com/stacksjs/system-cleaner/issues/98989), [#000](https://github.com/stacksjs/system-cleaner/issues/000), [#2040](https://github.com/stacksjs/system-cleaner/issues/2040), [#2041](https://github.com/stacksjs/system-cleaner/issues/2041), [#20](https://github.com/stacksjs/system-cleaner/issues/20), [#6](https://github.com/stacksjs/system-cleaner/issues/6))
+
+## 🔧 Chores
+
+- **desktop**: let a build open devtools when asked ([4fef1f2](https://github.com/stacksjs/system-cleaner/commit/4fef1f2)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+
+## Contributors
+
+- _glennmichael123 <gtorregosa@gmail.com>_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.3...v0.3.4)
 
 ## ✨ Features
