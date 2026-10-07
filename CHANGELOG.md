@@ -11,7 +11,7 @@
 
 ## 📝 Documentation
 
-- **changelog**: repair the links the generator invented for v0.3.4 ([032b866](https://github.com/stacksjs/system-cleaner/commit/032b866)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#242](https://github.com/stacksjs/system-cleaner/issues/242), [#98989](https://github.com/stacksjs/system-cleaner/issues/98989), [#000](https://github.com/stacksjs/system-cleaner/issues/000), [#2040](https://github.com/stacksjs/system-cleaner/issues/2040), [#2041](https://github.com/stacksjs/system-cleaner/issues/2041), [#20](https://github.com/stacksjs/system-cleaner/issues/20), [#6](https://github.com/stacksjs/system-cleaner/issues/6))
+- **changelog**: repair the links the generator invented for v0.3.4 ([032b866](https://github.com/stacksjs/system-cleaner/commit/032b866)) _(by glennmichael123 <gtorregosa@gmail.com>)_
 
 ## 🔧 Chores
 
