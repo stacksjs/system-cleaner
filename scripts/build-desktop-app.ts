@@ -240,11 +240,81 @@ run('./buddy', ['build:desktop'])
 
 // ── 5. Bundle and image ─────────────────────────────────────────
 console.log('[desktop] packaging')
+/** Staging directories `build:dmg` leaves in the temp dir, by name. */
+function stagingDirs(): Set<string> {
+  try {
+    return new Set(fs.readdirSync(os.tmpdir()).filter(d => d.startsWith('stacks-dmg-')))
+  }
+  catch {
+    return new Set()
+  }
+}
+
+/**
+ * Image the bundle `build:dmg` staged but could not write.
+ *
+ * `buddy build:dmg` always names the volume after the app, so the staged
+ * bundle lands at `/Volumes/SystemCleaner/SystemCleaner.app`. On a Mac where
+ * SystemCleaner is already installed, macOS refuses that path outright:
+ *
+ *     could not access /Volumes/SystemCleaner/SystemCleaner.app
+ *     hdiutil: create failed - Operation not permitted
+ *
+ * The installed copy carries `com.apple.macl` and `com.apple.provenance`, so
+ * TCC is managing that bundle and will not let a process without App
+ * Management rights create one that shadows it. Nothing is wrong with the
+ * build: the `.app` is complete by this point and only the final imaging
+ * fails, which is why this re-images rather than reporting a failure.
+ *
+ * Naming the volume `SystemCleaner <version>` sidesteps it and is the usual
+ * macOS convention anyway. Developers without the app installed never hit the
+ * collision and never reach here.
+ */
+function imageStagedBundle(before: Set<string>): void {
+  const tmp = os.tmpdir()
+  const staged = fs.readdirSync(tmp)
+    .filter(d => d.startsWith('stacks-dmg-') && !before.has(d))
+    .map(d => path.join(tmp, d))
+    .filter(d => fs.existsSync(path.join(d, `${APP_NAME}.app`)))
+
+  if (staged.length === 0)
+    throw new Error('build:dmg failed before it staged a bundle - nothing to image')
+
+  // Newest wins: a run stages more than one directory, only one holds the app.
+  staged.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)
+
+  const outDir = path.join(ROOT, 'storage/framework/desktop-dmg')
+  fs.mkdirSync(outDir, { recursive: true })
+  const out = path.join(outDir, `${APP_NAME}-${APP_VERSION}.dmg`)
+  fs.rmSync(out, { force: true })
+
+  const volume = `${APP_NAME} ${APP_VERSION}`
+  console.log(`[desktop] re-imaging as "${volume}" (the app name collides with the installed copy)`)
+  const imaged = spawnSync('hdiutil', [
+    'create', '-volname', volume, '-srcfolder', staged[0], '-ov', '-format', 'UDZO', out,
+  ], { stdio: 'inherit' })
+  if (imaged.status !== 0)
+    throw new Error(`hdiutil failed to image ${out}`)
+
+  // build:dmg removes its staging only after a successful create, so a failed
+  // run leaves ~90 MB behind each time. Clear what this run made.
+  for (const d of fs.readdirSync(tmp)) {
+    if (d.startsWith('stacks-dmg-') && !before.has(d))
+      fs.rmSync(path.join(tmp, d), { recursive: true, force: true })
+  }
+}
+
 // The framework cannot yet distinguish executable payloads from its JSON
 // metadata when signing an app with a userland launcher. Build the image
 // unsigned here; `sealSignedBundle` below performs the authoritative,
 // verified inside-out signing pass.
-run('./buddy', ['build:dmg'], { DESKTOP_SIGNING_IDENTITY: '' })
+const stagedBefore = stagingDirs()
+try {
+  run('./buddy', ['build:dmg'], { DESKTOP_SIGNING_IDENTITY: '' })
+}
+catch {
+  imageStagedBundle(stagedBefore)
+}
 
 const dmgDir = path.join(ROOT, 'storage/framework/desktop-dmg')
 const dmg = (fs.existsSync(dmgDir) ? fs.readdirSync(dmgDir) : []).find(file => file.endsWith('.dmg'))
