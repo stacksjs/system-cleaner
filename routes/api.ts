@@ -4,7 +4,9 @@ import * as path from 'node:path';
 import process from 'node:process';
 import {
   isPathSafe,
+  capabilities,
   classifyByGit,
+  PLATFORM,
   getDirSize,
   HOME,
   sanitizePackageName,
@@ -523,6 +525,20 @@ export default async function (router: Router) {
     invalidateStartupCache();
     dashboardStatsCache.clear();
     return Response.json(result);
+  });
+
+  /**
+   * What this build can actually do on the machine it is running on.
+   *
+   * Screens ask once and render a reason instead of an empty table. Without
+   * it a platform with no implementation reports "0 B recoverable", which a
+   * user reads as "already clean" rather than "cannot see" - the worst
+   * available answer from a tool whose entire claim is what it can reclaim.
+   *
+   * See stacksjs/system-cleaner#23.
+   */
+  await router.post('/platform', async () => {
+    return Response.json({ success: true, platform: PLATFORM, capabilities });
   });
 
   await router.post('/dir-sizes', async (req: Request) => {

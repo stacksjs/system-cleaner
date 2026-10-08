@@ -210,6 +210,93 @@ export const macPaths = {
 } as const
 
 /**
+ * The same concepts on Windows, and `null` where there is no such concept.
+ *
+ * Null is the whole point. Windows has no per-user "Library", no launch
+ * agents, no saved application state, and preferences live in the registry
+ * rather than on disk. Mapping those onto a plausible-looking directory would
+ * make the cleaner scan something that was never the thing it meant - and this
+ * app deletes what it scans. A caller that gets `null` is being told to skip
+ * the feature, which is what `capabilities` in ./platform is for.
+ *
+ * Built from a function so the env can be injected in a test; on macOS every
+ * one of these variables is undefined, and a bare `process.env.X` map would
+ * silently become a set of relative paths rooted at the CWD.
+ */
+export function buildWinPaths(env: Record<string, string | undefined> = process.env): WinPaths {
+  // On a real Windows box these are always set. The fallbacks exist so the
+  // shape can be asserted in a test from any platform, and are deliberately
+  // absolute so a mistake shows up as a wrong path rather than a relative one.
+  const home = env.USERPROFILE || HOME
+  const local = env.LOCALAPPDATA || path.win32.join(home, 'AppData', 'Local')
+  const roaming = env.APPDATA || path.win32.join(home, 'AppData', 'Roaming')
+  const programData = env.PROGRAMDATA || 'C:\\ProgramData'
+  const programFiles = env.ProgramFiles || 'C:\\Program Files'
+  const windir = env.SystemRoot || env.windir || 'C:\\Windows'
+  const temp = env.TEMP || env.TMP || path.win32.join(local, 'Temp')
+  const systemDrive = env.SystemDrive || 'C:'
+
+  return {
+    localAppData: local,
+    roamingAppData: roaming,
+    programData,
+    temp,
+    windowsTemp: path.win32.join(windir, 'Temp'),
+    prefetch: path.win32.join(windir, 'Prefetch'),
+    // Windows writes user-mode crash dumps here when configured to; the
+    // directory is absent until the first dump, which callers must tolerate.
+    crashReports: path.win32.join(local, 'CrashDumps'),
+    // Per-volume and SID-scoped. This is the root, not the user's own folder,
+    // so anything touching it has to resolve the SID first - which is why
+    // emptying the Recycle Bin is a shell API call and not an rmdir.
+    recycleBin: path.win32.join(systemDrive, '$Recycle.Bin'),
+    systemApplications: programFiles,
+    systemLogs: path.win32.join(windir, 'Logs'),
+
+    // No Windows equivalent. Listed rather than omitted so the gap is visible
+    // in one place instead of being rediscovered at each call site.
+    libraryDir: null,
+    logs: null,
+    preferences: null,
+    cookies: null,
+    launchAgents: null,
+    savedState: null,
+    httpStorages: null,
+    webkit: null,
+    containers: null,
+    groupContainers: null,
+    systemLaunchAgents: null,
+    systemLaunchDaemons: null,
+  }
+}
+
+export interface WinPaths {
+  localAppData: string
+  roamingAppData: string
+  programData: string
+  temp: string
+  windowsTemp: string
+  prefetch: string
+  crashReports: string
+  recycleBin: string
+  systemApplications: string
+  systemLogs: string
+
+  libraryDir: null
+  logs: null
+  preferences: null
+  cookies: null
+  launchAgents: null
+  savedState: null
+  httpStorages: null
+  webkit: null
+  containers: null
+  groupContainers: null
+  systemLaunchAgents: null
+  systemLaunchDaemons: null
+}
+
+/**
  * Safely read a directory, returning empty array on failure
  */
 export function safeReadDir(dirPath: string): string[] {
