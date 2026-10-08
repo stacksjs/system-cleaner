@@ -100,6 +100,61 @@ jobs:
       - name: Unit Test
         run: bun test
 
+  # The Windows spike for stacksjs/system-cleaner#23.
+  #
+  # Non-blocking on purpose. Nothing is implemented for Windows yet - the
+  # capability map says so, and every feature flag there is false - so this job
+  # exists to report how far the suite gets, not to gate a merge. Making it
+  # required before there is anything to require would just mean disabling it.
+  #
+  # What it answers, which cannot be answered from a Mac: whether `bun install`
+  # and the suite run at all on Windows, and which assumptions break first.
+  # Path separators and permission semantics are the two that macOS and Linux
+  # both hide from each other.
+  #
+  # `shell: bash` throughout because `buddy` is a /bin/sh script and the runner
+  # defaults to PowerShell; Git Bash ships on windows-latest.
+  test-windows:
+    runs-on: windows-latest
+    continue-on-error: true
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Dependencies
+        run: bun install
+
+      - name: Build client scripts
+        run: bun run build:scripts
+
+      - name: Generate migrations
+        run: ./buddy migrate:regenerate --force
+
+      # Printed before the suite so the log says what the app thinks it is even
+      # when the tests below fall over.
+      - name: What the app thinks it is running on
+        run: |
+          bun -e "
+            const { PLATFORM, capabilities } = await import('./packages/core/src/platform.ts')
+            console.log('platform:', PLATFORM)
+            console.log('capabilities:', JSON.stringify(capabilities, null, 2))
+          "
+
+      # The platform layer is the part that is supposed to work here already.
+      # If this fails, the foundation is wrong rather than merely incomplete.
+      - name: Platform layer
+        run: bun test tests/platform-support.test.ts
+
+      - name: Full suite, for the record
+        run: bun test --timeout 30000
+
   # Compiles the release artifact on every push so a broken CLI is caught here
   # rather than after a tag has already been pushed.
   binaries:
