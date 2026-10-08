@@ -3,10 +3,21 @@
 // Compiles the `system-cleaner` CLI into standalone binaries and zips each one
 // for the GitHub release.
 //
-// macOS targets only, on purpose: the CLI reads `~/Library`, `/Applications`,
-// and `df -k` output, so a linux or windows build would compile and then fail
-// on the first command. The release workflow attaches exactly what this
-// produces, so adding a target here is the only place that needs editing.
+// The release workflow attaches exactly what this produces, so adding a target
+// here is the only place that needs editing.
+//
+// macOS is the only RELEASE target. The CLI reads `~/Library`, `/Applications`
+// and `df -k`, so a build for anywhere else compiles and then finds nothing on
+// the first command.
+//
+// Windows is built but not released, behind --preview. Now that the CLI
+// refuses a command the platform cannot carry out, that binary fails honestly:
+// `system-cleaner clean` on Windows names the missing feature and exits 1,
+// rather than reporting 0 B reclaimable and looking like a clean machine. That
+// makes it worth compiling in CI, where it guards the toolchain and catches
+// the next change that assumes a POSIX path. It is not worth shipping until
+// the capability flags in @system-cleaner/core turn true.
+// See stacksjs/system-cleaner#23.
 //
 // Apple silicon only, also on purpose: Bun stopped publishing a
 // `bun-darwin-x64` runtime as of 1.4, so `--target=bun-darwin-x64` fails at
@@ -16,10 +27,18 @@
 import { spawnSync } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
+import process from 'node:process'
 
-const TARGETS = [
+const RELEASE_TARGETS = [
   { target: 'bun-darwin-arm64', name: 'system-cleaner-darwin-arm64' },
 ] as const
+
+const PREVIEW_TARGETS = [
+  { target: 'bun-windows-x64', name: 'system-cleaner-windows-x64' },
+] as const
+
+const TARGETS: readonly { target: string, name: string }[]
+  = process.argv.includes('--preview') ? [...RELEASE_TARGETS, ...PREVIEW_TARGETS] : RELEASE_TARGETS
 
 const ROOT = process.cwd()
 const ENTRY = path.join(ROOT, 'packages/cli/bin/system-cleaner.ts')
@@ -39,8 +58,10 @@ function run(cmd: string, args: string[]): void {
 let built = 0
 
 for (const { target, name } of TARGETS) {
-  const binary = path.join(OUT_DIR, name)
-  const archive = `${binary}.zip`
+  // Windows will not execute a file without the extension, and `bun build`
+  // does not add one.
+  const binary = path.join(OUT_DIR, target.includes('windows') ? `${name}.exe` : name)
+  const archive = `${path.join(OUT_DIR, name)}.zip`
 
   console.warn(`[binaries] building ${name}`)
   run('bun', ['build', ENTRY, '--compile', `--target=${target}`, '--outfile', binary])

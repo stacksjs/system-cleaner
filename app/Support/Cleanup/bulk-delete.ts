@@ -1,6 +1,6 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { formatBytes, getDirSize, isPathSafe, classifyByGit } from '@system-cleaner/core'
+import { formatBytes, getDirSize, isPathSafe, classifyByGit, refusesDeletion } from '@system-cleaner/core'
 import { moveManyToTrash } from '@system-cleaner/disk'
 import CleanupRun from '../../Models/CleanupRun'
 import ProtectedPath from '../../Models/ProtectedPath'
@@ -152,8 +152,14 @@ export async function bulkDelete(
 
   const deletable: string[] = []
   for (const target of unique) {
-    if (disposition.get(target) === 'tracked') {
-      skipped.push({ path: target, reason: 'Git tracks files here — deleting it would destroy committed work' })
+    const verdict = disposition.get(target) ?? 'unknown'
+    if (refusesDeletion(verdict)) {
+      skipped.push({
+        path: target,
+        reason: verdict === 'tracked'
+          ? 'Git tracks files here — deleting it would destroy committed work'
+          : 'Inside a git repository and git could not be asked what is tracked',
+      })
       continue
     }
 

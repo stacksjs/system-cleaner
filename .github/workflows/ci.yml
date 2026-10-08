@@ -158,6 +158,45 @@ jobs:
       - name: Full suite, for the record
         run: bun test --timeout 30000
 
+      # The first actual .exe. Built here rather than cross-compiled from the
+      # macOS release job, because `bun build --target=bun-windows-x64`
+      # downloads a runtime matching the local bun and the release runner may
+      # be ahead of the published stable.
+      #
+      # Not attached to a release. The capability flags are all false, so every
+      # cleaning command refuses - which is the point of building it: the
+      # binary proves the toolchain and fails honestly, instead of shipping
+      # something that reports 0 B reclaimable and looks like a clean machine.
+      - name: Build the Windows preview binary
+        run: bun run build:binaries --preview
+
+      # A binary that compiles and then lies is worse than no binary. Assert it
+      # runs, and that a command this platform cannot carry out says which
+      # feature is missing and exits non-zero.
+      - name: Smoke-test it
+        run: |
+          set -e
+          exe=packages/cli/bin/system-cleaner-windows-x64.exe
+          test -f "$exe" || { echo "no .exe produced"; exit 1; }
+          echo "--- version ---"
+          ./"$exe" --version
+          echo "--- an unsupported command must refuse, not find nothing ---"
+          if out=$(./"$exe" clean 2>&1); then
+            echo "FAIL: clean exited 0 on a platform with no implementation"
+            echo "$out"
+            exit 1
+          fi
+          echo "$out"
+          echo "$out" | grep -qi "not implemented on Windows" \
+            || { echo "FAIL: refusal did not name the platform"; exit 1; }
+
+      - name: Keep the binary for inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: system-cleaner-windows-x64
+          path: packages/cli/bin/system-cleaner-windows-x64.zip
+          if-no-files-found: error
+
   # Compiles the release artifact on every push so a broken CLI is caught here
   # rather than after a tag has already been pushed.
   binaries:
