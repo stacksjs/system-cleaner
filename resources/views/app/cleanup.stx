@@ -138,17 +138,37 @@ async function doCleanDir(p, name, id, risk) {
   _exec("markCleaning(" + JSON.stringify(id) + ")");
   _api('/api/clean-dir', { path: p }).then(function(r) {
     _exec("clearCleaning(" + JSON.stringify(id) + ")");
-    if (r.success) {
+
+    // Refresh whenever bytes actually went, not only after a flawless sweep.
+    //
+    // /clean-dir reports success only when its error list is empty, so one
+    // file held open by a running app turns a clean that freed gigabytes into
+    // success:false. Gating the refresh on that flag left the row sitting at
+    // its pre-delete size under a "Clean failed" toast - the original
+    // "nothing happened" symptom, on the path where it is most likely rather
+    // than least: ~/Library/Caches always has a few files locked by whatever
+    // happens to be running.
+    var freed = r.freedBytes || 0;
+    var removed = r.success || freed > 0 || r.measured === false;
+    var failedCount = (r.errors || []).length;
+
+    if (removed) {
       try { localStorage.removeItem(CACHE_KEY); } catch (e) {}
-      // An unmeasured clean really did happen; only its size is unknown.
-      // Saying "freed 0 B" would read as a failure.
-      var freedNote = r.measured === false ? '' : ' - freed ' + _fmtBytes(r.freedBytes);
-      _exec("toast('Cleaned " + name.replace(/'/g, "\\'") + freedNote + "', 'success')");
       // Re-scan so the row's size cell reflects the cleaned-up state
       // instead of holding stale numbers until the user manually rescans.
       scanCleanupSizes(true);
     }
-    else _exec("toast('Clean failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");
+
+    // An unmeasured clean really did happen; only its size is unknown.
+    // Saying "freed 0 B" would read as a failure.
+    var freedNote = r.measured === false ? '' : ' - freed ' + _fmtBytes(freed);
+
+    if (r.success)
+      _exec("toast('Cleaned " + name.replace(/'/g, "\\'") + freedNote + "', 'success')");
+    else if (removed)
+      _exec("toast(" + JSON.stringify('Cleaned ' + name + freedNote + ' - ' + failedCount + ' item' + (failedCount === 1 ? '' : 's') + ' in use, left in place') + ", 'info')");
+    else
+      _exec("toast('Clean failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");
   }).catch(_apiCatch('Clean failed', { clearCleaning: id }));
 }
 
@@ -160,7 +180,10 @@ async function doEmptyTrash() {
     destructive: true,
   })) return;
   _api('/api/empty-trash', {}).then(function(r) {
-    if (r.success) {
+    // Same reasoning as doCleanDir: an item the Finder still has open makes
+    // this report failure after emptying everything else, and the Trash row
+    // must not keep its old figure on that path.
+    if (r.success || (r.freedBytes || 0) > 0) {
       // Same two steps doCleanDir takes, and for the same reason. The server
       // forgets its measured sizes, but the client keeps its own five-minute
       // copy in localStorage; without dropping that and rescanning, the next
@@ -168,7 +191,8 @@ async function doEmptyTrash() {
       // Recoverable never moves. The toast says 12 GB freed, the table
       // disagrees, and the server-side fix is invisible from here.
       try { localStorage.removeItem(CACHE_KEY); } catch (e) {}
-      _exec("toast(" + JSON.stringify('Trash emptied - freed ' + _fmtBytes(r.freedBytes)) + ", 'success')");
+      _exec("toast(" + JSON.stringify('Trash emptied - freed ' + _fmtBytes(r.freedBytes || 0)) + ", "
+        + (r.success ? "'success')" : "'info')"));
       scanCleanupSizes(true);
     }
     else _exec("toast('Failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");
@@ -260,8 +284,12 @@ async function doCleanSelected() {
     // to a method that assigns a new object.
     _exec("markCleaning(" + JSON.stringify(t.id) + ")");
     _api('/api/clean-dir', { path: t.path }).then(function(r) {
-      if (r && r.success) freed += r.freedBytes || 0;
-      else failed++;
+      // Count the bytes a partial clean freed. success is false whenever any
+      // entry could not be removed, so crediting only flawless cleans made a
+      // run that freed gigabytes report them as zero and call itself failed.
+      var got = (r && r.freedBytes) || 0;
+      freed += got;
+      if (!r || (!r.success && got === 0 && r.measured !== false)) failed++;
       settle(t.id);
     }).catch(function() {
       failed++;
@@ -376,8 +404,21 @@ function scanCleanupSizes(force) {
   rows.forEach(function(r) { paths.push(r.getAttribute('data-clean-path')); });
   if (paths.length === 0) return;
 
+  // Put the screen back into its loading state. The class was only ever
+  // removed, never re-added, so every rescan after the first rendered the word
+  // "Scanning" in --green - the success colour - which is the one thing the
+  // markup's own comment says not to do. Dim the existing size cells too: the
+  // old figures stay readable while the walk runs, but reading as superseded
+  // rather than as current.
   var totalEl = document.getElementById('total-cleanable');
-  if (totalEl) totalEl.textContent = 'Scanning...';
+  if (totalEl) {
+    totalEl.textContent = 'Scanning';
+    totalEl.classList.add('is-scanning');
+  }
+  rows.forEach(function(r) {
+    var cell = r.querySelector('.clean-size');
+    if (cell) cell.classList.add('is-pending');
+  });
 
   // A forced rescan supersedes a walk already in flight instead of being
   // dropped by the single-flight guard. Deduping is right for two cold loads

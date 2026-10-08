@@ -58,6 +58,68 @@ describe('cleanup screen refresh', () => {
   })
 
   /**
+   * A clean that freed bytes must refresh, even when it reports failure.
+   *
+   * `/clean-dir` returns `success: result.errors.length === 0`, so a single
+   * entry it could not remove turns a clean that freed gigabytes into
+   * `success: false` with `freedBytes` well above zero. Gating the refresh on
+   * that flag left the row at its pre-delete size under a "Clean failed"
+   * toast - the original stale-number symptom, on the path where it is most
+   * likely rather than least: a live `~/Library/Caches` always holds a few
+   * files open by whatever is running, so the partial failure is the common
+   * case.
+   *
+   * The guard has to consider what was actually freed. `if (r.success)` alone
+   * is the bug.
+   */
+  it('refreshes after a partial clean, not only a flawless one', async () => {
+    const source = await Bun.file(CLEANUP).text()
+    const offenders: string[] = []
+
+    for (const handler of handlers(source)) {
+      const drop = handler.body.indexOf('removeItem(CACHE_KEY)')
+      if (drop === -1) continue
+
+      // The condition guarding the cache drop: the last `if (...)` above it.
+      const before = handler.body.slice(0, drop)
+      const open = before.lastIndexOf('if (')
+      if (open === -1) {
+        offenders.push(`${handler.name} drops CACHE_KEY under no condition at all`)
+        continue
+      }
+
+      let depth = 0
+      let close = open + 3
+      for (; close < before.length; close++) {
+        if (before[close] === '(') depth++
+        else if (before[close] === ')' && --depth === 0) break
+      }
+      const condition = before.slice(open + 4, close).trim()
+
+      // doCleanSelected guards on the completion counter, not the response -
+      // it refreshes once every target has settled, success or not.
+      if (/done <|done ===|targets\.length/.test(condition)) continue
+
+      // Resolve a bare identifier back to what it was assigned, so a guard
+      // written as `if (removed)` is judged on what `removed` actually means.
+      // Testing the whole body instead would pass on the broken version,
+      // which mentions freedBytes in its toast.
+      let expr = condition
+      if (/^[A-Za-z_$][\w$]*$/.test(condition)) {
+        const assigned = handler.body.match(new RegExp(`var\\s+${condition}\\s*=\\s*([^;]+);`))
+        if (assigned) expr = assigned[1]
+      }
+
+      if (!/freedBytes|freed\b|measured/.test(expr))
+        offenders.push(`${handler.name} guards the refresh on "${expr}" without considering what was freed`)
+    }
+
+    expect(handlers(source).filter(h => h.body.includes('removeItem(CACHE_KEY)')).length)
+      .toBeGreaterThan(0)
+    expect(offenders).toEqual([])
+  })
+
+  /**
    * A forced rescan must supersede a walk already in flight.
    *
    * The scan is single-flighted, which is right for two cold loads racing and
