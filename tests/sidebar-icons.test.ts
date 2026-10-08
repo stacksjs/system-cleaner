@@ -1,4 +1,15 @@
 import { describe, expect, it } from 'bun:test'
+
+/**
+ * Glob output, with the platform separator folded to '/'.
+ *
+ * Bun.Glob yields backslash-separated paths on Windows, so every
+ * `startsWith('packages/cli/')` in this file silently matched nothing there -
+ * and the CLI files, which legitimately carry emoji, stopped being excluded.
+ */
+function posix(file: string): string {
+  return file.replaceAll('\\', '/')
+}
 import f7 from '@iconify-json/f7/icons.json'
 
 // `packages/` is included because clean targets, browser profiles, and startup
@@ -18,7 +29,7 @@ const sourceFiles = new Bun.Glob('{resources,app,packages}/**/*.{stx,ts,js}')
  * to be asked of this project's own source.
  */
 function isGenerated(file: string): boolean {
-  return file.startsWith('app/Desktop/Resources/')
+  return posix(file).startsWith('app/Desktop/Resources/')
 }
 
 // Emoji presentation ranges. Excludes the arrows and dingbats blocks that
@@ -53,7 +64,7 @@ describe('Framework7 icons', () => {
     const offenders: string[] = []
 
     for await (const file of sourceFiles.scan('.')) {
-      if (file.startsWith('packages/cli/') || isGenerated(file))
+      if (posix(file).startsWith('packages/cli/') || isGenerated(file))
         continue
       const source = await Bun.file(file).text()
       for (const [index, line] of source.split('\n').entries()) {

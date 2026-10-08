@@ -84,11 +84,19 @@ describe('bulkDelete', () => {
   })
 
   it('refuses paths outside the home directory', async () => {
-    const result = await bulk.bulkDelete(['/etc/hosts'], 'permanent', 'large-files')
+    // A real file outside the profile, chosen per platform: /etc/hosts does
+    // not exist on Windows, so the final assertion failed there even though
+    // the refusal itself worked. The test is about the refusal, not about
+    // which operating system ships which file.
+    const outside = process.platform === 'win32'
+      ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'drivers', 'etc', 'hosts')
+      : '/etc/hosts'
+
+    const result = await bulk.bulkDelete([outside], 'permanent', 'large-files')
 
     expect(result.succeeded).toEqual([])
     expect(result.skipped).toHaveLength(1)
-    expect(fs.existsSync('/etc/hosts')).toBe(true)
+    expect(fs.existsSync(outside), 'the file must still be there').toBe(true)
   })
 
   it('refuses paths inside sensitive directories', async () => {

@@ -89,7 +89,14 @@ describe('execSyncResult', () => {
   })
 
   it('captures stderr on failure', () => {
-    const r = execSyncResult('echo woops 1>&2; exit 1')
+    // A command that does not exist, rather than `echo woops 1>&2; exit 1`.
+    // That was POSIX shell syntax, and node's execSync runs cmd.exe on
+    // Windows, where `;` is not a separator - so the failure under test never
+    // happened and the assertion failed for the wrong reason. A missing
+    // binary fails the same way on every platform, which is the contract this
+    // is actually about: a non-zero exit must surface as ok:false with the
+    // reason preserved.
+    const r = execSyncResult('system-cleaner-no-such-command-9f3a')
     expect(r.ok).toBe(false)
     expect(r.stderr.length).toBeGreaterThan(0)
   })

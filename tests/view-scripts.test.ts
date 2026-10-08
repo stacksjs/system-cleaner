@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test'
+import * as path from 'node:path'
 
 /**
  * A view that calls a global must load the file that defines it.
@@ -77,7 +78,8 @@ describe('view scripts', () => {
       // Whatever this view renders, by component tag name.
       let combined = source
       for (const [componentFile, componentSource] of componentSources) {
-        const tag = componentFile.split('/').pop()!.replace(/\.stx$/, '')
+        // See client-scripts.test.ts: glob output uses the platform separator.
+        const tag = path.basename(componentFile).replace(/\.stx$/, '')
         if (new RegExp(`<${tag}\\b`).test(source))
           combined += `\n${componentSource}`
       }

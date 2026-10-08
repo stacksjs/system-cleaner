@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test'
+import * as path from 'node:path'
 
 /**
  * The bundled client scripts, and the tags that load them.
@@ -18,7 +19,10 @@ const MARKUP = new Bun.Glob('resources/**/*.stx')
 async function sourceNames(): Promise<string[]> {
   const names: string[] = []
   for await (const file of SOURCES.scan('.'))
-    names.push(file.split('/').pop()!.replace(/\.ts$/, ''))
+    // path.basename, not split('/'): Bun.Glob yields backslash-separated
+    // paths on Windows, where splitting on a forward slash returns the
+    // whole path and every name becomes `resources\scripts\foo`.
+    names.push(path.basename(file).replace(/\.ts$/, ''))
   return names.sort()
 }
 
