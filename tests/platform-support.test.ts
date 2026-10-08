@@ -131,3 +131,74 @@ describe('windows paths', () => {
     }
   })
 })
+
+/**
+ * The gate drives the built bundle, not the source, because what ships is
+ * public/platform-gate.js and the bundler sits between the two.
+ */
+describe('the platform gate replaces a screen that cannot work', () => {
+  const ALL_OFF = {
+    cleanTargets: false, diskScan: false, developerJunk: false, appUninstall: false,
+    startupItems: false, privacy: false, maintenance: false, processes: false, trash: false,
+  }
+
+  async function run(pathname: string, platform: string, caps: Record<string, boolean>, ok = true) {
+    const src = await Bun.file('public/platform-gate.js').text()
+    const main = {
+      _html: '<table>real content</table>',
+      _attrs: {} as Record<string, string>,
+      getAttribute(k: string) { return this._attrs[k] ?? null },
+      setAttribute(k: string, v: string) { this._attrs[k] = v },
+      removeAttribute(k: string) { delete this._attrs[k] },
+      set innerHTML(v: string) { this._html = v },
+      get innerHTML() { return this._html },
+    }
+    const win = {
+      location: { pathname },
+      addEventListener() {},
+      MutationObserver: class { observe() {} },
+    }
+    const doc = {
+      readyState: 'complete',
+      addEventListener() {},
+      querySelector: (s: string) => (s === '[data-stx-content]' ? main : null),
+    }
+    const fetchStub = async () => ({
+      json: async () => (ok ? { success: true, platform, capabilities: caps } : { success: false }),
+    })
+    // eslint-disable-next-line no-new-func
+    new Function('window', 'document', 'fetch', 'MutationObserver', src)(win, doc, fetchStub, win.MutationObserver)
+    await new Promise(r => setTimeout(r, 60))
+    return main
+  }
+
+  it('replaces an unsupported screen and names the feature', async () => {
+    const main = await run('/app/cleanup', 'windows', ALL_OFF)
+    expect(main.getAttribute('data-platform-gated')).toBe('cleanTargets')
+    expect(main.innerHTML).toContain('Quick Clean')
+    expect(main.innerHTML).toContain('Windows')
+    // The reassurance matters as much as the refusal: a cleaner that renders
+    // an unexplained wall should say whether it touched anything.
+    expect(main.innerHTML).toContain('No files were scanned')
+  })
+
+  it('leaves a supported screen completely alone', async () => {
+    const main = await run('/app/cleanup', 'macos', { ...ALL_OFF, cleanTargets: true })
+    expect(main.getAttribute('data-platform-gated')).toBeNull()
+    expect(main.innerHTML).toBe('<table>real content</table>')
+  })
+
+  it('leaves an ungated route alone even when everything is off', async () => {
+    const main = await run('/app', 'windows', ALL_OFF)
+    expect(main.innerHTML).toBe('<table>real content</table>')
+  })
+
+  /**
+   * An agent without the route is an older build, which only ever ran on
+   * macOS. Gating on a missing endpoint would hide working features.
+   */
+  it('does nothing when the agent has no /platform route', async () => {
+    const main = await run('/app/cleanup', 'windows', ALL_OFF, false)
+    expect(main.innerHTML).toBe('<table>real content</table>')
+  })
+})
