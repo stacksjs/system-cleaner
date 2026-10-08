@@ -55,6 +55,7 @@ import { categoryPresentation, findProjectArtifacts, shredPaths } from '@system-
 import { getTopProcesses, summarizeProcesses } from '@system-cleaner/monitor';
 import { recordSystemActivity } from '../app/Support/System/activity-chart';
 import { isLocalAgent } from '../app/Support/Runtime/local-agent';
+import { invalidateVpnCache, readVpnStatus } from '../app/Support/Vpn/status';
 import {
   bulkDelete,
   cleanupHistory,
@@ -1958,5 +1959,24 @@ export default async function (router: Router) {
     // every measured size is suspect afterwards.
     invalidateSizeCaches();
     return Response.json({ success: outcome.errors.length === 0, ...outcome });
+  });
+
+  // ── VPN ──────────────────────────────────────────────────────
+
+  /**
+   * Read-only status of the localtunnels VPN on this machine.
+   *
+   * Observes only: it creates no interface, generates no key and asks for no
+   * password, so opening the panel changes nothing. `refresh` re-probes the
+   * CLI, whose answer is otherwise cached for a minute.
+   *
+   * Bringing a tunnel up needs root, which needs a privileged helper this app
+   * does not have yet — so there is deliberately no counterpart to this route.
+   */
+  await router.post('/vpn-status', async (req: Request) => {
+    const body = await readJsonBody<{ refresh?: unknown }>(req);
+    if (body?.refresh === true)
+      invalidateVpnCache();
+    return Response.json({ success: true, ...readVpnStatus() });
   });
 }
