@@ -1,3 +1,4 @@
+import * as fs from 'node:fs'
 import * as os from 'node:os'
 import type { DiskInfo, SystemInfo } from './types'
 import { exec, execSync, shellEscape } from './exec'
@@ -160,4 +161,35 @@ export function isAppleSilicon(): boolean {
 export function getMacOSMajorVersion(): number {
   const version = execSync('sw_vers -productVersion')
   return Number.parseInt(version.split('.')[0]) || 0
+}
+
+/**
+ * Free bytes on the filesystem that holds this path, or null if it cannot be
+ * read.
+ *
+ * `statfs` rather than a directory walk, because the two disagree in exactly
+ * the case that matters. Unlinking a file a process still holds open removes
+ * its directory entry immediately but frees none of its blocks until the
+ * holder closes it. `du` stops counting the file; the disk does not give the
+ * space back. Measured on a 200 MB file held open by a live process:
+ *
+ *   du  delta: 200.0 MB freed
+ *   df  delta:  -0.1 MB freed
+ *   after the holder exited: the 200 MB came back
+ *
+ * So a clean that reports its `du` delta can claim hundreds of megabytes while
+ * Disk Free does not move - which is the complaint this app has already had
+ * once, for a different reason, in the words "its either misreading the size
+ * or cleaning here does nothing, just fake stuff".
+ *
+ * One syscall, ~0.4ms, and it agrees with `df` to the byte.
+ */
+export function freeSpaceOf(target: string): number | null {
+  try {
+    const st = fs.statfsSync(target)
+    return Number(st.bavail) * Number(st.bsize)
+  }
+  catch {
+    return null
+  }
 }

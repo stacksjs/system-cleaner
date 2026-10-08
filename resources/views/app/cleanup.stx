@@ -163,7 +163,16 @@ async function doCleanDir(p, name, id, risk) {
     // Saying "freed 0 B" would read as a failure.
     var freedNote = r.measured === false ? '' : ' - freed ' + _fmtBytes(freed);
 
-    if (r.success)
+    if (r.heldOpen) {
+      // The delete worked and the disk did not move. On Unix, unlinking a
+      // file a process still holds open frees nothing until that process
+      // closes it - a log a running service writes to is the ordinary case.
+      // Saying "freed 470 MB" here and watching Disk Free sit still is how
+      // this app earned "its either misreading the size or cleaning here does
+      // nothing, just fake stuff".
+      _exec("toast(" + JSON.stringify('Cleaned ' + name + ' - ' + _fmtBytes(freed) + ' will free up once the apps using those files are closed') + ", 'info')");
+    }
+    else if (r.success)
       _exec("toast('Cleaned " + name.replace(/'/g, "\\'") + freedNote + "', 'success')");
     else if (removed)
       _exec("toast(" + JSON.stringify('Cleaned ' + name + freedNote + ' - ' + failedCount + ' item' + (failedCount === 1 ? '' : 's') + ' in use, left in place') + ", 'info')");

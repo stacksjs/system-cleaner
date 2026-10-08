@@ -36,8 +36,20 @@ export interface CleanScanResult {
 export interface CleanResult {
   targetId: string
   targetName: string
+  /** Bytes whose directory entries went away. */
   freedBytes: number
   freedFormatted: string
+  /**
+   * Bytes the filesystem actually gave back, or null if it could not be read.
+   *
+   * Not the same thing as `freedBytes`, and the gap is the point. Unlinking a
+   * file a process holds open removes its directory entry at once and frees
+   * none of its blocks until the holder closes it, so a walk-based count can
+   * report hundreds of megabytes the disk never returned.
+   */
+  reclaimedBytes: number | null
+  /** True when a substantial delete freed almost nothing, which means something still holds those files open. */
+  heldOpen: boolean
   errors: string[]
   skipped: string[]
   success: boolean

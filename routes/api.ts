@@ -467,6 +467,13 @@ export default async function (router: Router) {
       // happened, so the UI says "Cleaned" rather than "0 B freed", which reads
       // as a failure.
       measured: result.measured,
+      // What the filesystem actually gave back, and whether something is
+      // still holding the deleted files open. A log a running service writes
+      // to keeps its blocks until that service restarts, so the delete
+      // succeeds and the disk does not move - which is indistinguishable from
+      // the app lying unless it says so.
+      reclaimedBytes: result.reclaimedBytes,
+      heldOpen: result.heldOpen,
       errors: result.errors.length ? result.errors : undefined,
     });
   });
