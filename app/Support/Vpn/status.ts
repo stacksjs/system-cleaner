@@ -163,9 +163,15 @@ export function readCore(): VpnCore {
     return core
   }
 
-  const version = execSyncResult(`${quote(cliPath)} --version`, { timeout: 5000 })
+  // Probed from a neutral directory. The CLI is a compiled Bun binary, and Bun
+  // reads `bunfig.toml` from the working directory — so probing it from inside
+  // this project made it inherit *this* app's preload and fail with
+  // `preload not found "@stacksjs/env/plugin.js"`. The health of someone
+  // else's binary must not depend on where this app happens to be running.
+  const at = { cwd: os.tmpdir() }
+  const version = execSyncResult(`${quote(cliPath)} --version`, { ...at, timeout: 5000 })
   // `vpn:selftest` needs no root: it runs entirely in-process.
-  const selftest = execSyncResult(`${quote(cliPath)} vpn:selftest`, { timeout: 20_000 })
+  const selftest = execSyncResult(`${quote(cliPath)} vpn:selftest`, { ...at, timeout: 20_000 })
   const healthy = selftest.ok && /VPN core is healthy/i.test(selftest.stdout)
 
   const core: VpnCore = {
