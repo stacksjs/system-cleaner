@@ -82,7 +82,9 @@ describe('vpn/status', () => {
 
   describe('identity', () => {
     it('points at the directory the CLI uses', () => {
-      expect(vpnDir()).toMatch(/\.localtunnels\/vpn$/)
+      // Separator-agnostic: the path is built with path.join, so it ends
+    // `.localtunnels\vpn` on Windows and the forward-slash form matched nothing.
+    expect(vpnDir()).toMatch(/\.localtunnels[\\/]vpn$/)
     })
 
     it('reads a public key, or reports none, without ever creating one', () => {

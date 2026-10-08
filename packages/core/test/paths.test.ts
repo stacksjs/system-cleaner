@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import process from 'node:process'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { HOME, isCleanable, isPathSafe } from '../src/paths'
@@ -40,6 +41,13 @@ describe('isPathSafe', () => {
   })
 
   it('rejects /Applications root but not the prefix check for /Applications/<App>', () => {
+    // macOS only, on purpose. Windows uninstalls through the registry rather
+    // than by deleting a bundle, so isPathSafe grants no equivalent allowance
+    // for Program Files - there, /Applications resolves to C:\Applications and
+    // is correctly refused as outside the profile.
+    if (process.platform === 'win32')
+      return
+
     expect(isPathSafe('/Applications').safe).toBe(false)
     const r = isPathSafe('/Applications/NotARealApp.app')
     expect(r.safe).toBe(false)

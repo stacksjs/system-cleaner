@@ -52,7 +52,20 @@ beforeAll(async () => {
 })
 
 afterAll(() => {
-  fs.rmSync(root, { recursive: true, force: true })
+  // Windows refuses to unlink a directory while anything still holds a handle
+  // inside it, and SQLite drops its file lock a moment after close() returns -
+  // so the first attempt failed EBUSY on the runner and took the whole suite
+  // down from an afterAll. Retry briefly, then give up: this is a temp
+  // directory, and failing to tidy it is not a test result.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      fs.rmSync(root, { recursive: true, force: true })
+      return
+    }
+    catch {
+      Bun.sleepSync(100)
+    }
+  }
 })
 
 describe('bulkDelete', () => {
