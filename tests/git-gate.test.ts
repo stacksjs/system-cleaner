@@ -160,7 +160,11 @@ describe('the scanner asks git before offering anything', () => {
 
     // The fixture commits a node_modules, which the pattern table rates
     // `safe` — so without the gate this assertion has nothing to catch.
-    const fixture = found.find(a => a.path.includes('fixture-pkg/node_modules'))
+    // path.join, not a literal '/': the scanner builds paths with the
+    // platform separator, and this assertion passed on macOS while failing on
+    // the Windows CI leg for no reason other than the slash.
+    const needle = path.join('fixture-pkg', 'node_modules')
+    const fixture = found.find(a => a.path.includes(needle))
     expect(fixture, 'the committed node_modules was scanned').toBeDefined()
     expect(fixture!.git).toBe('tracked')
     expect(fixture!.risk).toBe('blocked')
