@@ -2,9 +2,13 @@
 <div class='card-row'>
   <div class='card' style='grid-column: span 2;'>
     <div class='card-label'>Space Recoverable</div>
-    <!-- Turns green only once there is a real figure. Green on "Scanning…"
-         reads as a result, which it is not. -->
-    <div class='card-value clean-total is-scanning' id='total-cleanable'>Scanning&hellip;</div>
+    <!-- Turns green only once there is a real figure. Green on "Scanning"
+         reads as a result, which it is not. The ellipsis is gone because the
+         ring beside it already says the same thing, and the bar below carries
+         the waiting. Both are CSS-only: this slot's textContent belongs to
+         scanCleanupSizes. -->
+    <div class='card-value clean-total is-scanning' id='total-cleanable'>Scanning</div>
+    <div class='clean-scanbar' aria-hidden='true'></div>
     <div class='card-detail'><span id='cleanup-visible-count'>{{ cleanCategories.length }}</span> cleanable categories found</div>
   </div>
   <div class='card'>

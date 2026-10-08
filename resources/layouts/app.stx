@@ -677,8 +677,56 @@ const localAgent = isLocalAgent()
     /* Quick Clean: a size is dim until it is real, so a column of placeholders
        reads as pending rather than as data. Same for the headline total, which
        must not be green — the success colour — while it is still scanning. */
-    .clean-total.is-scanning { color: var(--secondary); }
-    .clean-total { color: var(--green); }
+    /* The scanning state, which is on screen for up to fifteen seconds while
+       ~76 directories are measured. One static word for that long reads as a
+       stall, so: a ring that turns, the label at label weight rather than as a
+       24px figure it is not yet, and an indeterminate bar underneath.
+
+       The ring is a pseudo-element because `scanCleanupSizes` owns this slot's
+       textContent - it swaps between "Scanning", a figure and an em dash - and
+       a child element would be wiped on the first write. The bar is a sibling
+       for the same reason, shown by the `~` combinator so no JS has to know
+       about it.
+
+       `min-height` is on the base class, not the scanning one, so the card
+       does not resize when the figure lands. */
+    .clean-total { display: flex; min-height: 29px; align-items: center; color: var(--green); }
+    .clean-total.is-scanning { gap: var(--space-2); color: var(--secondary); font-size: 15px; font-weight: 500; letter-spacing: 0; }
+    .clean-total.is-scanning::before {
+      content: '';
+      width: 13px;
+      height: 13px;
+      flex-shrink: 0;
+      border: 2px solid color-mix(in srgb, var(--accent) 22%, transparent);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: clean-scan-spin .7s linear infinite;
+    }
+    @keyframes clean-scan-spin { to { transform: rotate(360deg); } }
+    .clean-scanbar { display: none; }
+    .clean-total.is-scanning ~ .clean-scanbar {
+      display: block;
+      position: relative;
+      height: 2px;
+      margin: var(--space-1) 0 var(--space-tight);
+      overflow: hidden;
+      border-radius: 1px;
+      background: var(--line);
+    }
+    .clean-total.is-scanning ~ .clean-scanbar::after {
+      content: '';
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 38%;
+      border-radius: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      animation: clean-scanbar-slide 1.25s ease-in-out infinite;
+    }
+    @keyframes clean-scanbar-slide { from { transform: translateX(-100%); } to { transform: translateX(363%); } }
+    @media (prefers-reduced-motion: reduce) {
+      .clean-total.is-scanning::before { animation: none; border-top-color: color-mix(in srgb, var(--accent) 22%, transparent); }
+      .clean-total.is-scanning ~ .clean-scanbar::after { width: 100%; background: color-mix(in srgb, var(--accent) 40%, transparent); animation: none; }
+    }
     .clean-size { font-weight: 600; font-variant-numeric: tabular-nums; }
     .clean-size.is-pending { color: var(--tertiary); font-weight: 400; }
     /* Category filter above the Quick Clean table. Plain buttons, because the
