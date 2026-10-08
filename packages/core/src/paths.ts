@@ -1,40 +1,79 @@
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
+import process from 'node:process'
 import type { PathSafetyCheck } from './types'
+
+/**
+ * Windows compares paths without regard to case, and separates them with a
+ * backslash. Both matter here: `isPathSafe` is the one gate every destructive
+ * route passes through, and on Windows it had no opinion about either.
+ */
+const IS_WINDOWS = process.platform === 'win32'
+
+/** Path equality, as the running filesystem defines it. */
+function samePath(a: string, b: string): boolean {
+  return IS_WINDOWS ? a.toLowerCase() === b.toLowerCase() : a === b
+}
+
+/**
+ * Split into segments on whichever separator this platform writes.
+ *
+ * Gated on the platform rather than always splitting on both: a backslash is
+ * a legal character in a macOS filename, so splitting on it there would make
+ * a file named `notes\.ssh` read as a path containing an `.ssh` segment. That
+ * errs safe - it refuses rather than deletes - but it is still a wrong answer,
+ * and the behaviour on macOS should not move at all.
+ */
+function segmentsOf(p: string): string[] {
+  return IS_WINDOWS ? p.split(/[\\/]+/) : p.split('/')
+}
 
 export const HOME = os.homedir()
 export const USERNAME = os.userInfo().username
 export const UID = os.userInfo().uid
 
+/**
+ * The system roots, per platform.
+ *
+ * The POSIX list protected nothing on Windows: `/System` and `/usr` do not
+ * exist there, so every one of these checks passed for any path, including
+ * `C:\\Windows`. The Windows CI leg caught it on its first run
+ * (stacksjs/system-cleaner#23).
+ */
+const SYSTEM_ROOTS: string[] = IS_WINDOWS
+  ? (() => {
+      const drive = process.env.SystemDrive || 'C:'
+      const windir = process.env.SystemRoot || process.env.windir || `${drive}\\Windows`
+      return [
+        `${drive}\\`,
+        windir,
+        process.env.ProgramFiles || `${drive}\\Program Files`,
+        process.env['ProgramFiles(x86)'] || `${drive}\\Program Files (x86)`,
+        process.env.PROGRAMDATA || `${drive}\\ProgramData`,
+        `${drive}\\Users`,
+        // The AppData roots themselves. Individual app folders inside them are
+        // the whole point of a cleaner; the roots are not.
+        process.env.LOCALAPPDATA || path.win32.join(HOME, 'AppData', 'Local'),
+        process.env.APPDATA || path.win32.join(HOME, 'AppData', 'Roaming'),
+        path.win32.join(HOME, 'AppData'),
+      ]
+    })()
+  : ['/', '/System', '/Library', '/Applications', '/Users', '/usr', '/bin', '/sbin', '/var', '/private', '/etc', '/tmp']
+
+/**
+ * The user directories that hold work rather than disposable state.
+ *
+ * `Videos` is the Windows spelling of `Movies`; both are listed because the
+ * set is checked against a resolved path and costs nothing to over-specify.
+ */
+const USER_ROOTS = ['Desktop', 'Documents', 'Downloads', 'Pictures', 'Music', 'Movies', 'Videos', 'Applications', 'Library', '.ssh', '.gnupg', '.aws', '.kube', '.config']
+
 // Directories that must never be deleted
 const PROTECTED_PATHS = new Set([
   HOME,
-  path.join(HOME, 'Desktop'),
-  path.join(HOME, 'Documents'),
-  path.join(HOME, 'Downloads'),
-  path.join(HOME, 'Pictures'),
-  path.join(HOME, 'Music'),
-  path.join(HOME, 'Movies'),
-  path.join(HOME, 'Applications'),
-  path.join(HOME, '.ssh'),
-  path.join(HOME, '.gnupg'),
-  path.join(HOME, '.aws'),
-  path.join(HOME, '.kube'),
-  path.join(HOME, '.config'),
-  path.join(HOME, 'Library'),
-  '/',
-  '/System',
-  '/Library',
-  '/Applications',
-  '/Users',
-  '/usr',
-  '/bin',
-  '/sbin',
-  '/var',
-  '/private',
-  '/etc',
-  '/tmp',
+  ...USER_ROOTS.map(d => path.join(HOME, d)),
+  ...SYSTEM_ROOTS,
 ])
 
 // Path components that indicate sensitive data (matched as whole path segments)
@@ -59,17 +98,41 @@ const SENSITIVE_FILES = new Set([
 ])
 
 /**
+ * Set membership, case-folded where the filesystem is.
+ *
+ * `C:\\Users\\x\\.SSH` and `~/.ssh` are the same directory on Windows and
+ * different ones on macOS, and only the Windows reading is dangerous.
+ */
+function matchesSensitive(set: Set<string>, segment: string): boolean {
+  if (set.has(segment)) return true
+  if (!IS_WINDOWS) return false
+  const lower = segment.toLowerCase()
+  for (const entry of set) {
+    if (entry.toLowerCase() === lower) return true
+  }
+  return false
+}
+
+/**
  * Check if a path is safe to delete
  */
 export function isPathSafe(targetPath: string): PathSafetyCheck {
   const resolved = path.resolve(targetPath)
 
-  // Allow /Applications (for app uninstall) but reject other system paths
-  if (!resolved.startsWith(HOME) && !resolved.startsWith('/Applications/')) {
+  // Allow /Applications (for app uninstall) but reject other system paths.
+  // The allowance is macOS-only on purpose: Windows uninstalls through the
+  // registry rather than by deleting a bundle, and `appUninstall` is false
+  // there, so opening up Program Files would widen the gate for a feature
+  // that does not exist.
+  const inHome = IS_WINDOWS
+    ? resolved.toLowerCase().startsWith(HOME.toLowerCase())
+    : resolved.startsWith(HOME)
+  const inAppBundles = !IS_WINDOWS && resolved.startsWith('/Applications/')
+  if (!inHome && !inAppBundles) {
     return { safe: false, reason: 'Path is outside home directory' }
   }
 
-  if (resolved === HOME) {
+  if (samePath(resolved, HOME)) {
     return { safe: false, reason: 'Cannot delete home directory' }
   }
 
@@ -78,20 +141,29 @@ export function isPathSafe(targetPath: string): PathSafetyCheck {
     return { safe: false, reason: 'Cannot delete /Applications directory' }
   }
 
-  if (PROTECTED_PATHS.has(resolved)) {
-    return { safe: false, reason: `${path.basename(resolved)} is a protected directory` }
+  // Compared with samePath rather than Set.has, because Windows resolves
+  // `C:\\WINDOWS` and `C:\\Windows` to the same directory and a Set does not.
+  for (const protectedPath of PROTECTED_PATHS) {
+    if (samePath(resolved, protectedPath))
+      return { safe: false, reason: `${path.basename(resolved) || resolved} is a protected directory` }
   }
 
   // Check for sensitive data — match whole path segments to avoid false positives
   // (e.g., ".ssh" should block ~/.ssh/keys but NOT ~/Library/Caches/com.ssh-agent-cache)
-  const segments = resolved.split('/')
+  //
+  // Split on either separator. This was `split('/')`, which on Windows returns
+  // the whole path as a single segment and therefore matched nothing: an
+  // `.ssh` or `credentials` directory passed the check completely. Git for
+  // Windows puts keys in ~/.ssh like everywhere else, so this was not
+  // hypothetical.
+  const segments = segmentsOf(resolved)
   for (const segment of segments) {
-    if (SENSITIVE_SEGMENTS.has(segment)) {
+    if (matchesSensitive(SENSITIVE_SEGMENTS, segment)) {
       return { safe: false, reason: `Path contains sensitive directory: ${segment}` }
     }
   }
   const basename = segments[segments.length - 1]
-  if (SENSITIVE_FILES.has(basename)) {
+  if (matchesSensitive(SENSITIVE_FILES, basename)) {
     return { safe: false, reason: `Path contains sensitive file: ${basename}` }
   }
 

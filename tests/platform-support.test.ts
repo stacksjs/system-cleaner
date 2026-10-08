@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import * as path from 'node:path'
-import { buildWinPaths, capabilities, macPaths, PLATFORM, supports, unsupportedReason } from '@system-cleaner/core'
+import process from 'node:process'
+import { buildWinPaths, capabilities, HOME, isPathSafe, macPaths, PLATFORM, supports, unsupportedReason } from '@system-cleaner/core'
 
 /**
  * The app has to know what it cannot do.
@@ -200,5 +201,70 @@ describe('the platform gate replaces a screen that cannot work', () => {
   it('does nothing when the agent has no /platform route', async () => {
     const main = await run('/app/cleanup', 'windows', ALL_OFF, false)
     expect(main.innerHTML).toBe('<table>real content</table>')
+  })
+})
+
+/**
+ * `isPathSafe` is the one gate every destructive route passes through -
+ * /delete-path, /shred-paths and bulkDelete all call it - and on Windows it
+ * had no opinion about anything.
+ *
+ * Two faults, both found by the Windows CI leg on its first run:
+ * the protected set listed `/System` and `/usr`, which do not exist there, so
+ * nothing was protected; and the sensitive-segment scan split on '/', which on
+ * a backslash path returns one segment and therefore matches nothing. An
+ * `.ssh` directory passed the check completely, and Git for Windows puts keys
+ * in ~/.ssh exactly like everywhere else.
+ *
+ * The Windows cases run on the windows-latest leg. The macOS ones pin the
+ * behaviour that must not move while fixing them.
+ */
+describe('path safety is written for the platform it runs on', () => {
+  it('refuses the home directory itself, everywhere', () => {
+    expect(isPathSafe(HOME).safe).toBe(false)
+  })
+
+  it('refuses a sensitive directory wherever the separator falls', () => {
+    const key = path.join(HOME, '.ssh', 'id_rsa')
+    const check = isPathSafe(key)
+    expect(check.safe, `${key} must never be deletable`).toBe(false)
+  })
+
+  it('refuses the system roots for this platform', () => {
+    const roots = PLATFORM === 'windows'
+      ? [process.env.SystemRoot || 'C:\\Windows', process.env.ProgramFiles || 'C:\\Program Files']
+      : ['/System', '/usr', '/Library']
+    for (const root of roots)
+      expect(isPathSafe(root).safe, `${root} must be protected`).toBe(false)
+  })
+
+  it('still allows an ordinary cache directory', () => {
+    // The app's whole job. A gate that refuses everything is as broken as one
+    // that refuses nothing.
+    const cache = PLATFORM === 'windows'
+      ? path.join(process.env.LOCALAPPDATA || path.join(HOME, 'AppData', 'Local'), 'SomeApp', 'Cache')
+      : path.join(HOME, 'Library', 'Caches', 'com.example.app')
+    const check = isPathSafe(cache)
+    // It may not exist on this machine, in which case the refusal is "Path
+    // does not exist" rather than a safety verdict - which is still a pass for
+    // what this test is about.
+    if (!check.safe)
+      expect(check.reason).toBe('Path does not exist')
+  })
+
+  it('treats a backslash as a separator only on Windows', () => {
+    if (PLATFORM === 'windows') return
+    // A backslash is a legal character in a macOS filename. Splitting on it
+    // here would make this read as a path containing an `.ssh` segment.
+    const odd = path.join(HOME, 'Library', 'Caches', 'notes\\.ssh')
+    const check = isPathSafe(odd)
+    if (!check.safe)
+      expect(check.reason, 'a literal backslash must not read as a separator').not.toContain('sensitive directory')
+  })
+
+  it('folds case on Windows and does not on macOS', () => {
+    if (PLATFORM !== 'windows') return
+    const upper = path.join(HOME, '.SSH', 'id_rsa')
+    expect(isPathSafe(upper).safe, 'Windows paths are case-insensitive').toBe(false)
   })
 })
