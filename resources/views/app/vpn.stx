@@ -73,10 +73,20 @@
     return document.getElementById('vpn-scope');
   }
 
-  function apply(status) {
+  // The first response can arrive before STX has finished wiring the scope,
+  // and dropping it then left the panel reading 'Reading VPN status...' until
+  // the next poll — ten seconds of a blank screen on a cold load, with the
+  // answer already in hand. Retry briefly instead of waiting for the timer.
+  function apply(status, attempt) {
     window.__vpnStatus = status;
     var el = scope();
-    if (!el || !el.__stx_execute) return;
+    if (!el || !el.__stx_execute) {
+      var tries = attempt || 0;
+      // ~2s of 50ms retries. Past that the scope is not coming, and the next
+      // poll is the right place to pick it up rather than spinning.
+      if (tries < 40) setTimeout(function() { apply(status, tries + 1); }, 50);
+      return;
+    }
     // Assignments only, reading from the stashed payload: STX tracks
     // assignment, so each field has to be set rather than mutated in place.
     el.__stx_execute(
