@@ -44,10 +44,16 @@
     scanArtifacts(false);
   },
 
-  toggle(p) { this.selected = this.selected.indexOf(p) === -1 ? this.selected.concat([p]) : this.selected.filter(function(x) { return x !== p; }); },
+  toggle(p) {
+    var row = this.artifacts.find(function(a) { return a.path === p; });
+    if (row && row.risk === 'blocked') return;
+    this.selected = this.selected.indexOf(p) === -1 ? this.selected.concat([p]) : this.selected.filter(function(x) { return x !== p; });
+  },
   isOn(p) { return this.selected.includes(p); },
 
   safePaths() { return this.artifacts.filter(function(a) { return a.risk === 'safe'; }).map(function(a) { return a.path; }); },
+  blockedCount() { return this.artifacts.filter(function(a) { return a.risk === 'blocked'; }).length; },
+  blockedBytes() { return this.artifacts.reduce(function(n, a) { return a.risk === 'blocked' ? n + a.sizeBytes : n; }, 0); },
   allSafeSelected() { var s = this.selected; var ids = this.safePaths(); return ids.length > 0 && ids.every(function(p) { return s.indexOf(p) !== -1; }); },
   toggleAllSafe() { this.selected = this.allSafeSelected() ? [] : this.safePaths(); },
 
@@ -139,11 +145,13 @@
                 <span x-text='a.name'></span>
                 <span class='badge' x-text='a.type'></span>
                 <span class='badge badge-orange' x-cloak x-show="a.risk === 'caution'">keep?</span>
+                <span class='badge badge-red' x-cloak x-show="a.risk === 'blocked'">in git</span>
               </td>
               <td x-text='a.project'></td>
               <td x-text='a.sizeFormatted'></td>
               <td>
-                <button class='btn btn-sm' :disabled='cleaning[a.path]'
+                <button class='btn btn-sm' :disabled="cleaning[a.path] || a.risk === 'blocked'"
+                  :title="a.risk === 'blocked' ? 'Git tracks files in here, so this is not build output' : ''"
                   onclick="doCleanOne(this.closest('tr').getAttribute('data-path'), this.closest('tr').getAttribute('data-label'), this.closest('tr').getAttribute('data-risk'))">
                   <span x-show='!cleaning[a.path]'>Clean</span>
                   <span x-show='cleaning[a.path]'>...</span>

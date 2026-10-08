@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import process from 'node:process';
 import {
   isPathSafe,
+  classifyByGit,
   getDirSize,
   HOME,
   sanitizePackageName,
@@ -148,6 +149,29 @@ let sizeCacheGeneration = 0;
  * whole path list, so there is no entry that corresponds to the one directory
  * that changed. The next scan re-walks, which is the point.
  */
+/**
+ * Refuse a delete that would destroy files git is tracking.
+ *
+ * The scanner marks such directories `blocked` and the screen will not offer
+ * them, but the screen is not the only caller: `buddy purge --all` selects
+ * every artifact and deletes it with no prompt at all, and `/clean-dir`,
+ * `/delete-path` and `/shred-paths` each take a path straight from the client.
+ * A gate that lives only in the UI is a gate on the one path that already has
+ * a confirmation dialog.
+ *
+ * Only `tracked` refuses. `unversioned` is allowed through deliberately -
+ * outside a repository there is nothing to appeal to, and refusing everything
+ * there would block `~/Library/Caches`, which is the app's main job.
+ */
+async function refuseIfTracked(target: string): Promise<Response | null> {
+  const disposition = await classifyByGit([target]);
+  if (disposition.get(target) !== 'tracked') return null;
+  return badRequest(
+    'Git tracks files here, so this is not build output. Deleting it would destroy committed work.',
+    409,
+  );
+}
+
 function invalidateSizeCaches(): void {
   dirSizesCache.clear();
   sizeCacheGeneration++;
@@ -376,6 +400,9 @@ export default async function (router: Router) {
     catch {
       return badRequest('Path does not exist', 404);
     }
+    const trackedHere = await refuseIfTracked(resolved);
+    if (trackedHere) return trackedHere;
+
     // Invalidate on both paths. A recursive delete is not atomic: one
     // undeletable entry throws after the other nine are already gone, so the
     // error path can have freed gigabytes. Leaving the size cached there keeps
@@ -424,6 +451,9 @@ export default async function (router: Router) {
     if (!pathInAllowedRoots(target, [HOME])) {
       return badRequest('Path must be under your home directory', 403);
     }
+
+    const tracked = await refuseIfTracked(target);
+    if (tracked) return tracked;
 
     const result = await cleanDirectory(target);
     invalidateSizeCaches();
@@ -1839,6 +1869,17 @@ export default async function (router: Router) {
     const passes = typeof body.passes === 'number' && body.passes >= 1 && body.passes <= 3
       ? Math.floor(body.passes)
       : 1;
+
+    // The one action with no recovery at all: the bytes are overwritten, so
+    // not even the git object store helps afterwards.
+    const dispositions = await classifyByGit(paths);
+    const trackedPaths = paths.filter(p => dispositions.get(p) === 'tracked');
+    if (trackedPaths.length > 0) {
+      return badRequest(
+        `Git tracks ${trackedPaths.length === 1 ? 'this path' : 'these paths'}: ${trackedPaths.join(', ')}. Shredding is unrecoverable.`,
+        409,
+      );
+    }
 
     const outcome = shredPaths(paths, { passes });
 
