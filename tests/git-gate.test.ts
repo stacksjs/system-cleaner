@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
-import { classifyByGit } from '@system-cleaner/core'
+import * as os from 'node:os'
+import { classifyByGit, refusesDeletion } from '@system-cleaner/core'
 import { findProjectArtifacts } from '../packages/disk/src/analysis'
 
 /**
@@ -171,5 +172,50 @@ describe('the scanner asks git before offering anything', () => {
 
     const offered = found.filter(a => a.risk === 'safe' && a.git === 'tracked')
     expect(offered.map(a => a.path)).toEqual([])
+  })
+})
+
+/**
+ * A gate that cannot see must refuse, not wave things through.
+ *
+ * The first version of this had no way to say "git did not answer": every
+ * failure produced `unversioned`, which is the permissive value, so the gate
+ * silently ceased to exist and committed directories went back to being
+ * offered as `safe` build output with no badge and no warning.
+ *
+ * It needed no contrived environment. A corrupt `.git/index` exits 128, and so
+ * does a repository carrying an extension this git does not understand.
+ */
+describe('git refusing to answer', () => {
+  it('is unknown, not unversioned, and unknown refuses deletion', async () => {
+    const broken = fs.mkdtempSync(path.join(os.tmpdir(), 'sc-git-broken-'))
+    try {
+      git(broken, 'init', '-q')
+      write(path.join(broken, 'build/make.ts'), 'source')
+      git(broken, 'add', '-f', '.')
+      git(broken, 'commit', '-qm', 'init')
+
+      const target = path.join(broken, 'build')
+      expect((await classifyByGit([target])).get(target)).toBe('tracked')
+
+      // Exactly what the review used to break it.
+      fs.writeFileSync(path.join(broken, '.git', 'index'), 'garbage')
+
+      const verdict = (await classifyByGit([target])).get(target)
+      expect(verdict, 'a repo git cannot read is unknown, never unversioned').toBe('unknown')
+      expect(refusesDeletion(verdict!), 'unknown must refuse').toBe(true)
+    }
+    finally {
+      fs.rmSync(broken, { recursive: true, force: true })
+    }
+  })
+
+  it('still calls a path with no repository at all unversioned', async () => {
+    const loose = path.join(root, 'loose/dist')
+    const verdict = (await classifyByGit([loose])).get(loose)
+    // No repository is a real answer, and it must stay permissive - otherwise
+    // ~/Library/Caches, which is the app's main job, stops being cleanable.
+    expect(verdict).toBe('unversioned')
+    expect(refusesDeletion(verdict!)).toBe(false)
   })
 })

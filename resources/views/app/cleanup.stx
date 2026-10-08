@@ -261,7 +261,14 @@ async function doCleanSelected() {
   }
   if (!confirmed) return;
 
-  var freed = 0, failed = 0, done = 0;
+  var failed = 0, done = 0, heldOpen = 0;
+  // Keyed by path rather than summed as we go. 97 of the cleanable categories
+  // sit inside another one - ~/Library/Caches/Google/Chrome and about thirty
+  // more live under User Caches - so adding every response counts those bytes
+  // once per level and claims more than the disk gave back. The headline total
+  // has carried _sumWithoutOverlap for this reason since it was written; this
+  // toast never did.
+  var freedByPath = {};
   // A new object each tick: stx tracks assignment, not a field written on the
   // old one, so `cleanProgress.done++` would move the number and leave the bar
   // where it was.
@@ -273,11 +280,15 @@ async function doCleanSelected() {
     _exec("cleanProgress = { done: " + done + ", total: " + targets.length + " }");
     if (done < targets.length) return;
     try { localStorage.removeItem(CACHE_KEY); } catch (e) {}
+    var freed = _sumWithoutOverlap(Object.keys(freedByPath), freedByPath);
     var cleaned = targets.length - failed;
     var msg = cleaned > 0
       ? 'Cleaned ' + cleaned + (cleaned === 1 ? ' category' : ' categories') + ' - freed ' + _fmtBytes(freed)
       : 'Nothing could be cleaned';
     if (failed > 0) msg += ' - ' + failed + ' failed';
+    // Carried through from the server. Without it a batch clean still claims
+    // bytes that are waiting on a process to let go of them.
+    if (heldOpen > 0) msg += ' - some of it frees up once the apps using those files close';
     if (unknown.length > 0) msg += ' - ' + unknown.length + ' no longer listed';
     _exec("toast('" + msg.replace(/'/g, "\\'") + "', '" + (cleaned > 0 ? (failed > 0 ? 'info' : 'success') : 'error') + "'); selected = []; cleanProgress = null");
     scanCleanupSizes(true);
@@ -297,7 +308,8 @@ async function doCleanSelected() {
       // entry could not be removed, so crediting only flawless cleans made a
       // run that freed gigabytes report them as zero and call itself failed.
       var got = (r && r.freedBytes) || 0;
-      freed += got;
+      freedByPath[t.path] = got;
+      if (r && r.heldOpen) heldOpen++;
       if (!r || (!r.success && got === 0 && r.measured !== false)) failed++;
       settle(t.id);
     }).catch(function() {

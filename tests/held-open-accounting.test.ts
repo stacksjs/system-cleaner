@@ -30,8 +30,8 @@ import { cleanDirectory } from '../packages/clean/src/cleaner'
 let root = ''
 const held: number[] = []
 
-/** Comfortably above HELD_OPEN_FLOOR, which is 10 MB. */
-const BIG = 40 * 1024 * 1024
+/** Comfortably above HELD_OPEN_FLOOR, which is 50 MB. */
+const BIG = 80 * 1024 * 1024
 
 beforeAll(() => {
   root = fs.mkdtempSync(path.join(os.homedir(), '.sc-heldopen-test-'))

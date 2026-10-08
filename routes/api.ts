@@ -6,6 +6,7 @@ import {
   isPathSafe,
   capabilities,
   classifyByGit,
+  refusesDeletion,
   PLATFORM,
   getDirSize,
   HOME,
@@ -167,10 +168,13 @@ let sizeCacheGeneration = 0;
  * there would block `~/Library/Caches`, which is the app's main job.
  */
 async function refuseIfTracked(target: string): Promise<Response | null> {
-  const disposition = await classifyByGit([target]);
-  if (disposition.get(target) !== 'tracked') return null;
+  const disposition = await classifyByGit([target]) ;
+  const verdict = disposition.get(target) ?? 'unknown';
+  if (!refusesDeletion(verdict)) return null;
   return badRequest(
-    'Git tracks files here, so this is not build output. Deleting it would destroy committed work.',
+    verdict === 'tracked'
+      ? 'Git tracks files here, so this is not build output. Deleting it would destroy committed work.'
+      : 'This is inside a git repository and git could not be asked whether these files are tracked, so it is not safe to delete.',
     409,
   );
 }
@@ -1897,7 +1901,7 @@ export default async function (router: Router) {
     // The one action with no recovery at all: the bytes are overwritten, so
     // not even the git object store helps afterwards.
     const dispositions = await classifyByGit(paths);
-    const trackedPaths = paths.filter(p => dispositions.get(p) === 'tracked');
+    const trackedPaths = paths.filter(p => refusesDeletion(dispositions.get(p) ?? 'unknown'));
     if (trackedPaths.length > 0) {
       return badRequest(
         `Git tracks ${trackedPaths.length === 1 ? 'this path' : 'these paths'}: ${trackedPaths.join(', ')}. Shredding is unrecoverable.`,

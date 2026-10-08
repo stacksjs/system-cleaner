@@ -73,5 +73,6 @@ storage/framework/discovered-packages.json
 # rather than the source would be silently overwritten.
 /public/app-menu.js
 /public/native-dialog.js
+/public/platform-gate.js
 /public/settings-panel.js
 /public/settings-window.js

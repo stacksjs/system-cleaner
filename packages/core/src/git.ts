@@ -9,7 +9,30 @@ import * as path from 'node:path'
  * statement than anything this app can infer from a directory being called
  * `dist`.
  */
-export type GitDisposition = 'ignored' | 'tracked' | 'unversioned'
+export type GitDisposition = 'ignored' | 'tracked' | 'unversioned' | 'unknown'
+
+/**
+ * True when this disposition must not be deleted on a pattern match alone.
+ *
+ * `unknown` counts, and that is the whole point of having it. The first
+ * version of this gate had no such value: when git could not answer, every
+ * candidate came back `unversioned`, which is the permissive answer, so the
+ * gate silently ceased to exist and committed directories went back to being
+ * offered as `safe` build output with no badge and no warning.
+ *
+ * It is not a contrived state. A corrupt `.git/index` exits 128. So does a
+ * repository written by a newer git carrying an extension this one does not
+ * know. git missing from PATH does it, and so does a broken Command Line
+ * Tools shim, which is what /usr/bin/git is on a stock Mac.
+ *
+ * The irony was sharp enough to be worth recording: the exit-code check that
+ * refuses to read a partial answer as a complete one was correct, and the
+ * fallback behind it converted that caution into the loss it was guarding
+ * against. A gate that cannot see has to say so, not wave things through.
+ */
+export function refusesDeletion(d: GitDisposition): boolean {
+  return d === 'tracked' || d === 'unknown'
+}
 
 /** Timeout per git call. A repository walk should be milliseconds. */
 const GIT_TIMEOUT_MS = 10_000
@@ -92,6 +115,9 @@ async function git(root: string, args: string[], stdin: string): Promise<{ ok: b
  */
 export async function classifyByGit(candidates: string[]): Promise<Map<string, GitDisposition>> {
   const result = new Map<string, GitDisposition>()
+  // Seeded `unversioned` only for paths no repository owns. Anything inside a
+  // repository is seeded `unknown` below and is only downgraded once git has
+  // actually answered for it.
   for (const c of candidates) result.set(c, 'unversioned')
   if (candidates.length === 0)
     return result
@@ -103,6 +129,13 @@ export async function classifyByGit(candidates: string[]): Promise<Map<string, G
     const list = byRepo.get(root)
     if (list) list.push(c)
     else byRepo.set(root, [c])
+  }
+
+  // Inside a repository, "we did not get an answer" is not "nothing is
+  // tracked". Seed every such candidate `unknown` and let a successful git
+  // call downgrade it.
+  for (const paths of byRepo.values()) {
+    for (const p of paths) result.set(p, 'unknown')
   }
 
   for (const [root, paths] of byRepo) {
@@ -153,6 +186,10 @@ export async function classifyByGit(candidates: string[]): Promise<Map<string, G
     if (!tracked.ok)
       continue
 
+    // git answered: anything it did not name is genuinely untracked, so the
+    // leftovers can come down off `unknown`.
+    for (const c of leftovers) result.set(c.input, 'unversioned')
+
     for (const rel of tracked.stdout.split('\0')) {
       if (!rel) continue
       const abs = path.join(realRoot, rel)
@@ -176,5 +213,5 @@ export async function classifyByGit(candidates: string[]): Promise<Map<string, G
  */
 export async function isTrackedByGit(target: string): Promise<boolean> {
   const map = await classifyByGit([target])
-  return map.get(target) === 'tracked'
+  return refusesDeletion(map.get(target) ?? 'unknown')
 }

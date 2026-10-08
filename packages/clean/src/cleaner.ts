@@ -30,7 +30,12 @@ export async function cleanTarget(target: CleanTarget, options: CleanOptions = {
 
   // Measure size before cleaning
   const sizeBefore = await getDirSize(target.path)
-  const freeBefore = freeSpaceOf(target.path)
+  // The PARENT, not the target. A contentsOnly:false target removes its own
+  // directory, so statfs on it answers ENOENT afterwards, reclaimedBytes came
+  // back null and the detection could never fire for exactly the targets that
+  // free the most. The parent is on the same filesystem and survives.
+  const measureAt = path.dirname(target.path)
+  const freeBefore = freeSpaceOf(measureAt)
 
   if (options.dryRun) {
     result.freedBytes = sizeBefore
@@ -109,11 +114,9 @@ export async function cleanTarget(target: CleanTarget, options: CleanOptions = {
   // ordinary way to hit this - deleting one a running daemon writes to frees
   // nothing until it restarts, and without saying so the app reports the full
   // size and Disk Free does not move.
-  const freeAfter = freeSpaceOf(target.path)
+  const freeAfter = freeSpaceOf(measureAt)
   result.reclaimedBytes = freeBefore !== null && freeAfter !== null ? freeAfter - freeBefore : null
-  result.heldOpen = result.reclaimedBytes !== null
-    && result.freedBytes >= HELD_OPEN_FLOOR
-    && result.reclaimedBytes < result.freedBytes / 2
+  result.heldOpen = isHeldOpen(result.freedBytes, result.reclaimedBytes)
 
   result.success = result.errors.length === 0
 
@@ -273,20 +276,41 @@ export async function cleanDirectory(dirPath: string): Promise<{
     // gone and the blocks are not. Deleting a log a running service writes to
     // is the ordinary way to hit this, and without saying so the app reports
     // hundreds of megabytes while Disk Free sits still.
-    heldOpen: reclaimed !== null && removed >= HELD_OPEN_FLOOR && reclaimed < removed / 2,
+    heldOpen: isHeldOpen(removed, reclaimed),
     errors,
   }
 }
 
 /**
- * Below this, the free-space comparison is noise.
+ * Below this, the free-space comparison says nothing worth acting on.
  *
- * Any other process writing during the clean moves the number, so a small
- * delete can easily show a negative delta for reasons that have nothing to do
- * with held-open files. Ten megabytes is comfortably above that floor and far
- * below anything a user would notice going missing.
+ * The delta is shared with every other process on the machine, so a small
+ * delete can show almost any figure for reasons that have nothing to do with
+ * held-open files.
  */
-const HELD_OPEN_FLOOR = 10 * 1024 * 1024
+const HELD_OPEN_FLOOR = 50 * 1024 * 1024
+
+/**
+ * The share of a delete that must fail to materialise before we call it held.
+ *
+ * This started at half, which is far too loose: a browser writing its cache
+ * while a 60 MB clean runs is enough to swallow the difference, and the app
+ * would tell a user their space had not come back when it had. Five per cent
+ * means the disk gave back essentially nothing, which concurrent writes have
+ * to work much harder to fake.
+ *
+ * It errs the other way now - a genuinely held-open delete alongside heavy
+ * concurrent freeing can slip past unflagged. That is the right direction to
+ * be wrong in: the headline figure is `freedBytes` either way, and a missing
+ * note is better than a false one.
+ */
+const HELD_OPEN_SHARE = 0.05
+
+function isHeldOpen(removed: number, reclaimed: number | null): boolean {
+  if (reclaimed === null || removed < HELD_OPEN_FLOOR)
+    return false
+  return reclaimed <= removed * HELD_OPEN_SHARE
+}
 
 /** How long a directory gets to report its size before the clean proceeds anyway. */
 const SIZE_TIMEOUT_MS = 10_000

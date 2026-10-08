@@ -1,6 +1,6 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { HOME, classifyByGit, formatBytes, getDirSize, pathExists } from '@system-cleaner/core'
+import { HOME, classifyByGit, formatBytes, getDirSize, pathExists, refusesDeletion } from '@system-cleaner/core'
 import type { DiskEntry, DiskUsageByCategory, LargeFile, ProjectArtifact } from './types'
 import { categorizeFile, getAllCategories, getProjectArtifactPatterns } from './categories'
 import { flattenTree, scanDirectory } from './scanner'
@@ -207,8 +207,11 @@ export async function findProjectArtifacts(
   const sized = artifacts.filter(a => a.sizeBytes >= minSizeBytes)
   const disposition = await classifyByGit(sized.map(a => a.path))
   for (const artifact of sized) {
-    artifact.git = disposition.get(artifact.path) ?? 'unversioned'
-    if (artifact.git === 'tracked')
+    artifact.git = disposition.get(artifact.path) ?? 'unknown'
+    // `unknown` blocks as firmly as `tracked`. git not answering is not
+    // evidence that nothing is tracked, and treating it as such is how the
+    // gate silently stopped existing on a repository with a corrupt index.
+    if (refusesDeletion(artifact.git))
       artifact.risk = 'blocked'
     // `unversioned` stays on its pattern risk. Outside a repository there is
     // nothing to appeal to, and refusing everything there would exclude the
