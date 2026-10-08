@@ -66,6 +66,34 @@ describe('x-data blocks', () => {
     expect(checked).toBeGreaterThan(0)
   })
 
+  // A getter is evaluated once while the scope is built and never re-run, so
+  // it freezes at whatever the initial state implied. That is the same class
+  // of failure as the two above — the screen renders, nothing appears in the
+  // console, and the value is simply wrong forever. The VPN panel's Core card
+  // read `Not installed` after a response said the core was healthy, while a
+  // direct `core.version` binding two lines below it updated correctly.
+  //
+  // Derived values belong in a method, which is called on every render.
+  it('declare no getters, which freeze at their first evaluation', async () => {
+    const offenders: string[] = []
+
+    for await (const file of views.scan('.')) {
+      const source = await Bun.file(file).text()
+
+      for (const block of extractXData(source)) {
+        if (!block.trimStart().startsWith('{'))
+          continue
+        // `get name() {` at a property position. Spelled loosely on purpose:
+        // the point is to catch the shape, not to parse JavaScript.
+        const match = block.match(/(?:^|[{,])\s*get\s+[A-Za-z_$][\w$]*\s*\(\s*\)\s*\{/)
+        if (match)
+          offenders.push(`${file}: ${match[0].trim()}`)
+      }
+    }
+
+    expect(offenders).toEqual([])
+  })
+
   it('contain no double quote, which would end the HTML attribute early', async () => {
     const offenders: string[] = []
 

@@ -40,6 +40,17 @@ export const groups = [
     { id: 'applications', label: 'Applications', icon: 'i-f7-app-fill', href: '/app/applications' },
     { id: 'extensions', label: 'Extensions', icon: 'i-f7-square-stack-3d-up-fill', href: '/app/extensions' },
   ],
+  // VPN sits in its own group because it is the one row that is not about
+  // what is on this Mac. Everything above scans local storage or local
+  // processes; this is the state of a network the Mac is joined to. Grouping
+  // it with Applications would have read as a sixth kind of thing to clean.
+  //
+  // It is in the rail rather than the top strip for the reason that separates
+  // the two: it is a place you go to look at something, not an errand you run
+  // or a preference you set once.
+  [
+    { id: 'vpn', label: 'VPN', icon: 'i-f7-lock-shield-fill', href: '/app/vpn' },
+  ],
 ]
 </script>
 

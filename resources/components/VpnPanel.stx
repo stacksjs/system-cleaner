@@ -1,0 +1,141 @@
+<!-- localtunnels VPN status. Read-only: every value here is observed, nothing
+     on this screen changes the machine.
+
+     State lives in the `vpn-scope` x-data on the view, fed by the client block
+     there from /api/vpn-status. Nothing is computed in a `<script server>`
+     block: the desktop bundle serves prerendered HTML, so anything a server
+     script worked out would describe the build machine forever. -->
+<div class='card-row'>
+  <div class='card'>
+    <div class='card-label'>Tunnel</div>
+    <div class='card-value' :style="connected ? 'color: var(--green);' : ''">{{ loaded ? (connected ? 'Up' : 'Down') : '—' }}</div>
+    <div class='card-detail'>{{ connected ? 'On a localtunnels address' : 'No localtunnels interface' }}</div>
+  </div>
+  <div class='card'>
+    <div class='card-label'>Core</div>
+    <div class='card-value' :style="coreTone()">{{ loaded ? coreLabel() : '—' }}</div>
+    <div class='card-detail'>{{ core.version ? core.version : 'libltvpn + CLI' }}</div>
+  </div>
+  <div class='card'>
+    <div class='card-label'>Identity</div>
+    <div class='card-value'>{{ loaded ? (identity ? 'Present' : 'None') : '—' }}</div>
+    <div class='card-detail'>{{ identity ? 'X25519 keypair on this Mac' : 'No keypair yet' }}</div>
+  </div>
+  <div class='card'>
+    <div class='card-label'>Interfaces</div>
+    <div class='card-value'>{{ loaded ? tunnels.length : '—' }}</div>
+    <div class='card-detail'>{{ 'tunnel devices with an IPv4 address' }}</div>
+  </div>
+</div>
+
+<!-- A platform that cannot host a tunnel says so once, rather than showing
+     four empty cards and leaving the reason to be guessed at. -->
+<template x-if='loaded && !supported'>
+  <div class='tbl-wrap'>
+    <div class='tbl-bar'><span class='tbl-title'>Not available on this platform</span></div>
+    <div class='empty-state'>localtunnels brings up tunnels through macOS <span class='mono'>utun</span> and Linux <span class='mono'>/dev/net/tun</span>. This build is running on neither.</div>
+  </div>
+</template>
+
+<template x-if='loaded && supported'>
+  <div>
+    <div class='tbl-wrap'>
+      <div class='tbl-bar'>
+        <div>
+          <span class='tbl-title'>This Mac</span>
+          <span class='tbl-count'>read-only</span>
+        </div>
+        <button class='btn btn-sm' @click='refresh()' :disabled='refreshing'>{{ refreshing ? 'Checking…' : 'Re-check' }}</button>
+      </div>
+      <div style='padding: var(--space-3) var(--space-4) var(--space-4);'>
+        <div class='info-row'>
+          <span class='info-label'>Native core</span>
+          <span class='info-value'>
+            <span :class="'badge ' + coreBadge()">{{ coreLabel() }}</span>
+          </span>
+        </div>
+        <div class='info-row'>
+          <span class='info-label'>CLI</span>
+          <span class='info-value'>{{ core.cliPath ? (core.version ? core.version : 'found') : 'not found' }}</span>
+        </div>
+        <template x-if='core.cliPath'>
+          <div class='info-path'>{{ core.cliPath }}</div>
+        </template>
+        <template x-if='core.detail'>
+          <div class='info-path'>{{ core.detail }}</div>
+        </template>
+
+        <template x-if='identity'>
+          <div>
+            <div class='info-row' style='margin-top: var(--space-3);'>
+              <span class='info-label'>Public key</span>
+              <span class='info-value'>shareable</span>
+            </div>
+            <div class='info-path'>{{ identity.publicKey }}</div>
+            <div class='info-row' style='margin-top: var(--space-3);'>
+              <span class='info-label'>Stored at</span>
+              <span class='info-value'>0644</span>
+            </div>
+            <div class='info-path'>{{ identity.publicKeyPath }}</div>
+          </div>
+        </template>
+        <template x-if='!identity'>
+          <div class='info-path'>No VPN identity on this Mac yet. One is created the first time you run a localtunnels VPN command — opening this screen does not create one.</div>
+        </template>
+      </div>
+    </div>
+
+    <div class='tbl-wrap' style='margin-top: var(--space-4);'>
+      <div class='tbl-bar'>
+        <div>
+          <span class='tbl-title'>Tunnel Interfaces</span>
+          <span class='tbl-count'>from ifconfig</span>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Interface</th>
+            <th>Address</th>
+            <th>Peer</th>
+            <th>MTU</th>
+            <th>Range</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-if='tunnels.length === 0'>
+            <tr><td colspan='5' class='empty-state'>No tunnel device has an IPv4 address. The <span class='mono'>utun</span> devices macOS keeps for iCloud Private Relay carry only link-local IPv6 and are not listed.</td></tr>
+          </template>
+          <template x-for='t in tunnels' :key='t.name'>
+            <tr>
+              <td><div class='item-name mono'>{{ t.name }}</div></td>
+              <td class='mono' style='font-size: 11px;'>{{ t.address }}</td>
+              <td class='mono dim' style='font-size: 11px;'>{{ t.peer ? t.peer : '—' }}</td>
+              <td class='dim' style='font-size: 11px;'>{{ t.mtu ? t.mtu : '—' }}</td>
+              <td>
+                <span :class="'badge ' + (t.localtunnelsRange ? 'badge-green' : 'badge-gray')">{{ t.localtunnelsRange ? 'localtunnels' : 'other' }}</span>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Said plainly rather than implied by a disabled button: an address in a
+         localtunnels range is a strong hint, not proof, and this screen cannot
+         bring a tunnel up because that needs root. -->
+    <div class='tbl-wrap' style='margin-top: var(--space-4);'>
+      <div class='tbl-bar'><span class='tbl-title'>What this screen can and cannot tell you</span></div>
+      <div style='padding: var(--space-3) var(--space-4) var(--space-4); font-size: 11px; color: var(--secondary); line-height: 1.5;'>
+        <div>The kernel does not record which process asked for a tunnel device, and macOS hands them out to iCloud Private Relay and every other VPN as well. An interface is marked <span class='mono'>localtunnels</span> when its address falls in a range localtunnels assigns — <span class='mono'>100.64.0.0/10</span> for coordinator-assigned addresses, <span class='mono'>10.8.0.0/24</span> for the VPN deploy. That is a strong hint, not proof.</div>
+        <div style='margin-top: var(--space-2);'>Connecting and disconnecting are not here yet. Creating a network interface needs root, which needs a privileged helper this app does not ship. Until then, bring a tunnel up with <span class='mono'>sudo lt vpn:up</span> and this screen will show it.</div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template x-if='!loaded'>
+  <div class='tbl-wrap'>
+    <div class='empty-state'>{{ error ? error : 'Reading VPN status…' }}</div>
+  </div>
+</template>

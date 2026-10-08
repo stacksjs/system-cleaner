@@ -1,0 +1,132 @@
+@extends('layouts/app')
+@section('nav', 'vpn')
+@section('body')
+
+<!--
+  No comments and no double quotes inside the `x-data` literal below. STX
+  collapses the attribute onto one line before evaluating it, so a `//` comment
+  swallows the rest of the object and a `"` ends the attribute early — either
+  way every binding on the page renders empty with nothing in the console.
+  `tests/xdata-parses.test.ts` guards both.
+
+  These are methods, not getters. STX evaluates a getter once while building
+  the scope and does not re-run it when the state it reads changes, so the
+  three below rendered their initial answer forever: the Core card still read
+  `Not installed` after a response said the core was healthy, while the version
+  bound directly beside it updated. Direct property reads re-render; derived
+  values have to be called.
+
+  Three more things it would otherwise say inline:
+  - `core` starts as an empty-ish object rather than null so the panel can bind
+    `core.version` before the first response arrives.
+  - `refreshing` is an in-flight guard so a double click cannot post twice.
+  - `refresh()` passes `refresh: true`, which drops the server's one-minute
+    cache of the CLI probe; the background poll does not, so it stays cheap.
+-->
+<div id='vpn-scope' x-data="{
+  loaded: false,
+  refreshing: false,
+  error: '',
+  supported: true,
+  connected: false,
+  core: { available: false, cliPath: null, version: null, healthy: null, detail: null },
+  identity: null,
+  tunnels: [],
+
+  coreLabel() {
+    if (!this.core.available) return 'Not installed';
+    return this.core.healthy ? 'Healthy' : 'Unhealthy';
+  },
+  coreBadge() {
+    if (!this.core.available) return 'badge-gray';
+    return this.core.healthy ? 'badge-green' : 'badge-orange';
+  },
+  coreTone() {
+    if (!this.core.available) return '';
+    return this.core.healthy ? 'color: var(--green);' : 'color: var(--orange);';
+  },
+
+  refresh() {
+    if (this.refreshing) return;
+    this.refreshing = true;
+    window.__vpnRefresh().finally(() => { this.refreshing = false; });
+  }
+}">
+
+<div class='main-header'>
+  <div class='main-title'>VPN</div>
+  <div class='main-subtitle'>Encrypted layer-3 networking through localtunnels</div>
+</div>
+<div class='main-content'>
+  <VpnPanel />
+</div>
+</div>
+
+<script data-stx-scoped>
+// ── VPN status feed ───────────────────────────────────────────
+// Same-origin API, polled slowly: none of this moves on its own. A tunnel
+// comes up or goes away when someone runs a command, and the CLI probe behind
+// it is cached server-side for a minute, so a 10s poll is already generous.
+
+(function() {
+  function scope() {
+    return document.getElementById('vpn-scope');
+  }
+
+  function apply(status) {
+    window.__vpnStatus = status;
+    var el = scope();
+    if (!el || !el.__stx_execute) return;
+    // Assignments only, reading from the stashed payload: STX tracks
+    // assignment, so each field has to be set rather than mutated in place.
+    el.__stx_execute(
+      'core = window.__vpnStatus.core;'
+      + ' identity = window.__vpnStatus.identity;'
+      + ' tunnels = window.__vpnStatus.tunnels;'
+      + ' connected = window.__vpnStatus.connected;'
+      + ' supported = window.__vpnStatus.supported;'
+      + " error = '';"
+      + ' loaded = true'
+    );
+  }
+
+  function fail(message) {
+    var el = scope();
+    if (!el || !el.__stx_execute) return;
+    window.__vpnError = message;
+    el.__stx_execute('error = window.__vpnError; loaded = false');
+  }
+
+  async function poll(forceRefresh) {
+    if (!scope()) return;
+    try {
+      var response = await fetch('/api/vpn-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh: forceRefresh === true }),
+      });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      var status = await response.json();
+      if (!status || status.success !== true) throw new Error('Unexpected response');
+      apply(status);
+    } catch (error) {
+      fail('Could not read VPN status: ' + (error.message || 'network error'));
+    }
+  }
+
+  // The panel's Re-check button, which also drops the server-side cache.
+  window.__vpnRefresh = function() { return poll(true); };
+
+  poll(false);
+  if (!window.__vpnPollTimer) {
+    window.__vpnPollTimer = setInterval(function() { poll(false); }, 10000);
+  }
+  // STX navigations swap only `[data-stx-content]`, so a remount needs the
+  // last payload painted back immediately rather than waiting for the timer.
+  window.addEventListener('stx:load', function() {
+    if (window.__vpnStatus) apply(window.__vpnStatus);
+    else poll(false);
+  }, { once: true });
+})();
+</script>
+@endsection
