@@ -168,7 +168,7 @@ jobs:
       # binary proves the toolchain and fails honestly, instead of shipping
       # something that reports 0 B reclaimable and looks like a clean machine.
       - name: Build the Windows preview binary
-        run: bun run build:binaries --preview
+        run: bun run build:binaries --preview --only windows
 
       # A binary that compiles and then lies is worse than no binary. Assert it
       # runs, and that a command this platform cannot carry out says which

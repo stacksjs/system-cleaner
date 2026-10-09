@@ -37,8 +37,20 @@ const PREVIEW_TARGETS = [
   { target: 'bun-windows-x64', name: 'system-cleaner-windows-x64' },
 ] as const
 
-const TARGETS: readonly { target: string, name: string }[]
+const all: readonly { target: string, name: string }[]
   = process.argv.includes('--preview') ? [...RELEASE_TARGETS, ...PREVIEW_TARGETS] : RELEASE_TARGETS
+
+// `--only <substring>` narrows to one target. The Windows CI leg builds only
+// the Windows binary: cross-compiling the macOS one there costs a runtime
+// download and proves nothing the macOS job has not already proven.
+const onlyAt = process.argv.indexOf('--only')
+const only = onlyAt === -1 ? null : process.argv[onlyAt + 1]
+const TARGETS = only ? all.filter(t => t.target.includes(only)) : all
+
+if (only && TARGETS.length === 0) {
+  console.error(`[binaries] --only ${only} matched none of: ${all.map(t => t.target).join(', ')}`)
+  process.exit(1)
+}
 
 const ROOT = process.cwd()
 const ENTRY = path.join(ROOT, 'packages/cli/bin/system-cleaner.ts')
@@ -51,8 +63,29 @@ if (!fs.existsSync(ENTRY)) {
 
 function run(cmd: string, args: string[]): void {
   const result = spawnSync(cmd, args, { stdio: 'inherit', cwd: ROOT })
+  // `status` is null when the command could not be spawned at all, which reads
+  // as "exited with undefined" and is how a missing `zip` first showed up.
   if (result.status !== 0)
-    throw new Error(`${cmd} ${args.join(' ')} exited with ${result.status}`)
+    throw new Error(`${cmd} ${args.join(' ')} exited with ${result.status ?? `${result.error?.message ?? 'spawn failed'}`}`)
+}
+
+/**
+ * Zip one file into a flat archive, with whatever this machine has.
+ *
+ * `zip` is not installed on windows-latest, and the failure is quiet: spawnSync
+ * returns status null rather than throwing, so the build reported "exited with
+ * undefined" after having compiled the binary successfully. PowerShell's
+ * Compress-Archive ships with the runner and produces the same flat layout.
+ */
+function archiveFlat(file: string, archive: string): void {
+  if (process.platform === 'win32') {
+    run('powershell', [
+      '-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
+      `Compress-Archive -Path '${file}' -DestinationPath '${archive}' -Force`,
+    ])
+    return
+  }
+  run('zip', ['-j', '-q', archive, file])
 }
 
 let built = 0
@@ -66,10 +99,10 @@ for (const { target, name } of TARGETS) {
   console.warn(`[binaries] building ${name}`)
   run('bun', ['build', ENTRY, '--compile', `--target=${target}`, '--outfile', binary])
 
-  // `zip -j` keeps the archive flat so extracting drops the binary in place
-  // rather than recreating `packages/cli/bin/`.
+  // Flat archive, so extracting drops the binary in place rather than
+  // recreating `packages/cli/bin/`.
   fs.rmSync(archive, { force: true })
-  run('zip', ['-j', '-q', archive, binary])
+  archiveFlat(binary, archive)
   fs.rmSync(binary, { force: true })
 
   const { size } = fs.statSync(archive)
