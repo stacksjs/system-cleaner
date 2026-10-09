@@ -168,7 +168,7 @@ jobs:
       # binary proves the toolchain and fails honestly, instead of shipping
       # something that reports 0 B reclaimable and looks like a clean machine.
       - name: Build the Windows preview binary
-        run: bun run build:binaries --preview --only windows
+        run: bun run build:binaries --preview --only windows --keep
 
       # A binary that compiles and then lies is worse than no binary. Assert it
       # runs, and that a command this platform cannot carry out says which
@@ -176,8 +176,12 @@ jobs:
       - name: Smoke-test it
         run: |
           set -e
-          exe=packages/cli/bin/system-cleaner-windows-x64.exe
-          test -f "$exe" || { echo "no .exe produced"; exit 1; }
+          # --keep left the binary beside the archive, so there is nothing to
+          # extract. Depending on `unzip` here would repeat the assumption that
+          # made `zip` fail on this runner.
+          cd packages/cli/bin
+          exe=system-cleaner-windows-x64.exe
+          test -f "$exe" || { echo "no .exe produced"; ls -la; exit 1; }
           echo "--- version ---"
           ./"$exe" --version
           echo "--- an unsupported command must refuse, not find nothing ---"

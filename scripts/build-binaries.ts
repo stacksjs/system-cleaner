@@ -103,7 +103,12 @@ for (const { target, name } of TARGETS) {
   // recreating `packages/cli/bin/`.
   fs.rmSync(archive, { force: true })
   archiveFlat(binary, archive)
-  fs.rmSync(binary, { force: true })
+  // `--keep` leaves the binary beside the archive. CI smoke-tests the Windows
+  // build by running it, and neither `unzip` nor `tar -xf` is a safe bet on
+  // windows-latest - the same assumption that made `zip` fail there. Releases
+  // still ship only the archive.
+  if (!process.argv.includes('--keep'))
+    fs.rmSync(binary, { force: true })
 
   const { size } = fs.statSync(archive)
   console.warn(`[binaries] ${path.basename(archive)} (${(size / 1e6).toFixed(1)} MB)`)
