@@ -11,6 +11,26 @@ import type { PathSafetyCheck } from './types'
  */
 const IS_WINDOWS = process.platform === 'win32'
 
+/**
+ * True when `child` is `parent` or sits beneath it.
+ *
+ * A bare `startsWith` is not a containment test, and on a machine with two
+ * accounts whose short names share a prefix it is a hole: with HOME
+ * `/Users/glenn`, `/Users/glenn2/Documents` reads as inside your own home.
+ * PROTECTED_PATHS only ever holds the current user's roots, so nothing behind
+ * the boundary check refuses it - the sibling's entire home, Library and
+ * Pictures all came back safe to delete. glenn/glenn2 and ci/ci-runner are
+ * ordinary pairs, not contrivances.
+ */
+export function isWithin(child: string, parent: string): boolean {
+  if (samePath(child, parent))
+    return true
+  const prefix = parent.endsWith(path.sep) ? parent : parent + path.sep
+  return IS_WINDOWS
+    ? child.toLowerCase().startsWith(prefix.toLowerCase())
+    : child.startsWith(prefix)
+}
+
 /** Path equality, as the running filesystem defines it. */
 function samePath(a: string, b: string): boolean {
   return IS_WINDOWS ? a.toLowerCase() === b.toLowerCase() : a === b
@@ -124,9 +144,7 @@ export function isPathSafe(targetPath: string): PathSafetyCheck {
   // registry rather than by deleting a bundle, and `appUninstall` is false
   // there, so opening up Program Files would widen the gate for a feature
   // that does not exist.
-  const inHome = IS_WINDOWS
-    ? resolved.toLowerCase().startsWith(HOME.toLowerCase())
-    : resolved.startsWith(HOME)
+  const inHome = isWithin(resolved, HOME)
   const inAppBundles = !IS_WINDOWS && resolved.startsWith('/Applications/')
   if (!inHome && !inAppBundles) {
     return { safe: false, reason: 'Path is outside home directory' }
@@ -227,7 +245,7 @@ export function isCleanable(targetPath: string): PathSafetyCheck {
   }
 
   if (
-    !resolved.startsWith(HOME)
+    !isWithin(resolved, HOME)
     && !resolved.startsWith('/private/tmp')
     && !resolved.startsWith('/private/var/tmp')
     && !resolved.startsWith('/Library/')

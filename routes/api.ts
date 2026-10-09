@@ -6,6 +6,7 @@ import {
   isPathSafe,
   capabilities,
   classifyByGit,
+  isWithin,
   refusesDeletion,
   PLATFORM,
   getDirSize,
@@ -572,7 +573,10 @@ export default async function (router: Router) {
       await Promise.all(
         slice.map(async (p) => {
           const resolved = path.resolve(p);
-          if (!resolved.startsWith(HOME)) return;
+          // Containment, not a prefix: `/Users/glenn2` is not inside
+          // `/Users/glenn`, and measuring another account's home is a smaller
+          // version of the same mistake as deleting it.
+          if (!isWithin(resolved, HOME)) return;
           try { results[p] = await getDirSize(resolved); }
           catch { results[p] = 0; }
         }),

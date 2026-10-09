@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import process from 'node:process'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { HOME, isCleanable, isPathSafe } from '../src/paths'
+import { HOME, isCleanable, isPathSafe, isWithin } from '../src/paths'
 import { makeTmpDir } from './_tmp'
 
 let TMP: string
@@ -106,5 +106,50 @@ describe('isCleanable', () => {
 
   it('rejects paths that do not exist', () => {
     expect(isCleanable(path.join(HOME, 'no-such-thing-here-xyz-12345')).safe).toBe(false)
+  })
+})
+
+/**
+ * A prefix is not a containment test.
+ *
+ * `isPathSafe` admitted anything starting with HOME, and PROTECTED_PATHS only
+ * ever holds the *current* user's roots - so once the boundary wrongly let a
+ * sibling profile through, nothing behind it refused. With HOME
+ * `/Users/glenn`, the whole of `/Users/glenn2` came back safe to delete:
+ * Documents, Pictures, Library, the lot.
+ *
+ * glenn/glenn2 and ci/ci-runner are ordinary account pairs. The reviewer that
+ * found this rated it non-blocking; reaching another account's home through
+ * the delete gate is worse than that.
+ */
+describe('isWithin', () => {
+  const HOME = '/Users/glenn'
+
+  it('accepts the directory itself and its children', () => {
+    expect(isWithin(HOME, HOME)).toBe(true)
+    expect(isWithin('/Users/glenn/Documents', HOME)).toBe(true)
+    expect(isWithin('/Users/glenn/Library/Caches/x', HOME)).toBe(true)
+  })
+
+  it('refuses a sibling whose name merely starts the same way', () => {
+    for (const sibling of ['/Users/glenn2', '/Users/glenn2/Documents', '/Users/glenn-old/Desktop', '/Users/glennx']) {
+      expect(isWithin(sibling, HOME), `${sibling} is not inside ${HOME}`).toBe(false)
+      // And the bare check this replaced would have admitted every one.
+      expect(sibling.startsWith(HOME), 'the old check admitted it').toBe(true)
+    }
+  })
+
+  it('refuses an unrelated account', () => {
+    expect(isWithin('/Users/alice/Documents', HOME)).toBe(false)
+  })
+
+  it('tolerates a trailing separator on the parent', () => {
+    expect(isWithin('/Users/glenn/Documents', '/Users/glenn/')).toBe(true)
+  })
+
+  it('keeps the real home boundary working end to end', () => {
+    // The sibling of the actual HOME on this machine, whatever it is called.
+    const sibling = `${HOME.replace(/\/$/, '')}2/Documents`
+    expect(isWithin(sibling, HOME)).toBe(false)
   })
 })
