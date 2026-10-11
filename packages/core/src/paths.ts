@@ -23,17 +23,43 @@ const IS_WINDOWS = process.platform === 'win32'
  * ordinary pairs, not contrivances.
  */
 export function isWithin(child: string, parent: string): boolean {
-  if (samePath(child, parent))
-    return true
-  const prefix = parent.endsWith(path.sep) ? parent : parent + path.sep
-  return IS_WINDOWS
-    ? child.toLowerCase().startsWith(prefix.toLowerCase())
-    : child.startsWith(prefix)
+  const c = forCompare(child)
+  const p = trimTrailingSep(forCompare(parent))
+  return c === p || c === p + path.sep || c.startsWith(p + path.sep)
+}
+
+/**
+ * A path rewritten into the one spelling this filesystem compares by.
+ *
+ * On Windows that means folding case and folding `/` onto `\\`, because both
+ * are separators there and `C:/Users/x` and `C:\\Users\\x` are the same
+ * directory. Comparing a prefix built with `path.sep` against a path written
+ * with forward slashes answered "not inside" for every input, which is how the
+ * Windows CI leg found this.
+ *
+ * On macOS neither fold is applied. A backslash is a legal character in a
+ * filename there, and the volume may be case-sensitive.
+ */
+function forCompare(p: string): string {
+  return IS_WINDOWS ? p.replace(/\//g, '\\').toLowerCase() : p
+}
+
+/**
+ * Drop trailing separators so a parent passed as `~/` behaves like `~`.
+ *
+ * Never shortens past a root: `/` becomes empty and `C:\\` becomes `C:`, and in
+ * both cases the caller re-appends the separator, which lands back on the root
+ * it started from.
+ */
+function trimTrailingSep(p: string): string {
+  let end = p.length
+  while (end > 1 && p[end - 1] === path.sep) end--
+  return p.slice(0, end)
 }
 
 /** Path equality, as the running filesystem defines it. */
 function samePath(a: string, b: string): boolean {
-  return IS_WINDOWS ? a.toLowerCase() === b.toLowerCase() : a === b
+  return forCompare(a) === forCompare(b)
 }
 
 /**

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
-import process from 'node:process'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
+import process from 'node:process'
 import { HOME, isCleanable, isPathSafe, isWithin } from '../src/paths'
 import { makeTmpDir } from './_tmp'
 
@@ -151,5 +151,29 @@ describe('isWithin', () => {
     // The sibling of the actual HOME on this machine, whatever it is called.
     const sibling = `${HOME.replace(/\/$/, '')}2/Documents`
     expect(isWithin(sibling, HOME)).toBe(false)
+  })
+
+  /**
+   * Windows separates paths with either character, so a containment test that
+   * only knows `\` answers "not inside" for every forward-slash path. That is
+   * the safe direction - it refuses rather than deletes - but it is still
+   * wrong, and it is what the Windows CI leg caught: the prefix was built with
+   * `path.sep` and compared against the POSIX spellings above, so even
+   * `isWithin(HOME, HOME)` came back false there.
+   *
+   * On macOS a backslash is an ordinary filename character and must not read
+   * as a separator, which is why this asserts opposite answers per platform
+   * rather than skipping one of them.
+   */
+  it('reads either separator on Windows, and only the slash on macOS', () => {
+    const onWindows = process.platform === 'win32'
+    const parent = 'C:\\Users\\glenn'
+
+    expect(isWithin('C:/Users/glenn/AppData/Local/Thing', parent)).toBe(onWindows)
+    expect(isWithin('C:/Users/glenn', parent)).toBe(onWindows)
+
+    // The fold must not widen the boundary it was added to narrow.
+    expect(isWithin('C:/Users/glenn2/Documents', parent)).toBe(false)
+    expect(isWithin('C:\\Users\\glenn-old', parent)).toBe(false)
   })
 })
