@@ -33,17 +33,31 @@ describe('platform capabilities', () => {
   })
 
   /**
-   * The honesty check. Windows has no path or command layer yet, so every
-   * capability must be false — a single true here is a screen that renders
-   * and finds nothing.
+   * The honesty check, and the record of what actually shipped on Windows.
    *
-   * Flip these one at a time as each lands, and this test turns into the
-   * record of what actually shipped.
+   * Asserted as an exact map rather than a list of trues, so it fails in both
+   * directions: a capability turned on before its implementation exists, and
+   * one that silently regresses. A single wrong true here is a screen that
+   * renders and finds nothing, which reads as a clean machine.
+   *
+   * `diskScan` and `developerJunk` are on because directory sizing no longer
+   * needs `du` — see `dirsize.ts`, which agrees with `du` to the byte. The
+   * rest need `launchctl`, `.app` bundles, `osascript`, `mdfind` or the
+   * registry, and none of those have a Windows implementation yet.
    */
-  it('claims nothing on Windows until the implementation exists', () => {
+  it('claims exactly the Windows features that are implemented', () => {
     if (PLATFORM !== 'windows') return
-    for (const [feature, enabled] of Object.entries(capabilities))
-      expect(enabled, `${feature} on Windows`).toBe(false)
+    expect(capabilities).toEqual({
+      cleanTargets: false,
+      diskScan: true,
+      developerJunk: true,
+      appUninstall: false,
+      startupItems: false,
+      privacy: false,
+      maintenance: false,
+      processes: false,
+      trash: false,
+    })
   })
 
   it('claims only filesystem work on Linux', () => {

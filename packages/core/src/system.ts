@@ -1,6 +1,7 @@
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import type { DiskInfo, SystemInfo } from './types'
+import { NEEDS_PORTABLE_SIZER, sizeOfTree, sizeOfTreeAsync } from './dirsize'
 import { exec, execSync, shellEscape } from './exec'
 
 /**
@@ -112,9 +113,23 @@ export async function getPrimaryDiskInfo(): Promise<DiskInfo | null> {
 }
 
 /**
- * Get the size of a directory using `du`
+ * Get the size of a directory using `du`, or a portable walk where there is no
+ * `du` to run.
+ *
+ * Windows has no `du`. The spawn failed ENOENT, `exec` reported not-ok, and
+ * this returned 0 — which the screens above it render as an empty chart and a
+ * clean machine. A size of zero and "I could not measure" have to be
+ * different answers, so on Windows the walk in `dirsize.ts` does the job
+ * instead. `du` stays the default wherever it exists, because it is several
+ * times faster.
  */
 export async function getDirSize(dirPath: string): Promise<number> {
+  // The async form on purpose. `du` ran in another process, so a 15-second
+  // measure cost this one nothing; an in-process walk awaited from a request
+  // handler would freeze the agent that serves the UI for the whole duration.
+  if (NEEDS_PORTABLE_SIZER)
+    return await sizeOfTreeAsync(dirPath, { deadline: Date.now() + 15_000 })
+
   const result = await exec(`du -sk ${shellEscape(dirPath)} 2>/dev/null | cut -f1`, { timeout: 15_000 })
   if (!result.ok)
     return 0
@@ -125,6 +140,9 @@ export async function getDirSize(dirPath: string): Promise<number> {
  * Get the size of a directory synchronously
  */
 export function getDirSizeSync(dirPath: string): number {
+  if (NEEDS_PORTABLE_SIZER)
+    return sizeOfTree(dirPath, { deadline: Date.now() + 15_000 })
+
   const out = execSync(`du -sk ${shellEscape(dirPath)} 2>/dev/null | cut -f1`, { timeout: 15_000 })
   return (Number.parseInt(out) || 0) * 1024
 }

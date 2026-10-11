@@ -1,8 +1,10 @@
+import type { SizeRecord } from '@system-cleaner/core'
 import type { DiskEntry, ScanOptions, ScanResult } from './types'
 import { spawn } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
+import { measureTreeAsync, NEEDS_PORTABLE_SIZER } from '@system-cleaner/core'
 
 const DEFAULT_MAX_DEPTH = 6
 const DEFAULT_TIMEOUT_MS = 15_000
@@ -97,6 +99,27 @@ const PRUNE_CEILING_BYTES = 2 * 1024 * 1024
 const REMAINDER_MIN_FRACTION = 0.01
 
 const DU_BIN = fs.existsSync('/usr/bin/du') ? '/usr/bin/du' : 'du'
+
+/**
+ * `du -k` output as records, so the grafting code has one input shape.
+ *
+ * Lines are `<KiB>\t<path>`. A line killed mid-write is dropped rather than
+ * half-parsed: `du` reports a directory only once everything under it is
+ * counted, so a truncated run still yields complete subtrees for every line
+ * that did arrive, and the partial last line is the only casualty.
+ */
+function parseDuRecords(output: string): SizeRecord[] {
+  const records: SizeRecord[] = []
+  for (const line of output.split('\n')) {
+    if (!line) continue
+    const tab = line.indexOf('\t')
+    if (tab <= 0) continue
+    const kib = Number.parseInt(line.slice(0, tab), 10)
+    if (!Number.isFinite(kib)) continue
+    records.push({ path: line.slice(tab + 1), bytes: kib * 1024 })
+  }
+  return records
+}
 
 interface Pending { entry: DiskEntry, depth: number }
 
@@ -352,14 +375,43 @@ export async function scanDirectory(rootPath: string, options: ScanOptions = {})
   }
 
   /**
-   * Run `du` over one directory and graft what it reports onto `entry`.
+   * Measure one directory and graft what comes back onto `entry`.
    *
-   * `-d` bounds the report to the depth the tree still has room for, `-x`
-   * keeps it on this filesystem, and `-k` makes every number a block count in
-   * KiB — allocated blocks rather than apparent size, which is the honest
-   * answer for a tool whose next screen offers to delete things.
+   * `du` where there is one: `-d` bounds the report to the depth the tree
+   * still has room for, `-x` keeps it on this filesystem, and `-k` makes every
+   * number a block count in KiB — allocated blocks rather than apparent size,
+   * which is the honest answer for a tool whose next screen offers to delete
+   * things.
+   *
+   * Windows has no `du`, so the walk in `@system-cleaner/core` does the same
+   * job in-process. It matches `du -x -k -d` in the four behaviours this
+   * scanner depends on: one filesystem, no symlink following, a hard link
+   * counted once, and a directory's number covering its whole subtree rather
+   * than only the part that was reported. Before it existed the spawn failed
+   * ENOENT and every folder came back `unmeasured` — honest, but an empty
+   * chart.
    */
-  function measureOne(entry: DiskEntry, depth: number): Promise<{ folders: number, unreadable: number, timedOut: boolean }> {
+  async function measureOne(entry: DiskEntry, depth: number): Promise<{ folders: number, unreadable: number, timedOut: boolean }> {
+    // A folded directory is measured, never described: asking for the depth
+    // below `node_modules` returns a node per package and answers a question
+    // nobody asked.
+    const reportDepth = skipPatterns.has(entry.name) ? 0 : Math.max(0, maxDepth - depth)
+
+    if (NEEDS_PORTABLE_SIZER) {
+      if (deadline - Date.now() <= 0) {
+        entry.unmeasured = true
+        return { folders: 0, unreadable: 0, timedOut: true }
+      }
+
+      // The yielding form: this walk runs in-process, and the progress ticker
+      // and every other request share the loop with it.
+      const measured = await measureTreeAsync(entry.path, { maxDepth: reportDepth, deadline })
+      const folders = graft(entry, measured.records)
+      if (entry.sizeBytes === 0 && folders === 0)
+        entry.unmeasured = true
+      return { folders, unreadable: measured.unreadable, timedOut: measured.timedOut }
+    }
+
     return new Promise((resolve) => {
       const remaining = deadline - Date.now()
       if (remaining <= 0) {
@@ -367,11 +419,6 @@ export async function scanDirectory(rootPath: string, options: ScanOptions = {})
         resolve({ folders: 0, unreadable: 0, timedOut: true })
         return
       }
-
-      // A folded directory is measured, never described: asking `du` for the
-      // depth below `node_modules` returns a node per package and answers a
-      // question nobody asked.
-      const reportDepth = skipPatterns.has(entry.name) ? 0 : Math.max(0, maxDepth - depth)
 
       const child = spawn(DU_BIN, ['-x', '-k', '-d', String(reportDepth), entry.path], {
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -400,7 +447,7 @@ export async function scanDirectory(rootPath: string, options: ScanOptions = {})
         // Killed mid-run still leaves usable output: `du` reports a directory
         // only once everything under it is counted, so every line that did
         // arrive is a complete subtree.
-        const folders = graft(entry, out)
+        const folders = graft(entry, parseDuRecords(out))
         if (entry.sizeBytes === 0 && folders === 0)
           entry.unmeasured = true
         resolve({ folders, unreadable, timedOut })
@@ -416,15 +463,19 @@ export async function scanDirectory(rootPath: string, options: ScanOptions = {})
   }
 
   /**
-   * Turn `du` output into child nodes under `root`.
+   * Turn measured records into child nodes under `root`.
    *
-   * Lines are `<KiB>\t<path>`, children before parents. A path whose ancestry
-   * runs through a folded directory is dropped — its bytes are already inside
-   * the folded directory's own total, which is the level the tree stops at.
+   * Records arrive children-before-parents. One whose ancestry runs through a
+   * folded directory is dropped — its bytes are already inside the folded
+   * directory's own total, which is the level the tree stops at.
+   *
+   * Separators come from `path`, not from a literal '/'. A hardcoded slash
+   * made every record fail the containment test on Windows, so nothing was
+   * ever grafted and the tree stayed one node deep.
    */
-  function graft(root: DiskEntry, output: string): number {
+  function graft(root: DiskEntry, records: SizeRecord[]): number {
     const byPath = new Map<string, DiskEntry>([[root.path, root]])
-    const prefix = `${root.path}/`
+    const prefix = root.path.endsWith(path.sep) ? root.path : root.path + path.sep
     let created = 0
 
     function ensure(target: string): DiskEntry | null {
@@ -449,25 +500,19 @@ export async function scanDirectory(rootPath: string, options: ScanOptions = {})
       return node
     }
 
-    for (const line of output.split('\n')) {
-      if (!line) continue
-      const tab = line.indexOf('\t')
-      if (tab <= 0) continue
-
-      const kib = Number.parseInt(line.slice(0, tab), 10)
-      if (!Number.isFinite(kib)) continue
-      const target = line.slice(tab + 1)
+    for (const record of records) {
+      const target = record.path
 
       if (target !== root.path) {
         if (!target.startsWith(prefix)) continue
         // Anything under a folded directory: counted, not listed.
-        const segments = target.slice(prefix.length).split('/')
+        const segments = target.slice(prefix.length).split(path.sep)
         if (segments.slice(0, -1).some(s => FOLDED_DIRS.has(s))) continue
       }
 
       const node = ensure(target)
       if (!node) continue
-      node.sizeBytes = kib * 1024
+      node.sizeBytes = record.bytes
     }
 
     return created

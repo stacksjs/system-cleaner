@@ -78,9 +78,16 @@ const NONE: Capabilities = {
  * Linux gets the three features that are pure filesystem work. The rest lean
  * on `launchctl`, `.app` bundles and `osascript`, none of which exist there.
  *
- * Windows is currently all false, deliberately. The path and command layers
- * have no Windows implementation yet, so every one of these would be a lie.
- * This is the flag to flip, one key at a time, as each lands — see
+ * Windows gets the two features that are pure filesystem work, and got them
+ * only once the thing underneath them actually worked. Both are backed by
+ * directory sizes, every size came from `du`, and Windows has no `du`: the
+ * spawn failed ENOENT, the error was swallowed, and the size came back 0. A
+ * capability turned on in that state is worse than one turned off, because an
+ * empty chart reads as a clean machine. `dirsize.ts` is the walker that
+ * replaced the shell-out, and it agrees with `du` to the byte.
+ *
+ * The rest stay false: they need `launchctl`, `.app` bundles, `osascript`,
+ * `mdfind` and the registry. Flip them one key at a time as each lands — see
  * stacksjs/system-cleaner#23.
  */
 const CAPABILITIES: Record<Platform, Capabilities> = {
@@ -100,7 +107,11 @@ const CAPABILITIES: Record<Platform, Capabilities> = {
     diskScan: true,
     developerJunk: true,
   },
-  windows: { ...NONE },
+  windows: {
+    ...NONE,
+    diskScan: true,
+    developerJunk: true,
+  },
   unsupported: { ...NONE },
 }
 
