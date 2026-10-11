@@ -23,6 +23,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import process from 'node:process'
+import { bundleLayout, dataDir as dataDirFor, runtimeSupports as probeRuntime, windowArgs } from './bundle'
 import { readRememberedPort, rememberPort } from '../Support/Runtime/agent-port'
 
 /**
@@ -75,20 +76,24 @@ const APP_NAME = 'SystemCleaner'
 const STARTUP_TIMEOUT_MS = 20_000
 const POLL_INTERVAL_MS = 100
 
-const macosDir = path.dirname(process.execPath)
-const contentsDir = path.dirname(macosDir)
+/**
+ * The platform this bundle was assembled for.
+ *
+ * Narrowed rather than cast: `process.platform` admits a dozen values this app
+ * has no layout for, and `bundleLayout` must not be handed one of them and
+ * silently return the POSIX shape.
+ */
+const platform = process.platform === 'darwin' || process.platform === 'win32' ? process.platform : 'linux'
 
-const craftBinary = path.join(macosDir, 'craft-runtime')
-const webRoot = path.join(contentsDir, 'Resources/web')
-const migrationsDir = path.join(contentsDir, 'Resources/migrations')
+const { craftBinary, webRoot, migrationsDir } = bundleLayout(process.execPath, platform)
 
 /**
- * Application data lives in `~/Library/Application Support`, not next to the
- * binary. A `.app` in `/Applications` is not writable by the user, and it gets
- * replaced wholesale on update — cleanup history stored inside it would be
- * both unwritable and disposable.
+ * Application data lives beside the user's other application data, never next
+ * to the binary. An installed app sits somewhere the user cannot write -
+ * `/Applications`, `C:\\Program Files` - and is replaced wholesale on update,
+ * so cleanup history stored inside it would be both unwritable and disposable.
  */
-const dataDir = path.join(os.homedir(), 'Library/Application Support', APP_NAME)
+const dataDir = dataDirFor(platform, APP_NAME, os.homedir(), process.env)
 const databasePath = path.join(dataDir, 'system-cleaner.sqlite')
 
 /**
@@ -202,127 +207,15 @@ const port = await readPort()
 rememberPort(portFile, port)
 await waitForHealth(port)
 
-/**
- * Whether the bundled runtime takes a given flag.
- *
- * This used to ask the binary its version and compare it against the release
- * that introduced the behaviour. That works for the runtime this app ships,
- * which is signed during the bundle build and answers `--version` properly. It
- * does not work for one that is not yet signed: macOS kills an unsigned Mach-O
- * on exec, so the probe reads an empty stdout, the regex finds no version, and
- * the runtime is judged incapable. The pantry download behaves exactly that
- * way before the build signs it, and a local `zig build` reports 0.0.0.
- *
- * So ask the binary what it *supports* rather than what it is called, without
- * running it at all. The flag name appears in its own argument table, which is
- * the fact the version number was standing in for and cannot drift away from
- * the behaviour. A runtime that cannot be read is treated as incapable, which
- * is the safe answer for every flag below.
- */
-function runtimeSupports(flag: string): boolean {
-  try {
-    // `grep -q` on the binary, rather than reading 13 MB into this process to
-    // search it. Exit code 0 means the flag is in the runtime's option table.
-    const probe = Bun.spawnSync(['grep', '-qa', '--', flag, craftBinary])
-    return probe.exitCode === 0
-  }
-  catch {
-    return false
-  }
-}
-
-/**
- * Whether the runtime can host this app's chrome.
- *
- * Hiding the titlebar puts the window's own buttons over the page's top-left
- * corner, which is where this app's chrome belongs — every Mac app with a
- * sidebar carries them there rather than in a strip above it. Two things have
- * to be true of the runtime for that to work:
- *
- *   1. It measures its window buttons and publishes where they are, so the
- *      icon rail can start its first button below them instead of under them.
- *   2. It serves `window.startDrag`, which is the only way the page can move a
- *      window that has no titlebar. WebKit does not implement
- *      `-webkit-app-region: drag` — a WKWebView discards the declaration — so
- *      without `startDrag` a titlebar-less window cannot be moved at all.
- *
- * Both arrived with `--titlebar-hidden`, so the flag stands for all three. A
- * runtime without it opens an ordinary titlebar and no buttons over the rail,
- * which is plain but not broken.
- */
-const canHostChrome = runtimeSupports('--titlebar-hidden')
-
-/**
- * The vibrancy the whole window sits on.
- *
- * Hiding the titlebar puts the real window buttons over the rail's top-left
- * corner, which is the right half of the arrangement. The other half is what
- * they sit ON. In Finder the buttons rest on a translucent sidebar rather than
- * on a flat page, and without a material under them three AppKit buttons float
- * on a white rectangle: they are the genuine article — ×/−/⤢ on hover, grey
- * when the window loses focus — but nothing around them says so.
- *
- * `--web-window-material` puts one NSVisualEffectView behind the entire web
- * view. It started as `--web-sidebar-material`, which covers a leading strip
- * and paints the rest opaque — Finder's arrangement, and the right one for a
- * window whose sidebar is a different surface from its content. This one is
- * not: the rail carries no fill of its own, and the seam between a translucent
- * rail and an opaque page was the only thing in the window that drew a line
- * there. One material behind everything removes the seam and gives the whole
- * app the same surface the buttons already sit on.
- *
- * Nothing is tinted natively. A material behind the whole page has to be
- * washed in the page's own colour, and the page is the only thing that knows
- * whether it is light or dark — so `app.stx` paints a translucent `--app-bg`
- * over it, in whichever mode it is in, and tells Craft which mode that is
- * (`settings-panel.ts`) so the material resolves to match.
- *
- * The older flags stay as the fallback: an installed copy is only rebuilt when
- * this app ships, and a runtime predating the window span should still put a
- * material under the buttons rather than none at all.
- */
-const WINDOW_MATERIAL = ['--web-window-material']
-
-const SIDEBAR_MATERIAL = [
-  '--web-sidebar-material',
-  '--web-sidebar-width',
-  '74',
-  '--web-sidebar-material-opacity',
-  '0.25',
-]
-
-const material = runtimeSupports('--web-window-material') ? WINDOW_MATERIAL : SIDEBAR_MATERIAL
-
-/**
- * Let the page keep what it stores.
- *
- * Craft gives a window a *non-persistent* website data store by default — no
- * disk I/O at startup, and right for a window that only renders. It is wrong
- * for this one. Everything the app remembers on the page's side lives in
- * `localStorage`: the colour mode the appearance bootstrap reads before first
- * paint, and every switch in the Settings window. In an ephemeral store those
- * are emptied on quit, and each window gets a store of its own — so the
- * Settings window wrote preferences the dashboard could not read, and both
- * forgot them at the next launch. Nothing failed; the values were simply never
- * there.
- *
- * Guarded because it arrived in craft-native.org 0.0.89, and an older runtime
- * given an unknown flag refuses to start.
- */
-const persistentStorage = runtimeSupports('--persistent-storage') ? ['--persistent-storage'] : []
-
 const craft = Bun.spawn([
   craftBinary,
-  `http://127.0.0.1:${port}/app`,
-  '--title',
-  APP_NAME,
-  ...(canHostChrome ? ['--titlebar-hidden', ...material] : []),
-  ...persistentStorage,
-  '--width',
-  '1400',
-  '--height',
-  '900',
-  ...(process.env.SYSTEM_CLEANER_DEVTOOLS === '1' ? [] : ['--no-devtools']),
+  ...windowArgs(platform, {
+    url: `http://127.0.0.1:${port}/app`,
+    title: APP_NAME,
+    width: 1400,
+    height: 900,
+    devtools: process.env.SYSTEM_CLEANER_DEVTOOLS === '1',
+  }, flag => probeRuntime(craftBinary, flag)),
 ], {
   stdin: 'inherit',
   stdout: 'inherit',
