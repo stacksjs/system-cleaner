@@ -78,7 +78,7 @@ const NONE: Capabilities = {
  * Linux gets the three features that are pure filesystem work. The rest lean
  * on `launchctl`, `.app` bundles and `osascript`, none of which exist there.
  *
- * Windows gets the two features that are pure filesystem work, and got them
+ * Windows gets the three features that are pure filesystem work, and got them
  * only once the thing underneath them actually worked. Both are backed by
  * directory sizes, every size came from `du`, and Windows has no `du`: the
  * spawn failed ENOENT, the error was swallowed, and the size came back 0. A
@@ -109,6 +109,7 @@ const CAPABILITIES: Record<Platform, Capabilities> = {
   },
   windows: {
     ...NONE,
+    cleanTargets: true,
     diskScan: true,
     developerJunk: true,
   },

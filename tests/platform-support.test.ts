@@ -48,7 +48,7 @@ describe('platform capabilities', () => {
   it('claims exactly the Windows features that are implemented', () => {
     if (PLATFORM !== 'windows') return
     expect(capabilities).toEqual({
-      cleanTargets: false,
+      cleanTargets: true,
       diskScan: true,
       developerJunk: true,
       appUninstall: false,
