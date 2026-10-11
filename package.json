@@ -13,6 +13,7 @@
     "build:scripts": "bun ./scripts/build-client-scripts.ts",
     "build:binaries": "bun ./scripts/build-binaries.ts",
     "build:app": "bun ./scripts/build-desktop-app.ts",
+    "build:app:windows": "bun ./scripts/build-desktop-windows.ts",
     "release": "./buddy release",
     "release:patch": "./buddy release --bump patch --no-interaction",
     "release:minor": "./buddy release --bump minor --no-interaction",

@@ -123,6 +123,10 @@ fs.mkdirSync(dataDir, { recursive: true })
 const agent = Bun.spawn([process.execPath, 'agent'], {
   stdout: 'pipe',
   stderr: 'inherit',
+  // Same binary, so it carries the GUI subsystem and shows nothing anyway -
+  // set for the same reason as below, so neither spawn depends on that
+  // happening to stay true.
+  windowsHide: true,
   env: {
     ...process.env,
     APP_ENV: 'production',
@@ -220,6 +224,11 @@ const craft = Bun.spawn([
   stdin: 'inherit',
   stdout: 'inherit',
   stderr: 'inherit',
+  // The launcher is a GUI-subsystem binary on Windows, so it owns no console.
+  // `craft-runtime.exe` is a console-subsystem one, and Windows allocates a
+  // fresh console for such a child unless told not to - which would put a
+  // command prompt on screen beside the app window. Ignored on POSIX.
+  windowsHide: true,
 })
 
 const code = await craft.exited

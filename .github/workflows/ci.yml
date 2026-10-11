@@ -236,6 +236,88 @@ jobs:
           path: packages/cli/bin/system-cleaner-windows-x64.zip
           if-no-files-found: error
 
+      # The desktop bundle, built on Windows because the icon and the
+      # version-info resource need the Windows resource compiler - a
+      # cross-build from macOS produces a working but anonymous .exe:
+      #
+      #     error: Using --windows-icon is only available when compiling on Windows
+      - name: Build the Windows desktop bundle
+        run: bun run build:app:windows
+
+      # What can be checked without a human looking at a window.
+      #
+      # Runs the launcher's own `agent` subcommand with the environment the
+      # launcher passes it, then asks the health endpoint. That exercises the
+      # compiled binary, the argv dispatch, the view payload, the migrations
+      # and the loopback bind - everything except the window itself, which
+      # needs eyes or a screenshot harness.
+      - name: Smoke-test the desktop agent
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stage = "storage/framework/desktop-windows/SystemCleaner"
+          $exe = Join-Path $stage "SystemCleaner.exe"
+          if (-not (Test-Path $exe)) { throw "no launcher at $exe" }
+
+          # The launcher is a GUI-subsystem binary, which is what keeps a
+          # command prompt from opening beside the app. Assert it, because the
+          # flag that does it is easy to drop and the symptom is cosmetic
+          # enough to ship unnoticed.
+          $bytes = [System.IO.File]::ReadAllBytes($exe)
+          $peOffset = [BitConverter]::ToInt32($bytes, 0x3C)
+          $subsystem = [BitConverter]::ToUInt16($bytes, $peOffset + 0x5C)
+          Write-Host "PE subsystem: $subsystem (2 = GUI, 3 = console)"
+          if ($subsystem -ne 2) { throw "launcher is not a GUI subsystem binary; --windows-hide-console was lost" }
+
+          $data = Join-Path $env:RUNNER_TEMP "sc-desktop-smoke"
+          New-Item -ItemType Directory -Force -Path $data | Out-Null
+
+          $env:SYSTEM_CLEANER_AGENT = '1'
+          $env:SYSTEM_CLEANER_WEB_ROOT = (Resolve-Path (Join-Path $stage "resources/web")).Path
+          $env:SYSTEM_CLEANER_MIGRATIONS = (Resolve-Path (Join-Path $stage "resources/migrations")).Path
+          $env:SYSTEM_CLEANER_PORT = '39477'
+          $env:DB_CONNECTION = 'sqlite'
+          $env:DB_DATABASE_PATH = (Join-Path $data "system-cleaner.sqlite")
+          $env:APP_ENV = 'production'
+
+          $log = Join-Path $data "agent.log"
+          $agent = Start-Process -FilePath $exe -ArgumentList 'agent' -PassThru `
+            -RedirectStandardOutput $log -RedirectStandardError (Join-Path $data "agent.err") -NoNewWindow
+
+          try {
+            $ok = $false
+            foreach ($attempt in 1..60) {
+              Start-Sleep -Milliseconds 500
+              try {
+                $res = Invoke-WebRequest -Uri "http://127.0.0.1:39477/__health" -UseBasicParsing -TimeoutSec 2
+                if ($res.StatusCode -eq 200) { $ok = $true; break }
+              } catch { }
+            }
+
+            Write-Host "--- agent stdout ---"; if (Test-Path $log) { Get-Content $log }
+            Write-Host "--- agent stderr ---"; Get-Content (Join-Path $data "agent.err") -ErrorAction SilentlyContinue
+
+            if (-not $ok) { throw "the desktop agent never answered /__health" }
+            Write-Host "the desktop agent answered /__health"
+
+            # And it serves the bundled UI, not just the API - a bundle whose
+            # web payload never reached it would still pass the check above.
+            $page = Invoke-WebRequest -Uri "http://127.0.0.1:39477/app" -UseBasicParsing -TimeoutSec 5
+            if ($page.StatusCode -ne 200) { throw "/app returned $($page.StatusCode)" }
+            Write-Host "/app served $($page.RawContentLength) bytes"
+          }
+          finally {
+            if ($agent -and -not $agent.HasExited) { Stop-Process -Id $agent.Id -Force }
+          }
+
+      - name: Keep the desktop bundle for inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: SystemCleaner-windows-desktop
+          path: storage/framework/desktop-windows/*.zip
+          if-no-files-found: error
+
   # Compiles the release artifact on every push so a broken CLI is caught here
   # rather than after a tag has already been pushed.
   binaries:
