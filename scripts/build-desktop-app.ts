@@ -306,7 +306,7 @@ function imageStagedBundle(before: Set<string>): void {
 
 // The framework cannot yet distinguish executable payloads from its JSON
 // metadata when signing an app with a userland launcher. Build the image
-// unsigned here; `sealSignedBundle` below performs the authoritative,
+// unsigned here; `sealBundle` below performs the authoritative,
 // verified inside-out signing pass.
 const stagedBefore = stagingDirs()
 try {
@@ -334,11 +334,24 @@ const dmgPath = path.join(dmgDir, dmg)
  * metadata under Resources, then sign the executable leaves before sealing the
  * app itself. Rebuilding the image here also makes a failed framework signing
  * attempt impossible to mistake for a distributable artifact.
+ *
+ * This runs whether or not there is an identity to sign with, because an
+ * unsealed bundle does not launch *anywhere* — not just on someone else's
+ * Mac. `bun build --compile` leaves the launcher linker-signed ad hoc while
+ * the bundle around it has no `_CodeSignature` at all, and macOS kills that
+ * combination on exec with SIGTRAP and no message: the app bounces once in the
+ * Dock and is gone. `codesign --verify` is the only thing that says why —
+ * "code has no resources but signature indicates they must be present".
+ *
+ * So with no identity the bundle is sealed ad hoc, which is enough to run it
+ * on the machine that built it and is what a local `bun run build:app` is for.
+ * Hardened runtime, entitlements and a timestamp belong to the Developer ID
+ * pass and are skipped: `--options runtime` is what makes the entitlements
+ * load-bearing, and an ad-hoc signature cannot be notarized regardless.
  */
-function sealSignedBundle(imagePath: string): void {
+function sealBundle(imagePath: string): void {
   const identity = process.env.DESKTOP_SIGNING_IDENTITY
-  if (!identity)
-    return
+  const adhoc = !identity
 
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'system-cleaner-sign-'))
   const mountDir = path.join(workDir, 'mounted')
@@ -385,16 +398,18 @@ function sealSignedBundle(imagePath: string): void {
     // `plutil -lint` and rejects them outright — "syntax error near line 12",
     // pointing at a comment plutil had just called valid.
     const entitlements = path.join(ROOT, 'app/Desktop/Entitlements.plist')
-    if (!fs.existsSync(entitlements))
+    if (!adhoc && !fs.existsSync(entitlements))
       throw new Error(`Signing needs ${entitlements}`)
 
-    const signArgs = [
-      '--force',
-      '--options', 'runtime',
-      '--entitlements', entitlements,
-      '--timestamp',
-      '--sign', identity,
-    ]
+    const signArgs = adhoc
+      ? ['--force', '--sign', '-']
+      : [
+          '--force',
+          '--options', 'runtime',
+          '--entitlements', entitlements,
+          '--timestamp',
+          '--sign', identity as string,
+        ]
 
     for (const name of ['craft-runtime', APP_NAME])
       run('codesign', [...signArgs, path.join(macosDir, name)])
@@ -403,9 +418,13 @@ function sealSignedBundle(imagePath: string): void {
     run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', appBundle])
 
     fs.symlinkSync('/Applications', path.join(imageRoot, 'Applications'))
+    // Versioned, for the reason `imageStagedBundle` is: on a Mac with the app
+    // installed, TCC refuses to let anything create
+    // `/Volumes/SystemCleaner/SystemCleaner.app` over the copy it manages, and
+    // `hdiutil` fails with "Operation not permitted".
     run('hdiutil', [
       'create',
-      '-volname', APP_NAME,
+      '-volname', `${APP_NAME} ${APP_VERSION}`,
       '-srcfolder', imageRoot,
       '-ov',
       '-format', 'UDZO',
@@ -424,7 +443,7 @@ function sealSignedBundle(imagePath: string): void {
   }
 }
 
-sealSignedBundle(dmgPath)
+sealBundle(dmgPath)
 
 // ── 6. Notarize ─────────────────────────────────────────────────
 // Signing is `build:dmg`'s job; notarization is not, and a signed but
@@ -459,7 +478,7 @@ fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
 console.log(`[desktop] ${manifestPath}`)
 
 if (!process.env.DESKTOP_SIGNING_IDENTITY)
-  console.warn('[desktop] DESKTOP_SIGNING_IDENTITY is unset — the bundle is unsigned and will not launch on another Mac')
+  console.warn('[desktop] DESKTOP_SIGNING_IDENTITY is unset — the bundle is sealed ad hoc, so it runs on this Mac and is refused on every other')
 else if (!process.env.NOTARY_PROFILE)
   console.warn('[desktop] NOTARY_PROFILE is unset — the DMG is signed but not notarized')
 
