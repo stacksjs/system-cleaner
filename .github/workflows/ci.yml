@@ -118,8 +118,52 @@ jobs:
   #
   # `shell: bash` throughout because `buddy` is a /bin/sh script and the runner
   # defaults to PowerShell; Git Bash ships on windows-latest.
+  # The prerendered UI, rendered once on Linux and handed to whoever needs it.
+  #
+  # Not an optimisation. `./buddy build:views` exits 0 on Windows in a third of
+  # a second having written nothing - a silent no-op somewhere in
+  # @stacksjs/stx, which the desktop bundle build caught only because it
+  # checks for its own inputs rather than trusting them. Worth reporting
+  # upstream; not worth blocking a Windows bundle on, because this payload is
+  # platform-independent on purpose. The bundle serves prerendered HTML and
+  # every host fact arrives over the API precisely so that nothing in `dist/`
+  # describes the machine that built it.
+  views:
+    name: Views
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Dependencies
+        run: bun install
+
+      - name: Build client scripts
+        run: bun run build:scripts
+
+      - name: Render the views
+        run: ./buddy build:views
+
+      # Asserted here rather than only where it is consumed, so a renderer
+      # that stops producing pages fails in the job that owns it.
+      - name: Check the app pages were written
+        run: |
+          test -f dist/app/large-files.html || { echo "no app pages in dist/"; ls -la dist || true; exit 1; }
+          echo "rendered $(find dist -type f | wc -l) files"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rendered-views
+          path: dist
+          if-no-files-found: error
+          retention-days: 1
+
   test-windows:
     runs-on: windows-latest
+    needs: views
 
     defaults:
       run:
@@ -241,14 +285,21 @@ jobs:
       # cross-build from macOS produces a working but anonymous .exe:
       #
       #     error: Using --windows-icon is only available when compiling on Windows
-      # `./buddy` is a POSIX shell script. These steps run it through the job's
-      # bash shell, which can; `spawnSync` from inside the build script cannot,
-      # and reaching for `sh` there would depend on Git Bash being on a child
-      # process's PATH - the assumption that makes a thing work on CI and fail
-      # for users. So the shared output is produced here and the script is told
-      # to skip it. It still checks that the output exists.
-      - name: Render the views for the bundle
-        run: ./buddy build:views
+      # Rendered by the `views` job, because `./buddy build:views` is a silent
+      # no-op on Windows: it exits 0 in a third of a second having written
+      # nothing. The payload is platform-independent by design, so building it
+      # elsewhere costs nothing but the download.
+      #
+      # `--skip-prepare` also sidesteps a second Windows problem: `./buddy` is
+      # a POSIX shell script and `spawnSync` cannot execute one here, so the
+      # build script could not have invoked it anyway. Reaching for `sh` would
+      # have depended on Git Bash being on a child process's PATH - the
+      # assumption that makes a thing work on CI and fail for users.
+      - name: Take the rendered views
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-views
+          path: dist
 
       - name: Build the Windows desktop bundle
         run: bun scripts/build-desktop-windows.ts --skip-prepare
@@ -319,6 +370,92 @@ jobs:
           finally {
             if ($agent -and -not $agent.HasExited) { Stop-Process -Id $agent.Id -Force }
           }
+
+      # The one thing the agent test cannot cover: whether a window actually
+      # opens. Craft hosts it in Edge WebView2, and asking the HTTP endpoint
+      # anything exercises none of that.
+      #
+      # Launches the real launcher - no subcommand - so the whole chain runs:
+      # agent spawn, health wait, then `craft-runtime.exe` with the arguments
+      # `bundle.ts` built. Then it asks Windows which windows exist and
+      # photographs the screen.
+      #
+      # No P/Invoke, deliberately: a PowerShell here-string has to close at
+      # column zero, which cannot be expressed inside a YAML block scalar.
+      # `Get-Process` gives the window title without it, and the screenshot
+      # shows the geometry better than `GetWindowRect` would report it.
+      - name: Open the window and photograph it
+        timeout-minutes: 6
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $shots = Join-Path $env:RUNNER_TEMP "sc-window"
+          New-Item -ItemType Directory -Force -Path $shots | Out-Null
+          $exe = (Resolve-Path "storage/framework/desktop-windows/SystemCleaner/SystemCleaner.exe").Path
+
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+
+          function Capture($name) {
+            $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
+            Write-Host "virtual screen: $($b.Width)x$($b.Height)"
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            try { $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size) }
+            catch { Write-Host "screen capture failed: $($_.Exception.Message)" }
+            $path = Join-Path $shots "$name.png"
+            $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+            $g.Dispose(); $bmp.Dispose()
+            Write-Host "wrote $name.png ($((Get-Item $path).Length) bytes)"
+          }
+
+          Write-Host "launching $exe"
+          Start-Process -FilePath $exe | Out-Null
+
+          $window = $null
+          try {
+            # The agent has to bind and answer before the launcher opens
+            # anything, so no window is expected immediately.
+            foreach ($attempt in 1..60) {
+              Start-Sleep -Seconds 1
+              $window = Get-Process | Where-Object {
+                $_.MainWindowTitle -and $_.ProcessName -match 'craft-runtime|SystemCleaner'
+              } | Select-Object -First 1
+              if ($window) { break }
+            }
+
+            if ($window) {
+              Write-Host "window '$($window.MainWindowTitle)' from $($window.ProcessName) after ${attempt}s"
+              # WebView2 still has to start a browser process and paint, so a
+              # shot taken the instant the window exists is usually blank.
+              Start-Sleep -Seconds 8
+              Capture "window"
+            }
+            else {
+              Write-Host "no window within 60s"
+              Capture "no-window"
+              Write-Host "--- anything of ours still running ---"
+              Get-Process | Where-Object { $_.ProcessName -match 'craft|SystemCleaner|msedgewebview' } |
+                Format-Table ProcessName, Id, MainWindowTitle -AutoSize | Out-String | Write-Host
+            }
+          }
+          finally {
+            foreach ($name in 'SystemCleaner', 'craft-runtime', 'msedgewebview2') {
+              Get-Process -Name $name -ErrorAction SilentlyContinue |
+                Stop-Process -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+          if (-not $window) { throw "the app opened no window" }
+
+      # Always, so a run that opened no window still hands back a picture of
+      # whatever it did instead.
+      - name: Keep the screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SystemCleaner-windows-window
+          path: ${{ runner.temp }}/sc-window/*.png
+          if-no-files-found: warn
 
       - name: Keep the desktop bundle for inspection
         uses: actions/upload-artifact@v4
