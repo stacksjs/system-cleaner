@@ -1,5 +1,67 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.5...v0.3.6)
+
+## ✨ Features
+
+- **vpn**: open the VPN window from the VPN screen ([c69bf7c](https://github.com/stacksjs/system-cleaner/commit/c69bf7c)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **vpn**: a VPN window with one button on it ([c30d039](https://github.com/stacksjs/system-cleaner/commit/c30d039)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **disk**: the Recycle Bin, so the Windows screens can delete as well as scan ([3681f71](https://github.com/stacksjs/system-cleaner/commit/3681f71)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#23](https://github.com/stacksjs/system-cleaner/issues/23))
+- **clean**: a Windows Quick Clean table, and the screen to go with it ([f3b86d2](https://github.com/stacksjs/system-cleaner/commit/f3b86d2)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#23](https://github.com/stacksjs/system-cleaner/issues/23))
+- **vpn**: connect and disconnect from the VPN screen ([7ff2480](https://github.com/stacksjs/system-cleaner/commit/7ff2480)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **core**: measure directories without du, and turn on the two Windows screens that needed it ([2f1ef26](https://github.com/stacksjs/system-cleaner/commit/2f1ef26)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#23](https://github.com/stacksjs/system-cleaner/issues/23))
+- **vpn**: bring the tunnel up and down through the macOS auth prompt ([18ddc56](https://github.com/stacksjs/system-cleaner/commit/18ddc56)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **cli**: refuse what the platform cannot do, and build a Windows preview .exe ([1d8a917](https://github.com/stacksjs/system-cleaner/commit/1d8a917)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **vpn**: VPN screen showing this Mac's tunnel status ([2eddf41](https://github.com/stacksjs/system-cleaner/commit/2eddf41)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **vpn**: read-only VPN status behind /api/vpn-status ([4874d74](https://github.com/stacksjs/system-cleaner/commit/4874d74)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **app**: show a reason instead of an empty screen where a feature cannot run ([a553aa2](https://github.com/stacksjs/system-cleaner/commit/a553aa2)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **core**: let the app say what it cannot do on a platform ([0fce3ad](https://github.com/stacksjs/system-cleaner/commit/0fce3ad)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#23](https://github.com/stacksjs/system-cleaner/issues/23))
+- **cleanup**: give the scanning state a real loading indicator ([8faab3e](https://github.com/stacksjs/system-cleaner/commit/8faab3e)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+
+## 🐛 Bug Fixes
+
+- **ci**: a smoke test must not prove a refusal with a destructive command ([0baacdc](https://github.com/stacksjs/system-cleaner/commit/0baacdc)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **desktop**: an unsigned build produced an app that could not launch ([1db6da2](https://github.com/stacksjs/system-cleaner/commit/1db6da2)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **core**: disk figures from the filesystem, not from df's columns ([db1eb67](https://github.com/stacksjs/system-cleaner/commit/db1eb67)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **core**: Windows names the same directory more than one way ([182b812](https://github.com/stacksjs/system-cleaner/commit/182b812)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#23](https://github.com/stacksjs/system-cleaner/issues/23))
+- **core**: Windows separates paths with either character ([de56f55](https://github.com/stacksjs/system-cleaner/commit/de56f55)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **core**: a prefix is not a containment test ([c76a624](https://github.com/stacksjs/system-cleaner/commit/c76a624)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **ci**: smoke-test the Windows binary without needing an extractor ([4d44457](https://github.com/stacksjs/system-cleaner/commit/4d44457)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **binaries**: archive with what the machine has, and build only what was asked ([e9d3c4c](https://github.com/stacksjs/system-cleaner/commit/e9d3c4c)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- close the three blocking findings from the v0.3.6 review ([0b7e8c8](https://github.com/stacksjs/system-cleaner/commit/0b7e8c8)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **desktop**: build:app could not image a DMG on a Mac with the app installed ([1a384f2](https://github.com/stacksjs/system-cleaner/commit/1a384f2)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **vpn**: paint the VPN panel on the first response, not the next poll ([89add9e](https://github.com/stacksjs/system-cleaner/commit/89add9e)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **clean**: stop counting bytes the disk never gave back ([214b92b](https://github.com/stacksjs/system-cleaner/commit/214b92b)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **vpn**: probe the CLI from a neutral directory ([0931e32](https://github.com/stacksjs/system-cleaner/commit/0931e32)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **core**: make the delete-safety gate understand the platform it runs on ([7928983](https://github.com/stacksjs/system-cleaner/commit/7928983)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **disk**: let git overrule the pattern before anything is deleted ([1750deb](https://github.com/stacksjs/system-cleaner/commit/1750deb)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **cleanup**: refresh after a clean that freed bytes but reported failure ([1489198](https://github.com/stacksjs/system-cleaner/commit/1489198)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+
+## 📝 Documentation
+
+- **changelog**: drop the links the generator invented for v0.3.5 ([722dbfb](https://github.com/stacksjs/system-cleaner/commit/722dbfb)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+
+## ✅ Tests
+
+- two cases that had encoded the answer the alias bug produced ([0993ead](https://github.com/stacksjs/system-cleaner/commit/0993ead)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **disk**: verify a recycle against the record that makes a restore possible ([5dd50a1](https://github.com/stacksjs/system-cleaner/commit/5dd50a1)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- close the last three Windows failures ([9693827](https://github.com/stacksjs/system-cleaner/commit/9693827)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- stop the suite assuming POSIX, so the Windows leg reports real signal ([1f0edff](https://github.com/stacksjs/system-cleaner/commit/1f0edff)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **disk**: build the fixture path with the platform separator ([4b81042](https://github.com/stacksjs/system-cleaner/commit/4b81042)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+
+## 💚 Continuous Integration
+
+- make the Windows leg blocking, now that it passes ([3c82b27](https://github.com/stacksjs/system-cleaner/commit/3c82b27)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- add a non-blocking Windows leg to find out what actually breaks ([55539c9](https://github.com/stacksjs/system-cleaner/commit/55539c9)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#23](https://github.com/stacksjs/system-cleaner/issues/23))
+
+## 🔧 Chores
+
+- ignore the two generated VPN window scripts ([6ced5b9](https://github.com/stacksjs/system-cleaner/commit/6ced5b9)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+
+## Contributors
+
+- _glennmichael123 <gtorregosa@gmail.com>_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.4...v0.3.5)
 
 ## 🐛 Bug Fixes
