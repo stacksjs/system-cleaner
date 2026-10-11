@@ -23,21 +23,49 @@ import { recycle } from '../src/recycle-windows'
 
 const IS_WINDOWS = process.platform === 'win32'
 
-/** The original paths the Recycle Bin currently holds, lowercased. */
-async function recycleBinContents(): Promise<string[]> {
+/**
+ * What the Recycle Bin holds, read from the records that make a restore
+ * possible rather than through the shell.
+ *
+ * An entry is restorable because the shell wrote a `$I` record beside the
+ * `$R` data, holding the original path as UTF-16. Reading those directly beats
+ * enumerating `Shell.Application`: the COM object wants a desktop session, and
+ * on a runner it can answer "empty" for a bin that is not — which is exactly
+ * the ambiguity that made the first version of this test useless.
+ *
+ * Returns the raw record text plus a listing of the bin, so a failure says
+ * whether the bin was unreadable, genuinely empty, or holding something else.
+ */
+async function recycleBinRecords(): Promise<{ records: string, listing: string, error: string }> {
   const script = [
-    '$shell = New-Object -ComObject Shell.Application',
-    '$bin = $shell.Namespace(0xA)',
-    '$bin.Items() | ForEach-Object { $bin.GetDetailsOf($_, 1) + \'\\\' + $_.Name }',
-  ].join('; ')
+    '$ErrorActionPreference = \'Continue\'',
+    '$sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value',
+    '$dir = Join-Path "$env:SystemDrive\\`$Recycle.Bin" $sid',
+    'if (-not (Test-Path -LiteralPath $dir)) { Write-Output "NOBIN:$dir"; exit 0 }',
+    'Write-Output "LISTING:"',
+    'Get-ChildItem -LiteralPath $dir -Force | ForEach-Object { Write-Output $_.Name }',
+    'Write-Output "RECORDS:"',
+    'Get-ChildItem -LiteralPath $dir -Force -Filter \'$I*\' | ForEach-Object {',
+    '  Write-Output ([System.Text.Encoding]::Unicode.GetString([System.IO.File]::ReadAllBytes($_.FullName)))',
+    '}',
+  ].join('\n')
 
   const proc = Bun.spawn(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', script], {
     stdout: 'pipe',
-    stderr: 'ignore',
+    stderr: 'pipe',
   })
-  const out = await new Response(proc.stdout).text()
+  const [out, err] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ])
   await proc.exited
-  return out.split('\n').map(l => l.trim().toLowerCase()).filter(Boolean)
+
+  const marker = out.indexOf('RECORDS:')
+  return {
+    records: marker >= 0 ? out.slice(marker + 'RECORDS:'.length) : '',
+    listing: marker >= 0 ? out.slice(0, marker) : out,
+    error: err.trim(),
+  }
 }
 
 describe('the input guards answer before anything is spawned', () => {
@@ -78,11 +106,15 @@ describe('recycling on windows', () => {
     expect(fs.existsSync(file)).toBe(false)
 
     // And actually recoverable, which is the part a permanent delete would
-    // also have passed the assertion above.
-    const contents = await recycleBinContents()
+    // also have passed the assertion above. The `$I` record holding the
+    // original path is what makes a restore possible, so its presence is the
+    // only evidence worth accepting.
+    const bin = await recycleBinRecords()
+    const found = bin.records.toLowerCase().includes(path.basename(file).toLowerCase())
     expect(
-      contents.some(entry => entry.includes(path.basename(file).toLowerCase())),
-      'the file is not in the Recycle Bin, so the delete was permanent',
+      found,
+      `no restore record names ${path.basename(file)}, so the delete was permanent.\n`
+      + `bin listing:\n${bin.listing}\nstderr: ${bin.error}`,
     ).toBe(true)
 
     // The item is deliberately left in the bin. `Clear-RecycleBin -Force`
