@@ -84,10 +84,14 @@ describe('listDisks', () => {
     expect(boot.totalBytes).toBe(dfTotal)
     expect(Math.abs(boot.freeBytes - dfAvail) / dfTotal).toBeLessThan(0.01)
 
-    // And the percentage df itself prints, which is the one the old code
-    // disagreed with.
-    const dfPercent = Number.parseInt(parts![4], 10)
-    expect(Math.abs(boot.usedPercent - (100 - dfPercent))).toBeLessThanOrEqual(1)
+    // The percentage, derived from df's own two columns by the same
+    // definition. Deliberately not compared against df's Capacity column:
+    // that is `used / (used + avail)`, which mixes the very two scopes this
+    // module exists to stop mixing. On this disk it reads 15% against a real
+    // 86%, and the first version of this assertion only passed because
+    // `100 - 15` happened to land near 85.
+    const expectedPercent = Math.round(((dfTotal - dfAvail) / dfTotal) * 100)
+    expect(Math.abs(boot.usedPercent - expectedPercent)).toBeLessThanOrEqual(1)
   })
 
   it('leaves out volumes too small to be storage', async () => {

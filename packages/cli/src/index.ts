@@ -25,10 +25,21 @@ const COMMAND_CAPABILITY: Record<string, keyof typeof capabilities> = {
   uninstall: 'appUninstall',
   disk: 'diskScan',
   monitor: 'processes',
-  scan: 'diskScan',
+  // `scan` is a whole-machine summary, not a disk scan, so it is gated on the
+  // collector its headline numbers come from. It was mapped to `diskScan`,
+  // which became true on Windows while `processes` stayed false — and every
+  // figure it leads with (health score, CPU, memory, startup items) comes from
+  // the side that is missing. It would have printed "System is in good shape!"
+  // about a machine it never measured, which is the one failure this map
+  // exists to prevent. A command that spans features belongs to the strictest
+  // one it needs.
+  scan: 'processes',
   optimize: 'maintenance',
   purge: 'developerJunk',
 }
+
+/** Exposed for the test that pins each command to the feature it needs. */
+export { COMMAND_CAPABILITY }
 
 /**
  * Refuse a command this platform cannot carry out, before it runs.

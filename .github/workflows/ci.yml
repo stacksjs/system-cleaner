@@ -163,17 +163,19 @@ jobs:
       # downloads a runtime matching the local bun and the release runner may
       # be ahead of the published stable.
       #
-      # Not attached to a release. The capability flags are all false, so every
-      # cleaning command refuses - which is the point of building it: the
-      # binary proves the toolchain and fails honestly, instead of shipping
-      # something that reports 0 B reclaimable and looks like a clean machine.
+      # Not attached to a release. Four capabilities are implemented here now
+      # (cleanTargets, diskScan, developerJunk, trash) and the rest refuse by
+      # name, which is the point of building it: the binary proves the
+      # toolchain and is honest about its gaps, instead of shipping something
+      # that reports 0 B reclaimable and looks like a clean machine.
       - name: Build the Windows preview binary
         run: bun run build:binaries --preview --only windows --keep
 
       # A binary that compiles and then lies is worse than no binary. Assert it
-      # runs, and that a command this platform cannot carry out says which
-      # feature is missing and exits non-zero.
+      # runs, that a command this platform cannot carry out says which feature
+      # is missing and exits non-zero, and that one it *can* carry out does.
       - name: Smoke-test it
+        timeout-minutes: 5
         run: |
           set -e
           # --keep left the binary beside the archive, so there is nothing to
@@ -182,17 +184,50 @@ jobs:
           cd packages/cli/bin
           exe=system-cleaner-windows-x64.exe
           test -f "$exe" || { echo "no .exe produced"; ls -la; exit 1; }
+
           echo "--- version ---"
           ./"$exe" --version
-          echo "--- an unsupported command must refuse, not find nothing ---"
-          if out=$(./"$exe" clean 2>&1); then
-            echo "FAIL: clean exited 0 on a platform with no implementation"
+
+          # `optimize` needs `maintenance`, which has no Windows implementation.
+          #
+          # This used to run `clean`, chosen when every Windows capability was
+          # false. Cleaning is implemented here now, so that assertion had CI
+          # deleting files on the runner and then waiting on a confirmation
+          # prompt with no TTY to answer it - the step hung for half an hour
+          # before anyone looked. A smoke test must never pick a destructive
+          # command to prove a refusal with.
+          echo "--- a command this platform cannot carry out must refuse, not find nothing ---"
+          if out=$(./"$exe" optimize 2>&1); then
+            echo "FAIL: optimize exited 0 on a platform with no implementation"
             echo "$out"
             exit 1
           fi
           echo "$out"
           echo "$out" | grep -qi "not implemented on Windows" \
             || { echo "FAIL: refusal did not name the platform"; exit 1; }
+
+          # And the other half, which the refusal test cannot show: a feature
+          # that *is* implemented actually works in the compiled binary.
+          # `disk` is read-only, is gated on `diskScan`, and measures through
+          # the portable walker that replaced `du` - so this is the only place
+          # in CI that proves the sizer runs inside an .exe.
+          echo "--- an implemented, read-only command must work ---"
+          mkdir -p smoke-probe
+          # 256 KiB, so a sizer that reports zero cannot pass by rounding.
+          head -c 262144 /dev/urandom > smoke-probe/blob.bin
+          ./"$exe" disk smoke-probe --depth 1 --json > disk.json 2>&1 \
+            || { echo "FAIL: disk exited non-zero"; cat disk.json; exit 1; }
+          cat disk.json
+          # Whitespace tolerated after the colon: the output is pretty-printed,
+          # and the first version of this grep required none, so it would have
+          # failed against perfectly good JSON.
+          grep -qE '"sizeBytes" *:' disk.json \
+            || { echo "FAIL: disk produced no sizes"; exit 1; }
+          # A measurement of exactly zero is the failure this whole platform
+          # effort is about: it renders as a clean machine. 256 KiB went in, so
+          # anything starting with a zero here is the sizer not working.
+          grep -qE '"totalSize" *: *[1-9]' disk.json \
+            || { echo "FAIL: the probe measured zero bytes"; exit 1; }
 
       - name: Keep the binary for inspection
         uses: actions/upload-artifact@v4
