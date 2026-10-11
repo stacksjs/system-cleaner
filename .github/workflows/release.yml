@@ -136,3 +136,46 @@ jobs:
           release-checksums: sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Both jobs above attach their own files and ask the action for checksums,
+  # and the action checksums the files *it* uploaded. The desktop job runs
+  # second, so its two-asset `checksums.txt` replaced the one covering the CLI
+  # archives — v0.3.5 and v0.3.6 both published with no hash for the CLI zips
+  # at all, which matters most for the unsigned Windows .exe, where a checksum
+  # is the only integrity signal a user has:
+  #
+  #     Release      Generated checksums.txt (sha256) for 2 asset(s)
+  #     Desktop app  Generated checksums.txt (sha256) for 2 asset(s)   <- won
+  #
+  # So checksums are rebuilt once, last, over whatever actually ended up on the
+  # release. `release-manifest.json` had the same hole and is rebuilt with it.
+  checksums:
+    name: Checksums
+    needs: [release, desktop]
+    # `always()`, because `desktop` is skipped whenever signing is not
+    # configured and a skipped dependency would skip this too. Gated on
+    # `release` instead: if that failed there is nothing to checksum, and if
+    # `desktop` failed the assets that did land should still be covered.
+    if: ${{ always() && needs.release.result == 'success' }}
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # Runs after every asset is attached, so a failure here leaves the
+      # release intact with the previous, incomplete checksums rather than
+      # breaking the release itself.
+      - name: Rebuild checksums over every attached asset
+        run: bun run scripts/release-checksums.ts "${{ github.ref_name }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
