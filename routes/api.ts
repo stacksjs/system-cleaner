@@ -58,6 +58,7 @@ import { getTopProcesses, summarizeProcesses } from '@system-cleaner/monitor';
 import { recordSystemActivity } from '../app/Support/System/activity-chart';
 import { isLocalAgent } from '../app/Support/Runtime/local-agent';
 import { invalidateVpnCache, readVpnStatus } from '../app/Support/Vpn/status';
+import { connect as vpnConnect, connectionPid, disconnect as vpnDisconnect } from '../app/Support/Vpn/control';
 import {
   bulkDelete,
   cleanupHistory,
@@ -1992,6 +1993,31 @@ export default async function (router: Router) {
     const body = await readJsonBody<{ refresh?: unknown }>(req);
     if (body?.refresh === true)
       invalidateVpnCache();
-    return Response.json({ success: true, ...readVpnStatus() });
+    // `managedPid` is the tunnel *this app* started, which is a different
+    // question from whether a tunnel exists: the interface list reports any
+    // tunnel on the machine, including one someone brought up in Terminal.
+    // Only a managed one can be disconnected from here.
+    return Response.json({ success: true, ...readVpnStatus(), managedPid: await connectionPid() });
+  });
+
+  /**
+   * Bring the VPN up.
+   *
+   * Prompts for authorization through macOS, so it blocks until the person
+   * answers the dialog — or declines, which comes back as `Cancelled` rather
+   * than as a failure. Request validation lives in the control module, beside
+   * the command construction it protects.
+   */
+  await router.post('/vpn-connect', async (req: Request) => {
+    const body = await readJsonBody<unknown>(req);
+    if (body === null) return badJson();
+    const result = await vpnConnect(body);
+    return Response.json(result, { status: result.success ? 200 : 400 });
+  });
+
+  /** Take the VPN down. Also authorized, since the tunnel runs as root. */
+  await router.post('/vpn-disconnect', async () => {
+    const result = await vpnDisconnect();
+    return Response.json(result, { status: result.success ? 200 : 400 });
   });
 }

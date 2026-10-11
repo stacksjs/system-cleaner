@@ -32,6 +32,51 @@
   core: { available: false, cliPath: null, version: null, healthy: null, detail: null },
   identity: null,
   tunnels: [],
+  managedPid: null,
+
+  coordinatorUrl: '',
+  authKey: '',
+  useExit: 'auto',
+  busy: false,
+  notice: '',
+  noticeKind: '',
+
+  canConnect() {
+    return this.core.available && this.core.healthy && !this.busy && this.coordinatorUrl.length > 0;
+  },
+
+  say(message, kind) {
+    this.notice = message;
+    this.noticeKind = kind || 'info';
+  },
+
+  connect() {
+    if (this.busy) return;
+    this.busy = true;
+    this.say('Waiting for authorization\u2026', 'info');
+    window.__vpnPost('/api/vpn-connect', {
+      coordinatorUrl: this.coordinatorUrl,
+      authKey: this.authKey,
+      useExit: this.useExit === 'none' ? '' : this.useExit,
+    }).then((r) => {
+      this.busy = false;
+      if (r.success) this.say('Tunnel is up.', 'success');
+      else if (r.error === 'Cancelled') this.say('Authorization cancelled.', 'info');
+      else this.say(r.error || 'Could not connect.', 'error');
+    });
+  },
+
+  disconnect() {
+    if (this.busy) return;
+    this.busy = true;
+    this.say('Waiting for authorization\u2026', 'info');
+    window.__vpnPost('/api/vpn-disconnect', {}).then((r) => {
+      this.busy = false;
+      if (r.success) this.say('Tunnel is down.', 'success');
+      else if (r.error === 'Cancelled') this.say('Authorization cancelled.', 'info');
+      else this.say(r.error || 'Could not disconnect.', 'error');
+    });
+  },
 
   coreLabel() {
     if (!this.core.available) return 'Not installed';
@@ -94,6 +139,7 @@
       + ' identity = window.__vpnStatus.identity;'
       + ' tunnels = window.__vpnStatus.tunnels;'
       + ' connected = window.__vpnStatus.connected;'
+      + ' managedPid = window.__vpnStatus.managedPid;'
       + ' supported = window.__vpnStatus.supported;'
       + " error = '';"
       + ' loaded = true'
@@ -126,6 +172,26 @@
 
   // The panel's Re-check button, which also drops the server-side cache.
   window.__vpnRefresh = function() { return poll(true); };
+
+  // Connect and disconnect both wait on the macOS authorization dialog, so
+  // they can sit for as long as the person takes to answer it. The status is
+  // re-read afterwards either way: a cancelled connect still needs the panel
+  // to agree with reality.
+  window.__vpnPost = async function(url, body) {
+    try {
+      var response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body || {}),
+      });
+      var data = await response.json().catch(function() { return null; });
+      return data || { success: false, error: 'HTTP ' + response.status };
+    } catch (error) {
+      return { success: false, error: error.message || 'network error' };
+    } finally {
+      poll(false);
+    }
+  };
 
   poll(false);
   if (!window.__vpnPollTimer) {

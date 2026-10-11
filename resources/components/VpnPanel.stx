@@ -85,6 +85,77 @@
       </div>
     </div>
 
+    <!-- Connect. Creating an interface needs root, so this hands off to the
+         macOS authorization dialog rather than holding any privilege itself.
+         Disabled until the native core reports healthy, because without it
+         the CLI cannot bring anything up and the prompt would be wasted. -->
+    <div class='tbl-wrap' style='margin-top: var(--space-4);'>
+      <div class='tbl-bar'>
+        <div>
+          <span class='tbl-title'>Connection</span>
+          <span class='tbl-count'>{{ managedPid ? 'managed by this app' : 'needs authorization' }}</span>
+        </div>
+        <template x-if='managedPid'>
+          <button class='btn btn-danger btn-sm' @click='disconnect()' :disabled='busy'>{{ busy ? 'Working\u2026' : 'Disconnect' }}</button>
+        </template>
+      </div>
+
+      <div style='padding: var(--space-3) var(--space-4) var(--space-4);'>
+        <template x-if='managedPid'>
+          <div>
+            <div class='info-row'>
+              <span class='info-label'>Tunnel process</span>
+              <span class='info-value mono'>{{ 'pid ' + managedPid }}</span>
+            </div>
+            <div class='info-row'>
+              <span class='info-label'>Started by</span>
+              <span class='info-value'>SystemCleaner</span>
+            </div>
+          </div>
+        </template>
+
+        <template x-if='!managedPid'>
+          <div>
+            <div class='info-row'>
+              <span class='info-label'>Coordinator</span>
+              <span class='info-value dim'>ws:// or wss:// host, optional port</span>
+            </div>
+            <input class='check' type='text' x-model='coordinatorUrl' placeholder='ws://coordinator.example:51821'
+              style='width: 100%; margin-top: var(--space-1); padding: var(--space-tight) var(--space-2); border-radius: 5px; border: .5px solid var(--line); background: var(--surface-soft); color: var(--ink); font: 11px/1.4 SF Mono, Menlo, monospace;' />
+
+            <div class='info-row' style='margin-top: var(--space-3);'>
+              <span class='info-label'>Auth key</span>
+              <span class='info-value dim'>blank if the coordinator is open</span>
+            </div>
+            <input class='check' type='password' x-model='authKey' placeholder='shared secret'
+              style='width: 100%; margin-top: var(--space-1); padding: var(--space-tight) var(--space-2); border-radius: 5px; border: .5px solid var(--line); background: var(--surface-soft); color: var(--ink); font: 11px/1.4 SF Mono, Menlo, monospace;' />
+
+            <div class='info-row' style='margin-top: var(--space-3);'>
+              <span class='info-label'>Exit node</span>
+              <span class='info-value dim'>where non-tunnel traffic goes</span>
+            </div>
+            <div style='display: flex; gap: var(--space-tight); margin-top: var(--space-1);'>
+              <button class='btn btn-sm' :class="useExit === 'auto' ? 'btn-active' : ''" @click="useExit = 'auto'">Auto</button>
+              <button class='btn btn-sm' :class="useExit === 'none' ? 'btn-active' : ''" @click="useExit = 'none'">None</button>
+            </div>
+            <div class='info-path' x-show="useExit === 'auto'" x-cloak>Auto takes the lowest-sorted peer advertising itself as an exit. The coordinator cannot verify that claim, so on a network you do not control, prefer None and reach peers directly.</div>
+
+            <div style='margin-top: var(--space-4);'>
+              <button class='btn' @click='connect()' :disabled='!canConnect()'>{{ busy ? 'Waiting for authorization\u2026' : 'Connect' }}</button>
+            </div>
+          </div>
+        </template>
+
+        <template x-if='notice'>
+          <div class='info-path' :style="noticeKind === 'error' ? 'color: var(--red);' : noticeKind === 'success' ? 'color: var(--green);' : ''">{{ notice }}</div>
+        </template>
+
+        <template x-if='!core.healthy'>
+          <div class='info-path'>Connecting needs a working native core. Fix the core above first.</div>
+        </template>
+      </div>
+    </div>
+
     <div class='tbl-wrap' style='margin-top: var(--space-4);'>
       <div class='tbl-bar'>
         <div>
@@ -128,7 +199,7 @@
       <div class='tbl-bar'><span class='tbl-title'>What this screen can and cannot tell you</span></div>
       <div style='padding: var(--space-3) var(--space-4) var(--space-4); font-size: 11px; color: var(--secondary); line-height: 1.5;'>
         <div>The kernel does not record which process asked for a tunnel device, and macOS hands them out to iCloud Private Relay and every other VPN as well. An interface is marked <span class='mono'>localtunnels</span> when its address falls in a range localtunnels assigns — <span class='mono'>100.64.0.0/10</span> for coordinator-assigned addresses, <span class='mono'>10.8.0.0/24</span> for the VPN deploy. That is a strong hint, not proof.</div>
-        <div style='margin-top: var(--space-2);'>Connecting and disconnecting are not here yet. Creating a network interface needs root, which needs a privileged helper this app does not ship. Until then, bring a tunnel up with <span class='mono'>sudo lt vpn:up</span> and this screen will show it.</div>
+        <div style='margin-top: var(--space-2);'>Connecting needs root, so it goes through macOS's own authorization dialog each time — this app installs no privileged helper and holds no privilege between connections. Only a tunnel started here can be disconnected here; one you brought up yourself in Terminal is listed above but is not this app's to stop.</div>
       </div>
     </div>
   </div>
