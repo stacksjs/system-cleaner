@@ -202,14 +202,19 @@ describe('isWithinHome', () => {
   })
 
   it('agrees with the temp directory it is actually given', () => {
-    // The case from CI. On Windows these are two spellings of one
-    // directory; on POSIX os.tmpdir() is simply outside home and the
-    // answer is a plain false.
-    const tmp = os.tmpdir()
-    const expected = process.platform === 'win32'
-      ? isWithin(fs.realpathSync(tmp), fs.realpathSync(HOME))
-      : false
-    expect(isWithinHome(tmp)).toBe(expected)
+    // The case from CI, where `%TEMP%` is `%LOCALAPPDATA%\\Temp` — inside home,
+    // reached through a spelling that did not string-match it. On POSIX
+    // os.tmpdir() is simply outside home and the answer is a plain false.
+    //
+    // `realpathSync.native` is the same primitive the implementation uses:
+    // plain `realpathSync` does not expand an 8.3 name, so recomputing the
+    // expectation with it disagreed about spelling rather than about
+    // containment.
+    const canon = (p: string): string => {
+      try { return fs.realpathSync.native(p) }
+      catch { return p }
+    }
+    expect(isWithinHome(os.tmpdir())).toBe(isWithin(canon(os.tmpdir()), canon(HOME)))
   })
 
   it('judges a path that does not exist by where it would live', () => {
