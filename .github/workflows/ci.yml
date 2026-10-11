@@ -241,8 +241,17 @@ jobs:
       # cross-build from macOS produces a working but anonymous .exe:
       #
       #     error: Using --windows-icon is only available when compiling on Windows
+      # `./buddy` is a POSIX shell script. These steps run it through the job's
+      # bash shell, which can; `spawnSync` from inside the build script cannot,
+      # and reaching for `sh` there would depend on Git Bash being on a child
+      # process's PATH - the assumption that makes a thing work on CI and fail
+      # for users. So the shared output is produced here and the script is told
+      # to skip it. It still checks that the output exists.
+      - name: Render the views for the bundle
+        run: ./buddy build:views
+
       - name: Build the Windows desktop bundle
-        run: bun run build:app:windows
+        run: bun scripts/build-desktop-windows.ts --skip-prepare
 
       # What can be checked without a human looking at a window.
       #

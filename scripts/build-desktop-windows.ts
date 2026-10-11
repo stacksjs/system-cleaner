@@ -186,19 +186,46 @@ function buildIco(destination: string): string | null {
 }
 
 // ── 1. Shared build output ──────────────────────────────────────
+/**
+ * Whether to produce the shared build output, or trust that it is there.
+ *
+ * `./buddy` is a POSIX shell script, and `spawnSync` cannot execute one on
+ * Windows — it tries to exec the file, Windows has no shebang handling, and
+ * the spawn fails before any argument is read:
+ *
+ *     error: ./buddy build:views could not be spawned
+ *
+ * Running it through `sh` instead would mean depending on Git Bash being
+ * reachable from a child process, which is the same assumption that makes
+ * `exec()` work on CI and fail for users. So on Windows the CI job runs those
+ * steps itself, in the bash shell it already has, and this script is told to
+ * skip them.
+ *
+ * Nothing is trusted silently: the outputs are checked below either way.
+ */
+const PREPARE = !process.argv.includes('--skip-prepare')
+
 console.log(`[windows] building ${APP_NAME} ${APP_VERSION}`)
 
-run('bun', [path.join(ROOT, 'scripts/build-client-scripts.ts')])
-run('./buddy', ['build:views'])
+if (PREPARE) {
+  run('bun', [path.join(ROOT, 'scripts/build-client-scripts.ts')])
+  run('./buddy', ['build:views'])
+  // `--force` because a machine that has already run its migrations would
+  // otherwise refuse, and a build must not depend on whether the local ledger
+  // happens to be empty.
+  run('./buddy', ['migrate:regenerate', '--force'])
+}
+else {
+  console.log('[windows] --skip-prepare: using the shared build output already on disk')
+}
 
 const web = path.join(ROOT, 'dist')
 if (!fs.existsSync(path.join(web, 'app/large-files.html')))
-  throw new Error(`view build did not produce the app pages in ${web}`)
+  throw new Error(`no rendered app pages in ${web} - run \`./buddy build:views\` first, or drop --skip-prepare`)
 
-// `--force` because a machine that has already run its migrations would
-// otherwise refuse, and a build must not depend on whether the local ledger
-// happens to be empty.
-run('./buddy', ['migrate:regenerate', '--force'])
+const migrations = path.join(ROOT, 'database/migrations')
+if (!fs.existsSync(migrations) || fs.readdirSync(migrations).length === 0)
+  throw new Error(`no migrations in ${migrations} - run \`./buddy migrate:regenerate --force\` first, or drop --skip-prepare`)
 
 // ── 2. Stage ────────────────────────────────────────────────────
 fs.rmSync(STAGE, { recursive: true, force: true })
@@ -206,7 +233,7 @@ fs.mkdirSync(STAGE, { recursive: true })
 
 const resources = path.join(STAGE, 'resources')
 fs.cpSync(web, path.join(resources, 'web'), { recursive: true })
-fs.cpSync(path.join(ROOT, 'database/migrations'), path.join(resources, 'migrations'), { recursive: true })
+fs.cpSync(migrations, path.join(resources, 'migrations'), { recursive: true })
 
 // ── 3. The launcher ─────────────────────────────────────────────
 /**
