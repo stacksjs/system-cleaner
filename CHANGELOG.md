@@ -2,6 +2,19 @@
 
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.5...v0.3.6)
 
+This is the first release with a Windows build. `system-cleaner-windows-x64.zip`
+holds the CLI; the desktop app is still macOS-only.
+
+Four things work there — Quick Clean, disk scanning, Developer Junk, and
+sending files to the Recycle Bin. Application uninstall, Startup Items,
+Privacy, Maintenance and Processes are not implemented yet: the commands that
+need them refuse by name and exit non-zero rather than reporting an empty
+result, and the matching screens say so instead of rendering as a clean
+machine. See [#23](https://github.com/stacksjs/system-cleaner/issues/23).
+
+The Windows binary is unsigned — there is no Authenticode certificate for this
+project yet — so SmartScreen will warn the first time you run it.
+
 ## ✨ Features
 
 - **vpn**: open the VPN window from the VPN screen ([c69bf7c](https://github.com/stacksjs/system-cleaner/commit/c69bf7c)) _(by glennmichael123 <gtorregosa@gmail.com>)_

@@ -57,8 +57,14 @@ storage/logs/
 /.tmp-upgrade/
 
 # Compiled CLI release artifacts (produced by scripts/build-binaries.ts)
+#
+# Every target name the script can emit, not the two that exist today: a
+# `--keep` build leaves the raw binary beside the archive, and the Windows
+# .exe - 44 MB of it - was not covered by the darwin-only pattern.
+# `system-cleaner.ts` has no dash after the name, so the entry point is never
+# matched; the negation below is belt and braces.
 packages/cli/bin/*.zip
-packages/cli/bin/system-cleaner-darwin-*
+packages/cli/bin/system-cleaner-*
 !packages/cli/bin/system-cleaner.ts
 
 # Local visual-QA output

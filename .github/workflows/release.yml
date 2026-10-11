@@ -49,6 +49,7 @@ jobs:
           release: 'true'
           release-files: |
             packages/cli/bin/system-cleaner-darwin-arm64.zip
+            packages/cli/bin/system-cleaner-windows-x64.zip
           release-checksums: sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

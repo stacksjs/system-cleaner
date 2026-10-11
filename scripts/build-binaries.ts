@@ -31,11 +31,23 @@ import process from 'node:process'
 
 const RELEASE_TARGETS = [
   { target: 'bun-darwin-arm64', name: 'system-cleaner-darwin-arm64' },
-] as const
-
-const PREVIEW_TARGETS = [
+  // Shipped from v0.3.6, which is the release that made Windows do anything.
+  // Four capabilities are implemented there - Quick Clean, disk scanning,
+  // Developer Junk and the Recycle Bin - and every command that depends on the
+  // other five refuses by name and exits non-zero rather than reporting an
+  // empty result. It is unsigned: there is no Authenticode certificate for
+  // this project yet, so SmartScreen warns on first run.
   { target: 'bun-windows-x64', name: 'system-cleaner-windows-x64' },
 ] as const
+
+/**
+ * Nothing is preview-only any more.
+ *
+ * Kept rather than deleted because `--preview` is still how the Windows CI leg
+ * asks for a build, and because the next platform to be half-finished belongs
+ * here instead of in the release set.
+ */
+const PREVIEW_TARGETS = [] as const
 
 const all: readonly { target: string, name: string }[]
   = process.argv.includes('--preview') ? [...RELEASE_TARGETS, ...PREVIEW_TARGETS] : RELEASE_TARGETS
