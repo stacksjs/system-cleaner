@@ -1,6 +1,18 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
+import process from 'node:process'
 import { appleScriptEscape, exec } from '@system-cleaner/core'
+import { recycle } from './recycle-windows'
+
+/**
+ * Which recoverable-deletion mechanism this platform has.
+ *
+ * macOS has Finder's Trash, driven by AppleScript. Windows has the Recycle
+ * Bin, reachable only through the shell API that maintains its restore
+ * records. Linux has neither here, so a delete there stays a refusal rather
+ * than becoming a permanent `rm` nobody asked for.
+ */
+const IS_WINDOWS = process.platform === 'win32'
 
 export interface MoveToTrashOptions {
   /**
@@ -30,21 +42,17 @@ export async function moveToTrash(
 
   const { absPath } = check
 
-  // AppleScript escape order matters: escape backslashes first, then
-  // double quotes — otherwise an injected `\"` smuggles a quote through.
-  const escapedAS = appleScriptEscape(absPath)
-  const script = `tell application "Finder" to delete POSIX file "${escapedAS}"`
+  const outcome = IS_WINDOWS
+    ? await recycle([absPath], 30_000)
+    : await viaFinder(absPath)
 
-  const result = await exec(`osascript -e ${shellSafe(script)}`, { timeout: 30_000 })
-
-  if (result.ok) {
+  if (outcome.ok)
     return { success: true }
-  }
 
   if (!options.permanent) {
     return {
       success: false,
-      error: `Could not move to Trash: ${result.stderr || 'osascript failed'}. `
+      error: `Could not move to ${IS_WINDOWS ? 'the Recycle Bin' : 'Trash'}: ${outcome.error || 'failed'}. `
         + 'Pass { permanent: true } to delete permanently.',
     }
   }
@@ -56,6 +64,25 @@ export async function moveToTrash(
   catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Failed to delete' }
   }
+}
+
+/** Finder's Trash for a whole batch, in one AppleScript. macOS only. */
+async function viaFinderBatch(batch: string[]): Promise<{ ok: boolean, error?: string }> {
+  const list = batch
+    .map(p => `POSIX file "${appleScriptEscape(path.resolve(p))}"`)
+    .join(', ')
+  const script = `tell application "Finder" to delete {${list}}`
+  const result = await exec(`osascript -e ${shellSafe(script)}`, { timeout: 120_000 })
+  return result.ok ? { ok: true } : { ok: false, error: result.stderr || 'osascript failed' }
+}
+
+/** Finder's Trash, via AppleScript. macOS only. */
+async function viaFinder(absPath: string): Promise<{ ok: boolean, error?: string }> {
+  // AppleScript escape order matters: escape backslashes first, then double
+  // quotes — otherwise an injected `\"` smuggles a quote through.
+  const script = `tell application "Finder" to delete POSIX file "${appleScriptEscape(absPath)}"`
+  const result = await exec(`osascript -e ${shellSafe(script)}`, { timeout: 30_000 })
+  return result.ok ? { ok: true } : { ok: false, error: result.stderr || 'osascript failed' }
 }
 
 /**
@@ -118,7 +145,11 @@ export async function moveManyToTrash(
   const failed: { path: string, error: string }[] = []
 
   // Deeper paths first, so a child is gone before its parent is considered.
-  const sorted = [...paths].sort((a, b) => b.split('/').length - a.split('/').length)
+  // Split on either separator: `split('/')` returns one segment for every
+  // backslash path, so on Windows every depth compared equal and the ordering
+  // this relies on silently stopped happening.
+  const depth = (p: string): number => p.split(/[\\/]+/).length
+  const sorted = [...paths].sort((a, b) => depth(b) - depth(a))
 
   const valid: string[] = []
   for (const p of sorted) {
@@ -131,12 +162,10 @@ export async function moveManyToTrash(
 
   for (let i = 0; i < valid.length; i += TRASH_BATCH_SIZE) {
     const batch = valid.slice(i, i + TRASH_BATCH_SIZE)
-    const list = batch
-      .map(p => `POSIX file "${appleScriptEscape(path.resolve(p))}"`)
-      .join(', ')
-    const script = `tell application "Finder" to delete {${list}}`
 
-    const result = await exec(`osascript -e ${shellSafe(script)}`, { timeout: 120_000 })
+    const result = IS_WINDOWS
+      ? await recycle(batch.map(p => path.resolve(p)))
+      : await viaFinderBatch(batch)
 
     if (result.ok) {
       succeeded.push(...batch)

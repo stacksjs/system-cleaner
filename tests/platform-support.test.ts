@@ -56,7 +56,7 @@ describe('platform capabilities', () => {
       privacy: false,
       maintenance: false,
       processes: false,
-      trash: false,
+      trash: true,
     })
   })
 
