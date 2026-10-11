@@ -1004,20 +1004,26 @@ export default async function (router: Router) {
     const cpuAvgPercent = cpuCores > 0 ? Math.round(totalCPU / cpuCores) : 0;
 
     // Read the boot volume once, in bytes, and derive every label from it.
-    // `df -h`'s own "Used" column is not usable here: on APFS the root
-    // volume is the read-only system snapshot (~12Gi) while "Avail" reports
-    // the shared container, so the two columns describe different things.
+    //
+    // Through `getPrimaryDiskInfo` rather than a `df` of its own. The
+    // arithmetic here was already right - `df`'s "Used" column is unusable on
+    // APFS, where the root volume is the read-only system snapshot (~12Gi)
+    // while "Avail" reports the shared container, so the two columns describe
+    // different things - but it reached `df` through `execSync`, which runs a
+    // shell. Windows has no `df` for that shell to find, so every tile on this
+    // card rendered as "-". One shell-free source now answers for both
+    // platforms, and `usedPercent` there is derived the same way: total minus
+    // available, over total.
     let dUsedPct = 0;
     let diskTotalBytes = 0;
     let diskFreeBytes = 0;
     try {
-      const { execSync } = await import('@system-cleaner/core');
-      const dfOut = execSync('df -k / 2>/dev/null');
-      const parts = dfOut.split('\n')[1]?.split(/\s+/);
-      if (parts) {
-        diskTotalBytes = Number.parseInt(parts[1], 10) * 1024;
-        diskFreeBytes = Number.parseInt(parts[3], 10) * 1024;
-        dUsedPct = diskTotalBytes > 0 ? Math.round((1 - diskFreeBytes / diskTotalBytes) * 100) : 0;
+      const { getPrimaryDiskInfo } = await import('@system-cleaner/core');
+      const boot = await getPrimaryDiskInfo();
+      if (boot) {
+        diskTotalBytes = boot.totalBytes;
+        diskFreeBytes = boot.freeBytes;
+        dUsedPct = boot.usedPercent;
       }
     }
     catch {}

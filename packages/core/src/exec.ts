@@ -9,6 +9,19 @@ const TIMED_OUT = Symbol('exec-timed-out')
 /**
  * Execute a shell command asynchronously using Bun.spawn.
  *
+ * **POSIX only, and not by accident.** Everything here goes through `sh -c`,
+ * and Windows has no `sh`. It is on the PATH of a developer machine with Git
+ * for Windows installed and absent from everyone else's, so a feature built
+ * on this works for whoever wrote it and silently returns nothing for the
+ * rest — which is the shape of a bug that passes CI and ships.
+ *
+ * The spawn fails ENOENT and the catch below turns it into `ok: false`, so
+ * nothing here is unsafe. It is just unavailable, and a caller that treats an
+ * empty result as a fact about the machine rather than about the shell will
+ * report a clean disk or an idle system. Every capability in ./platform that
+ * depends on this is false on Windows for that reason; see ./disks for what
+ * replacing one of them looks like.
+ *
  * The deadline bounds the call, not just the shell. `proc.kill()` signals the
  * `sh` we spawned, and `sh -c` only *becomes* the command when it can exec it
  * away — a single simple command. Give it a pipeline or two statements and it

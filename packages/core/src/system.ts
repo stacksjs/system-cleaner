@@ -1,6 +1,7 @@
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import type { DiskInfo, SystemInfo } from './types'
+import { bootMountPoint, listDisks } from './disks'
 import { NEEDS_PORTABLE_SIZER, sizeOfTree, sizeOfTreeAsync } from './dirsize'
 import { exec, execSync, shellEscape } from './exec'
 
@@ -56,52 +57,16 @@ export function getSystemInfoSync(): SystemInfo {
 }
 
 /**
- * Get disk usage information for all mounted volumes
+ * Get disk usage information for all mounted volumes.
+ *
+ * The implementation moved to ./disks, which reads the sizes from `statfs`
+ * rather than out of `df`'s columns. Two reasons, both load-bearing: `exec`
+ * runs every command through `sh -c` and Windows has no `sh`, and on APFS the
+ * `used` and `total` columns describe different scopes, so dividing one by the
+ * other reported this 85%-full disk as 2% full.
  */
 export async function getDiskInfo(): Promise<DiskInfo[]> {
-  const result = await exec('df -k 2>/dev/null')
-  if (!result.ok)
-    return []
-
-  const lines = result.stdout.split('\n').slice(1)
-  const disks: DiskInfo[] = []
-  const seen = new Set<string>()
-
-  for (const line of lines) {
-    const parts = line.trim().split(/\s+/)
-    if (parts.length < 6)
-      continue
-
-    const mountPoint = parts.slice(5).join(' ')
-
-    // Skip virtual/system volumes
-    if (
-      mountPoint.startsWith('/System/Volumes/')
-      || mountPoint === '/dev'
-      || mountPoint.startsWith('/private/var/vm')
-      || seen.has(parts[0])
-    )
-      continue
-
-    const totalKB = Number.parseInt(parts[1]) || 0
-    const usedKB = Number.parseInt(parts[2]) || 0
-    const freeKB = Number.parseInt(parts[3]) || 0
-
-    if (totalKB < 1_048_576)
-      continue // Skip volumes < 1GB
-
-    seen.add(parts[0])
-    disks.push({
-      mountPoint,
-      filesystem: parts[0],
-      totalBytes: totalKB * 1024,
-      usedBytes: usedKB * 1024,
-      freeBytes: freeKB * 1024,
-      usedPercent: totalKB > 0 ? Math.round((usedKB / totalKB) * 100) : 0,
-    })
-  }
-
-  return disks
+  return await listDisks()
 }
 
 /**
@@ -109,7 +74,10 @@ export async function getDiskInfo(): Promise<DiskInfo[]> {
  */
 export async function getPrimaryDiskInfo(): Promise<DiskInfo | null> {
   const disks = await getDiskInfo()
-  return disks.find(d => d.mountPoint === '/') || disks[0] || null
+  const boot = bootMountPoint()
+  // Matched against the platform's own boot mount rather than a literal '/',
+  // which no Windows volume is ever called.
+  return disks.find(d => d.mountPoint === boot) || disks[0] || null
 }
 
 /**
