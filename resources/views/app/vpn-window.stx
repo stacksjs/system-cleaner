@@ -1,0 +1,334 @@
+@extends('layouts/vpn-window')
+
+@section('styles')
+  /* ---------- Status ---------- */
+  .vpn-status { flex: none; text-align: center; padding-top: var(--space-2); }
+  .vpn-status-label { font-size: 20px; font-weight: 600; letter-spacing: -.02em; }
+  .vpn-status-clock {
+    margin-top: var(--space-1); height: 16px;
+    font-size: 13px; color: var(--secondary); font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- The button ---------- */
+  /* One target, dead centre, taking the space between the status and the
+     location row. Every consumer VPN is shaped this way because there is
+     exactly one thing to do in the window. */
+  .vpn-power-wrap { flex: 1; display: grid; place-items: center; min-height: 180px; }
+  .vpn-power {
+    position: relative; display: grid; place-items: center;
+    width: 148px; height: 148px; padding: 0;
+    border: 0; border-radius: 50%;
+    background: var(--surface-inset); color: var(--secondary);
+    cursor: default;
+    transition: background .2s ease, color .2s ease, transform .12s ease;
+  }
+  .vpn-power:hover { background: var(--hover); }
+  .vpn-power:active { transform: scale(.97); }
+  .vpn-power:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+  .vpn-power span { width: 52px; height: 52px; }
+
+  .vpn-power[data-state='connecting'],
+  .vpn-power[data-state='disconnecting'] { background: color-mix(in srgb, var(--orange) 16%, transparent); color: var(--orange); }
+  .vpn-power[data-state='on'] {
+    background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green);
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--green) 8%, transparent);
+  }
+
+  /* The ring that turns while a connection is being made. Drawn as a conic
+     gradient masked to a 3px band, so it needs no SVG and no library. */
+  .vpn-ring {
+    position: absolute; inset: -12px; border-radius: 50%; pointer-events: none;
+    opacity: 0;
+    background: conic-gradient(from 0deg, transparent 0deg, currentColor 300deg, transparent 330deg);
+    mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+  }
+  .vpn-power[data-state='connecting'] .vpn-ring,
+  .vpn-power[data-state='disconnecting'] .vpn-ring { opacity: 1; animation: vpn-spin 1s linear infinite; }
+  @keyframes vpn-spin { to { transform: rotate(360deg); } }
+
+  .vpn-power-caption {
+    flex: none; text-align: center; min-height: 16px;
+    font-size: 12px; color: var(--tertiary);
+  }
+
+  /* ---------- Location ---------- */
+  .vpn-location {
+    display: flex; align-items: center; gap: var(--space-3); width: 100%;
+    margin-top: var(--space-5); padding: var(--space-3);
+    border: .5px solid var(--vpn-card-line); border-radius: 12px;
+    background: var(--vpn-card); color: inherit;
+    font: inherit; text-align: left; cursor: default;
+  }
+  .vpn-location:hover { background: var(--surface-soft); }
+  .vpn-location:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .vpn-badge {
+    display: grid; place-items: center; flex: none;
+    width: 34px; height: 34px; border-radius: 9px;
+    background: var(--surface-inset); color: var(--secondary);
+    font-size: 12px; font-weight: 700; letter-spacing: .02em;
+  }
+  .vpn-location-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .vpn-location-kicker { font-size: 11px; color: var(--tertiary); }
+  .vpn-location-name {
+    font-size: 14px; font-weight: 600; letter-spacing: -.015em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .vpn-location-city {
+    font-size: 11px; color: var(--secondary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .vpn-location-chevron { flex: none; width: 13px; height: 13px; color: var(--tertiary); }
+
+  /* ---------- The picker ---------- */
+  .vpn-picker {
+    margin-top: var(--space-2); overflow: hidden;
+    border: .5px solid var(--vpn-card-line); border-radius: 12px; background: var(--vpn-card);
+  }
+  .vpn-pick {
+    display: flex; align-items: center; gap: var(--space-3); width: 100%;
+    padding: var(--space-3); border: 0; background: none;
+    color: inherit; font: inherit; text-align: left; cursor: default;
+  }
+  .vpn-pick + .vpn-pick { box-shadow: inset 0 .5px 0 var(--vpn-card-line); }
+  .vpn-pick:hover { background: var(--hover); }
+  .vpn-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .vpn-pick-check { flex: none; width: 14px; height: 14px; color: var(--accent); }
+
+  .vpn-foot {
+    flex: none; margin-top: var(--space-4);
+    font-size: 11px; line-height: 1.45; color: var(--tertiary); text-align: center;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .vpn-power, .vpn-power:active { transition: none; transform: none; }
+    .vpn-power[data-state='connecting'] .vpn-ring,
+    .vpn-power[data-state='disconnecting'] .vpn-ring { animation: none; }
+  }
+@endsection
+
+@section('body')
+
+<!--
+  No comments and no double quotes inside the `x-data` literal below. STX
+  collapses the attribute onto one line before evaluating it, so a `//` comment
+  swallows the rest of the object and a `"` ends the attribute early — either
+  way every binding renders empty with nothing in the console.
+  `tests/xdata-parses.test.ts` guards both, and bans getters: STX evaluates a
+  getter once while building the scope, so every derived value here is a
+  method.
+
+  This is the skeleton. The state machine is local — pressing the button walks
+  off -> connecting -> on and runs a clock, and nothing talks to the tunnel
+  yet. The real connect lands on `/api/vpn-connect`, which already exists and
+  already takes a coordinator and an exit; what is missing is a deployed server
+  for each location to point at. Until then this window is here to be looked
+  at and pressed, and it says so at the foot rather than pretending.
+
+  The two locations are the two regions `localtunnels` defines for this
+  deployment (`deploy/config.ts`), not a menu of somewhere to be invented
+  later.
+-->
+<div id='vpn-window-scope' x-data="{
+  state: 'off',
+  region: 'us-west',
+  picking: false,
+  elapsed: 0,
+
+  regions: [
+    { id: 'us-west', badge: 'US', country: 'United States', city: 'Hillsboro, Oregon' },
+    { id: 'eu-central', badge: 'DE', country: 'Germany', city: 'Falkenstein' }
+  ],
+
+  current() {
+    var found = this.regions.filter(r => r.id === this.region);
+    return found.length > 0 ? found[0] : this.regions[0];
+  },
+
+  busy() {
+    return this.state === 'connecting' || this.state === 'disconnecting';
+  },
+
+  statusLabel() {
+    if (this.state === 'on') return 'Connected';
+    if (this.state === 'connecting') return 'Connecting…';
+    if (this.state === 'disconnecting') return 'Disconnecting…';
+    return 'Not connected';
+  },
+
+  statusTone() {
+    if (this.state === 'on') return 'color: var(--green);';
+    if (this.state === 'off') return '';
+    return 'color: var(--orange);';
+  },
+
+  caption() {
+    if (this.state === 'on') return 'Your traffic leaves from ' + this.current().city;
+    if (this.busy()) return 'Nothing is being changed yet';
+    return 'Tap to connect to ' + this.current().country;
+  },
+
+  clock() {
+    if (this.state !== 'on') return '';
+    var pad = n => (n < 10 ? '0' + n : '' + n);
+    var h = Math.floor(this.elapsed / 3600);
+    var m = Math.floor((this.elapsed % 3600) / 60);
+    return pad(h) + ':' + pad(m) + ':' + pad(this.elapsed % 60);
+  },
+
+  toggle() {
+    window.__vpnSkeleton.toggle();
+  },
+
+  pick(id) {
+    this.region = id;
+    this.picking = false;
+    if (this.state !== 'off') window.__vpnSkeleton.reset();
+  }
+}">
+
+  <div class='vpn-status'>
+    <div class='vpn-status-label' :style='statusTone()'>{{ statusLabel() }}</div>
+    <div class='vpn-status-clock'>{{ clock() }}</div>
+  </div>
+
+  <div class='vpn-power-wrap'>
+    <button class='vpn-power' type='button' :data-state='state' :disabled='busy()'
+      @click='toggle()' :aria-label="state === 'on' ? 'Disconnect' : 'Connect'">
+      <span class='vpn-ring' aria-hidden='true'></span>
+      <span class='i-f7-power' aria-hidden='true'></span>
+    </button>
+  </div>
+
+  <div class='vpn-power-caption'>{{ caption() }}</div>
+
+  <!-- The selected location, and the two-row list it opens. A picker this
+       short is a disclosure rather than a sheet: two rows do not need a window
+       of their own, and a sheet over a 380px window covers all of it. -->
+  <button class='vpn-location' type='button' @click='picking = !picking'
+    :aria-expanded="picking ? 'true' : 'false'">
+    <span class='vpn-badge'>{{ current().badge }}</span>
+    <span class='vpn-location-text'>
+      <span class='vpn-location-kicker'>Location</span>
+      <span class='vpn-location-name'>{{ current().country }}</span>
+      <span class='vpn-location-city'>{{ current().city }}</span>
+    </span>
+    <span class='vpn-location-chevron' :class="picking ? 'i-f7-chevron-up' : 'i-f7-chevron-down'" aria-hidden='true'></span>
+  </button>
+
+  <template x-if='picking'>
+    <div class='vpn-picker'>
+      <template x-for='r in regions' :key='r.id'>
+        <button class='vpn-pick' type='button' @click='pick(r.id)'>
+          <span class='vpn-badge'>{{ r.badge }}</span>
+          <span class='vpn-location-text'>
+            <span class='vpn-location-name'>{{ r.country }}</span>
+            <span class='vpn-location-city'>{{ r.city }}</span>
+          </span>
+          <template x-if='r.id === region'>
+            <span class='vpn-pick-check i-f7-checkmark-alt' aria-hidden='true'></span>
+          </template>
+        </button>
+      </template>
+    </div>
+  </template>
+
+  <p class='vpn-foot'>
+    Skeleton. The button and the picker work; no tunnel is brought up yet, and
+    neither location has a server behind it. Diagnostics live on the VPN screen
+    in the main window.
+  </p>
+</div>
+
+<script data-stx-scoped>
+// ── The skeleton's state machine ──────────────────────────────
+// Plain JS in a scoped block, which is how this app drives anything on a
+// clock: STX tracks assignment, so the ticker has to push whole values in
+// through `__stx_execute` rather than mutate the scope. Same arrangement as
+// the status feed on `/app/vpn`.
+//
+// It lives out here rather than in the `x-data` literal because a `setTimeout`
+// chain holding its own state is not a view model, and because the real
+// version of this is an API call with a pending state — which is this shape,
+// not a different one.
+
+(function() {
+  var state = 'off';
+  var elapsed = 0;
+  var timer = null;
+
+  function scope() {
+    return document.getElementById('vpn-window-scope');
+  }
+
+  // The first push can land before STX has finished wiring the scope. Retry
+  // briefly rather than dropping it, or the window paints its initial state
+  // and never moves.
+  function push(attempt) {
+    var el = scope();
+    if (!el || !el.__stx_execute) {
+      var tries = attempt || 0;
+      if (tries < 40) setTimeout(function() { push(tries + 1); }, 50);
+      return;
+    }
+    window.__vpnView = { state: state, elapsed: elapsed };
+    el.__stx_execute('state = window.__vpnView.state; elapsed = window.__vpnView.elapsed');
+  }
+
+  function set(next) {
+    state = next;
+    push();
+  }
+
+  function stopClock() {
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+  }
+
+  function startClock() {
+    stopClock();
+    timer = setInterval(function() {
+      elapsed += 1;
+      push();
+    }, 1000);
+  }
+
+  window.__vpnSkeleton = {
+    toggle: function() {
+      if (state === 'connecting' || state === 'disconnecting') return;
+      if (state === 'off') {
+        set('connecting');
+        // Stands in for the macOS authorization prompt and the handshake. The
+        // real one is `/api/vpn-connect`, which takes as long as the person
+        // takes to answer the password dialog.
+        setTimeout(function() {
+          elapsed = 0;
+          set('on');
+          startClock();
+        }, 1200);
+        return;
+      }
+      stopClock();
+      set('disconnecting');
+      setTimeout(function() {
+        elapsed = 0;
+        set('off');
+      }, 600);
+    },
+
+    // Choosing a different location drops the connection rather than
+    // pretending to move it: a real switch is a disconnect and a fresh
+    // handshake against the other server.
+    reset: function() {
+      stopClock();
+      elapsed = 0;
+      set('off');
+    }
+  };
+
+  push();
+})();
+</script>
+@endsection
