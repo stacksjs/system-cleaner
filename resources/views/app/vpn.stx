@@ -101,6 +101,12 @@
 <div class='main-header'>
   <div class='main-title'>VPN</div>
   <div class='main-subtitle'>Encrypted layer-3 networking through localtunnels</div>
+  <!-- Opens the small VPN window. The markup only carries the hook; the
+       `craft.window.open` call is in `resources/scripts/vpn-panel.ts`, because
+       an stx client block cannot import the native bridge. -->
+  <div style='margin-top: var(--space-3);'>
+    <button class='btn btn-sm' type='button' data-open-vpn-window>Open VPN window</button>
+  </div>
 </div>
 <div class='main-content'>
   <VpnPanel />

@@ -847,5 +847,6 @@ useEventListener('mousedown', moveWindowFrom, { target: document })
 <!-- Wires the Settings panel above: Cmd+, from the menubar or the page, the
      profile chip in the top strip, and the controls inside it. -->
 <script src="/settings-panel.js"></script>
+<script src="/vpn-panel.js"></script>
 </body>
 </html>
