@@ -63,6 +63,49 @@ function samePath(a: string, b: string): boolean {
 }
 
 /**
+ * A path with Windows' alias spellings resolved away.
+ *
+ * Windows lets the same directory be named more than one way. The 8.3 short
+ * name is the common one: `%TEMP%` on a GitHub runner is
+ * `C:\\Users\\RUNNER~1\\AppData\\Local\\Temp` while `os.homedir()` is
+ * `C:\\Users\\runneradmin`, and a string containment test between those two
+ * correctly answers "not inside your home" about a directory that plainly is.
+ * That refusal is the safe direction, and it still broke the single largest
+ * Windows clean target.
+ *
+ * Resolving the nearest existing ancestor rather than the path itself, because
+ * most of what this is asked about does not exist: nobody has all six browsers
+ * and every toolchain, and `realpath` on a missing path throws. The tail is
+ * reattached afterwards, so a target that is absent today is still judged
+ * against the canonical spelling of the directory it would live in.
+ *
+ * POSIX is left alone. There are no alias spellings there, and `realpath`
+ * would additionally resolve symlinks — which `isPathSafe` refuses separately
+ * and on purpose.
+ */
+function canonical(resolvedPath: string): string {
+  if (!IS_WINDOWS)
+    return resolvedPath
+
+  let head = resolvedPath
+  const tail: string[] = []
+
+  while (true) {
+    try {
+      return tail.length === 0 ? fs.realpathSync.native(head) : path.join(fs.realpathSync.native(head), ...tail)
+    }
+    catch {
+      const parent = path.dirname(head)
+      // A root that does not resolve: nothing further up to try.
+      if (parent === head)
+        return resolvedPath
+      tail.unshift(path.basename(head))
+      head = parent
+    }
+  }
+}
+
+/**
  * Split into segments on whichever separator this platform writes.
  *
  * Gated on the platform rather than always splitting on both: a backslash is
@@ -78,6 +121,25 @@ function segmentsOf(p: string): string[] {
 export const HOME = os.homedir()
 export const USERNAME = os.userInfo().username
 export const UID = os.userInfo().uid
+
+/**
+ * HOME in the same spelling `canonical` produces, so the two can be compared.
+ *
+ * `HOME` itself stays exactly as `os.homedir()` reported it, because it is
+ * public and half the app builds display paths out of it.
+ */
+const CANONICAL_HOME = canonical(HOME)
+
+/**
+ * True when a path is inside the current user's home directory.
+ *
+ * The containment test every destructive route depends on, with both sides
+ * canonicalised first. Exported so callers outside this module get the alias
+ * handling rather than reimplementing `isWithin(p, HOME)` without it.
+ */
+export function isWithinHome(target: string): boolean {
+  return isWithin(canonical(path.resolve(target)), CANONICAL_HOME)
+}
 
 /**
  * The system roots, per platform.
@@ -115,10 +177,16 @@ const SYSTEM_ROOTS: string[] = IS_WINDOWS
  */
 const USER_ROOTS = ['Desktop', 'Documents', 'Downloads', 'Pictures', 'Music', 'Movies', 'Videos', 'Applications', 'Library', '.ssh', '.gnupg', '.aws', '.kube', '.config']
 
-// Directories that must never be deleted
+// Directories that must never be deleted.
+//
+// Listed under both spellings of home where Windows has two: a short-name
+// path reaching `~/.ssh` must hit the protected set, not slip past it because
+// the string did not match.
 const PROTECTED_PATHS = new Set([
   HOME,
+  CANONICAL_HOME,
   ...USER_ROOTS.map(d => path.join(HOME, d)),
+  ...USER_ROOTS.map(d => path.join(CANONICAL_HOME, d)),
   ...SYSTEM_ROOTS,
 ])
 
@@ -163,20 +231,24 @@ function matchesSensitive(set: Set<string>, segment: string): boolean {
  * Check if a path is safe to delete
  */
 export function isPathSafe(targetPath: string): PathSafetyCheck {
-  const resolved = path.resolve(targetPath)
+  // `raw` is what gets stat-ed; `resolved` is what gets compared. They differ
+  // only on Windows, where the same directory has more than one spelling and
+  // a comparison against the wrong one answers confidently and wrongly.
+  const raw = path.resolve(targetPath)
+  const resolved = canonical(raw)
 
   // Allow /Applications (for app uninstall) but reject other system paths.
   // The allowance is macOS-only on purpose: Windows uninstalls through the
   // registry rather than by deleting a bundle, and `appUninstall` is false
   // there, so opening up Program Files would widen the gate for a feature
   // that does not exist.
-  const inHome = isWithin(resolved, HOME)
+  const inHome = isWithin(resolved, CANONICAL_HOME)
   const inAppBundles = !IS_WINDOWS && resolved.startsWith('/Applications/')
   if (!inHome && !inAppBundles) {
     return { safe: false, reason: 'Path is outside home directory' }
   }
 
-  if (samePath(resolved, HOME)) {
+  if (samePath(resolved, CANONICAL_HOME) || samePath(raw, HOME)) {
     return { safe: false, reason: 'Cannot delete home directory' }
   }
 
@@ -212,7 +284,10 @@ export function isPathSafe(targetPath: string): PathSafetyCheck {
   }
 
   try {
-    const stat = fs.lstatSync(resolved)
+    // `raw`, deliberately: on Windows `canonical` resolves a symlink to its
+    // target, and stat-ing that would make this check report on the target
+    // instead of refusing the link.
+    const stat = fs.lstatSync(raw)
     if (stat.isSymbolicLink()) {
       return { safe: false, reason: 'Will not delete symbolic links for safety' }
     }
@@ -261,7 +336,8 @@ export function isPermissionGated(targetPath: string): boolean {
  * Check if a path is safe for cleaning (less strict - allows cleaning contents)
  */
 export function isCleanable(targetPath: string): PathSafetyCheck {
-  const resolved = path.resolve(targetPath)
+  const raw = path.resolve(targetPath)
+  const resolved = canonical(raw)
 
   if (PERMISSION_GATED.some(gated => resolved === path.join(HOME, gated) || resolved.startsWith(`${path.join(HOME, gated)}/`))) {
     return {
@@ -271,7 +347,7 @@ export function isCleanable(targetPath: string): PathSafetyCheck {
   }
 
   if (
-    !isWithin(resolved, HOME)
+    !isWithin(resolved, CANONICAL_HOME)
     && !resolved.startsWith('/private/tmp')
     && !resolved.startsWith('/private/var/tmp')
     && !resolved.startsWith('/Library/')
@@ -282,7 +358,10 @@ export function isCleanable(targetPath: string): PathSafetyCheck {
   }
 
   try {
-    const stat = fs.lstatSync(resolved)
+    // `raw` for the same reason as in `isPathSafe`: `canonical` resolves a
+    // symlink to its target on Windows, and stat-ing that would report on the
+    // target instead of refusing the link.
+    const stat = fs.lstatSync(raw)
     if (stat.isSymbolicLink()) {
       return { safe: false, reason: 'Will not clean symbolic links' }
     }

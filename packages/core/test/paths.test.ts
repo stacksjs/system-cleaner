@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import * as fs from 'node:fs'
+import * as os from 'node:os'
 import * as path from 'node:path'
 import process from 'node:process'
-import { HOME, isCleanable, isPathSafe, isWithin } from '../src/paths'
+import { HOME, isCleanable, isPathSafe, isWithin, isWithinHome } from '../src/paths'
 import { makeTmpDir } from './_tmp'
 
 let TMP: string
@@ -175,5 +176,47 @@ describe('isWithin', () => {
     // The fold must not widen the boundary it was added to narrow.
     expect(isWithin('C:/Users/glenn2/Documents', parent)).toBe(false)
     expect(isWithin('C:\\Users\\glenn-old', parent)).toBe(false)
+  })
+})
+
+/**
+ * Windows lets the same directory be named more than one way, and a string
+ * comparison between two spellings answers confidently and wrongly.
+ *
+ * Found by the Windows CI leg against a real runner: `%TEMP%` there is
+ * `C:\\Users\\RUNNER~1\\AppData\\Local\\Temp` while `os.homedir()` is
+ * `C:\\Users\\runneradmin`, so `user-temp` — the single largest Windows clean
+ * target — was refused as being outside the user's own home. The refusal was
+ * the safe direction and it still broke the feature.
+ */
+describe('isWithinHome', () => {
+  it('accepts the home directory and what is under it', () => {
+    expect(isWithinHome(HOME)).toBe(true)
+    expect(isWithinHome(path.join(HOME, 'Library'))).toBe(true)
+    expect(isWithinHome(path.join(HOME, 'a', 'b', 'c'))).toBe(true)
+  })
+
+  it('refuses a sibling account, whatever its name shares with yours', () => {
+    expect(isWithinHome(`${HOME}2`)).toBe(false)
+    expect(isWithinHome(`${HOME}-old`)).toBe(false)
+  })
+
+  it('agrees with the temp directory it is actually given', () => {
+    // The case from CI. On Windows these are two spellings of one
+    // directory; on POSIX os.tmpdir() is simply outside home and the
+    // answer is a plain false.
+    const tmp = os.tmpdir()
+    const expected = process.platform === 'win32'
+      ? isWithin(fs.realpathSync(tmp), fs.realpathSync(HOME))
+      : false
+    expect(isWithinHome(tmp)).toBe(expected)
+  })
+
+  it('judges a path that does not exist by where it would live', () => {
+    // `realpath` throws on a missing path, so the nearest existing ancestor
+    // is resolved and the tail reattached. Most of what the guards are
+    // asked about does not exist: nobody has all six browsers installed.
+    expect(isWithinHome(path.join(HOME, 'no-such-dir', 'nor-this-one'))).toBe(true)
+    expect(isWithinHome(path.join(`${HOME}2`, 'no-such-dir'))).toBe(false)
   })
 })

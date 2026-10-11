@@ -6,7 +6,7 @@ import {
   isPathSafe,
   capabilities,
   classifyByGit,
-  isWithin,
+  isWithinHome,
   refusesDeletion,
   PLATFORM,
   getDirSize,
@@ -576,8 +576,11 @@ export default async function (router: Router) {
           const resolved = path.resolve(p);
           // Containment, not a prefix: `/Users/glenn2` is not inside
           // `/Users/glenn`, and measuring another account's home is a smaller
-          // version of the same mistake as deleting it.
-          if (!isWithin(resolved, HOME)) return;
+          // version of the same mistake as deleting it. `isWithinHome` rather
+          // than `isWithin(resolved, HOME)` so Windows' alias spellings - an
+          // 8.3 short name reaching the same directory - are resolved before
+          // the comparison instead of reading as a different account.
+          if (!isWithinHome(resolved)) return;
           try { results[p] = await getDirSize(resolved); }
           catch { results[p] = 0; }
         }),
