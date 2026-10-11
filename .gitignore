@@ -76,3 +76,5 @@ storage/framework/discovered-packages.json
 /public/platform-gate.js
 /public/settings-panel.js
 /public/settings-window.js
+/public/vpn-panel.js
+/public/vpn-window.js
