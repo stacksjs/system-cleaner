@@ -81,27 +81,35 @@ function patchOf(version: string): number {
 /**
  * The Craft runtime version this bundle ships.
  *
- * Prefers whatever pantry resolved, so Windows and macOS stay on the same
- * runtime as that moves forward, and falls back to the oldest complete Windows
- * archive when the resolved one predates it. The completeness check further
- * down is what actually enforces this — the floor only avoids a download that
- * is known to be useless.
+ * From `deps.yaml`, which is tracked and therefore present wherever the build
+ * runs. The first version of this read the installed `pantry/craft-native.org`
+ * directory instead, to match whatever the macOS build resolves — and a
+ * Windows runner has no pantry at all, so it failed having already compiled
+ * the launcher:
+ *
+ *     error: no Craft runtime in D:\\a\\...\\pantry\\craft-native.org
+ *
+ * The declared dependency is the better answer anyway: it is the version this
+ * project asks for, rather than the one a particular machine happens to have
+ * unpacked.
+ *
+ * Raised to the floor when the declared version predates a complete Windows
+ * archive. The check further down is what actually enforces completeness; the
+ * floor only avoids a download that is known to be useless.
  */
 function craftVersion(): string {
-  const pantryDir = path.join(ROOT, 'pantry/craft-native.org')
-  const versions = fs.existsSync(pantryDir)
-    ? fs.readdirSync(pantryDir).filter(d => d.startsWith('v')).sort((a, b) => patchOf(a) - patchOf(b))
-    : []
+  const depsFile = path.join(ROOT, 'deps.yaml')
+  const declared = fs.readFileSync(depsFile, 'utf8').match(/craft-native\.org:\s*[\^~]?([\d.]+)/)
 
-  if (versions.length === 0)
-    throw new Error(`no Craft runtime in ${pantryDir} - run \`bun install\` so pantry resolves craft-native.org`)
+  if (!declared)
+    throw new Error(`no craft-native.org dependency in ${depsFile}`)
 
-  const resolved = versions[versions.length - 1]
-  if (patchOf(resolved) >= MIN_WINDOWS_CRAFT)
-    return resolved
+  const version = `v${declared[1]}`
+  if (patchOf(version) >= MIN_WINDOWS_CRAFT)
+    return version
 
   const floor = `v0.0.${MIN_WINDOWS_CRAFT}`
-  console.warn(`[windows] pantry resolved Craft ${resolved}, whose Windows archive ships no WebView2 loader; using ${floor}`)
+  console.warn(`[windows] ${version} is declared, but its Windows archive ships no WebView2 loader; using ${floor}`)
   return floor
 }
 
