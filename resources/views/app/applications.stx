@@ -346,6 +346,8 @@
     this.post('/api/app-uninstall', { path: this.scan.app.path, paths: this.chosen, mode: mode })
       .then(function(r) {
         self.removing = false;
+        if (r.message) self.toast(r.message, 'success');
+        if (r.error && !r.launched) self.toast(r.error, 'error');
         if ((r.succeeded || []).length > 0)
           self.toast('Removed ' + r.succeeded.length + ' item(s) from ' + name + ' - freed ' + r.freedFormatted, 'success');
         if ((r.skipped || []).length > 0)

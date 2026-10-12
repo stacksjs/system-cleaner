@@ -1,6 +1,7 @@
 import * as path from 'node:path'
 import { HOME, appleScriptEscape, pathExists, safeReadDir, safeStat, parsePlist, exec, isWindows, shellEscape } from '@system-cleaner/core'
 import { readBundleInfo } from './bundle'
+import { discoverWindowsPrograms, toAppInfo } from './apps-windows'
 import { discoverWindowsStartup, toggleWindowsStartupItem } from './startup-windows'
 import type { AppInfo, StartupItem } from './types'
 
@@ -19,6 +20,15 @@ const SYSTEM_APP_PATTERNS = [
  * Discover all installed applications
  */
 export async function discoverApps(includeSystemApps = false): Promise<AppInfo[]> {
+  if (isWindows) {
+    // A Windows program is a registry entry, not a directory, and there are no
+    // `.app` bundles to walk. `includeSystemApps` has no counterpart either:
+    // what Windows considers its own is marked `SystemComponent` and dropped
+    // during discovery rather than filtered here.
+    const programs = await discoverWindowsPrograms()
+    return programs.map(toAppInfo)
+  }
+
   const apps: AppInfo[] = []
   const seen = new Set<string>()
 

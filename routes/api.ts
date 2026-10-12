@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import process from 'node:process';
 import {
   isPathSafe,
+  isWindows,
   capabilities,
   classifyByGit,
   isWithinHome,
@@ -50,6 +51,8 @@ import {
 } from '@system-cleaner/clean';
 import {
   killProcess,
+  discoverWindowsPrograms,
+  launchWindowsUninstaller,
   toggleStartupItem,
   removeStartupItem,
 } from '@system-cleaner/uninstall';
@@ -1571,6 +1574,34 @@ export default async function (router: Router) {
     const body = await readJsonBody<{ path: unknown }>(req);
     if (body === null) return badJson();
     if (typeof body.path !== 'string' || !body.path) return badRequest('No app path provided');
+
+    // Windows is a different act entirely, not a different path.
+    //
+    // Uninstalling a Mac app means moving a bundle this app chose to the
+    // Trash - our decision, and reversible. A Windows program is a registry
+    // entry pointing at the vendor's own uninstaller, so the most this app can
+    // honestly do is start it and say so. It does not remove anything itself,
+    // does not wait, and does not report bytes freed: most uninstallers open a
+    // window and ask questions, and claiming a program was removed because a
+    // process was spawned is the same class of lie as reporting space that
+    // never came back.
+    if (isWindows) {
+      const programs = await discoverWindowsPrograms();
+      const program = programs.find(entry => entry.key === body.path);
+      if (!program) return badRequest('No such program is registered', 404);
+
+      const launch = await launchWindowsUninstaller(program);
+      return Response.json({
+        success: launch.success,
+        launched: launch.launched,
+        app: program.name,
+        error: launch.error,
+        message: launch.launched
+          ? `Started the uninstaller for ${program.name}. Follow its prompts to finish.`
+          : undefined,
+      }, { status: launch.success ? 200 : 400 });
+    }
+
     if (!pathInAllowedRoots(body.path, ['/Applications', path.join(HOME, 'Applications')]))
       return badRequest('Only apps in /Applications can be uninstalled', 403);
 

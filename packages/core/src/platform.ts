@@ -109,6 +109,7 @@ const CAPABILITIES: Record<Platform, Capabilities> = {
   },
   windows: {
     ...NONE,
+    appUninstall: true,
     cleanTargets: true,
     diskScan: true,
     developerJunk: true,

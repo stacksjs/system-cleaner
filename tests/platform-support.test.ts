@@ -51,7 +51,7 @@ describe('platform capabilities', () => {
       cleanTargets: true,
       diskScan: true,
       developerJunk: true,
-      appUninstall: false,
+      appUninstall: true,
       startupItems: true,
       privacy: true,
       maintenance: false,
