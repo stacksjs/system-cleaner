@@ -3,7 +3,7 @@ import * as path from 'node:path'
 import process from 'node:process'
 import { capabilities, PLATFORM } from '@system-cleaner/core'
 import { BROWSER_PROBE_FAILED, blockedByRunningBrowser, detectBrowserProfiles, runningBrowsers } from '../packages/clean/src/browser'
-import { scanPrivacyItems } from '../packages/clean/src/privacy'
+import { scanPrivacyItems, systemPrivacyDefinitions } from '../packages/clean/src/privacy'
 
 /**
  * Privacy on Windows.
@@ -94,30 +94,21 @@ describe('browser profiles resolve for this platform', () => {
 })
 
 describe('system privacy items follow the platform', () => {
-  // Ids carry a source prefix - `macos::shell-history` - so these match on the
-  // suffix. The first version of this compared against the bare id, found
-  // nothing, and passed without asserting anything at all.
-  const systemItems = () => scanPrivacyItems().filter(i => i.kind === 'system')
-  const bySuffix = (suffix: string) => systemItems().find(i => i.id.endsWith(suffix))
+  // Asserted against the *definitions*, not the scan. `scanPrivacyItems`
+  // filters to paths that exist on this machine, which is right for the UI and
+  // wrong for checking platform logic: on a Linux runner none of the macOS
+  // paths are there, so the filtered list is empty and the assertions below
+  // would fail for a reason that has nothing to do with the code. That is
+  // exactly how the first version of this file broke CI.
+  const definitions = () => systemPrivacyDefinitions()
+  const byId = (id: string) => definitions().find(d => d.id === id)
 
-  it('finds the system items at all', () => {
-    // Guards every other assertion here against passing vacuously.
-    expect(systemItems().length, 'no system privacy items were produced').toBeGreaterThan(0)
-  })
-
-  it('names them for the system they came from', () => {
-    // The prefix was a hardcoded `macos::`, which would have labelled a
-    // Windows machine's PowerShell history as a macOS item - in the id the UI
-    // keys its selections off.
-    const expected = PLATFORM === 'windows' ? 'windows::' : 'macos::'
-    for (const item of systemItems()) {
-      expect(item.id.startsWith(expected), `${item.id} should start with ${expected}`).toBe(true)
-      expect(item.browser).toBe(PLATFORM === 'windows' ? 'Windows' : 'macOS')
-    }
+  it('defines system items for whatever platform this is', () => {
+    expect(definitions().length, 'no system privacy items are defined').toBeGreaterThan(0)
   })
 
   it('offers only what this platform actually has', () => {
-    const quarantine = bySuffix('quarantine-log')
+    const quarantine = byId('quarantine-log')
 
     if (PLATFORM === 'windows') {
       // Windows records a download's origin in a Zone.Identifier stream per
@@ -126,19 +117,38 @@ describe('system privacy items follow the platform', () => {
       expect(quarantine, 'macOS-only item offered on Windows').toBeUndefined()
     }
     else {
-      expect(quarantine, 'the macOS download log should be offered here').toBeDefined()
+      expect(quarantine, 'the macOS download log should be defined here').toBeDefined()
     }
   })
 
   it('points shell history at the history this platform keeps', () => {
-    const shell = bySuffix('shell-history')
-    expect(shell, 'shell history is offered on every platform').toBeDefined()
+    const shell = byId('shell-history')
+    expect(shell, 'shell history is defined on every platform').toBeDefined()
 
     const joined = shell!.paths.join(' ')
     if (PLATFORM === 'windows')
       expect(joined, 'PowerShell history is the one that matters here').toContain('ConsoleHost_history.txt')
     else
       expect(joined).toContain('.zsh_history')
+  })
+
+  /**
+   * This one does read the scan, because the prefix is applied there. It is
+   * conditional on items existing, and that is legitimate rather than vacuous:
+   * the platform logic itself is covered by the three tests above, which hold
+   * on a machine with none of these files.
+   */
+  it('names any item it does produce for the system it came from', () => {
+    const produced = scanPrivacyItems().filter(i => i.kind === 'system')
+    const expected = PLATFORM === 'windows' ? 'windows::' : 'macos::'
+
+    for (const item of produced) {
+      // The prefix was a hardcoded `macos::`, which would have labelled a
+      // Windows machine's PowerShell history as a macOS item - in the id the
+      // UI keys its selections off.
+      expect(item.id.startsWith(expected), `${item.id} should start with ${expected}`).toBe(true)
+      expect(item.browser).toBe(PLATFORM === 'windows' ? 'Windows' : 'macOS')
+    }
   })
 })
 
