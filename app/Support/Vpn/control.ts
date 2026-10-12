@@ -141,7 +141,7 @@ export async function connect(input: unknown): Promise<ControlResult> {
   if (!checked.ok)
     return { success: false, error: checked.error }
 
-  const core = readCore()
+  const core = await readCore()
   if (!core.available || !core.cliPath)
     return { success: false, error: core.detail || 'No localtunnels CLI found' }
 
@@ -207,7 +207,7 @@ export async function connectionPid(): Promise<number | null> {
   const ps = await exec(`ps -o command= -p ${pid}`, { timeout: 5000 })
   if (!ps.ok || !ps.stdout.trim())
     return null
-  return looksLikeTunnel(ps.stdout, readCore().cliPath) ? pid : null
+  return looksLikeTunnel(ps.stdout, (await readCore()).cliPath) ? pid : null
 }
 
 /**

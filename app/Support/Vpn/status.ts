@@ -22,7 +22,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import process from 'node:process'
-import { execSyncResult, isMacOS, TtlCache } from '@system-cleaner/core'
+import { exec, isMacOS, TtlCache } from '@system-cleaner/core'
 
 /** The CLI, if one could be found and made to answer. */
 export interface VpnCore {
@@ -125,7 +125,7 @@ export function readIdentity(): VpnIdentity | null {
  * `LOCALTUNNELS_BIN` wins, so a checkout can be pointed at without installing
  * anything. Otherwise both names it ships under are looked up on PATH.
  */
-function findCli(): string | null {
+async function findCli(): Promise<string | null> {
   const explicit = process.env.LOCALTUNNELS_BIN
   if (explicit) {
     try {
@@ -137,20 +137,32 @@ function findCli(): string | null {
     }
   }
   for (const name of ['localtunnels', 'lt']) {
-    const found = execSyncResult(`command -v ${name}`, { timeout: 2000 })
+    const found = await exec(`command -v ${name}`, { timeout: 2000 })
     if (found.ok && found.stdout)
       return found.stdout.split('\n')[0].trim()
   }
   return null
 }
 
-/** Find the CLI and ask it whether its native core is healthy. */
-export function readCore(): VpnCore {
+/**
+ * Find the CLI and ask it whether its native core is healthy.
+ *
+ * Asynchronous, and that is the entire point of it.
+ *
+ * This used to be a chain of `execSyncResult` calls, which block the thread
+ * they run on — and the thread they run on is the one serving the whole UI.
+ * The probes are not quick, either: `vpn:selftest` carries a 20 second
+ * timeout, `--version` five, the PATH lookup two, and `ifconfig` five, so a
+ * single cache miss could stop the agent answering anything at all for half a
+ * minute. Measured against a selftest that took two seconds, a 100ms timer
+ * ticked **zero** times during the call where it should have ticked twenty-five.
+ */
+export async function readCore(): Promise<VpnCore> {
   const cached = coreCache.get('core')
   if (cached)
     return cached
 
-  const cliPath = findCli()
+  const cliPath = await findCli()
   if (!cliPath) {
     const core: VpnCore = {
       available: false,
@@ -169,9 +181,14 @@ export function readCore(): VpnCore {
   // `preload not found "@stacksjs/env/plugin.js"`. The health of someone
   // else's binary must not depend on where this app happens to be running.
   const at = { cwd: os.tmpdir() }
-  const version = execSyncResult(`${quote(cliPath)} --version`, { ...at, timeout: 5000 })
-  // `vpn:selftest` needs no root: it runs entirely in-process.
-  const selftest = execSyncResult(`${quote(cliPath)} vpn:selftest`, { ...at, timeout: 20_000 })
+  // Both at once: they are independent questions for the same binary, and
+  // serialising them doubled the wait for no reason now that waiting no longer
+  // blocks anyone else.
+  const [version, selftest] = await Promise.all([
+    exec(`${quote(cliPath)} --version`, { ...at, timeout: 5000 }),
+    // `vpn:selftest` needs no root: it runs entirely in-process.
+    exec(`${quote(cliPath)} vpn:selftest`, { ...at, timeout: 20_000 }),
+  ])
   const healthy = selftest.ok && /VPN core is healthy/i.test(selftest.stdout)
 
   const core: VpnCore = {
@@ -195,13 +212,13 @@ export function readCore(): VpnCore {
  * and `tun` devices with an IPv4 address are considered; everything else on
  * the machine is somebody else's business.
  */
-export function readTunnels(): TunnelInterface[] {
+export async function readTunnels(): Promise<TunnelInterface[]> {
   if (!isMacOS) {
     // `ip -o addr` on Linux; not reachable from the desktop bundle today, so
     // left unimplemented rather than guessed at.
     return []
   }
-  const out = execSyncResult('ifconfig -a', { timeout: 5000 })
+  const out = await exec('ifconfig -a', { timeout: 5000 })
   return out.ok ? parseIfconfig(out.stdout) : []
 }
 
@@ -249,10 +266,11 @@ export function parseIfconfig(output: string): TunnelInterface[] {
 }
 
 /** The whole read-only picture. */
-export function readVpnStatus(): VpnStatus {
-  const tunnels = readTunnels()
+export async function readVpnStatus(): Promise<VpnStatus> {
+  // The CLI probe and the interface list do not depend on each other.
+  const [core, tunnels] = await Promise.all([readCore(), readTunnels()])
   return {
-    core: readCore(),
+    core,
     identity: readIdentity(),
     tunnels,
     connected: tunnels.some(t => t.localtunnelsRange),

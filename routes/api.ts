@@ -2006,7 +2006,10 @@ export default async function (router: Router) {
     // question from whether a tunnel exists: the interface list reports any
     // tunnel on the machine, including one someone brought up in Terminal.
     // Only a managed one can be disconnected from here.
-    return Response.json({ success: true, ...readVpnStatus(), managedPid: await connectionPid() });
+    // Both awaited together: the status probe and the managed-pid lookup are
+    // independent, and neither blocks the agent now that the probe is async.
+    const [status, managedPid] = await Promise.all([readVpnStatus(), connectionPid()]);
+    return Response.json({ success: true, ...status, managedPid });
   });
 
   /**

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'bun:test'
-import { parseIfconfig, readIdentity, vpnDir } from '../app/Support/Vpn/status'
+import * as fs from 'node:fs'
+import * as os from 'node:os'
+import * as path from 'node:path'
+import process from 'node:process'
+import { invalidateVpnCache, parseIfconfig, readIdentity, readVpnStatus, vpnDir } from '../app/Support/Vpn/status'
 
 /**
  * The VPN panel's read-only status.
@@ -98,4 +102,62 @@ describe('vpn/status', () => {
       }
     })
   })
+})
+
+/**
+ * The status probe must not stop the agent serving everything else.
+ *
+ * `readVpnStatus` used to be a chain of synchronous `execSyncResult` calls on
+ * the one thread that answers every request in the desktop app. The probes are
+ * not quick either: `vpn:selftest` carries a 20 second timeout, `--version`
+ * five, the PATH lookup two and `ifconfig` five, so a single cache miss could
+ * stop the app answering anything for the better part of a minute.
+ *
+ * Asserted by starving a timer rather than by timing the call, because the
+ * duration was never the complaint — a slow probe is fine, a frozen app is
+ * not. Measured against the synchronous version, a 100ms timer ticked zero
+ * times across a 2.4 second call.
+ */
+describe('readVpnStatus does not block the event loop', () => {
+  // POSIX only: the stand-in CLI is a shell script, and the VPN feature is
+  // macOS-only anyway (`supported: isMacOS`).
+  const POSIX = process.platform !== 'win32'
+
+  it('lets timers run while it probes a slow CLI', async () => {
+    if (!POSIX) return
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sc-vpn-probe-'))
+    const cli = path.join(dir, 'localtunnels')
+    // Long enough to be unmistakable, short enough not to pad the suite.
+    fs.writeFileSync(cli, '#!/bin/sh\ncase "$1" in\n  --version) echo "localtunnels 9.9.9" ;;\n  vpn:selftest) sleep 1; echo "VPN core is healthy" ;;\nesac\n')
+    fs.chmodSync(cli, 0o755)
+
+    const previous = process.env.LOCALTUNNELS_BIN
+    process.env.LOCALTUNNELS_BIN = cli
+    invalidateVpnCache()
+
+    let ticks = 0
+    const timer = setInterval(() => { ticks++ }, 50)
+
+    try {
+      const started = Date.now()
+      const status = await readVpnStatus()
+      const elapsed = Date.now() - started
+
+      // The probe really did run the slow command, or this proves nothing.
+      expect(status.core.available, 'the stand-in CLI was found').toBe(true)
+      expect(elapsed, 'the slow selftest really ran').toBeGreaterThan(500)
+
+      // The assertion that matters. Synchronous probing leaves this at zero
+      // however long the call takes.
+      expect(ticks, 'the event loop was starved while the VPN was probed').toBeGreaterThan(0)
+    }
+    finally {
+      clearInterval(timer)
+      if (previous === undefined) delete process.env.LOCALTUNNELS_BIN
+      else process.env.LOCALTUNNELS_BIN = previous
+      invalidateVpnCache()
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  }, 30_000)
 })
