@@ -54,7 +54,7 @@ import {
   removeStartupItem,
 } from '@system-cleaner/uninstall';
 import { categoryPresentation, findProjectArtifacts, shredPaths } from '@system-cleaner/disk';
-import { getTopProcesses, summarizeProcesses } from '@system-cleaner/monitor';
+import { getTopProcesses, sampleCpuUsage, summarizeProcesses } from '@system-cleaner/monitor';
 import { recordSystemActivity } from '../app/Support/System/activity-chart';
 import { isLocalAgent } from '../app/Support/Runtime/local-agent';
 import { invalidateVpnCache, readVpnStatus } from '../app/Support/Vpn/status';
@@ -995,13 +995,18 @@ export default async function (router: Router) {
     }
 
     const os = await import('node:os');
-    const procs = await getTopProcesses(8);
+    // Measured from the kernel's own per-core counters rather than summed out
+    // of `ps`. The old figure was `sum(process %cpu) / cores`, which on
+    // Windows is 0% forever — `ps` is not there, the process list comes back
+    // empty, and a busy machine reports as idle while the health score below
+    // sees no CPU pressure and inflates. It was also a poor number on macOS:
+    // `ps` reports a process's lifetime average, not what it is doing now, and
+    // counts no kernel time.
+    const [procs, cpu] = await Promise.all([getTopProcesses(8), sampleCpuUsage()]);
     const base = getDashboardStatsCached();
     const host = getHostSnapshot();
-    const totalCPU = procs.reduce((s, p) => s + p.cpuPercent, 0);
-    const cpuCores = os.default.cpus().length;
     const memPercent = Math.round(((os.default.totalmem() - os.default.freemem()) / os.default.totalmem()) * 100);
-    const cpuAvgPercent = cpuCores > 0 ? Math.round(totalCPU / cpuCores) : 0;
+    const cpuAvgPercent = cpu.usagePercent;
 
     // Read the boot volume once, in bytes, and derive every label from it.
     //

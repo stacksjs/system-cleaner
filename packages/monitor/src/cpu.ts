@@ -9,6 +9,63 @@ let cachedPhysicalCores: number | null = null
 const TOPOLOGY_CACHE_TTL = 600_000 // 10 minutes
 
 /**
+ * Processor utilisation, measured rather than inferred, on any platform.
+ *
+ * `os.cpus()` reports cumulative per-core times everywhere, so two samples a
+ * short interval apart give true utilisation with no shell and no per-platform
+ * command. That matters twice over:
+ *
+ *  - The dashboard derived CPU by summing `ps -Aceo pcpu` across processes and
+ *    dividing by core count. `ps` does not exist on Windows, so the figure was
+ *    always 0% — a busy machine reported as idle, and a health score that saw
+ *    no CPU pressure and inflated itself accordingly.
+ *  - Even on macOS that sum was a poor proxy: `ps` reports a process's
+ *    *lifetime average* CPU, not what it is using now, and it counts no kernel
+ *    time at all.
+ *
+ * The cost is the sampling window, which is why it is a parameter: the caller
+ * decides how much accuracy a reading is worth.
+ */
+export async function sampleCpuUsage(windowMs = 120): Promise<{ usagePercent: number, perCoreUsage: number[] }> {
+  const read = (): { idle: number, total: number }[] =>
+    os.cpus().map(cpu => ({
+      idle: cpu.times.idle,
+      total: Object.values(cpu.times).reduce((a, b) => a + b, 0),
+    }))
+
+  const first = read()
+  await new Promise(resolve => setTimeout(resolve, windowMs))
+  const second = read()
+
+  const perCoreUsage: number[] = []
+  let idleDelta = 0
+  let totalDelta = 0
+
+  for (let i = 0; i < second.length; i++) {
+    const previous = first[i]
+    // A core that appeared between samples has nothing to compare against.
+    if (!previous) {
+      perCoreUsage.push(0)
+      continue
+    }
+    const idle = second[i].idle - previous.idle
+    const total = second[i].total - previous.total
+    perCoreUsage.push(total > 0 ? clampPercent(Math.round((1 - idle / total) * 100)) : 0)
+    idleDelta += idle
+    totalDelta += total
+  }
+
+  return {
+    usagePercent: totalDelta > 0 ? clampPercent(Math.round((1 - idleDelta / totalDelta) * 100)) : 0,
+    perCoreUsage,
+  }
+}
+
+function clampPercent(value: number): number {
+  return Math.max(0, Math.min(100, value))
+}
+
+/**
  * Collect CPU metrics with per-core usage and Apple Silicon topology.
  * Uses a two-read delta pattern for accurate usage calculation.
  */
@@ -46,17 +103,14 @@ export async function getCpuMetrics(): Promise<CpuMetrics> {
     usagePercent = totalDelta > 0 ? Math.round((1 - totalIdle / totalDelta) * 100) : 0
   }
   else {
-    // First reading — fall back to ps-based aggregation (matching Mole's fallback)
-    const psResult = await exec('ps -Aceo pcpu 2>/dev/null | tail -n +2 | awk \'{s+=$1} END {print s}\'', { timeout: 3000 })
-    if (psResult.ok) {
-      const totalPercent = Number.parseFloat(psResult.stdout) || 0
-      usagePercent = Math.min(100, Math.round(totalPercent / cpus.length))
-    }
-    else {
-      usagePercent = Math.min(100, Math.round((loadAvg[0] / cpus.length) * 100))
-    }
-    for (let i = 0; i < cpus.length; i++)
-      perCoreUsage.push(usagePercent)
+    // No previous reading to diff against, so take the second sample here
+    // rather than guessing. This used to aggregate `ps -Aceo pcpu` and fall
+    // back to `os.loadavg()` — the first does not exist on Windows and the
+    // second reports zeros there, so the very first CPU figure the app showed
+    // on that platform was always 0%.
+    const sampled = await sampleCpuUsage()
+    usagePercent = sampled.usagePercent
+    perCoreUsage.push(...sampled.perCoreUsage)
   }
 
   lastCpuTimes = currentTimes
