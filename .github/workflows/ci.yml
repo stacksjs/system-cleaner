@@ -311,12 +311,34 @@ jobs:
       # compiled binary, the argv dispatch, the view payload, the migrations
       # and the loopback bind - everything except the window itself, which
       # needs eyes or a screenshot harness.
+      # Copied out of the repository before anything runs it, because that is
+      # where an installed app lives and the difference is not cosmetic: a
+      # compiled Bun binary reads `bunfig.toml` from its working directory, and
+      # this repository's preloads `@stacksjs/env/plugin.js`. Run from the
+      # checkout, the agent died on a preload no installed copy would ever
+      # see:
+      #
+      #     error: preload not found "@stacksjs/env/plugin.js"
+      #
+      # `C:\Program Files\SystemCleaner` has no bunfig.toml and no
+      # node_modules, so testing from inside the tree was testing a
+      # configuration that will never ship.
+      - name: Install the bundle outside the repository
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $target = Join-Path $env:RUNNER_TEMP "SystemCleaner"
+          Remove-Item -Recurse -Force $target -ErrorAction SilentlyContinue
+          Copy-Item -Recurse "storage/framework/desktop-windows/SystemCleaner" $target
+          Write-Host "installed to $target"
+          Get-ChildItem $target | Format-Table Name, Length -AutoSize | Out-String | Write-Host
+
       - name: Smoke-test the desktop agent
         timeout-minutes: 5
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $stage = "storage/framework/desktop-windows/SystemCleaner"
+          $stage = Join-Path $env:RUNNER_TEMP "SystemCleaner"
           $exe = Join-Path $stage "SystemCleaner.exe"
           if (-not (Test-Path $exe)) { throw "no launcher at $exe" }
 
@@ -342,7 +364,9 @@ jobs:
           $env:APP_ENV = 'production'
 
           $log = Join-Path $data "agent.log"
-          $agent = Start-Process -FilePath $exe -ArgumentList 'agent' -PassThru `
+          # `-WorkingDirectory`, so nothing in the checkout is on the
+          # resolution path - the whole point of copying it out.
+          $agent = Start-Process -FilePath $exe -ArgumentList 'agent' -PassThru -WorkingDirectory $stage `
             -RedirectStandardOutput $log -RedirectStandardError (Join-Path $data "agent.err") -NoNewWindow
 
           try {
@@ -391,7 +415,8 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $shots = Join-Path $env:RUNNER_TEMP "sc-window"
           New-Item -ItemType Directory -Force -Path $shots | Out-Null
-          $exe = (Resolve-Path "storage/framework/desktop-windows/SystemCleaner/SystemCleaner.exe").Path
+          $stage = Join-Path $env:RUNNER_TEMP "SystemCleaner"
+          $exe = (Resolve-Path (Join-Path $stage "SystemCleaner.exe")).Path
 
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
@@ -409,7 +434,7 @@ jobs:
           }
 
           Write-Host "launching $exe"
-          Start-Process -FilePath $exe | Out-Null
+          Start-Process -FilePath $exe -WorkingDirectory $stage | Out-Null
 
           $window = $null
           try {
