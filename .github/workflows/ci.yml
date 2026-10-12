@@ -433,8 +433,16 @@ jobs:
             Write-Host "wrote $name.png ($((Get-Item $path).Length) bytes)"
           }
 
+          # Redirected, because the launcher is a GUI-subsystem binary and so
+          # owns no console: every `fail()` in it writes to a stderr that goes
+          # nowhere. The first run of this step reported only that no window
+          # appeared and that nothing was still running - the app had exited
+          # and taken its reason with it.
+          $out = Join-Path $shots "launcher.out"
+          $err = Join-Path $shots "launcher.err"
           Write-Host "launching $exe"
-          Start-Process -FilePath $exe -WorkingDirectory $stage | Out-Null
+          Start-Process -FilePath $exe -WorkingDirectory $stage `
+            -RedirectStandardOutput $out -RedirectStandardError $err | Out-Null
 
           $window = $null
           try {
@@ -462,6 +470,22 @@ jobs:
               Get-Process | Where-Object { $_.ProcessName -match 'craft|SystemCleaner|msedgewebview' } |
                 Format-Table ProcessName, Id, MainWindowTitle -AutoSize | Out-String | Write-Host
             }
+
+            # Whichever way it went. A window that opened still leaves the
+            # agent's own startup line here, and one that did not leaves the
+            # reason.
+            Write-Host "--- launcher stdout ---"
+            if (Test-Path $out) { Get-Content $out } else { Write-Host "(none)" }
+            Write-Host "--- launcher stderr ---"
+            if (Test-Path $err) { Get-Content $err } else { Write-Host "(none)" }
+
+            # Whether WebView2 is even on this machine: craft.exe hosts the
+            # window in it, and Windows Server images do not always carry the
+            # runtime that Edge installs on desktop editions.
+            Write-Host "--- WebView2 runtime ---"
+            $wv = Get-ItemProperty -ErrorAction SilentlyContinue `
+              'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+            if ($wv) { Write-Host "version $($wv.pv)" } else { Write-Host "not installed" }
           }
           finally {
             foreach ($name in 'SystemCleaner', 'craft-runtime', 'msedgewebview2') {
@@ -479,7 +503,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: SystemCleaner-windows-window
-          path: ${{ runner.temp }}/sc-window/*.png
+          path: |
+            ${{ runner.temp }}/sc-window/*.png
+            ${{ runner.temp }}/sc-window/*.out
+            ${{ runner.temp }}/sc-window/*.err
           if-no-files-found: warn
 
       - name: Keep the desktop bundle for inspection
