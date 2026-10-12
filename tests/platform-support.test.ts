@@ -54,7 +54,7 @@ describe('platform capabilities', () => {
       appUninstall: true,
       startupItems: true,
       privacy: true,
-      maintenance: false,
+      maintenance: true,
       processes: true,
       trash: true,
     })

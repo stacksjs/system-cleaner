@@ -81,6 +81,7 @@
   },
 
   isRunning(id) { return this.running[id] === true; },
+  elevationNeeded() { const t = this.tasks.find(function(x) { return x.requiresSudo; }); return t ? t.elevationLabel : 'elevated rights'; },
   resultFor(id) { return this.results[id] || null; },
 
   async run(task) {

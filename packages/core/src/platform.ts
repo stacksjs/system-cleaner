@@ -78,8 +78,12 @@ const NONE: Capabilities = {
  * Linux gets the three features that are pure filesystem work. The rest lean
  * on `launchctl`, `.app` bundles and `osascript`, none of which exist there.
  *
- * Windows gets the four features whose implementation actually exists there,
- * and got each one only once the thing underneath it worked. Both are backed by
+ * Windows has all nine now, and got each one only once the thing underneath
+ * it worked. `maintenance` was the last and the most arguable: most of what it
+ * offers needs administrator rights the agent cannot obtain, so the tasks that
+ * do run as the signed-in user run, and the rest are listed with the command
+ * to paste into an elevated prompt - the same arrangement the macOS `sudo`
+ * tasks have always used. Both are backed by
  * directory sizes, every size came from `du`, and Windows has no `du`: the
  * spawn failed ENOENT, the error was swallowed, and the size came back 0. A
  * capability turned on in that state is worse than one turned off, because an
@@ -113,6 +117,7 @@ const CAPABILITIES: Record<Platform, Capabilities> = {
     cleanTargets: true,
     diskScan: true,
     developerJunk: true,
+    maintenance: true,
     privacy: true,
     processes: true,
     startupItems: true,

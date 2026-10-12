@@ -16,7 +16,7 @@
     <div class='card-label'>Tasks Available</div>
     <div class='card-value' x-text='tasks.length'>0</div>
     <div class='card-detail'
-      x-text="tasks.filter(function(t) { return !t.requiresSudo; }).length + ' run from here, the rest need Terminal'"></div>
+      x-text="tasks.filter(function(t) { return !t.requiresSudo; }).length + ' run from here, the rest need ' + elevationNeeded()"></div>
   </div>
   <div class='card'>
     <div class='card-label'>Queued to Erase</div>
@@ -81,7 +81,7 @@
               <div class='item-row'>
                 <span class='item-glyph' :class='task.icon' aria-hidden='true'></span>
                 <span class='item-name' x-text='task.name'></span>
-                <span class='badge badge-orange' x-show='task.requiresSudo' x-cloak>needs Terminal</span>
+                <span class='badge badge-orange' x-show='task.requiresSudo' x-cloak x-text="'needs ' + task.elevationLabel"></span>
               </div>
               <div class='item-sub' x-text='task.effect'></div>
               <!-- Half of these print nothing on success, so the recorded
