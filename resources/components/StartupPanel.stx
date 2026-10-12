@@ -10,15 +10,24 @@
     <div class='card-value dim'>{{ disabledStartup().length }}</div>
     <div class='card-detail'>Not running</div>
   </div>
+  <!--
+    Counted by scope rather than by launchd's vocabulary, and the detail line
+    comes from the items themselves. The labels used to read "User Agents" and
+    "System Daemons" over "~/Library/LaunchAgents" and "/Library/LaunchDaemons",
+    which say nothing true on Windows - where the same two groups are the
+    registry's HKCU and HKLM keys and the two Startup folders. The page is
+    prerendered, so it cannot be told which platform it is on; it can be told
+    where the rows it was given came from.
+  -->
   <div class='card'>
-    <div class='card-label'>User Agents</div>
+    <div class='card-label'>Yours</div>
     <div class='card-value'>{{ startupItems.filter(function(i){ return i.scope === 'user'; }).length }}</div>
-    <div class='card-detail'>~/Library/LaunchAgents</div>
+    <div class='card-detail'>{{ startupSources('user') }}</div>
   </div>
   <div class='card'>
-    <div class='card-label'>System Daemons</div>
-    <div class='card-value'>{{ startupItems.filter(function(i){ return i.type === 'daemon'; }).length }}</div>
-    <div class='card-detail'>/Library/LaunchDaemons</div>
+    <div class='card-label'>System-wide</div>
+    <div class='card-value'>{{ startupItems.filter(function(i){ return i.scope === 'system'; }).length }}</div>
+    <div class='card-detail'>{{ startupSources('system') }}</div>
   </div>
 </div>
 
@@ -26,12 +35,12 @@
   <button class='tab' :class="{ active: startupFilter === 'all' }" @click="setFilter('all')">All (<span>{{ startupItems.length }}</span>)</button>
   <button class='tab' :class="{ active: startupFilter === 'enabled' }" @click="setFilter('enabled')">Enabled (<span>{{ enabledStartup().length }}</span>)</button>
   <button class='tab' :class="{ active: startupFilter === 'vendor' }" @click="setFilter('vendor')">Third-party</button>
-  <button class='tab' :class="{ active: startupFilter === 'system' }" @click="setFilter('system')">Apple</button>
+  <button class='tab' :class="{ active: startupFilter === 'system' }" @click="setFilter('system')">Built-in</button>
 </div>
 
 <div class='tbl-wrap'>
   <div class='tbl-bar'>
-    <span class='tbl-title'>Launch Agents & Daemons</span>
+    <span class='tbl-title'>Startup Items</span>
     <div style='display: flex; gap: var(--space-tight);'>
       <button class='btn btn-sm' x-cloak x-show='false' aria-hidden='true'>
         Disable Selected (<span x-text='selected.length'>0</span>)

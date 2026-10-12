@@ -52,7 +52,7 @@ describe('platform capabilities', () => {
       diskScan: true,
       developerJunk: true,
       appUninstall: false,
-      startupItems: false,
+      startupItems: true,
       privacy: true,
       maintenance: false,
       processes: true,

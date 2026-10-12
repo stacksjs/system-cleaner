@@ -35,7 +35,16 @@ export interface StartupItem {
   icon: string
   category: 'system' | 'vendor' | 'dev' | 'other'
   scope: 'user' | 'system'
-  type: 'agent' | 'daemon'
+  /**
+   * What kind of thing starts this.
+   *
+   * `agent` and `daemon` are launchd's; `registry` and `startup-folder` are
+   * the two places Windows looks. Kept in one field rather than split per
+   * platform because every consumer wants the same thing from it — a label
+   * and a count — and a second field would mean every one of them learning
+   * which to read.
+   */
+  type: 'agent' | 'daemon' | 'registry' | 'startup-folder'
   runAtLoad: boolean
   keepAlive: boolean
   disabled: boolean

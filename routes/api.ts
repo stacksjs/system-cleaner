@@ -1003,7 +1003,7 @@ export default async function (router: Router) {
     // `ps` reports a process's lifetime average, not what it is doing now, and
     // counts no kernel time.
     const [procs, cpu] = await Promise.all([getTopProcesses(8), sampleCpuUsage()]);
-    const base = getDashboardStatsCached();
+    const base = await getDashboardStatsCached();
     const host = getHostSnapshot();
     const memPercent = Math.round(((os.default.totalmem() - os.default.freemem()) / os.default.totalmem()) * 100);
     const cpuAvgPercent = cpu.usagePercent;
@@ -1085,7 +1085,7 @@ export default async function (router: Router) {
   });
 
   await router.post('/startup-items', async () => {
-    const { items, cached } = getStartupItemsCached();
+    const { items, cached } = await getStartupItemsCached();
     return Response.json({ success: true, items, cached });
   });
 

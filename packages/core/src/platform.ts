@@ -114,6 +114,7 @@ const CAPABILITIES: Record<Platform, Capabilities> = {
     developerJunk: true,
     privacy: true,
     processes: true,
+    startupItems: true,
     trash: true,
   },
   unsupported: { ...NONE },
