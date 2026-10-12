@@ -51,16 +51,30 @@ describe('command capability map', () => {
   })
 
   /**
-   * The CI smoke test runs one command expecting a refusal and one expecting
-   * success. Both have to stay true as capabilities land, and neither may be
-   * destructive — the refusal probe used to be `clean`, chosen when every
-   * Windows capability was false. Cleaning is implemented there now, so that
-   * step had CI deleting files on the runner and then hanging on a
-   * confirmation prompt with no TTY to answer it.
+   * Windows refuses nothing any more, and that is the point of this test.
+   *
+   * The CI smoke test used to prove the gate by running a command the platform
+   * could not carry out and checking it exited non-zero naming the feature.
+   * The probe was `clean` when every Windows capability was false, then
+   * `optimize` once cleaning landed — and now every capability is
+   * implemented, so no command refuses and the assertion has nothing left to
+   * make. The smoke test drops it rather than keeping a capability off to
+   * preserve a test.
+   *
+   * What remains asserted is that the gate still *works*: a command maps to a
+   * capability, and `supports` agrees with the map.
    */
-  it('keeps the commands the Windows smoke test relies on', () => {
+  it('has nothing left to refuse on Windows', () => {
     if (PLATFORM !== 'windows') return
-    expect(supports(COMMAND_CAPABILITY.optimize), 'the refusal probe must still refuse').toBe(false)
+
+    const refusing = Object.entries(COMMAND_CAPABILITY).filter(([, needs]) => !supports(needs))
+    expect(refusing.map(([command]) => command), 'a command would refuse, so the smoke test can probe it again').toEqual([])
+  })
+
+  it('keeps the command the Windows smoke test runs for real', () => {
+    if (PLATFORM !== 'windows') return
+    // Read-only, and the only place in CI that proves the `du` replacement
+    // works inside a compiled .exe.
     expect(supports(COMMAND_CAPABILITY.disk), 'the success probe must still run').toBe(true)
   })
 })

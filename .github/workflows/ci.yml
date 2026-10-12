@@ -232,26 +232,16 @@ jobs:
           echo "--- version ---"
           ./"$exe" --version
 
-          # `optimize` needs `maintenance`, which has no Windows implementation.
-          #
-          # This used to run `clean`, chosen when every Windows capability was
-          # false. Cleaning is implemented here now, so that assertion had CI
-          # deleting files on the runner and then waiting on a confirmation
-          # prompt with no TTY to answer it - the step hung for half an hour
-          # before anyone looked. A smoke test must never pick a destructive
-          # command to prove a refusal with.
-          echo "--- a command this platform cannot carry out must refuse, not find nothing ---"
-          if out=$(./"$exe" optimize 2>&1); then
-            echo "FAIL: optimize exited 0 on a platform with no implementation"
-            echo "$out"
-            exit 1
-          fi
-          echo "$out"
-          echo "$out" | grep -qi "not implemented on Windows" \
-            || { echo "FAIL: refusal did not name the platform"; exit 1; }
+          # There is no refusal left to probe. This step used to run a command
+          # the platform could not carry out and check it exited non-zero
+          # naming the feature — `clean` when every Windows capability was
+          # false, then `optimize` once cleaning landed. Every capability is
+          # implemented now, so nothing refuses, and keeping one switched off
+          # to preserve the assertion would be the tail wagging the dog. The
+          # gate itself is still asserted in packages/cli/test.
 
-          # And the other half, which the refusal test cannot show: a feature
-          # that *is* implemented actually works in the compiled binary.
+          # That a feature which is implemented actually works in the compiled
+          # binary.
           # `disk` is read-only, is gated on `diskScan`, and measures through
           # the portable walker that replaced `du` - so this is the only place
           # in CI that proves the sizer runs inside an .exe.
