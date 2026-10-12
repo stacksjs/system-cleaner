@@ -113,6 +113,7 @@ const CAPABILITIES: Record<Platform, Capabilities> = {
     diskScan: true,
     developerJunk: true,
     privacy: true,
+    processes: true,
     trash: true,
   },
   unsupported: { ...NONE },
