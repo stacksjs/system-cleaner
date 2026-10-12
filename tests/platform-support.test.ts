@@ -53,7 +53,7 @@ describe('platform capabilities', () => {
       developerJunk: true,
       appUninstall: false,
       startupItems: false,
-      privacy: false,
+      privacy: true,
       maintenance: false,
       processes: false,
       trash: true,

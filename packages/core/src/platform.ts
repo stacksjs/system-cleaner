@@ -112,6 +112,7 @@ const CAPABILITIES: Record<Platform, Capabilities> = {
     cleanTargets: true,
     diskScan: true,
     developerJunk: true,
+    privacy: true,
     trash: true,
   },
   unsupported: { ...NONE },

@@ -1,38 +1,95 @@
 import * as path from 'node:path'
-import { HOME, exec, pathExists, safeReadDir, safeReadFile } from '@system-cleaner/core'
+import process from 'node:process'
+import { HOME, isWindows as IS_WINDOWS, pathExists, safeReadDir, safeReadFile } from '@system-cleaner/core'
 import type { BrowserProfile } from './types'
 
 /**
  * Detect all installed browser profiles and their cleanable paths
  */
+/**
+ * The cleanable paths of one Chromium profile.
+ *
+ * Every Chromium browser keeps the same set, so the shape is defined once
+ * rather than repeated per browser. It was repeated five times, which is what
+ * made adding Windows a matter of pasting it five more — and why the Arc block
+ * had quietly drifted, listing no `ShaderCache` and no `Cookies-journal`.
+ *
+ * `externalCache` is the one genuinely per-browser path: macOS puts a second
+ * cache under `~/Library/Caches/<bundle id>`, and Windows keeps everything
+ * inside the profile.
+ */
+function chromiumProfile(
+  browser: string,
+  browserIcon: string,
+  profile: string,
+  externalCache: string | null,
+): BrowserProfile {
+  return {
+    browser,
+    browserIcon,
+    profilePath: profile,
+    cachePaths: [
+      ...(externalCache ? [externalCache] : []),
+      path.join(profile, 'Cache'),
+      path.join(profile, 'Code Cache'),
+      path.join(profile, 'GPUCache'),
+      path.join(profile, 'ShaderCache'),
+    ],
+    cookiePaths: [path.join(profile, 'Cookies'), path.join(profile, 'Cookies-journal')],
+    historyPaths: [path.join(profile, 'History'), path.join(profile, 'History-journal')],
+    serviceWorkerPaths: [path.join(profile, 'Service Worker/CacheStorage'), path.join(profile, 'Service Worker/ScriptCache')],
+    localStoragePaths: [path.join(profile, 'Local Storage')],
+  }
+}
+
+/**
+ * Where each Chromium browser keeps its profiles, per platform.
+ *
+ * Windows has no second cache location, so `externalCache` is null throughout
+ * — the entries that would have pointed at `~/Library/Caches` there.
+ */
+function chromiumRoots(): { browser: string, icon: string, base: string, externalCache: string | null }[] {
+  if (IS_WINDOWS) {
+    const local = process.env.LOCALAPPDATA || path.win32.join(HOME, 'AppData', 'Local')
+    const roaming = process.env.APPDATA || path.win32.join(HOME, 'AppData', 'Roaming')
+    return [
+      { browser: 'Chrome', icon: 'i-f7-globe', base: path.win32.join(local, 'Google', 'Chrome', 'User Data'), externalCache: null },
+      { browser: 'Edge', icon: 'i-f7-globe', base: path.win32.join(local, 'Microsoft', 'Edge', 'User Data'), externalCache: null },
+      { browser: 'Brave', icon: 'i-f7-shield-fill', base: path.win32.join(local, 'BraveSoftware', 'Brave-Browser', 'User Data'), externalCache: null },
+      { browser: 'Vivaldi', icon: 'i-f7-globe', base: path.win32.join(local, 'Vivaldi', 'User Data'), externalCache: null },
+      { browser: 'Opera', icon: 'i-f7-globe', base: path.win32.join(roaming, 'Opera Software', 'Opera Stable'), externalCache: null },
+    ]
+  }
+
+  const support = path.join(HOME, 'Library/Application Support')
+  return [
+    { browser: 'Chrome', icon: 'i-f7-globe', base: path.join(support, 'Google/Chrome'), externalCache: path.join(HOME, 'Library/Caches/Google/Chrome') },
+    { browser: 'Edge', icon: 'i-f7-globe', base: path.join(support, 'Microsoft Edge'), externalCache: path.join(HOME, 'Library/Caches/Microsoft Edge') },
+    { browser: 'Brave', icon: 'i-f7-shield-fill', base: path.join(support, 'BraveSoftware/Brave-Browser'), externalCache: path.join(HOME, 'Library/Caches/BraveSoftware/Brave-Browser') },
+    { browser: 'Arc', icon: 'i-f7-circle-grid-hex-fill', base: path.join(support, 'Arc/User Data'), externalCache: path.join(HOME, 'Library/Caches/company.thebrowser.Browser') },
+  ]
+}
+
+/** Where Firefox keeps its profiles, per platform. */
+function firefoxProfilesRoot(): string {
+  if (IS_WINDOWS) {
+    const roaming = process.env.APPDATA || path.win32.join(HOME, 'AppData', 'Roaming')
+    return path.win32.join(roaming, 'Mozilla', 'Firefox', 'Profiles')
+  }
+  return path.join(HOME, 'Library/Application Support/Firefox/Profiles')
+}
+
 export function detectBrowserProfiles(): BrowserProfile[] {
   const profiles: BrowserProfile[] = []
 
-  // Chrome
-  const chromeBase = path.join(HOME, 'Library/Application Support/Google/Chrome')
-  if (pathExists(chromeBase)) {
-    for (const profile of findChromeProfiles(chromeBase)) {
-      profiles.push({
-        browser: 'Chrome',
-        browserIcon: 'i-f7-globe',
-        profilePath: profile,
-        cachePaths: [
-          path.join(HOME, 'Library/Caches/Google/Chrome'),
-          path.join(profile, 'Cache'),
-          path.join(profile, 'Code Cache'),
-          path.join(profile, 'GPUCache'),
-          path.join(profile, 'ShaderCache'),
-        ],
-        cookiePaths: [path.join(profile, 'Cookies'), path.join(profile, 'Cookies-journal')],
-        historyPaths: [path.join(profile, 'History'), path.join(profile, 'History-journal')],
-        serviceWorkerPaths: [path.join(profile, 'Service Worker/CacheStorage'), path.join(profile, 'Service Worker/ScriptCache')],
-        localStoragePaths: [path.join(profile, 'Local Storage')],
-      })
-    }
+  for (const { browser, icon, base, externalCache } of chromiumRoots()) {
+    if (!pathExists(base)) continue
+    for (const profile of findChromeProfiles(base))
+      profiles.push(chromiumProfile(browser, icon, profile, externalCache))
   }
 
   // Firefox
-  const firefoxProfiles = path.join(HOME, 'Library/Application Support/Firefox/Profiles')
+  const firefoxProfiles = firefoxProfilesRoot()
   if (pathExists(firefoxProfiles)) {
     for (const profile of safeReadDir(firefoxProfiles)) {
       const profilePath = path.join(firefoxProfiles, profile)
@@ -72,75 +129,6 @@ export function detectBrowserProfiles(): BrowserProfile[] {
       serviceWorkerPaths: [path.join(HOME, 'Library/WebKit/com.apple.Safari/WebsiteData')],
       localStoragePaths: [path.join(safariPath, 'LocalStorage')],
     })
-  }
-
-  // Edge
-  const edgeBase = path.join(HOME, 'Library/Application Support/Microsoft Edge')
-  if (pathExists(edgeBase)) {
-    for (const profile of findChromeProfiles(edgeBase)) {
-      profiles.push({
-        browser: 'Edge',
-        browserIcon: 'i-f7-app-fill',
-        profilePath: profile,
-        cachePaths: [
-          path.join(HOME, 'Library/Caches/Microsoft Edge'),
-          path.join(profile, 'Cache'),
-          path.join(profile, 'Code Cache'),
-          path.join(profile, 'GPUCache'),
-        ],
-        cookiePaths: [path.join(profile, 'Cookies')],
-        historyPaths: [path.join(profile, 'History')],
-        serviceWorkerPaths: [path.join(profile, 'Service Worker/CacheStorage')],
-        localStoragePaths: [path.join(profile, 'Local Storage')],
-      })
-    }
-  }
-
-  // Brave
-  const braveBase = path.join(HOME, 'Library/Application Support/BraveSoftware/Brave-Browser')
-  if (pathExists(braveBase)) {
-    for (const profile of findChromeProfiles(braveBase)) {
-      profiles.push({
-        browser: 'Brave',
-        browserIcon: 'i-f7-shield-lefthalf-fill',
-        profilePath: profile,
-        cachePaths: [
-          path.join(HOME, 'Library/Caches/BraveSoftware/Brave-Browser'),
-          path.join(profile, 'Cache'),
-          path.join(profile, 'Code Cache'),
-          path.join(profile, 'GPUCache'),
-        ],
-        cookiePaths: [path.join(profile, 'Cookies')],
-        historyPaths: [path.join(profile, 'History')],
-        serviceWorkerPaths: [path.join(profile, 'Service Worker/CacheStorage')],
-        localStoragePaths: [path.join(profile, 'Local Storage')],
-      })
-    }
-  }
-
-  // Arc
-  const arcBase = path.join(HOME, 'Library/Application Support/Arc')
-  if (pathExists(arcBase)) {
-    const arcUser = path.join(arcBase, 'User Data')
-    if (pathExists(arcUser)) {
-      for (const profile of findChromeProfiles(arcUser)) {
-        profiles.push({
-          browser: 'Arc',
-          browserIcon: 'i-f7-circle-grid-hex-fill',
-          profilePath: profile,
-          cachePaths: [
-            path.join(HOME, 'Library/Caches/company.thebrowser.Browser'),
-            path.join(profile, 'Cache'),
-            path.join(profile, 'Code Cache'),
-            path.join(profile, 'GPUCache'),
-          ],
-          cookiePaths: [path.join(profile, 'Cookies')],
-          historyPaths: [path.join(profile, 'History')],
-          serviceWorkerPaths: [path.join(profile, 'Service Worker/CacheStorage')],
-          localStoragePaths: [path.join(profile, 'Local Storage')],
-        })
-      }
-    }
   }
 
   return profiles
@@ -310,6 +298,26 @@ const BROWSER_PROCESSES: Record<string, string[]> = {
   'Arc': ['Arc'],
 }
 
+/** The same browsers, by the image name Windows reports for them. */
+const WINDOWS_BROWSER_PROCESSES: Record<string, string[]> = {
+  Chrome: ['chrome.exe'],
+  Firefox: ['firefox.exe'],
+  Edge: ['msedge.exe'],
+  Brave: ['brave.exe'],
+  Opera: ['opera.exe'],
+  Vivaldi: ['vivaldi.exe'],
+}
+
+/**
+ * Returned in place of a browser name when the probe could not answer.
+ *
+ * Not a browser, and deliberately unspellable as one. `blockedByRunningBrowser`
+ * treats its presence as "every browser might be open", which is the only safe
+ * reading: this gate exists because writing into a live profile corrupts it,
+ * and a gate that cannot see has to refuse rather than wave things through.
+ */
+export const BROWSER_PROBE_FAILED = '\u0000probe-failed'
+
 /**
  * Which browsers are running right now, by the display name the rest of this
  * package uses.
@@ -319,21 +327,72 @@ const BROWSER_PROCESSES: Record<string, string[]> = {
  * the profile, and the damage only shows up at the next launch.
  */
 export async function runningBrowsers(): Promise<string[]> {
+  const names = await processNames()
+
+  // The probe could not answer. Say so rather than returning an empty list,
+  // which reads identically to "nothing is open" and is how this gate used to
+  // fail open: `pgrep` exits 1 when it matches nothing and 127 when it is not
+  // there, and both produced empty output. On Windows there is no `pgrep` at
+  // all, so every clean would have been permitted against a live profile.
+  if (names === null)
+    return [BROWSER_PROBE_FAILED]
+
+  const table = IS_WINDOWS ? WINDOWS_BROWSER_PROCESSES : BROWSER_PROCESSES
   const running: string[] = []
 
-  for (const [browser, processes] of Object.entries(BROWSER_PROCESSES)) {
-    for (const name of processes) {
-      // `pgrep -x` matches the executable name exactly, so "Chrome" cannot
-      // match "Chrome Helper" and report a browser that is not open.
-      const result = await exec(`pgrep -x ${JSON.stringify(name)} >/dev/null && echo yes`, { timeout: 3000 })
-      if (result.stdout.trim() === 'yes') {
-        running.push(browser)
-        break
-      }
-    }
+  for (const [browser, processes] of Object.entries(table)) {
+    // Exact match on the executable name, so "Google Chrome" cannot be matched
+    // by "Google Chrome Helper" and report a browser that is not open.
+    if (processes.some(name => names.has(name.toLowerCase())))
+      running.push(browser)
   }
 
   return running
+}
+
+/**
+ * Every running process's executable name, lowercased, or null if the list
+ * could not be obtained.
+ *
+ * One spawn for the whole sweep rather than one per browser, and spawned
+ * directly rather than through `exec`, which wraps everything in `sh -c` —
+ * absent on Windows, and the reason this check silently permitted every clean
+ * there.
+ */
+async function processNames(): Promise<Set<string> | null> {
+  // `tasklist` lives in System32 and is always present; `ps` is in the POSIX
+  // base. Neither needs a shell.
+  const argv = IS_WINDOWS
+    ? ['tasklist.exe', '/FO', 'CSV', '/NH']
+    : ['ps', '-A', '-o', 'comm=']
+
+  try {
+    const proc = Bun.spawn(argv, { stdout: 'pipe', stderr: 'ignore' })
+    const timer = setTimeout(() => proc.kill(), 5000)
+    const stdout = await new Response(proc.stdout).text()
+    const code = await proc.exited
+    clearTimeout(timer)
+
+    if (code !== 0 || !stdout.trim())
+      return null
+
+    const names = new Set<string>()
+    for (const line of stdout.split('\n')) {
+      const trimmed = line.trim()
+      if (!trimmed) continue
+      // tasklist CSV quotes every field, and the image name is the first.
+      // `ps -o comm=` prints a path on macOS, so only the last segment is the
+      // executable name.
+      const value = IS_WINDOWS
+        ? trimmed.split('","')[0].replace(/^"/, '')
+        : trimmed.split('/').pop() || trimmed
+      names.add(value.toLowerCase())
+    }
+    return names
+  }
+  catch {
+    return null
+  }
 }
 
 /**
@@ -347,6 +406,15 @@ export async function runningBrowsers(): Promise<string[]> {
  */
 export function blockedByRunningBrowser(browser: string, running: Iterable<string>, action: 'clear' | 'remove'): string | null {
   for (const open of running) {
+    // The probe failed, so nothing can be ruled out. Refusing is the only
+    // honest answer: the whole point of this check is that writing into a live
+    // profile corrupts it, and silence is not evidence that none is open.
+    if (open === BROWSER_PROBE_FAILED) {
+      return action === 'clear'
+        ? 'Could not tell whether a browser is open, so this was not cleared — a live profile would be corrupted'
+        : 'Could not tell whether a browser is open, so nothing was removed — a live profile would be corrupted'
+    }
+
     if (open !== browser)
       continue
 
