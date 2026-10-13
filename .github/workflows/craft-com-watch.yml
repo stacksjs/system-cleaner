@@ -1,0 +1,58 @@
+# Notice the day Craft initialises COM, so the Windows desktop app stops
+# waiting on somebody remembering to check.
+#
+# The desktop bundle builds and serves and then opens no window: `launcher.ts`
+# spawns the runtime with `CREATE_NO_WINDOW`, which takes the console away, and
+# Craft never puts the thread in a COM apartment itself, so
+# `CreateCoreWebView2EnvironmentWithOptions` returns `CO_E_NOTINITIALIZED`.
+# craft-native/craft#342 adds the call; building Craft at that commit and at
+# its parent turned every such failure into a loaded webview.
+#
+# The regression guard in `ci.yml` cannot announce the fix arriving, because it
+# probes the version `build-desktop-windows.ts` pins — v0.0.100 — however many
+# releases Craft cuts. This watches from the other side, reading each newest
+# release's import table.
+#
+# Daily, which is often enough for something that has to be acted on by hand
+# and rare enough to cost nothing. A scheduled workflow stops running after 60
+# days without repository activity, which for this repository means it stops
+# when there is nothing to ship anyway.
+name: Craft COM watch
+
+on:
+  schedule:
+    # 07:17 UTC. Not on the hour: GitHub's scheduler queues more work there, and
+    # a watcher has no reason to compete for it.
+    - cron: '17 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # To open the one issue, when there is something to open it about.
+  issues: write
+
+jobs:
+  check:
+    name: Does the newest Craft release initialise COM
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # Reads the release's craft.exe and answers whether `CoInitializeEx` is
+      # in its import table — proof by what the binary declares, needing no
+      # Windows machine to run it.
+      #
+      # Green either way: still waiting is not a failure. It opens an issue
+      # when the answer changes, once, and fails only if it cannot trust its
+      # own answer — a craft.exe that imports nothing from ole32 at all means
+      # the parse or the archive changed, not that COM is still uninitialised.
+      - name: Check the import table
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bun scripts/craft-com-watch.ts --open-issue
