@@ -1,0 +1,81 @@
+# Which difference stops Craft opening a window for this app on Windows.
+#
+# Temporary, and deliberately not part of `ci.yml`: it answers one question for
+# craft-native/craft#342 and should be deleted once it has.
+#
+# The question: craft's own `windows-multi-window` job passes on an unpatched
+# build, while this app's bundle gets `CO_E_NOTINITIALIZED` and no window. The
+# loader is byte-identical in both cases and the build flags match, so what is
+# left is the invocation — craft's CI runs `craft.exe --url <u>`, this app runs
+# `craft.exe <u> --title … --persistent-storage --width … --height …
+# --no-devtools` — or the build host, which this job cannot vary.
+#
+# So: take the exact binary the bundle downloads, and try both invocations and
+# the flags between them. `scripts/windows-webview-probe.ts` reports every case
+# and fails none of them; the result is the table in the job summary.
+name: Windows WebView2 experiment
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - exp/windows-webview-com
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Probe craft invocations
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # v0.0.100 is what `scripts/build-desktop-windows.ts` downloads, because
+      # deps.yaml declares ^0.0.90 and MIN_WINDOWS_CRAFT floors it at 100 (the
+      # v0.0.90 archive ships no WebView2Loader.dll). v0.0.142 is current, and
+      # is here to show whether any of this is version-dependent.
+      #
+      # Each archive extracts into its own directory: craft.exe loads
+      # WebView2Loader.dll from beside itself, so two versions sharing a
+      # directory would not be testing what they claim to.
+      - name: Fetch the shipped Craft runtimes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($version in 'v0.0.100', 'v0.0.142') {
+            $dir = Join-Path $env:RUNNER_TEMP "craft-$version"
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            $zip = Join-Path $env:RUNNER_TEMP "craft-$version.zip"
+            Invoke-WebRequest -Uri "https://github.com/craft-native/craft/releases/download/$version/craft-windows-x64.zip" -OutFile $zip
+            Expand-Archive -LiteralPath $zip -DestinationPath $dir -Force
+            Write-Host "--- $version"
+            Get-ChildItem $dir | ForEach-Object { Write-Host "    $($_.Name)  $($_.Length) bytes" }
+            $loader = Join-Path $dir 'WebView2Loader.dll'
+            if (Test-Path $loader) {
+              Write-Host "    loader sha256 $((Get-FileHash $loader -Algorithm SHA256).Hash.ToLowerInvariant())"
+            }
+          }
+
+      # The same key the bundle's own CI reads. A missing runtime would explain
+      # every failure below and mean none of them are about COM.
+      - name: WebView2 runtime on this machine
+        shell: pwsh
+        run: |
+          $wv = Get-ItemProperty -ErrorAction SilentlyContinue `
+            'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          if ($wv) { Write-Host "WebView2 runtime $($wv.pv)" } else { Write-Host '::error::no WebView2 runtime' }
+
+      - name: Probe v0.0.100 (the version the bundle ships)
+        run: bun scripts/windows-webview-probe.ts --exe "$env:RUNNER_TEMP/craft-v0.0.100/craft.exe" --label v0.0.100
+        shell: pwsh
+
+      - name: Probe v0.0.142 (current)
+        run: bun scripts/windows-webview-probe.ts --exe "$env:RUNNER_TEMP/craft-v0.0.142/craft.exe" --label v0.0.142
+        shell: pwsh
