@@ -139,12 +139,60 @@ jobs:
         with:
           bun-version: latest
 
-      # The same action and version craft's own Windows job uses, so the Zig
-      # that builds this is the Zig that builds theirs.
-      - name: Setup Pantry (provides Zig)
-        uses: pantry-pm/pantry/packages/action@e0e7377f6f94f1348b8efcfd3e631967261c6dce # v0.11.66
-        with:
-          version: '0.11.64'
+      # Not via pantry, which is how craft's own Windows job gets Zig. Its pin,
+      # ziglang.org@0.17.0-dev.1963_e00c6c439, 404s: ziglang.org keeps only the
+      # current master build, and pantry's registry mirrors no windows-x86-64
+      # dev build to outlive that pruning. Craft's CI presumably still passes on
+      # a cached copy. So a tagged release instead, which does not get pruned —
+      # 0.17.0 satisfies craft's `minimum_zig_version` of 0.17.0-dev.
+      #
+      # Digest published alongside the download, verified because this builds
+      # and then runs the result.
+      #
+      # Master is fetched as a fallback for one reason only: craft pins a dev
+      # build, so a tagged release is not a configuration anyone has compiled
+      # it with. If 0.17.0 cannot build it, the argument should not stall on
+      # that. Whichever toolchain is chosen builds *both* commits, or the
+      # comparison means nothing.
+      - name: Install Zig
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = @{
+            name = '0.17.0'
+            url = 'https://ziglang.org/download/0.17.0/zig-x86_64-windows-0.17.0.zip'
+            sha256 = 'b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428'
+          }
+
+          function Fetch($spec) {
+            $zip = Join-Path $env:RUNNER_TEMP "zig-$($spec.name).zip"
+            $dir = Join-Path $env:RUNNER_TEMP "zig-$($spec.name)"
+            Invoke-WebRequest -Uri $spec.url -OutFile $zip
+            $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($spec.sha256 -and $actual -ne $spec.sha256) {
+              throw "zig $($spec.name) digest mismatch: $actual"
+            }
+            Write-Host "zig $($spec.name) sha256 $actual"
+            Expand-Archive -LiteralPath $zip -DestinationPath $dir -Force
+            $exe = Get-ChildItem $dir -Filter zig.exe -Recurse -File | Select-Object -First 1 -ExpandProperty FullName
+            if (-not $exe) { throw "no zig.exe in the $($spec.name) archive" }
+            return $exe
+          }
+
+          $primary = Fetch $release
+          Write-Host "primary: $primary"
+          & $primary version
+
+          # Master's URL carries its exact dev version and is replaced as master
+          # moves, so it is read from the download index rather than pinned.
+          $index = Invoke-RestMethod -Uri 'https://ziglang.org/download/index.json'
+          $m = $index.master.'x86_64-windows'
+          $fallback = Fetch @{ name = 'master'; url = $m.tarball; sha256 = $m.shasum }
+          Write-Host "fallback: $fallback"
+          & $fallback version
+
+          "ZIG_PRIMARY=$primary" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "ZIG_FALLBACK=$fallback" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: First-party Zig dependencies
         uses: ./.github/actions/first-party-zig-deps
@@ -168,21 +216,35 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
 
-          # The pantry shim can report a version but cannot locate Zig's lib
-          # directory during a build, which is craft's own note in ci.yml. Run
-          # the package binary itself.
-          $zig = Get-ChildItem (Join-Path $env:GITHUB_WORKSPACE 'pantry') -Filter zig.exe -Recurse -File |
-            Select-Object -First 1 -ExpandProperty FullName
-          if (-not $zig) { throw 'no zig.exe under pantry/' }
-          Write-Host "zig: $zig"
-          & $zig version
-
+          # The two commits, resolved and held as SHAs before anything checks
+          # anything out. Naming them relatively would be a trap: the toolchain
+          # probe below checks out the parent, after which `HEAD` is the parent
+          # and `HEAD~1` its grandparent, and the job would quietly build the
+          # wrong pair and compare them.
           $head = (git rev-parse HEAD).Trim()
           $parent = (git rev-parse HEAD~1).Trim()
           Write-Host "patched:   $head"
           Write-Host "unpatched: $parent"
           Write-Host '--- the only difference between the two builds ---'
-          git diff --stat HEAD~1 HEAD
+          git diff --stat $parent $head
+
+          # Which toolchain can build this at all, decided once on the parent
+          # so that both builds share it. craft pins a dev build that no longer
+          # exists, so a tagged release is not a configuration it is known to
+          # compile under.
+          $zig = $env:ZIG_PRIMARY
+          git -c advice.detachedHead=false checkout --quiet $parent
+          Push-Location (Join-Path $env:GITHUB_WORKSPACE 'packages/zig')
+          try {
+            & $zig build -Doptimize=ReleaseSafe -Dcpu=baseline
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "::warning::zig 0.17.0 cannot build craft; falling back to master"
+              $zig = $env:ZIG_FALLBACK
+            }
+          }
+          finally { Pop-Location }
+          Write-Host "building both commits with $zig"
+          & $zig version
 
           function Build($commit, $label) {
             Write-Host "::group::build $label ($commit)"
