@@ -79,3 +79,22 @@ jobs:
       - name: Probe v0.0.142 (current)
         run: bun scripts/windows-webview-probe.ts --exe "$env:RUNNER_TEMP/craft-v0.0.142/craft.exe" --label v0.0.142
         shell: pwsh
+
+      # Round two. Round one found every argument list works, which leaves how
+      # `app/Desktop/launcher.ts` spawns craft: inherited stdio, windowsHide,
+      # and a GUI-subsystem parent that owns no console.
+      - name: Spawn probe, v0.0.100
+        run: bun scripts/windows-webview-spawn-probe.ts --exe "$env:RUNNER_TEMP/craft-v0.0.100/craft.exe" --label v0.0.100
+        shell: pwsh
+
+      # The bundle renames craft.exe to craft-runtime.exe and stands it in a
+      # directory of its own. Cheap to rule out, and expensive to overlook.
+      - name: Spawn probe, staged as craft-runtime.exe
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stage = Join-Path $env:RUNNER_TEMP 'staged'
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item "$env:RUNNER_TEMP/craft-v0.0.100/craft.exe" (Join-Path $stage 'craft-runtime.exe')
+          Copy-Item "$env:RUNNER_TEMP/craft-v0.0.100/WebView2Loader.dll" $stage
+          bun scripts/windows-webview-spawn-probe.ts --exe (Join-Path $stage 'craft-runtime.exe') --label craft-runtime
