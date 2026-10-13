@@ -130,8 +130,13 @@ jobs:
           # taking this checkout with it too.
           repository: craft-native/craft
           ref: fix/windows-com-init
-          # The patch and its parent. The A/B needs both.
-          fetch-depth: 2
+          # Whole history, because the control is the merge base with main and
+          # not `HEAD~1`. That shortcut held only while the branch was a single
+          # commit: a second commit made `HEAD~1` the first half of the patch,
+          # so the control leg was itself patched and the run compared the
+          # patch with the patch. It still passed, which is the point — a
+          # broken control does not announce itself.
+          fetch-depth: 0
 
       - name: Check out this repository for the probe
         uses: actions/checkout@v4
@@ -225,11 +230,17 @@ jobs:
           # and `HEAD~1` its grandparent, and the job would quietly build the
           # wrong pair and compare them.
           $head = (git rev-parse HEAD).Trim()
-          $parent = (git rev-parse HEAD~1).Trim()
+          $parent = (git merge-base HEAD origin/main).Trim()
+          if (-not $parent) { throw 'no merge base with origin/main' }
           Write-Host "patched:   $head"
-          Write-Host "unpatched: $parent"
+          Write-Host "unpatched: $parent (merge base with main)"
           Write-Host '--- the only difference between the two builds ---'
           git diff --stat $parent $head
+
+          # The control must not already contain what is being tested, which is
+          # the failure this job had when it compared HEAD with HEAD~1.
+          git show "${parent}:packages/zig/src/windows.zig" | Select-String -Pattern 'CoInitializeEx' -Quiet |
+            ForEach-Object { if ($_) { throw 'the control commit already calls CoInitializeEx; it is not a control' } }
 
           # Which toolchain can build this at all, decided once on the parent
           # so that both builds share it. craft pins a dev build that no longer
