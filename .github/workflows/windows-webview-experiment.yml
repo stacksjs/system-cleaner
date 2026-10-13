@@ -125,7 +125,10 @@ jobs:
       - name: Check out the patched branch
         uses: actions/checkout@v4
         with:
-          repository: glennmichael123/craft
+          # The branch lives in the upstream repository now. It began on a
+          # fork, which was deleted — closing the pull request with it, and
+          # taking this checkout with it too.
+          repository: craft-native/craft
           ref: fix/windows-com-init
           # The patch and its parent. The A/B needs both.
           fetch-depth: 2
