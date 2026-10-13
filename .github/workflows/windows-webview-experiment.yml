@@ -98,3 +98,121 @@ jobs:
           Copy-Item "$env:RUNNER_TEMP/craft-v0.0.100/craft.exe" (Join-Path $stage 'craft-runtime.exe')
           Copy-Item "$env:RUNNER_TEMP/craft-v0.0.100/WebView2Loader.dll" $stage
           bun scripts/windows-webview-spawn-probe.ts --exe (Join-Path $stage 'craft-runtime.exe') --label craft-runtime
+
+  # Round three: does the patch actually clear it.
+  #
+  # Rounds one and two found the trigger — `CREATE_NO_WINDOW` alone turns a
+  # working webview into CO_E_NOTINITIALIZED — and that craft never puts the
+  # thread in an apartment itself. craft-native/craft#342 adds the
+  # `CoInitializeEx` call. Everything so far says it should fix this; nothing
+  # so far has run it.
+  #
+  # So build craft twice from source on one machine, from commits one apart:
+  # the patch, and its parent. Same toolchain, same flags, same loader, same
+  # runner — the only variable is the commit. Then run round two's spawn table
+  # against both.
+  #
+  # craft is checked out at the workspace root rather than a subdirectory
+  # because its own `first-party-zig-deps` action resolves the sibling
+  # packages relative to GITHUB_WORKSPACE, and the point of using that action
+  # is to build the way craft's own CI does, at the revisions it pins.
+  from-source:
+    name: Patched vs unpatched, from source
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out the patched branch
+        uses: actions/checkout@v4
+        with:
+          repository: glennmichael123/craft
+          ref: fix/windows-com-init
+          # The patch and its parent. The A/B needs both.
+          fetch-depth: 2
+
+      - name: Check out this repository for the probe
+        uses: actions/checkout@v4
+        with:
+          path: sc
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # The same action and version craft's own Windows job uses, so the Zig
+      # that builds this is the Zig that builds theirs.
+      - name: Setup Pantry (provides Zig)
+        uses: pantry-pm/pantry/packages/action@e0e7377f6f94f1348b8efcfd3e631967261c6dce # v0.11.66
+        with:
+          version: '0.11.64'
+
+      - name: First-party Zig dependencies
+        uses: ./.github/actions/first-party-zig-deps
+
+      # The WebView2 loader craft ships, so neither build is tested against a
+      # different one than round two used.
+      - name: Stage the shipped WebView2 loader
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = Join-Path $env:RUNNER_TEMP 'craft-release.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'craft-release'
+          Invoke-WebRequest -Uri 'https://github.com/craft-native/craft/releases/download/v0.0.142/craft-windows-x64.zip' -OutFile $zip
+          Expand-Archive -LiteralPath $zip -DestinationPath $dir -Force
+          $loader = Join-Path $dir 'WebView2Loader.dll'
+          Write-Host "loader sha256 $((Get-FileHash $loader -Algorithm SHA256).Hash.ToLowerInvariant())"
+          "LOADER=$loader" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Build both commits
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          # The pantry shim can report a version but cannot locate Zig's lib
+          # directory during a build, which is craft's own note in ci.yml. Run
+          # the package binary itself.
+          $zig = Get-ChildItem (Join-Path $env:GITHUB_WORKSPACE 'pantry') -Filter zig.exe -Recurse -File |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $zig) { throw 'no zig.exe under pantry/' }
+          Write-Host "zig: $zig"
+          & $zig version
+
+          $head = (git rev-parse HEAD).Trim()
+          $parent = (git rev-parse HEAD~1).Trim()
+          Write-Host "patched:   $head"
+          Write-Host "unpatched: $parent"
+          Write-Host '--- the only difference between the two builds ---'
+          git diff --stat HEAD~1 HEAD
+
+          function Build($commit, $label) {
+            Write-Host "::group::build $label ($commit)"
+            git -c advice.detachedHead=false checkout --quiet $commit
+            Push-Location (Join-Path $env:GITHUB_WORKSPACE 'packages/zig')
+            try {
+              & $zig build -Doptimize=ReleaseSafe -Dcpu=baseline
+              if ($LASTEXITCODE -ne 0) { throw "$label build failed with $LASTEXITCODE" }
+            }
+            finally { Pop-Location }
+            $dest = Join-Path $env:RUNNER_TEMP $label
+            New-Item -ItemType Directory -Force -Path $dest | Out-Null
+            Copy-Item (Join-Path $env:GITHUB_WORKSPACE 'packages/zig/zig-out/bin/craft.exe') (Join-Path $dest 'craft.exe')
+            Copy-Item $env:LOADER $dest
+            # Whether the symbol is in the binary at all, so a mislabelled pair
+            # cannot be mistaken for a result.
+            $exe = Join-Path $dest 'craft.exe'
+            $found = bun -e "const b = Buffer.from(await Bun.file(process.argv[1]).arrayBuffer()); console.log(b.includes('CoInitializeEx') ? 'yes' : 'no')" $exe
+            Write-Host "$label : craft.exe references CoInitializeEx: $found"
+            Write-Host '::endgroup::'
+          }
+
+          # Control first, so the log reads in the order the argument runs.
+          Build $parent 'unpatched'
+          Build $head 'patched'
+
+      - name: Spawn table, unpatched (the control)
+        shell: pwsh
+        run: bun sc/scripts/windows-webview-spawn-probe.ts --exe "$env:RUNNER_TEMP/unpatched/craft.exe" --label from-source-unpatched
+
+      - name: Spawn table, patched
+        shell: pwsh
+        run: bun sc/scripts/windows-webview-spawn-probe.ts --exe "$env:RUNNER_TEMP/patched/craft.exe" --label from-source-patched
