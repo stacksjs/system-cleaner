@@ -48,18 +48,29 @@ interface Case {
   name: string
   spawn: Spawn
   windowsHide: boolean
+  /**
+   * What `--guard` requires of this case against the Craft the bundle ships.
+   *
+   * `loaded` is a promise to this app: these spawns work today and a change
+   * that breaks one is a regression in something we control, so the guard
+   * fails. `no-webview` only records the upstream bug — craft-native/craft#342
+   * is unmerged, so `CREATE_NO_WINDOW` still costs the apartment. The day that
+   * lands these start loading, which is good news and must not turn CI red; it
+   * is reported as the news it is.
+   */
+  expect: 'loaded' | 'no-webview'
 }
 
 const CASES: Case[] = [
   // Round one's spawn, repeated here so this run carries its own control. If
   // this one stops loading, the machine changed and nothing else below means
   // what it would otherwise mean.
-  { name: 'control: piped, no windowsHide', spawn: 'piped', windowsHide: false },
-  { name: 'piped + windowsHide', spawn: 'piped', windowsHide: true },
-  { name: 'inherit + windowsHide', spawn: 'inherit', windowsHide: true },
-  { name: 'inherit, no windowsHide', spawn: 'inherit', windowsHide: false },
+  { name: 'control: piped, no windowsHide', spawn: 'piped', windowsHide: false, expect: 'loaded' },
+  { name: 'piped + windowsHide', spawn: 'piped', windowsHide: true, expect: 'no-webview' },
+  { name: 'inherit + windowsHide', spawn: 'inherit', windowsHide: true, expect: 'no-webview' },
+  { name: 'inherit, no windowsHide', spawn: 'inherit', windowsHide: false, expect: 'loaded' },
   // The launcher, as a binary with the launcher's own subsystem.
-  { name: 'GUI parent (the launcher)', spawn: 'gui-parent', windowsHide: true },
+  { name: 'GUI parent (the launcher)', spawn: 'gui-parent', windowsHide: true, expect: 'no-webview' },
 ]
 
 interface Outcome {
@@ -81,15 +92,18 @@ function usage(message: string): never {
   process.exit(2)
 }
 
-function readArgs(): { exe: string, label: string } {
+function readArgs(): { exe: string, label: string, guard: boolean } {
   const argv = process.argv.slice(2)
   let exe = ''
   let label = ''
+  let guard = false
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--exe')
       exe = argv[i += 1] ?? ''
     else if (argv[i] === '--label')
       label = argv[i += 1] ?? ''
+    else if (argv[i] === '--guard')
+      guard = true
     else
       usage(`unexpected argument ${argv[i]}`)
   }
@@ -97,7 +111,7 @@ function readArgs(): { exe: string, label: string } {
     usage('--exe is required')
   if (!fs.existsSync(exe))
     usage(`no such file: ${exe}`)
-  return { exe: path.resolve(exe), label: label || path.basename(exe) }
+  return { exe: path.resolve(exe), label: label || path.basename(exe), guard }
 }
 
 async function drain(stream: ReadableStream<Uint8Array> | undefined | null, into: string[]): Promise<void> {
@@ -203,13 +217,37 @@ async function runCase(exe: string, probe: Case, guiParent: string | null): Prom
   // The GUI parent sets the launcher's options itself; for the direct cases
   // this is where they are varied.
   const stdio = probe.spawn === 'inherit' ? 'inherit' : 'pipe'
-  const child = Bun.spawn(command, {
-    cwd: path.dirname(exe),
-    stdin: 'inherit',
-    stdout: probe.spawn === 'gui-parent' ? 'pipe' : stdio,
-    stderr: probe.spawn === 'gui-parent' ? 'pipe' : stdio,
-    windowsHide: probe.windowsHide,
-  })
+  // A spawn that throws is a case that could not be tested, not a case that
+  // produced no webview, and the difference matters: the first is this
+  // harness's problem and the second is the finding. Running the probe from a
+  // non-Windows host hits exactly this, since the GUI parent now compiles to a
+  // Windows binary that will not execute there.
+  let child: Bun.Subprocess
+  try {
+    child = Bun.spawn(command, {
+      cwd: path.dirname(exe),
+      stdin: 'inherit',
+      stdout: probe.spawn === 'gui-parent' ? 'pipe' : stdio,
+      stderr: probe.spawn === 'gui-parent' ? 'pipe' : stdio,
+      windowsHide: probe.windowsHide,
+    })
+  }
+  catch (error) {
+    server.stop(true)
+    const why = error instanceof Error ? error.message : String(error)
+    console.error(`    => COULD NOT SPAWN: ${why}`)
+    return {
+      name: probe.name,
+      loaded: false,
+      elapsedMs: 0,
+      exitCode: null,
+      signalCode: null,
+      comFailure: false,
+      skipped: `could not spawn: ${why}`,
+      parentNotes: [],
+      detail: why.slice(0, 160),
+    }
+  }
   void drain(child.stdout as ReadableStream<Uint8Array>, stdout)
   void drain(child.stderr as ReadableStream<Uint8Array>, stderr)
 
@@ -266,7 +304,7 @@ async function runCase(exe: string, probe: Case, guiParent: string | null): Prom
 }
 
 async function main(): Promise<void> {
-  const { exe, label } = readArgs()
+  const { exe, label, guard } = readArgs()
 
   // Compiled once, before any case runs: a failure here is a problem with this
   // harness, and it should not be mistaken for a failure of the last case.
@@ -340,11 +378,78 @@ async function main(): Promise<void> {
   const loaded = outcomes.filter(o => o.loaded).length
   const ran = outcomes.filter(o => !o.skipped).length
   console.error(`\n${loaded} of ${ran} spawns that ran produced a webview.`)
+
+  if (guard)
+    applyGuard(outcomes)
   // The case this exists for. If it could not run, the run proved nothing
   // about the launcher and should not be read as though it had.
   const launcher = outcomes.find(o => o.name.startsWith('GUI parent'))
   if (launcher?.skipped)
     console.error(`::error::the launcher case did not run: ${launcher.skipped}`)
+}
+
+/**
+ * Hold the shipped runtime to what is known about it.
+ *
+ * Two different kinds of divergence, deliberately not treated alike:
+ *
+ *  - A case expected to load and did not. Those spawns work today; something
+ *    this app controls has broken, or the Craft version it pins has regressed.
+ *    That fails.
+ *  - A case expected to fail and loaded. That is craft-native/craft#342 having
+ *    landed in whatever Craft the bundle now pins, measured rather than
+ *    assumed. Failing CI for it would be failing for good news, so it is
+ *    reported as news — loudly, because several things should then change:
+ *    this expectation, the `0x800401f0` tolerance in the window step, and the
+ *    release notes that say the desktop app is macOS-only.
+ *  - A case that could not run at all is a broken harness, not evidence, and
+ *    fails too.
+ */
+function applyGuard(outcomes: Outcome[]): void {
+  const byName = new Map(outcomes.map(o => [o.name, o]))
+  const regressions: string[] = []
+  const fixed: string[] = []
+
+  for (const probe of CASES) {
+    const outcome = byName.get(probe.name)
+    if (!outcome || outcome.skipped) {
+      regressions.push(`${probe.name}: did not run (${outcome?.skipped ?? 'no outcome'})`)
+      continue
+    }
+    const expected = probe.expect === 'loaded'
+    if (expected && !outcome.loaded)
+      regressions.push(`${probe.name}: expected a webview, got none (${outcome.detail || 'no output'})`)
+    if (!expected && outcome.loaded)
+      fixed.push(`${probe.name}: loaded in ${outcome.elapsedMs}ms, where CO_E_NOTINITIALIZED was expected`)
+  }
+
+  for (const line of fixed) {
+    console.error(`::warning::Craft now opens a webview under CREATE_NO_WINDOW — ${line}`)
+  }
+  if (fixed.length > 0) {
+    console.error('::warning::craft-native/craft#342 appears to have landed. Drop the windowsHide expectations here, remove the 0x800401f0 tolerance from the window step, and the desktop app can ship on Windows.')
+  }
+
+  const summary = process.env.GITHUB_STEP_SUMMARY
+  if (summary && (fixed.length > 0 || regressions.length > 0)) {
+    const lines = [
+      '### Windows webview guard',
+      '',
+      ...fixed.map(f => `- **Fixed upstream**: ${f}`),
+      ...regressions.map(r => `- **Regression**: ${r}`),
+      '',
+    ]
+    fs.appendFileSync(summary, `${lines.join('\n')}\n`)
+  }
+
+  if (regressions.length > 0) {
+    for (const line of regressions)
+      console.error(`::error::${line}`)
+    throw new Error(`${regressions.length} spawn(s) that should work do not`)
+  }
+  console.error(fixed.length > 0
+    ? 'guard: nothing regressed, and the upstream fix has landed.'
+    : 'guard: the shipped runtime behaves exactly as recorded.')
 }
 
 main().catch((error) => {
