@@ -533,6 +533,44 @@ jobs:
           path: storage/framework/desktop-windows/*.zip
           if-no-files-found: error
 
+      # Why the window above does not open, held to what was measured.
+      #
+      # The step before tolerates `0x800401f0` by name, which is right but
+      # coarse: it would go on tolerating it if the cause changed underneath,
+      # and it cannot tell "Craft still has no COM apartment" from "the bundle
+      # broke in some new way that also produces no window".
+      #
+      # So this probes the runtime the bundle actually ships, spawning it five
+      # ways and requiring each to behave as recorded:
+      #
+      #   piped stdio, no windowsHide     a webview loads
+      #   piped stdio + windowsHide       CO_E_NOTINITIALIZED
+      #   inherit stdio + windowsHide     CO_E_NOTINITIALIZED
+      #   inherit stdio, no windowsHide   a webview loads
+      #   GUI-subsystem parent            CO_E_NOTINITIALIZED
+      #
+      # `CREATE_NO_WINDOW` — Bun's `windowsHide`, which `launcher.ts` sets so
+      # Windows puts no console beside the app — is the whole of the
+      # difference. Craft never puts the thread in an apartment itself, so
+      # taking the console away leaves it without one. Measured both ways in
+      # stacksjs/system-cleaner run 38393332113: building Craft from source at
+      # craft-native/craft#342 and at its parent commit turns every one of
+      # those failures into a load.
+      #
+      # A spawn that should work and stops working fails this job. A spawn that
+      # should fail and starts loading does not — that is the upstream fix
+      # arriving, and the step says so and stays green.
+      #
+      # Last in the job so a failure here cannot cost the screenshot or the
+      # bundle artifact above.
+      - name: Guard why the window does not open
+        timeout-minutes: 8
+        shell: pwsh
+        run: |
+          bun scripts/windows-webview-spawn-probe.ts `
+            --exe "$env:RUNNER_TEMP/SystemCleaner/craft-runtime.exe" `
+            --label bundle-runtime --guard
+
   # Compiles the release artifact on every push so a broken CLI is caught here
   # rather than after a tag has already been pushed.
   binaries:
