@@ -137,6 +137,103 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # The Windows desktop bundle, which until now existed only as a CI artifact.
+  #
+  # v0.3.7 shipped the Windows CLI and said the desktop app was macOS-only,
+  # because craft's Windows runtime never initialised COM and the window never
+  # opened. That is fixed upstream and floored at v0.0.175 in
+  # `scripts/build-desktop-windows.ts`, so there is something worth publishing.
+  #
+  # Unsigned, deliberately and visibly: there is no Windows signing identity
+  # configured, SmartScreen will warn, and the release notes say so. An
+  # unsigned .dmg is not worth attaching because Gatekeeper refuses it outright
+  # — a Windows user can still choose to run this one, and the checksum is
+  # their integrity signal.
+  desktop-windows:
+    name: Windows desktop app
+    needs: [release, views]
+    runs-on: windows-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Dependencies
+        run: bun install
+
+      - name: Build client scripts
+        run: bun run build:scripts
+
+      - name: Generate migrations
+        run: ./buddy migrate:regenerate --force
+
+      # Rendered on Linux by the job above. `./buddy build:views` exits 0 on
+      # Windows in a third of a second having written nothing, so a bundle
+      # built after it there carries no pages at all.
+      - name: Take the rendered views
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-views
+          path: dist
+
+      # `--skip-prepare` because the preparation it skips is `./buddy
+      # build:views`, which the step above supplies, and because `./buddy` is a
+      # shell script that Windows cannot spawn.
+      - name: Build the Windows desktop bundle
+        run: bun scripts/build-desktop-windows.ts --skip-prepare
+
+      - name: Publish release
+        uses: pantry-pm/pantry/packages/action@v0.11.74
+        with:
+          install: 'false'
+          release: 'true'
+          release-files: |
+            storage/framework/desktop-windows/*.zip
+          release-checksums: sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The views the Windows bundle serves, rendered where the renderer works.
+  views:
+    name: Views
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Dependencies
+        run: bun install
+
+      - name: Build client scripts
+        run: bun run build:scripts
+
+      - name: Render the views
+        run: ./buddy build:views
+
+      - name: Check the app pages were written
+        run: |
+          test -f dist/app/large-files.html || { echo "no app pages in dist/"; ls -la dist || true; exit 1; }
+          echo "rendered $(find dist -type f | wc -l) files"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rendered-views
+          path: dist
+          if-no-files-found: error
+          retention-days: 1
+
   # Both jobs above attach their own files and ask the action for checksums,
   # and the action checksums the files *it* uploaded. The desktop job runs
   # second, so its two-asset `checksums.txt` replaced the one covering the CLI
@@ -151,7 +248,7 @@ jobs:
   # release. `release-manifest.json` had the same hole and is rebuilt with it.
   checksums:
     name: Checksums
-    needs: [release, desktop]
+    needs: [release, desktop, desktop-windows]
     # `always()`, because `desktop` is skipped whenever signing is not
     # configured and a skipped dependency would skip this too. Gated on
     # `release` instead: if that failed there is nothing to checksum, and if
