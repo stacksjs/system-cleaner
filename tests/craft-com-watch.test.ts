@@ -15,7 +15,7 @@
  * answers an independent parser gave.
  */
 import { describe, expect, it } from 'bun:test'
-import { importsFrom } from '../scripts/craft-com-watch'
+import { importsFrom, verdict } from '../scripts/craft-com-watch'
 
 /**
  * Assemble the smallest PE64 that has an import directory.
@@ -159,5 +159,53 @@ describe('importsFrom', () => {
   it('refuses something that is not a PE', () => {
     const notPe = new Uint8Array(0x400)
     expect(() => importsFrom(notPe, 'ole32.dll')).toThrow(/not a PE/)
+  })
+})
+
+/**
+ * The verdict, which inverted once already.
+ *
+ * This watcher was built to announce `CoInitializeEx` arriving, and now
+ * announces it leaving. No Craft release at or above the floor has dropped it,
+ * so CI will never exercise the branch that matters; these do.
+ */
+describe('verdict', () => {
+  const FIXED = ['CoInitializeEx', 'CoTaskMemFree', 'CoUninitialize']
+  const BROKEN = ['CoTaskMemFree']
+
+  it('says nothing about a release below the floor, fixed or not', () => {
+    // v0.0.164 does not initialise COM and never will. It is also not what
+    // this app pins, so it is not news.
+    expect(verdict(164, 175, BROKEN)).toBe('below-floor')
+    expect(verdict(174, 175, FIXED)).toBe('below-floor')
+  })
+
+  it('is quiet while the newest release still initialises COM', () => {
+    expect(verdict(247, 175, FIXED)).toBe('initialises-com')
+  })
+
+  it('judges the floor release itself', () => {
+    // The floor is the version being shipped, so a regression there is the
+    // most urgent case of all, not an off-by-one to skip.
+    expect(verdict(175, 175, BROKEN)).toBe('regressed')
+    expect(verdict(175, 175, FIXED)).toBe('initialises-com')
+  })
+
+  it('calls a release at or above the floor without the call a regression', () => {
+    expect(verdict(248, 175, BROKEN)).toBe('regressed')
+  })
+
+  it('does not accept the control import as the one that matters', () => {
+    // The whole diagnosis rested on `CoTaskMemFree` being present while
+    // `CoInitializeEx` was absent. If those are ever conflated, this script
+    // reports health for exactly the binary that fails.
+    expect(verdict(248, 175, ['CoTaskMemFree', 'CoUninitialize'])).toBe('regressed')
+  })
+
+  it('reads an ordinal import as absent, because a name search cannot see it', () => {
+    // `#13` is what an ordinal import looks like here. Craft imports ole32 by
+    // name today; if that changed, the honest answer is that this script can
+    // no longer tell, and `regressed` is the answer that gets looked at.
+    expect(verdict(248, 175, ['#13', 'CoTaskMemFree'])).toBe('regressed')
   })
 })

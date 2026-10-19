@@ -1,17 +1,18 @@
-# Notice the day Craft initialises COM, so the Windows desktop app stops
-# waiting on somebody remembering to check.
+# Notice if Craft ever stops initialising COM, before the Windows desktop app
+# finds out the hard way.
 #
-# The desktop bundle builds and serves and then opens no window: `launcher.ts`
-# spawns the runtime with `CREATE_NO_WINDOW`, which takes the console away, and
-# Craft never puts the thread in a COM apartment itself, so
-# `CreateCoreWebView2EnvironmentWithOptions` returns `CO_E_NOTINITIALIZED`.
-# craft-native/craft#342 adds the call; building Craft at that commit and at
-# its parent turned every such failure into a loaded webview.
+# Craft's Windows runtime opens no window unless it puts the calling thread in
+# a COM apartment: `launcher.ts` spawns it with `CREATE_NO_WINDOW`, which takes
+# the console away, so `CreateCoreWebView2EnvironmentWithOptions` returns
+# `CO_E_NOTINITIALIZED`. craft-native/craft@e2fc920f added the call and
+# v0.0.166 was the first release to carry it; `MIN_WINDOWS_CRAFT` pins v0.0.175,
+# the version the bundle was built and verified against.
 #
-# The regression guard in `ci.yml` cannot announce the fix arriving, because it
-# probes the version `build-desktop-windows.ts` pins — v0.0.100 — however many
-# releases Craft cuts. This watches from the other side, reading each newest
-# release's import table.
+# This watched for that fix arriving — it is what filed #24 and unblocked
+# v0.3.8 — and now watches for it leaving. The regression guard in `ci.yml`
+# cannot: it probes the pinned version, so it will stay green through any
+# number of releases that drop the call, and the news would arrive as a dead
+# window the first time anyone raised the floor.
 #
 # Daily, which is often enough for something that has to be acted on by hand
 # and rare enough to cost nothing. A scheduled workflow stops running after 60
@@ -33,7 +34,7 @@ permissions:
 
 jobs:
   check:
-    name: Does the newest Craft release initialise COM
+    name: Does the newest Craft release still initialise COM
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -48,10 +49,16 @@ jobs:
       # in its import table — proof by what the binary declares, needing no
       # Windows machine to run it.
       #
-      # Green either way: still waiting is not a failure. It opens an issue
-      # when the answer changes, once, and fails only if it cannot trust its
-      # own answer — a craft.exe that imports nothing from ole32 at all means
-      # the parse or the archive changed, not that COM is still uninitialised.
+      # Green in the ordinary case, and green on a regression too: the issue it
+      # opens is what has to be acted on, and it outlives a red run on a page
+      # nobody opens. One issue per regressed release, named in its title, so
+      # closing it is final — deduplicating on open issues alone is what filed
+      # #25 the morning after #24 was closed.
+      #
+      # It fails only if it cannot trust its own answer: a craft.exe importing
+      # nothing from ole32 at all, or a tag this script cannot read a version
+      # out of, mean the parse or the archive changed rather than that Craft
+      # regressed.
       - name: Check the import table
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
