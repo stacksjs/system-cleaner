@@ -63,15 +63,30 @@ function run(command: string, args: string[], options: { cwd?: string, env?: Rec
 }
 
 /**
- * The oldest Craft release whose Windows archive is complete.
+ * The oldest Craft release that can actually open a window on Windows.
  *
- * `craft.exe` reaches WebView2 through `WebView2Loader.dll` and the archive is
- * expected to carry it. The v0.0.90 Windows asset — the version pantry
- * resolves for this project, and the one the macOS bundle ships — contains
- * only `craft.exe`, so a bundle built from it would install cleanly and never
- * open a window. Every release from v0.0.100 on ships both.
+ * Two separate reasons, both of which produce a bundle that installs cleanly
+ * and shows nothing:
+ *
+ *  - **The loader.** `craft.exe` reaches WebView2 through
+ *    `WebView2Loader.dll`, and the v0.0.90 archive — the version pantry
+ *    resolves for this project, and the one the macOS bundle ships — contains
+ *    only `craft.exe`. Every release from v0.0.100 on ships both. That was the
+ *    original floor.
+ *  - **The apartment.** Until craft-native/craft e2fc920f, craft's Windows
+ *    runtime never called `CoInitializeEx`, so `craft.exe` spawned with
+ *    `CREATE_NO_WINDOW` — which `app/Desktop/launcher.ts` does, to keep a
+ *    console off the screen — found no COM apartment and
+ *    `CreateCoreWebView2EnvironmentWithOptions` failed with
+ *    `CO_E_NOTINITIALIZED`. v0.0.175 is the first release whose `craft.exe`
+ *    imports `CoInitializeEx`, measured from its import table by
+ *    `scripts/craft-com-watch.ts`.
+ *
+ * So the floor is the second of those. `deps.yaml` still declares ^0.0.90 for
+ * the macOS runtime, which is unaffected by either problem; this is the one
+ * place that knows Windows needs something newer.
  */
-const MIN_WINDOWS_CRAFT = 100
+const MIN_WINDOWS_CRAFT = 175
 
 /** `v0.0.90` → 90. Craft has not left 0.0.x, so the patch is the version. */
 function patchOf(version: string): number {
@@ -109,7 +124,7 @@ function craftVersion(): string {
     return version
 
   const floor = `v0.0.${MIN_WINDOWS_CRAFT}`
-  console.warn(`[windows] ${version} is declared, but its Windows archive ships no WebView2 loader; using ${floor}`)
+  console.warn(`[windows] ${version} is declared, but it cannot open a window on Windows; using ${floor}`)
   return floor
 }
 

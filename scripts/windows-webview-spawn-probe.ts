@@ -51,14 +51,18 @@ interface Case {
   /**
    * What `--guard` requires of this case against the Craft the bundle ships.
    *
-   * `loaded` is a promise to this app: these spawns work today and a change
-   * that breaks one is a regression in something we control, so the guard
-   * fails. `no-webview` only records the upstream bug — craft-native/craft#342
-   * is unmerged, so `CREATE_NO_WINDOW` still costs the apartment. The day that
-   * lands these start loading, which is good news and must not turn CI red; it
-   * is reported as the news it is.
+   * Every spawn must now produce a webview. That has only been true since
+   * craft-native/craft e2fc920f, shipped in v0.0.175: before it, craft never
+   * put the thread in a COM apartment, so the three spawns that pass
+   * `CREATE_NO_WINDOW` — including the one `app/Desktop/launcher.ts` actually
+   * performs — failed with `CO_E_NOTINITIALIZED` and opened no window. Those
+   * three were expected to fail here, and this field existed to say so.
+   *
+   * They are promises now, not observations: a spawn that stops producing a
+   * webview is a regression in something this project controls or in the
+   * runtime version it pins, and fails the job.
    */
-  expect: 'loaded' | 'no-webview'
+  expect: 'loaded'
 }
 
 const CASES: Case[] = [
@@ -66,11 +70,11 @@ const CASES: Case[] = [
   // this one stops loading, the machine changed and nothing else below means
   // what it would otherwise mean.
   { name: 'control: piped, no windowsHide', spawn: 'piped', windowsHide: false, expect: 'loaded' },
-  { name: 'piped + windowsHide', spawn: 'piped', windowsHide: true, expect: 'no-webview' },
-  { name: 'inherit + windowsHide', spawn: 'inherit', windowsHide: true, expect: 'no-webview' },
+  { name: 'piped + windowsHide', spawn: 'piped', windowsHide: true, expect: 'loaded' },
+  { name: 'inherit + windowsHide', spawn: 'inherit', windowsHide: true, expect: 'loaded' },
   { name: 'inherit, no windowsHide', spawn: 'inherit', windowsHide: false, expect: 'loaded' },
   // The launcher, as a binary with the launcher's own subsystem.
-  { name: 'GUI parent (the launcher)', spawn: 'gui-parent', windowsHide: true, expect: 'no-webview' },
+  { name: 'GUI parent (the launcher)', spawn: 'gui-parent', windowsHide: true, expect: 'loaded' },
 ]
 
 interface Outcome {
@@ -389,26 +393,21 @@ async function main(): Promise<void> {
 }
 
 /**
- * Hold the shipped runtime to what is known about it.
+ * Hold the shipped runtime to what every spawn must do.
  *
- * Two different kinds of divergence, deliberately not treated alike:
+ * This began asymmetric: three spawns were expected to fail, because craft had
+ * no COM apartment under `CREATE_NO_WINDOW`, and a spawn that started working
+ * was reported as news rather than failing the job — failing CI for the
+ * upstream fix arriving would have been the wrong reflex. The fix arrived in
+ * v0.0.175 and the pin moved with it, so there is nothing left to wait for and
+ * the asymmetry is gone with it: every spawn must produce a webview.
  *
- *  - A case expected to load and did not. Those spawns work today; something
- *    this app controls has broken, or the Craft version it pins has regressed.
- *    That fails.
- *  - A case expected to fail and loaded. That is craft-native/craft#342 having
- *    landed in whatever Craft the bundle now pins, measured rather than
- *    assumed. Failing CI for it would be failing for good news, so it is
- *    reported as news — loudly, because several things should then change:
- *    this expectation, the `0x800401f0` tolerance in the window step, and the
- *    release notes that say the desktop app is macOS-only.
- *  - A case that could not run at all is a broken harness, not evidence, and
- *    fails too.
+ * A case that could not run at all is a broken harness rather than evidence,
+ * and fails too.
  */
 function applyGuard(outcomes: Outcome[]): void {
   const byName = new Map(outcomes.map(o => [o.name, o]))
   const regressions: string[] = []
-  const fixed: string[] = []
 
   for (const probe of CASES) {
     const outcome = byName.get(probe.name)
@@ -416,30 +415,22 @@ function applyGuard(outcomes: Outcome[]): void {
       regressions.push(`${probe.name}: did not run (${outcome?.skipped ?? 'no outcome'})`)
       continue
     }
-    const expected = probe.expect === 'loaded'
-    if (expected && !outcome.loaded)
-      regressions.push(`${probe.name}: expected a webview, got none (${outcome.detail || 'no output'})`)
-    if (!expected && outcome.loaded)
-      fixed.push(`${probe.name}: loaded in ${outcome.elapsedMs}ms, where CO_E_NOTINITIALIZED was expected`)
-  }
-
-  for (const line of fixed) {
-    console.error(`::warning::Craft now opens a webview under CREATE_NO_WINDOW — ${line}`)
-  }
-  if (fixed.length > 0) {
-    console.error('::warning::craft-native/craft#342 appears to have landed. Drop the windowsHide expectations here, remove the 0x800401f0 tolerance from the window step, and the desktop app can ship on Windows.')
+    if (!outcome.loaded) {
+      const why = outcome.comFailure
+        ? 'CO_E_NOTINITIALIZED — the runtime this bundle pins does not initialise COM'
+        : (outcome.detail || 'no output')
+      regressions.push(`${probe.name}: expected a webview, got none (${why})`)
+    }
   }
 
   const summary = process.env.GITHUB_STEP_SUMMARY
-  if (summary && (fixed.length > 0 || regressions.length > 0)) {
-    const lines = [
+  if (summary && regressions.length > 0) {
+    fs.appendFileSync(summary, `${[
       '### Windows webview guard',
       '',
-      ...fixed.map(f => `- **Fixed upstream**: ${f}`),
       ...regressions.map(r => `- **Regression**: ${r}`),
       '',
-    ]
-    fs.appendFileSync(summary, `${lines.join('\n')}\n`)
+    ].join('\n')}\n`)
   }
 
   if (regressions.length > 0) {
@@ -447,9 +438,7 @@ function applyGuard(outcomes: Outcome[]): void {
       console.error(`::error::${line}`)
     throw new Error(`${regressions.length} spawn(s) that should work do not`)
   }
-  console.error(fixed.length > 0
-    ? 'guard: nothing regressed, and the upstream fix has landed.'
-    : 'guard: the shipped runtime behaves exactly as recorded.')
+  console.error('guard: every spawn opened a webview.')
 }
 
 main().catch((error) => {

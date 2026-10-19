@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+The Windows desktop app can open its window. v0.3.7 shipped the Windows CLI
+and said the desktop app was macOS-only, which it was: craft's Windows runtime
+never called `CoInitializeEx`, and `app/Desktop/launcher.ts` spawns it with
+`CREATE_NO_WINDOW` so that no console appears beside the app — which left the
+thread with no COM apartment and `CreateCoreWebView2EnvironmentWithOptions`
+failing with `CO_E_NOTINITIALIZED` before any window existed.
+
+That was fixed upstream in craft-native/craft e2fc920f and shipped in Craft
+v0.0.175, so `MIN_WINDOWS_CRAFT` floors the Windows runtime there.
+`deps.yaml` still declares ^0.0.90 for macOS, which neither problem touched.
+
+CI no longer tolerates that error by name: a window that does not open fails
+the build, and the spawn guard requires a webview from all five ways of
+starting the runtime rather than from the three that used to work.
+
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.6...v0.3.7)
 
 Windows support is complete: all nine features the app offers now work there,
