@@ -1,22 +1,60 @@
 # Changelog
 
-## Unreleased
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.7...v0.3.8)
 
-The Windows desktop app can open its window. v0.3.7 shipped the Windows CLI
-and said the desktop app was macOS-only, which it was: craft's Windows runtime
-never called `CoInitializeEx`, and `app/Desktop/launcher.ts` spawns it with
-`CREATE_NO_WINDOW` so that no console appears beside the app — which left the
-thread with no COM apartment and `CreateCoreWebView2EnvironmentWithOptions`
-failing with `CO_E_NOTINITIALIZED` before any window existed.
+The Windows desktop app opens its window, and ships.
 
-That was fixed upstream in craft-native/craft e2fc920f and shipped in Craft
-v0.0.175, so `MIN_WINDOWS_CRAFT` floors the Windows runtime there.
-`deps.yaml` still declares ^0.0.90 for macOS, which neither problem touched.
+v0.3.7 shipped the Windows CLI and said the desktop app was macOS-only. It was:
+`app/Desktop/launcher.ts` spawns the Craft runtime with `CREATE_NO_WINDOW`, so
+that no console sits beside the app, and Craft's Windows runtime never called
+`CoInitializeEx` — which left the thread with no COM apartment and
+`CreateCoreWebView2EnvironmentWithOptions` failing with `CO_E_NOTINITIALIZED`
+before any window existed. Nothing on this side could fix it; a COM apartment
+belongs to a thread in the runtime's own process.
 
-CI no longer tolerates that error by name: a window that does not open fails
-the build, and the spawn guard requires a webview from all five ways of
-starting the runtime rather than from the three that used to work.
+It is fixed upstream in craft-native/craft e2fc920f and shipped in Craft
+v0.0.175, so `MIN_WINDOWS_CRAFT` floors the Windows runtime there. `deps.yaml`
+still declares ^0.0.90 for macOS, which neither that problem nor the missing
+`WebView2Loader.dll` in older archives ever touched.
 
+`SystemCleaner-windows-x64.zip` is new: the desktop bundle, which existed only
+as a CI artifact before. It is **unsigned** — there is no Windows signing
+identity configured, SmartScreen will warn, and the published checksum is the
+integrity signal. Both CLI binaries remain unsigned for the same reason. The
+macOS `.dmg` is signed and notarized as before.
+
+### What proves it
+
+CI builds the bundle on Windows, launches it, and photographs the screen. That
+step no longer tolerates `0x800401f0` by name, so it passes only when a window
+actually appears:
+
+    [windows] v0.0.90 is declared, but it cannot open a window on Windows; using v0.0.175
+    window 'SystemCleaner' from craft-runtime after 3s
+    [WebView2] Initialization complete
+
+A second guard spawns the runtime five ways — piped and inherited stdio, with
+and without `CREATE_NO_WINDOW`, and from a GUI-subsystem parent, which is what
+the launcher actually does — and requires a webview from each. Three of those
+five could not work before Craft v0.0.175.
+
+`scripts/craft-com-watch.ts` is what noticed the fix: it reads each new Craft
+release's PE import table and opens an issue the day `CoInitializeEx` appears,
+rather than anyone remembering to check.
+
+## ✨ Features
+
+- **desktop**: the Windows window opens ([4e68bfd](https://github.com/stacksjs/system-cleaner/commit/4e68bfd)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#24](https://github.com/stacksjs/system-cleaner/issues/24))
+
+## 💚 Continuous Integration
+
+- publish the Windows desktop bundle ([9885e45](https://github.com/stacksjs/system-cleaner/commit/9885e45)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- watch for Craft initialising COM instead of remembering to look ([11d50a7](https://github.com/stacksjs/system-cleaner/commit/11d50a7)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- hold the Windows window failure to what was measured ([cb8846c](https://github.com/stacksjs/system-cleaner/commit/cb8846c)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+
+## Contributors
+
+- _glennmichael123 <gtorregosa@gmail.com>_
 
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.6...v0.3.7)
 
