@@ -25,6 +25,14 @@ database/stacks.sqlite
 database/stacks_testing.sqlite
 database/*.sqlite-wal
 database/*.sqlite-shm
+
+# Generated from app/Models by `buddy migrate:regenerate --force`, which every
+# build runs (scripts/build-desktop-{app,windows}.ts, and ci.yml before the
+# tests). The numbering is not stable across regenerations - the same
+# cleanup_runs table was 0000000073 when a80e390 removed these from the tree and
+# is 0000000002 today - so tracking them produces a diff that says nothing on
+# every build. A hand-written migration would need a negation here.
+database/migrations/
 storage/framework/stx/
 storage/framework/.cache/
 storage/framework/auto-imports/*
