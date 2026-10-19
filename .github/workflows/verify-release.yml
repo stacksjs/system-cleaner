@@ -1,0 +1,155 @@
+# Run what was published, the way someone who downloaded it would.
+#
+# `ci.yml` builds a Windows bundle on every push and opens its window, which
+# proves the source produces a working app. It does not prove the *release*
+# does: the zip on the release page is a different object, and in v0.3.8 it was
+# a different object in a very literal sense — the job meant to publish it
+# failed, and the asset was attached by hand from a CI artifact. Provenance was
+# sound and nobody had run it.
+#
+# So this downloads the asset from the release, checks it against the published
+# checksum, extracts it somewhere no repository checkout can help it, launches
+# it, and photographs the screen. A window is required; anything else fails.
+#
+# Deliberately checks out nothing. A compiled Bun binary reads `bunfig.toml`
+# from its working directory, and this repository's preloads
+# `@stacksjs/env/plugin.js` — running an installed app from inside the source
+# tree tests a configuration no user will ever have, and `ci.yml` has the scar
+# to prove it.
+name: Verify release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to verify. Defaults to the latest release.
+        required: false
+        type: string
+  # Every published release verifies itself, so the question is never left to
+  # whoever remembers to ask.
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: The published Windows bundle opens a window
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Download the published bundle
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = '${{ inputs.tag }}'
+          if (-not $tag) { $tag = '${{ github.event.release.tag_name }}' }
+          if (-not $tag) { $tag = (gh release view --repo $env:GITHUB_REPOSITORY --json tagName -q .tagName) }
+          Write-Host "verifying $tag"
+          "TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+          $dir = Join-Path $env:RUNNER_TEMP 'release'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          gh release download $tag --repo $env:GITHUB_REPOSITORY --dir $dir `
+            --pattern 'SystemCleaner-*-windows-x64.zip' --pattern 'checksums.txt'
+          if ($LASTEXITCODE -ne 0) { throw "could not download $tag" }
+          Get-ChildItem $dir | ForEach-Object { Write-Host "  $($_.Name)  $($_.Length)" }
+
+          $zip = Get-ChildItem $dir -Filter 'SystemCleaner-*-windows-x64.zip' | Select-Object -First 1
+          if (-not $zip) { throw "$tag has no Windows desktop bundle" }
+          "ZIP=$($zip.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+          # What is about to run should be what the release page offers, and the
+          # checksum is the only thing that says so.
+          $actual = (Get-FileHash $zip.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          $line = Select-String -Path (Join-Path $dir 'checksums.txt') -Pattern ([regex]::Escape($zip.Name)) |
+            Select-Object -First 1
+          if (-not $line) { throw "checksums.txt does not cover $($zip.Name)" }
+          $expected = ($line.Line -split '\s+')[0].ToLowerInvariant()
+          if ($actual -ne $expected) { throw "digest mismatch: $actual vs published $expected" }
+          Write-Host "sha256 $actual matches the published checksum"
+
+      # Into a plain directory, as an installer would, and nowhere near a
+      # checkout of this repository.
+      - name: Install it
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $install = Join-Path $env:RUNNER_TEMP 'install'
+          Remove-Item -Recurse -Force $install -ErrorAction SilentlyContinue
+          Expand-Archive -LiteralPath $env:ZIP -DestinationPath $install -Force
+          $exe = Get-ChildItem $install -Filter 'SystemCleaner.exe' -Recurse -File | Select-Object -First 1
+          if (-not $exe) { throw 'no SystemCleaner.exe in the bundle' }
+          Write-Host "installed to $($exe.DirectoryName)"
+          Get-ChildItem $exe.DirectoryName | ForEach-Object { Write-Host "  $($_.Name)" }
+          "EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Run it and photograph the window
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $shots = Join-Path $env:RUNNER_TEMP 'shots'
+          New-Item -ItemType Directory -Force -Path $shots | Out-Null
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+
+          # The launcher is a GUI-subsystem binary and owns no console, so its
+          # stderr goes nowhere unless it is redirected. Without this, an app
+          # that exits early reports nothing at all about why.
+          $out = Join-Path $shots 'launcher.out'
+          $err = Join-Path $shots 'launcher.err'
+          Start-Process -FilePath $env:EXE -WorkingDirectory (Split-Path $env:EXE) `
+            -RedirectStandardOutput $out -RedirectStandardError $err | Out-Null
+
+          $window = $null
+          try {
+            foreach ($attempt in 1..60) {
+              Start-Sleep -Seconds 1
+              $window = Get-Process | Where-Object {
+                $_.MainWindowTitle -and $_.ProcessName -match 'craft-runtime|SystemCleaner'
+              } | Select-Object -First 1
+              if ($window) { break }
+            }
+
+            if ($window) {
+              Write-Host "window '$($window.MainWindowTitle)' from $($window.ProcessName) after ${attempt}s"
+              # WebView2 still has a browser process to start and a page to
+              # paint; a shot taken the instant the window exists is blank.
+              Start-Sleep -Seconds 8
+            }
+            else {
+              Write-Host 'no window within 60s'
+            }
+
+            $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            try { $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size) }
+            catch { Write-Host "screen capture failed: $($_.Exception.Message)" }
+            $bmp.Save((Join-Path $shots 'window.png'), [System.Drawing.Imaging.ImageFormat]::Png)
+            $g.Dispose(); $bmp.Dispose()
+
+            Write-Host '--- launcher stdout ---'
+            if (Test-Path $out) { Get-Content $out } else { Write-Host '(none)' }
+            Write-Host '--- launcher stderr ---'
+            if (Test-Path $err) { Get-Content $err } else { Write-Host '(none)' }
+          }
+          finally {
+            foreach ($name in 'SystemCleaner', 'craft-runtime', 'msedgewebview2') {
+              Get-Process -Name $name -ErrorAction SilentlyContinue |
+                Stop-Process -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+          if (-not $window) { throw "$env:TAG installs but opens no window" }
+
+      - name: Keep the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-release-windows
+          path: ${{ runner.temp }}/shots/*
+          if-no-files-found: warn
