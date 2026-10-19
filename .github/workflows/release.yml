@@ -157,6 +157,20 @@ jobs:
     permissions:
       contents: write
 
+    # Bash, as `ci.yml`'s Windows job does, and for the reason v0.3.8 found the
+    # hard way. `./buddy` is a shell script with no extension; under the
+    # runner's default PowerShell, `./buddy migrate:regenerate --force` reports
+    # success and does nothing at all, and the build then stopped on the
+    # migrations that step was supposed to write:
+    #
+    #     error: no migrations in D:\a\system-cleaner\system-cleaner\database\migrations
+    #
+    # A step that cannot run should fail, not pass quietly. Until buddy says so
+    # itself, the shell that can run it is the guard.
+    defaults:
+      run:
+        shell: bash
+
     steps:
       - uses: actions/checkout@v7
 
