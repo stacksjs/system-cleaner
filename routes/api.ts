@@ -1756,6 +1756,9 @@ export default async function (router: Router) {
       type: item.type,
       sizeBytes: item.sizeBytes,
       daysSinceModified: item.daysSinceModified,
+      // Application Support and Containers can hold the only copy of
+      // something; the UI must not pre-select these the way it can a cache.
+      holdsUserData: item.holdsUserData,
       protected: protectedPaths.has(path.resolve(item.path)),
     }));
 
