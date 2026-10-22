@@ -41,6 +41,7 @@ import {
   findIncompleteDownloads,
   findOrphanedAppData,
   scanProjectCaches,
+  scanStaleDependencies,
   extensionsPage,
   isWebStoreId,
   MAINTENANCE_TASKS,
@@ -195,6 +196,7 @@ function invalidateSizeCaches(): void {
 const orphanCache = new TtlCache<{ items: unknown[]; totalBytes: number }>(5 * 60_000);
 // A project-cache scan walks the code roots rather than stat-ing a fixed
 // list, so it costs seconds, not milliseconds. Same TTL as orphans.
+const staleDepsCache = new TtlCache<{ trees: unknown[]; totalBytes: number; withoutLockfile: number; rootsScanned: string[]; timedOut: boolean }>(5 * 60_000);
 const projectCacheCache = new TtlCache<{ groups: unknown[]; totalBytes: number; entryCount: number; rootsScanned: string[]; timedOut: boolean }>(5 * 60_000);
 // Walking every project root and sizing what it finds is ~8s of disk work for
 // an answer that only moves when a build runs. Long TTL, with an explicit
@@ -1846,6 +1848,54 @@ export default async function (router: Router) {
     projectCacheCache.clear();
     // These live under the user's code roots, which the disk screen sizes in
     // its own right — a stale total would still show the reclaimed bytes.
+    invalidateSizeCaches();
+
+    return Response.json({ success: outcome.failed.length === 0, mode, ...outcome });
+  });
+
+  /**
+   * Dependency trees for projects nobody has touched in months.
+   *
+   * Kept off the project-cache screen deliberately. Everything there is
+   * rebuilt from sources already on disk; this needs the network, is only
+   * reproducible with a lockfile, and costs minutes rather than seconds. It
+   * is reclamation the user opts into per project, never a sweep.
+   */
+  await router.post('/stale-dependencies', async () => {
+    const cached = staleDepsCache.get('scan');
+    if (cached) return Response.json({ success: true, ...cached, cached: true });
+
+    const result = await scanStaleDependencies({ deadline: Date.now() + 120_000 });
+
+    const payload = {
+      trees: result.trees,
+      totalBytes: result.totalBytes,
+      withoutLockfile: result.withoutLockfile,
+      rootsScanned: result.rootsScanned,
+      timedOut: result.timedOut,
+    };
+
+    staleDepsCache.set('scan', payload);
+    return Response.json({ success: true, ...payload, cached: false });
+  });
+
+  await router.post('/clean-stale-dependencies', async (req: Request) => {
+    const body = await readJsonBody<{ paths: unknown; mode?: unknown }>(req);
+    if (body === null) return badJson();
+
+    const requested = sanitizeStringArray(body.paths, MAX_BULK_PATHS);
+    if (requested === null) return badRequest('paths must be a non-empty string array');
+
+    // Same gate as the other two: only paths a scan produced. These are
+    // inside the user's source tree and cost a network round trip to undo.
+    const scan = await scanStaleDependencies({ deadline: Date.now() + 120_000 });
+    const known = new Set(scan.trees.map(tree => path.resolve(tree.path)));
+    const targets = requested.map(p => path.resolve(p)).filter(p => known.has(p));
+    if (targets.length === 0) return badRequest('None of those paths are stale dependency trees', 403);
+
+    const mode = body.mode === 'permanent' ? 'permanent' : 'trash';
+    const outcome = await bulkDelete(targets, mode, 'stale-dependencies');
+    staleDepsCache.clear();
     invalidateSizeCaches();
 
     return Response.json({ success: outcome.failed.length === 0, mode, ...outcome });
