@@ -40,6 +40,7 @@ import {
   findDsStoreFiles,
   findIncompleteDownloads,
   findOrphanedAppData,
+  scanProjectCaches,
   extensionsPage,
   isWebStoreId,
   MAINTENANCE_TASKS,
@@ -192,6 +193,9 @@ function invalidateSizeCaches(): void {
 // finds, which is seconds of work for an answer that changes when an app is
 // uninstalled and not otherwise.
 const orphanCache = new TtlCache<{ items: unknown[]; totalBytes: number }>(5 * 60_000);
+// A project-cache scan walks the code roots rather than stat-ing a fixed
+// list, so it costs seconds, not milliseconds. Same TTL as orphans.
+const projectCacheCache = new TtlCache<{ groups: unknown[]; totalBytes: number; entryCount: number; rootsScanned: string[]; timedOut: boolean }>(5 * 60_000);
 // Walking every project root and sizing what it finds is ~8s of disk work for
 // an answer that only moves when a build runs. Long TTL, with an explicit
 // refresh for the person who just deleted something and wants to see it gone.
@@ -1789,6 +1793,59 @@ export default async function (router: Router) {
     orphanCache.clear();
     // Orphan rows live under ~/Library/Caches and ~/Library/Application
     // Support, which the cleanup screen sizes as targets in their own right.
+    invalidateSizeCaches();
+
+    return Response.json({ success: outcome.failed.length === 0, mode, ...outcome });
+  });
+
+  /**
+   * Build caches each project keeps inside itself.
+   *
+   * The counterpart to Quick Clean rather than a addition to it: that works
+   * from a fixed list of absolute paths, which can name a toolchain's global
+   * cache and structurally cannot name the per-project ones. On a developer
+   * machine the second set is the larger one by an order of magnitude.
+   */
+  await router.post('/project-caches', async () => {
+    const cached = projectCacheCache.get('scan');
+    if (cached) return Response.json({ success: true, ...cached, cached: true });
+
+    // Walking the code roots is seconds of work; bound it so a pathological
+    // tree returns a partial answer instead of hanging the request.
+    const result = await scanProjectCaches({ deadline: Date.now() + 120_000 });
+
+    const payload = {
+      groups: result.groups,
+      totalBytes: result.totalBytes,
+      entryCount: result.entryCount,
+      rootsScanned: result.rootsScanned,
+      timedOut: result.timedOut,
+    };
+
+    projectCacheCache.set('scan', payload);
+    return Response.json({ success: true, ...payload, cached: false });
+  });
+
+  await router.post('/clean-project-caches', async (req: Request) => {
+    const body = await readJsonBody<{ paths: unknown; mode?: unknown }>(req);
+    if (body === null) return badJson();
+
+    const requested = sanitizeStringArray(body.paths, MAX_BULK_PATHS);
+    if (requested === null) return badRequest('paths must be a non-empty string array');
+
+    // Same rule as /clean-orphans: only paths a scan actually produced.
+    // Without it this is "delete any directory you name" behind a cache-
+    // shaped door, and these paths live inside the user's source tree.
+    const scan = await scanProjectCaches({ deadline: Date.now() + 120_000 });
+    const known = new Set(scan.groups.flatMap(group => group.entries.map(entry => path.resolve(entry.path))));
+    const targets = requested.map(p => path.resolve(p)).filter(p => known.has(p));
+    if (targets.length === 0) return badRequest('None of those paths are project caches', 403);
+
+    const mode = body.mode === 'permanent' ? 'permanent' : 'trash';
+    const outcome = await bulkDelete(targets, mode, 'project-caches');
+    projectCacheCache.clear();
+    // These live under the user's code roots, which the disk screen sizes in
+    // its own right — a stale total would still show the reclaimed bytes.
     invalidateSizeCaches();
 
     return Response.json({ success: outcome.failed.length === 0, mode, ...outcome });
