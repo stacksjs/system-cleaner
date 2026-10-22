@@ -27,7 +27,7 @@ security/src/
 ```typescript
 import { generateAppKey } from '@stacksjs/security'
 
-const key = generateAppKey()  // 32-character random string
+const key = generateAppKey()  // base64: followed by 32 random bytes encoded as base64
 // Run via CLI: buddy key:generate
 ```
 
@@ -74,9 +74,8 @@ const algo = detectAlgorithm(hash)  // 'bcrypt' | 'argon2' | 'argon2id' | ...
 ### Algorithm-Specific Functions
 ```typescript
 bcryptEncode(value, rounds?)     // bcrypt hash
-bcryptVerify(value, hash)        // bcrypt verify
 argon2Encode(value, options?)    // argon2 hash
-argon2Verify(value, hash)        // argon2 verify
+check(value, hash)               // verifies supported bcrypt/argon2 hashes
 base64Encode(value)               // base64
 ```
 
@@ -102,6 +101,12 @@ interface HashMakeOptions {
 ## config/security.ts
 ```typescript
 {
+  // Application rate limits and the login lockout are multiplied by this.
+  // Keep 1 in production; tests raise it (or STACKS_RATE_LIMIT_SCALE).
+  rateLimit: { scale: 1 },
+  // Proxies whose forwarding headers name the client (clientAddress()).
+  // Unset = loopback/private/link-local; [] = trust none.
+  trustedProxies: ['10.0.0.0/8'],
   firewall: {
     enabled: true,
     countryCodes: [],                // block by country
@@ -144,12 +149,105 @@ import { eraseSubject, exportSubjectData, pruneRetainedData } from '@stacksjs/or
   `log`, which writes to disk in production.
 
 ## Gotchas
-- Default hashing is bcrypt with 12 rounds — sufficient for most applications
-- `needsRehash()` compares current hash options against provided options — useful after config changes
-- APP_KEY is used for `encrypt()`/`decrypt()` — generate via `buddy key:generate`
+- Default hashing is bcrypt with 12 rounds - sufficient for most applications
+- `needsRehash()` compares current hash options against provided options - useful after config changes
+- APP_KEY is used for `encrypt()`/`decrypt()` - generate via `buddy key:generate`
 - APP_KEY format is colon-separated (validated during deployment)
 - Argon2 requires more memory/time but is more resistant to GPU attacks
 - Base64 is encoding, not hashing. Never use `base64Encode()` for credentials.
 - MD5 and base64 password verification are intentionally absent from the main security API.
 - The firewall config is used by cloud deployment for WAF rules
-- Rate limiting is per-minute per-IP (500 default)
+- The firewall rate limit is per-minute per-IP at the WAF (`firewall.rateLimitPerMinute`)
+- Application rate limits (`.rateLimit()`, `rateLimit()`, the login lockout) share the Redis cache when it is configured and count per process otherwise; see `stacks-router`
+
+
+## Encryption and webhook contracts
+
+New `encrypt()` ciphertext uses the versioned AES-256-GCM envelope and
+PBKDF2-SHA-256 derivation in `core/security/src/crypt.ts`; decrypt retains
+legacy formats for upgrades. The base64: APP_KEY prefix is normalized by that
+implementation. Encryption/hashing/encoding are distinct APIs; use the exported
+webhook helpers from `core/security/src/webhook.ts` for signed callback
+validation rather than inventing a string comparison. To SEND signed webhooks,
+`signWebhook(secret | secrets[], body, { timestamp? })` returns the
+`t=<unix>,v1=<hex>` header (HMAC-SHA256 of `${t}.${body}`, one `v1` per secret
+while rotating) and `verifySignedWebhook` / `verifyWebhook('signed', ...)` is
+the receiver's check (tolerance applies both ways). `generateWebhookSecret()`
+mints a `whsec_` secret; store it encrypted, since signing needs the plaintext.
+
+Outbound requests to a URL a user typed (webhook endpoints, import-from-URL)
+go through `await fetchPublicUrl(url, init?, opts?)`, which makes the request
+rather than blessing it: https only, no credentials, every resolved address
+public (`isPrivateAddress` covers loopback, RFC 1918, CGNAT, link-local
+metadata, IPv4-mapped/NAT64/6to4 forms), **every redirect hop re-checked by
+the same rules**, the connection pinned to an address that was checked (name
+kept in `Host` and TLS SNI), `Authorization`/`Cookie` dropped across an
+origin change, and the body and duration capped. It throws `OutboundUrlError`
+with a `reason`.
+
+`outboundUrlProblem(url, opts)` is the cheap check for when the URL is saved,
+and `assertPublicOutboundUrl(url, opts)` the check alone. **Checking is not
+fetching.** A caller that validates and then calls `fetch` has given the
+guarantee back: `fetch` defaults to `redirect: 'follow'`, so a validated host
+answering `302 Location: http://169.254.169.254/...` is followed unchecked,
+and `fetch` resolves the name a second time, so the address that was approved
+is not the address connected to (stacksjs/stacks#2909). Use `fetchPublicUrl`
+unless you know you want only the check.
+API keys handed to integrations: `generateApiKey('myapp_live_')` returns
+`{ key, hash, hint }`; show `key` once, store `hash` (`hashApiKey`), list `hint`.
+
+Configured or user-supplied regex patterns: `matchBoundedRegex(source, input, options)`
+accepts optional `flags` and `timeoutMs`, and returns `{ value, index }` for the first complete
+match, or `null`. Every call runs in an isolated Bun process with an OS-enforced
+deadline and `SIGKILL`, including process startup (25ms by default, integer
+1-1000ms). It requires `bun` on PATH. Timeouts throw `RegexTimeoutError`;
+invalid patterns throw `SyntaxError`. Do not treat either as a clean security
+scan. Source is capped at 8Ki UTF-16 code units, input at 64Ki, and flags at 8.
+The helper does not inherit app preloads, environment variables or .env files.
+It matches statelessly and does not return captures. Use ordinary RegExp for
+trusted application constants to avoid process startup for normal matching.
+Timing a synchronous match afterward or vetting one sample input cannot bound
+an untrusted expression on its next input.
+
+Generated model API exposure and ownership live under `config/security.ts`
+api settings. Read `stacks-models`/`stacks-router` before opening generated
+endpoints; a cloud WAF setting does not implement model row authorization.
+Capability/config validation and credential recovery have separate tests and
+failure contracts; propagate their real errors rather than interpreting an
+awaited call as proof that a security state transition persisted.
+
+## Shadowed security defaults
+
+`app/` wins resolution over `storage/framework/defaults/app/`, so an app copy of
+a security default freezes that code: framework security fixes to it never run.
+The API server (`buddy dev` and `serve`) warns once at boot, and `buddy doctor`
+reports a "Security overrides" warning, for every file in
+`SECURITY_DEFAULT_FILES` (`@stacksjs/server`) that the app shadows. That list
+covers the Auth, Guest, Csrf, Cors, Throttle, Signed, Abilities, Can,
+Permission, Role and EnsureEmailIsVerified middleware; the sign-in, session,
+token, OAuth, passkey, magic-link, social and session-handoff actions with their
+helpers; and the password-reset actions.
+
+- `identical`: a byte-for-byte copy. Delete it, since it does nothing except
+  block fixes.
+- `modified`: diff it against the current default and port any fixes. Once
+  reviewed, add `// stacks-reviewed-default: <fingerprint>` (the warning prints
+  the value). The fingerprint is a hash of the default, so the warning comes
+  back when the framework changes that default.
+
+Set `STACKS_SHADOWED_DEFAULTS_WARN=false` to silence it. To check
+programmatically, call `findShadowedSecurityDefaults(appDir, defaultsDir)`,
+which returns `{ path, kind, appFile, defaultFile, fingerprint }[]`. Keep app
+hooks in events or app-owned actions rather than copying these files.
+
+## Credential and sign-in hardening
+
+- Social sign-in state is single use, browser bound and stored as a digest
+  (`issueOAuthFlow` / `consumeOAuthFlow`, `stacks-socials`); the callback hands
+  over a one-use code, never tokens in a URL (`createSessionHandoff`,
+  `stacks-auth`).
+- Any change to how an account proves who it is runs
+  `revokeAccountCredentials()` (`stacks-auth`): stamp, then revoke challenges,
+  magic links, OAuth grants, tokens and sessions in one transaction.
+- SMS STOP is never bypassed by `ignorePreferences`; only an explicit
+  `ignoreOptOut` for legally required messages (`stacks-notifications`).

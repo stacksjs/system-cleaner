@@ -60,6 +60,9 @@ const fastCommands = [
   'build',
   'test',
   'lint',
+  // Repository documentation tools inspect source without application globals.
+  'docs',
+  'release',
   '--version',
   '-v',
   'version',
@@ -85,7 +88,15 @@ const isRepl = !process.argv[1]
 // otherwise valid. Postinstall scripts are bootstrap work and must stay independent
 // of the application runtime preloader.
 const isPostinstall = process.env.npm_lifecycle_event === 'postinstall'
-const skipPreloader = isRepl || isPostinstall || (args.length > 0 && fastCommands.some(cmd => args[0] === cmd || args[0].startsWith(`${cmd}:`)))
+// runAction starts these framework files directly, with flags rather than a
+// Buddy command in argv[2]. They only inspect/release repository metadata.
+// Match the framework's source and published layouts, never an app action
+// which happens to have the same basename and needs its application globals.
+const entrypoint = (process.argv[1] ?? '').replaceAll('\\', '/')
+const repositoryAction = '(?:release|bump|generate/lib-entries)\\.[jt]s'
+const isRepositoryAction = new RegExp(`(?:^|/)storage/framework/core/actions/src/${repositoryAction}$`).test(entrypoint)
+  || new RegExp(`(?:^|/)(?:node_modules|pantry)/@stacksjs/actions/(?:src|dist(?:/src)?)/${repositoryAction}$`).test(entrypoint)
+const skipPreloader = isRepl || isPostinstall || isRepositoryAction || (args.length > 0 && fastCommands.some(cmd => args[0] === cmd || args[0].startsWith(`${cmd}:`)))
 
 if (!skipPreloader) {
   // Detect production/deployment commands and set environment accordingly BEFORE loading env files
@@ -155,11 +166,19 @@ if (!isRepl && !isPostinstall) {
   // `upgrade` that would fix it. Falling through leaves stx and ts-cloud on
   // their own defaults, which is degraded but recoverable.
   const pathPkg = '@stacksjs/' + 'path'
-  const { applyRuntimeDirectoryEnv } = await import('../../../core/path/src/index.ts')
+  const { applyRuntimeDirectoryEnv, linkPackagedDefaults } = await import('../../../core/path/src/index.ts')
     .catch(() => import(pathPkg))
 
   if (typeof applyRuntimeDirectoryEnv === 'function')
     applyRuntimeDirectoryEnv()
+
+  // An app that does not vendor the framework defaults gets a gitignored
+  // `storage/framework/defaults` link to the installed package. A fresh clone
+  // has no link until something makes one, so boot does: one lstat when it is
+  // already there, and a no-op for a vendored tree. Guarded for the same
+  // published-version reason as the helper above.
+  if (typeof linkPackagedDefaults === 'function')
+    linkPackagedDefaults()
   else
     console.warn('[stacks] installed @stacksjs/path has no applyRuntimeDirectoryEnv; stx and ts-cloud will use their default state directories. Run `buddy upgrade` to refresh the framework packages.')
 }
@@ -308,7 +327,8 @@ export async function loadAutoImports() {
           Reflect.set(globalThis, name, value)
         }
       }
-    } catch {
+    }
+    catch {
       // Package might not exist or not be built yet
     }
   }
@@ -328,7 +348,8 @@ export async function loadAutoImports() {
           Reflect.set(globalThis, name, value)
         }
       }
-    } catch {
+    }
+    catch {
       // Some files may have client-side dependencies, skip them
     }
   }
@@ -338,7 +359,7 @@ export async function loadAutoImports() {
   // Priority: user models (app/Models) override framework defaults
   const modelDirs = [
     path.userModelsPath(),
-    path.storagePath('framework/defaults/app/Models'),
+    path.defaultsPath('app/Models'),
   ]
 
   const loadedModels = new Set<string>()
@@ -361,11 +382,13 @@ export async function loadAutoImports() {
             Reflect.set(globalThis, modelName, module.default)
             loadedModels.add(modelName)
           }
-        } catch {
+        }
+        catch {
           // Model may have unresolved dependencies during bootstrap
         }
       }
-    } catch {
+    }
+    catch {
       // Directory may not exist
     }
   }
@@ -392,11 +415,13 @@ export async function loadAutoImports() {
           Reflect.set(globalThis, jobName, module.default)
           loadedJobs.add(jobName)
         }
-      } catch {
+      }
+      catch {
         // Job may have unresolved dependencies during bootstrap
       }
     }
-  } catch {
+  }
+  catch {
     // Directory may not exist
   }
 
@@ -405,7 +430,7 @@ export async function loadAutoImports() {
   // Priority: user controllers > default controllers
   const controllerDirs = [
     path.userControllersPath(),
-    path.storagePath('framework/defaults/app/Controllers'),
+    path.defaultsPath('app/Controllers'),
   ]
   const loadedControllers = new Set<string>()
 
@@ -427,11 +452,13 @@ export async function loadAutoImports() {
             Reflect.set(globalThis, controllerName, module.default)
             loadedControllers.add(controllerName)
           }
-        } catch {
+        }
+        catch {
           // Controller may have unresolved dependencies during bootstrap
         }
       }
-    } catch {
+    }
+    catch {
       // Directory may not exist
     }
   }

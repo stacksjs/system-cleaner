@@ -646,7 +646,9 @@ async function runScenarioStep(cdp: Cdp, step: ScenarioStep): Promise<Record<str
   if (step.action === 'press') {
     const key = step.key || ''
     const keyCode = key.length === 1 ? key.charCodeAt(0) : ({ Enter: 13, Escape: 27, Tab: 9 }[key] || 0)
-    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key, code: key, windowsVirtualKeyCode: keyCode })
+    // Enter's text generates the keypress that activates native buttons/forms.
+    const text = key === 'Enter' ? '\r' : undefined
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key, code: key, windowsVirtualKeyCode: keyCode, text, unmodifiedText: text })
     await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key, code: key, windowsVirtualKeyCode: keyCode })
     return { action: step.action, key, ok: true }
   }
@@ -833,7 +835,9 @@ async function main() {
         const cdp = await openPage(session.port)
         const state = await gotoAndInstrument(cdp, url, { viewport: { w: bp.w, h: bp.h }, cookies, settleMs, scheme, reducedMotion: true })
         const overflow = await cdp.send('Runtime.evaluate', {
-          expression: 'document.body.scrollWidth > window.innerWidth ? document.body.scrollWidth - window.innerWidth : 0',
+          // Mobile Chrome may expand innerWidth to fit overflowing content.
+          // Compare the page with the requested device width, not that expansion.
+          expression: `Math.max(0, Math.max(document.body.scrollWidth, document.documentElement.scrollWidth) - ${bp.w})`,
           returnByValue: true,
         })
         const out = join(outDir, `${bp.device.toLowerCase().replace(/\s+/g, '-')}.png`)
@@ -914,8 +918,16 @@ async function main() {
         })()`,
       })
 
+      let scenarioFailed = false
       for (const step of steps) {
-        results.push(await runScenarioStep(cdp, step))
+        try {
+          results.push(await runScenarioStep(cdp, step))
+        }
+        catch (error) {
+          results.push({ action: step.action, ok: false, step: results.length + 1, error: error instanceof Error ? error.message : String(error) })
+          scenarioFailed = true
+          break
+        }
         if (step.action !== 'wait')
           await Bun.sleep(step.settle ?? 250)
       }
@@ -954,7 +966,7 @@ async function main() {
         consoleErrors: state.consoleErrors,
         failedRequests,
       }, null, 2))
-      if (state.consoleErrors.length || failedRequests.length)
+      if (scenarioFailed || state.consoleErrors.length || failedRequests.length)
         process.exitCode = 1
       state.dispose()
       cdp.close()
@@ -1022,7 +1034,7 @@ async function main() {
               expression: `(() => ({
               title: document.title,
               links: Array.from(document.querySelectorAll('a[href]')).map(link => link.href),
-              overflow: Math.max(0, document.body.scrollWidth - window.innerWidth),
+              overflow: Math.max(0, Math.max(document.body.scrollWidth, document.documentElement.scrollWidth) - ${crawlViewport.w}),
               layout: (() => {
                 const main = document.querySelector('[data-stx-content]')
                 return {
@@ -1031,7 +1043,7 @@ async function main() {
                   mainClientWidth: main?.clientWidth ?? null,
                   mainOverflowX: main ? getComputedStyle(main).overflowX : null,
                   mainScrollWidth: main?.scrollWidth ?? null,
-                  viewportWidth: window.innerWidth,
+                  viewportWidth: ${crawlViewport.w},
                 }
               })(),
               overflowing: Array.from(document.querySelectorAll('body *'))
@@ -1076,8 +1088,8 @@ async function main() {
                     ...(overflowContainer ? { overflowContainer } : {}),
                   }
                 })
-                .filter(item => item.width > 0 && (item.left < -1 || item.right > window.innerWidth + 1))
-                .sort((a, b) => Math.max(b.right - window.innerWidth, -b.left) - Math.max(a.right - window.innerWidth, -a.left))
+                .filter(item => item.width > 0 && (item.left < -1 || item.right > ${crawlViewport.w} + 1))
+                .sort((a, b) => Math.max(b.right - ${crawlViewport.w}, -b.left) - Math.max(a.right - ${crawlViewport.w}, -a.left))
                 .slice(0, 10),
             }))()`,
               returnByValue: true,

@@ -1,6 +1,6 @@
 ---
 name: stacks-deploy
-description: Use when deploying a Stacks application - picking a deploy target (AWS, Hetzner, or a host you own over SSH), the deployment workflow (build → deploy), pre/post deploy hooks, server vs serverless mode selection, first-time deployment setup, rollback, deployment troubleshooting, or the buddy deploy command. For cloud infrastructure details (EC2, Lambda, CloudFormation, Route53, IAM, rpx, systemd), see stacks-cloud.
+description: Use when deploying a Stacks application - picking a deploy target (AWS, Hetzner, or a host you own over SSH), the deployment workflow (build → deploy), pre/post deploy hooks, server vs serverless mode selection, first-time deployment setup, rollback, deployment troubleshooting, or the buddy deploy command. For cloud infrastructure details (EC2, Lambda, CloudFormation, Route53, IAM, rpx, systemd), see stacks-cloud. Covers buddy deploy, config/cloud.ts, provider previews, release and rollback.
 license: MIT
 compatibility: Bun >= 1.3.0, TypeScript, AWS / Hetzner / any 64-bit Debian or Ubuntu host over SSH
 allowed-tools: Read Edit Write Bash Grep Glob
@@ -20,6 +20,7 @@ environment overrides it. With neither set, the provider is `aws`.
 | `'aws'` (default) | AWS | Generates infrastructure, creates or updates a CloudFormation stack |
 | `'hetzner'` | Hetzner Cloud | Provisions the server through the Hetzner API, then deploys over SSH |
 | `'ssh'` | A host you already own | Adopts and bootstraps the host over SSH, then deploys to it |
+| `'fly'` | Fly.io Machines | Builds `storage/framework/Dockerfile`, pushes it to `registry.fly.io`, rolls the Machines under their leases |
 
 Read the repo's own `config/cloud.ts` before assuming a target. This repo uses `'hetzner'`.
 
@@ -50,6 +51,19 @@ a versioned `STACKS_DEPLOY_PREVIEW_JSON=` line for API and tool consumers.
 
 ## Deployment Prerequisites
 
+Automated production deployments on GitHub Actions and ReviewOS require a full provider
+commit SHA and branch ref. Before prerequisite setup, Buddy verifies the checkout against
+that SHA and accepts an unchanged origin head directly. If the head moved, Buddy fetches
+the branch from `origin` (FETCH_HEAD only), completes shallow history and requires the
+commit to be on it. Unavailable or still-shallow history stops deployment. Before shipping over SSH it
+reads the release each site's `current` link serves and stops only when production
+already runs a commit that landed after this one, so a deploy never goes backwards. A
+verified commit newer than production deploys even when the head has moved on: requiring
+the exact head starved production whenever pushes outpaced CI. A commit off the branch
+(force-pushed away), a tag/PR ref, missing metadata, an unavailable remote or an
+unreadable box stops the deployment. Ordinary manual deployments and staging deployments
+keep their existing behavior; dry-run previews remain read-only.
+
 **AWS** (`provider: 'aws'`)
 
 1. **AWS credentials configured**: `buddy configure:aws`
@@ -67,6 +81,22 @@ a versioned `STACKS_DEPLOY_PREVIEW_JSON=` line for API and tool consumers.
 1. A host in `ssh.hosts`, or `TS_CLOUD_SSH_HOST` in the environment
 2. A key that reaches it, and passwordless sudo when the user is not root
 3. `buddy server:doctor` clean
+
+**Fly.io** (`provider: 'fly'`)
+
+1. `FLY_API_TOKEN` (an org token lets the first deploy create the app)
+2. Docker where the deploy runs, for the image build and push
+3. `fly.*` in `config/cloud.ts`: `regions`, `count`, `vm`, `volume`, `hostnames`. Every `.env.<env>`
+   value becomes a Fly secret. A deploy never destroys Machines; extras are reported.
+
+## Preview deployments (Hetzner and `ssh`)
+
+`buddy deploy:preview pr-123` deploys the app as its own tenant (slug `<slug>-pr-123`, attached to
+the app's box) at `pr-123.<cloud.previews.domain | PREVIEW_DOMAIN>`; `deploy:preview:remove pr-123`
+removes its units, gateway route, cert units, files and DNS records by exact name. Secrets come
+from `.env.preview` only (the deploy refuses without it), and a relative SQLite path gets its own
+data dir. `--base staging` uses the staging box. New apps ship `.github/workflows/preview.yml`
+(same-repo PRs only; needs `DEPLOY_SSH_KEY`, `DOTENV_PRIVATE_KEY_PREVIEW`, `vars.PREVIEW_DOMAIN`).
 
 ## Deployment Flow
 
@@ -182,6 +212,11 @@ buddy cloud:cleanup           # clean retained resources
 ```
 
 ## Gotchas
+- The API reachability guard recognises `serve:api`, source `serve/api.js`
+  entrypoints and compiled `storage/framework/runtime/production/api.js`
+  bundles, including wrapper commands and custom site names. Page sites still
+  need `API_URL` or `PORT_API` pointing to their API; a compiled API site does
+  not need a proxy back to itself.
 - Check `cloud.provider` before advising anything provider-specific. Half the AWS advice is wrong
   for a Hetzner or SSH box, and vice versa.
 - `buddy deploy --prod` from a non-interactive shell refuses without `--yes`, rather than hanging
@@ -197,3 +232,19 @@ buddy cloud:cleanup           # clean retained resources
 - A failover replica bucket (`infrastructure.storage.<name>.failover`) lives outside the stack, so
   `buddy cloud:remove` leaves it, and its data, behind on purpose
 - For infrastructure details, see the `stacks-cloud` skill
+
+
+## Evidence and infrastructure contract
+
+`core/config/src/capabilities.ts` marks the Hetzner and adopted SSH targets
+experimental: their retained SSH-target tests do not prove live rollback/provider
+conformance. AWS and Fly have runtime paths outside that registry's retained
+deploy matrix; do not infer either supported or unsupported from their absence.
+Read the actual deploy branch, preview and provider tests before claiming parity.
+
+`config/cloud.ts` distinguishes the named tsCloud object (provider,
+infrastructure, environments, sites) from the default Stacks wrapper. Follow the
+installed file's shape rather than moving tsCloud settings into an unrelated
+flat object. A cloud SQS queue definition does not implement QUEUE_DRIVER=sqs
+in the Stacks queue package. Previews, destructive removal, secret writes and
+provider mutations need the user's existing task authorization.

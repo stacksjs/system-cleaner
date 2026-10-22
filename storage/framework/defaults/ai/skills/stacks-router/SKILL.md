@@ -32,6 +32,29 @@ route.options('/users', handler)
 route.health()  // GET /health endpoint
 ```
 
+### Redirects
+
+Laravel's `Route::redirect` and `Route::permanentRedirect`:
+
+```typescript
+route.redirect('/here', '/there')            // 302
+route.redirect('/here', '/there', 307)       // any of 301, 302, 303, 307, 308
+route.permanentRedirect('/old', '/new')      // 301
+```
+
+The incoming query string is carried onto the target unless the target names
+its own. Group prefixes apply, and the call returns a chainable route.
+
+A redirect for a page path goes in a root-mounted route file (`'web'` in
+`app/Routes.ts`, or any entry with `prefix: ''`). The views server answers
+page paths and never loads route files, so `buddy generate:types` writes those
+redirects to `storage/framework/auto-imports/routes.ts` (`routeRedirects`) and
+both `buddy dev` and `buddy serve` answer them before looking for a page: no
+`config/server.ts` proxy rule and no hop to the API. Re-run
+`generate:types` after adding one (CI's barrel check catches a stale map).
+Exact paths only; a `{param}` redirect stays an API route. A rule in
+`config/server.ts` `redirects` wins a clash.
+
 ### Zero-allocation static responses
 
 Use `staticResponse()` only when the response is final at registration time and
@@ -61,6 +84,25 @@ route.get('/admin', handler)
   .name('admin.dashboard')
 ```
 
+### Rate limits and the client address
+
+`.rateLimit(max, 'minute' | seconds)` on a route and `await rateLimit(key, max,
+{ identity? }).per('hour')` in an action count in the configured Redis cache
+when `config/cache.ts` selects Redis (one budget across every worker and
+instance), otherwise, and while Redis is unreachable (warned once), in process
+memory. `useRateLimitStorage(storage | null)` installs any ts-rate-limiter
+`StorageProvider` (call `resetRateLimiters()` after). Every `max`, the Throttle
+middleware's and the login lockout's are multiplied by
+`config.security.rateLimit.scale` (`STACKS_RATE_LIMIT_SCALE`, default 1):
+raise it in a test suite instead of turning limits off.
+
+The anonymous identity is `clientAddress(req)` from `@stacksjs/router`, which
+shadows bun-router's export and believes forwarding headers only from
+`config.security.trustedProxies` (unset: loopback, private and link-local
+networks; `[]`: none). Set it to the load balancer's ranges when other hosts
+share the private network. bun-router's own `request.ip()` and the server
+package's maintenance allow-list still use the bun-router default.
+
 ### Route Groups
 ```typescript
 route.group({ prefix: '/api/v1', middleware: ['auth', 'throttle'] }, () => {
@@ -70,7 +112,7 @@ route.group({ prefix: '/api/v1', middleware: ['auth', 'throttle'] }, () => {
 ```
 
 ### Handler Types
-- Function: `(req) => …` — return a `Response`, or any value `formatResult`
+- Function: `(req) => ...` - return a `Response`, or any value `formatResult`
   handles: an object/array becomes JSON, a string becomes text, `null` becomes
   204, a `ReadableStream` streams. `req.params` is narrowed to the path's own
   placeholders, so `req.params.slugTypo` is a compile error rather than
@@ -78,6 +120,14 @@ route.group({ prefix: '/api/v1', middleware: ['auth', 'throttle'] }, () => {
 - Action string: `'Actions/CreateUser'` — auto-loads action, lazily
 - Action object: an imported action, passed directly — see typed routes below
 - Controller: `'Controllers/UserController@index'` — calls controller method
+
+Generated Action registries keep their source `.ts` targets. For current
+`app/Actions/` files, the loader uses a colocated regular `.js` file only when
+the exact source target is absent. An existing source always wins, including
+when its import fails. Nested Actions and app overrides follow the same rule.
+Packaged defaults, controllers and middleware keep their own resolution.
+This supports native app-build output; it does not qualify a complete server
+image or Docker deployment.
 
 ## The strings are typed
 
@@ -185,6 +235,34 @@ export default {
   'admin': { path: 'admin', prefix: 'admin', middleware: ['auth'] }
 } satisfies Record<string, string | RouteDefinition>
 ```
+
+The registry is optional; `appRouteRegistry()` falls back to the API file
+mounted at `/api`. App registrations precede default bundles and the first
+duplicate method/path wins. Default bundles are selected explicitly or through
+their feature gates; see `stacks-routes` for `STACKS_DEFAULT_ROUTES` and prefix
+rules. Do not hard-code an assumption that every built-in route is mounted.
+
+## Binding, signed access, and request lifecycle
+
+`defineRouteModelBinding(param, resolver)` resolves a raw path value for policy
+middleware. Explicit bindings take precedence over the optional fallback.
+Unclaimed parameters stay raw; a claimed missing model is different from an
+unclaimed parameter. Binding does not remove the need to validate a path key.
+
+`signedUrl`, `signUrl`, `verifySignedUrl`, and `verifySignedUrlMiddleware`
+support temporary signed access. Signing requires `APP_KEY` or the dedicated
+secret. Verify method/URL/expiry according to the helper contract; changing a
+signed URL is not equivalent to authorizing a row. Storage signatures are a
+separate provider/delivery contract.
+
+Native request context carries typed model/user data, query tracking, trace
+IDs, route params, and hooks. `safePathParam`/`sanitizePathParam` protect path
+segments, while numeric IDs need numeric validation as well. `stream` preserves
+backpressure; do not eagerly collect a stream merely to attach JSON metadata.
+
+Read `health`, `signed-url`, `route-model-binding`, `precognition`,
+`request-context`, `after-response`, and `stream-backpressure` tests before
+depending on the corresponding lifecycle behavior.
 
 ## Enhanced Request (Laravel-style)
 
@@ -299,12 +377,18 @@ clearTrackedQueries()
 clearMiddlewareCache()
 ```
 
-## Default API Routes (routes/api.ts)
+## Default API route families
+
+These are examples of available bundles. The app's registry, selected default
+bundles, and feature gates decide the mounted surface; inspect `buddy route:list`.
 
 ### Auth
 - `POST /login`, `POST /register`, `POST /auth/refresh`, `POST /auth/token`
 - `GET /auth/tokens`, `DELETE /auth/tokens/{id}` (auth)
 - `GET /me`, `POST /logout` (auth)
+- Social bundle: `GET /auth/{provider}`, `GET|POST /auth/{provider}/callback`
+  (POST skips CSRF; the browser-bound OAuth state is checked instead),
+  `POST /auth/handoff` (redeems the callback's one-use code)
 
 ### Email
 - `POST /api/email/subscribe`, `GET /api/email/unsubscribe`
@@ -344,7 +428,7 @@ url('user.show', { id: 42 })             // '/users/42'
 
 ## Gotchas
 - Routes use `@stacksjs/bun-router` under the hood
-- Rate limiting via `ts-rate-limiter` is built into the router
+- Rate limiting via `ts-rate-limiter` is built into the router; it is shared through Redis only when the cache driver is Redis
 - Route registry in `app/Routes.ts` maps file names to URL prefixes
 - String-based handlers (`'Actions/MyAction'`) are dynamically imported
 - Middleware priority: lower number = runs first
@@ -354,3 +438,22 @@ url('user.show', { id: 42 })             // '/users/42'
 - Query tracking is for debug/profiling — call `clearTrackedQueries()` to free memory
 - The dev server writes a route manifest to `storage/framework/stx/routes.ts` (stx's `stateDir`, set in `config/ui.ts`); it is a build artifact, not a file to edit
 - The health endpoint returns uptime, memory, PID, and Bun version info
+
+## Protocol-owned request bodies
+
+For MCP or another wire protocol with its own validation and error envelope,
+`route.post('/mcp', handler).parseBody(false)` leaves the body unread for the
+handler. This does not disable middleware or CSRF: choose authentication and CSRF
+policy explicitly. Duplicate registrations cannot change the live route's policy.
+Use `readJsonBody(request, maxBytes)` from `@stacksjs/router/body` for a streamed
+byte limit, media-type and strict UTF-8 checks. `RequestBodyError.status` is
+400, 413 or 415. Normal app routes continue using the standard request macros.
+JSON-RPC error envelopes keep their shape; X-Request-ID remains in the headers.
+
+
+`@stacksjs/router/body` also exposes `readTextBody(request, maxBytes)` for
+bounded UTF-8 form or text protocols. It counts actual streamed bytes, rejects
+invalid UTF-8, cancels oversized streams and grows one buffer geometrically so
+many small chunks do not create an unbounded chunk-object list. Pair it with
+`parseBody(false)` where the handler owns wire parsing. Media-type policy stays
+with the protocol; `readJsonBody` additionally requires application/json.
