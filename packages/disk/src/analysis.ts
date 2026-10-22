@@ -221,6 +221,23 @@ export async function findProjectArtifacts(
   return sized.sort((a, b) => b.sizeBytes - a.sizeBytes)
 }
 
+/**
+ * Lockfiles, in no particular order — any one of them makes an install
+ * reproducible enough that re-downloading is a cost rather than a gamble.
+ */
+const LOCKFILE_NAMES = ['bun.lock', 'bun.lockb', 'pnpm-lock.yaml', 'yarn.lock', 'package-lock.json']
+
+function hasLockfile(projectRoot: string): boolean {
+  return LOCKFILE_NAMES.some((name) => {
+    try {
+      return fs.existsSync(path.join(projectRoot, name))
+    }
+    catch {
+      return false
+    }
+  })
+}
+
 async function scanForArtifacts(
   dirPath: string,
   depth: number,
@@ -267,6 +284,13 @@ async function scanForArtifacts(
       // Determine project name from parent directory
       const projectName = path.basename(dirPath)
 
+      // `node_modules` is `safe` on the grounds that it comes back from a
+      // command and a network round-trip. That holds while a lockfile is
+      // there to come back to. Without one the restored tree is whatever the
+      // registry resolves today, which is not necessarily what was deleted —
+      // so the name alone no longer justifies putting it in Select All.
+      const missingLockfile = entry.name === 'node_modules' && !hasLockfile(dirPath)
+
       artifacts.push({
         path: fullPath,
         type: pattern.type,
@@ -274,8 +298,8 @@ async function scanForArtifacts(
         sizeFormatted: '...',
         projectName,
         lastModified: mtime,
-        label: pattern.label,
-        risk: pattern.risk,
+        label: missingLockfile ? `${pattern.label} (no lockfile)` : pattern.label,
+        risk: missingLockfile ? 'caution' : pattern.risk,
         // Settled in one batch once the list is final; see findProjectArtifacts.
         git: 'unversioned',
       })

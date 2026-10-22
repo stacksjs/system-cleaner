@@ -39,6 +39,10 @@ export const groups = [
   [
     { id: 'applications', label: 'Applications', icon: 'i-f7-app-fill', href: '/app/applications' },
     { id: 'extensions', label: 'Extensions', icon: 'i-f7-square-stack-3d-up-fill', href: '/app/extensions' },
+    // Sits with Applications because it is about apps, not storage: what an
+    // uninstall left behind. Disk Usage above answers "what is big"; this
+    // answers "what has no owner any more".
+    { id: 'orphans', label: 'Leftover Data', icon: 'i-f7-tray-fill', href: '/app/orphans' },
   ],
   // VPN sits in its own group because it is the one row that is not about
   // what is on this Mac. Everything above scans local storage or local
