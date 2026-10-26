@@ -133,7 +133,14 @@ function install(tray: TrayBridge, craft: CraftShell): void {
         ? item(`Clean ${formatBytes(bytes)}`, 'clean')
         : item('Nothing to clean', 'none', false),
       separator,
-      item('Open SystemCleaner', 'open'),
+      // `show`, like `quit` below, is one of Craft's built-in menu actions
+      // ("Window shown" / "Menu bar expanded via show action" in the runtime)
+      // and is handled natively. Reopening the window is the one thing that
+      // must not depend on the page: a page that has gone wrong is exactly
+      // when someone goes looking for the window. The `show` case in the
+      // handler below is kept for the runtime that dispatches it to JS
+      // anyway — showing an already-shown window is a no-op either way.
+      item('Open SystemCleaner', 'show'),
       item('Rescan', 'rescan'),
       separator,
       // `quit` is one of Craft's built-in actions, so this still works if the
@@ -191,6 +198,7 @@ function install(tray: TrayBridge, craft: CraftShell): void {
       case 'clean':
         void clean()
         break
+      case 'show':
       case 'open':
         craft.window?.show()
         craft.window?.focus()
@@ -204,9 +212,15 @@ function install(tray: TrayBridge, craft: CraftShell): void {
     }
   })
 
-  // Left-clicking the item opens the menu on its own in AppKit only when a
-  // menu is attached; the click event still arrives, and bringing the window
-  // back is the thing most likely to be wanted from a plain click.
+  // Craft splits the two buttons: a left click is delivered here ("tray left
+  // click: queued for JavaScript"), and only a right click opens the menu.
+  // So this is the whole of what a plain click does, and getting the window
+  // back is what someone who closed it wants from one.
+  //
+  // It survives the window being gone. `show()` restores a window closed
+  // either way — by the red button or by `window.close()` — and the click is
+  // still delivered to this page while it is hidden, both checked against the
+  // runtime and then against the built bundle.
   tray.onClick(() => {
     craft.window?.show()
     craft.window?.focus()
