@@ -1,6 +1,6 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { formatBytes, getDirSize, isCleanable, isPathSafe } from '@system-cleaner/core'
+import { formatBytes, getDirSize, isCleanable, isPathSafe, freeSpaceOf } from '@system-cleaner/core'
 import type { CleanOptions, CleanResult, CleanTarget } from './types'
 import { CLEAN_TARGETS } from './categories'
 import { scanExistingTargets } from './scanner'
@@ -14,6 +14,8 @@ export async function cleanTarget(target: CleanTarget, options: CleanOptions = {
     targetName: target.name,
     freedBytes: 0,
     freedFormatted: '0 B',
+    reclaimedBytes: null,
+    heldOpen: false,
     errors: [],
     skipped: [],
     success: false,
@@ -28,6 +30,12 @@ export async function cleanTarget(target: CleanTarget, options: CleanOptions = {
 
   // Measure size before cleaning
   const sizeBefore = await getDirSize(target.path)
+  // The PARENT, not the target. A contentsOnly:false target removes its own
+  // directory, so statfs on it answers ENOENT afterwards, reclaimedBytes came
+  // back null and the detection could never fire for exactly the targets that
+  // free the most. The parent is on the same filesystem and survives.
+  const measureAt = path.dirname(target.path)
+  const freeBefore = freeSpaceOf(measureAt)
 
   if (options.dryRun) {
     result.freedBytes = sizeBefore
@@ -99,6 +107,17 @@ export async function cleanTarget(target: CleanTarget, options: CleanOptions = {
   }
   result.freedBytes = Math.max(0, sizeBefore - sizeAfter)
   result.freedFormatted = formatBytes(result.freedBytes)
+
+  // Same reasoning as cleanDirectory: compare what the filesystem reports
+  // before and after, because a directory walk cannot see a file that has
+  // been unlinked while a process still holds it open. Service logs are the
+  // ordinary way to hit this - deleting one a running daemon writes to frees
+  // nothing until it restarts, and without saying so the app reports the full
+  // size and Disk Free does not move.
+  const freeAfter = freeSpaceOf(measureAt)
+  result.reclaimedBytes = freeBefore !== null && freeAfter !== null ? freeAfter - freeBefore : null
+  result.heldOpen = isHeldOpen(result.freedBytes, result.reclaimedBytes)
+
   result.success = result.errors.length === 0
 
   options.onProgress?.(target.id, 'done')
@@ -163,6 +182,8 @@ export async function cleanAll(options: CleanOptions = {}): Promise<{
         targetName: t.name,
         freedBytes: 0,
         freedFormatted: '0 B',
+        reclaimedBytes: null,
+        heldOpen: false,
         errors: ['Requires elevated privileges (sudo)'],
         skipped: [],
         success: false,
@@ -183,7 +204,7 @@ export async function cleanAll(options: CleanOptions = {}): Promise<{
 export async function emptyTrash(): Promise<CleanResult> {
   const trashTarget = CLEAN_TARGETS.find(t => t.id === 'trash')
   if (!trashTarget) {
-    return { targetId: 'trash', targetName: 'Trash', freedBytes: 0, freedFormatted: '0 B', errors: ['Trash target not found'], skipped: [], success: false }
+    return { targetId: 'trash', targetName: 'Trash', freedBytes: 0, freedFormatted: '0 B', reclaimedBytes: null, heldOpen: false, errors: ['Trash target not found'], skipped: [], success: false }
   }
   return cleanTarget(trashTarget)
 }
@@ -191,11 +212,17 @@ export async function emptyTrash(): Promise<CleanResult> {
 /**
  * Clean directory contents (used by API routes)
  */
-export async function cleanDirectory(dirPath: string): Promise<{ freedBytes: number, measured: boolean, errors: string[] }> {
+export async function cleanDirectory(dirPath: string): Promise<{
+  freedBytes: number
+  measured: boolean
+  reclaimedBytes: number | null
+  heldOpen: boolean
+  errors: string[]
+}> {
   const resolvedPath = path.resolve(dirPath)
   const check = isCleanable(resolvedPath)
   if (!check.safe) {
-    return { freedBytes: 0, measured: true, errors: [check.reason || 'Path is not safe'] }
+    return { freedBytes: 0, measured: true, reclaimedBytes: null, heldOpen: false, errors: [check.reason || 'Path is not safe'] }
   }
 
   // Bounded: `getDirSize` shells out to `du`, whose own timeout cannot kill a
@@ -206,6 +233,11 @@ export async function cleanDirectory(dirPath: string): Promise<{ freedBytes: num
   const sizeBefore = await sizeWithin(resolvedPath)
   const measured = sizeBefore !== null
   const errors: string[] = []
+
+  // What the filesystem says before we touch anything. Compared afterwards,
+  // this is the only number that reflects space the disk actually gave back -
+  // see freeSpaceOf for why a directory walk cannot tell.
+  const freeBefore = freeSpaceOf(resolvedPath)
 
   try {
     for (const entry of fs.readdirSync(resolvedPath)) {
@@ -224,15 +256,60 @@ export async function cleanDirectory(dirPath: string): Promise<{ freedBytes: num
   // Same accounting fix as cleanTarget: re-walk the actual surviving
   // size rather than treating "du failed" as "everything was freed".
   const sizeAfter = await sizeWithin(resolvedPath) ?? 0
+  const removed = measured ? Math.max(0, (sizeBefore ?? 0) - sizeAfter) : 0
+
+  const freeAfter = freeSpaceOf(resolvedPath)
+  const reclaimed = freeBefore !== null && freeAfter !== null ? freeAfter - freeBefore : null
 
   return {
-    freedBytes: measured ? Math.max(0, (sizeBefore ?? 0) - sizeAfter) : 0,
+    freedBytes: removed,
     // False when the directory could not be measured in time. The clean still
     // happened; the byte count is the part we do not know, and reporting an
     // unmeasured clean as "0 B freed" reads as a failure when it was not.
     measured,
+    // What the filesystem gave back. Null when it could not be read, and
+    // noisy by nature - other processes write while we work - so it is
+    // reported beside `freedBytes` rather than replacing it.
+    reclaimedBytes: reclaimed,
+    // True when a substantial delete freed almost nothing, which on Unix
+    // means something still holds those files open: the directory entries are
+    // gone and the blocks are not. Deleting a log a running service writes to
+    // is the ordinary way to hit this, and without saying so the app reports
+    // hundreds of megabytes while Disk Free sits still.
+    heldOpen: isHeldOpen(removed, reclaimed),
     errors,
   }
+}
+
+/**
+ * Below this, the free-space comparison says nothing worth acting on.
+ *
+ * The delta is shared with every other process on the machine, so a small
+ * delete can show almost any figure for reasons that have nothing to do with
+ * held-open files.
+ */
+const HELD_OPEN_FLOOR = 50 * 1024 * 1024
+
+/**
+ * The share of a delete that must fail to materialise before we call it held.
+ *
+ * This started at half, which is far too loose: a browser writing its cache
+ * while a 60 MB clean runs is enough to swallow the difference, and the app
+ * would tell a user their space had not come back when it had. Five per cent
+ * means the disk gave back essentially nothing, which concurrent writes have
+ * to work much harder to fake.
+ *
+ * It errs the other way now - a genuinely held-open delete alongside heavy
+ * concurrent freeing can slip past unflagged. That is the right direction to
+ * be wrong in: the headline figure is `freedBytes` either way, and a missing
+ * note is better than a false one.
+ */
+const HELD_OPEN_SHARE = 0.05
+
+function isHeldOpen(removed: number, reclaimed: number | null): boolean {
+  if (reclaimed === null || removed < HELD_OPEN_FLOOR)
+    return false
+  return reclaimed <= removed * HELD_OPEN_SHARE
 }
 
 /** How long a directory gets to report its size before the clean proceeds anyway. */

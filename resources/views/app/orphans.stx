@@ -1,0 +1,283 @@
+@extends('layouts/app')
+@section('nav', 'orphans')
+@section('body')
+
+<!--
+  Data belonging to apps that are no longer installed.
+
+  Why this is its own screen rather than rows in Quick Clean: a clean target
+  is a known path with a known meaning, and these are discovered by asking
+  Spotlight which apps exist and then finding support directories no app
+  claims. The answer is different on every machine.
+
+  Uninstalling Cursor on the machine this was built against left 5.6 GB
+  behind, 4.1 GB of it under Application Support, which nothing in the app
+  surfaced.
+
+  No `//` comments and no double quotes inside this `x-data`: STX flattens
+  the attribute onto one line before evaluating it, and either takes the
+  whole object down silently. `tests/xdata-parses.test.ts` guards both.
+
+  Commentary that belongs to this state:
+
+  - `selected` holds paths. Never push to it — stx tracks assignment, not
+    Array.prototype, and a pushed element updates the array while leaving
+    the DOM showing the old one. Same for `cleaning`, written through
+    markCleaning/clearCleaning.
+  - Select All takes only rows where `holdsUserData` is false. Caches and
+    logs for a departed app are rebuildable leftovers; an Application
+    Support or Container directory may be the only copy of something, and
+    the app that could read it is gone. Same rule the clean targets use for
+    `caution`.
+  - Deleting moves to the Trash by default. These are not caches, and the
+    Trash is the undo this screen can offer.
+-->
+<div x-data="{
+  items: [],
+  itemCount: 0,
+  totalFormatted: '0 B',
+  reclaimableFormatted: '0 B',
+  selected: [],
+  cleaning: {},
+  loading: true,
+  toasts: [],
+  toastId: 0,
+
+  init() {
+    scanOrphans();
+  },
+
+  toggle(p) {
+    var row = this.items.find(function(i) { return i.path === p; });
+    if (row && row.protected) return;
+    this.selected = this.selected.indexOf(p) === -1 ? this.selected.concat([p]) : this.selected.filter(function(x) { return x !== p; });
+  },
+  isOn(p) { return this.selected.includes(p); },
+
+  safePaths() { return this.items.filter(function(i) { return !i.holdsUserData && !i.protected; }).map(function(i) { return i.path; }); },
+  allSafeSelected() { var s = this.selected; var ids = this.safePaths(); return ids.length > 0 && ids.every(function(p) { return s.indexOf(p) !== -1; }); },
+  toggleAllSafe() { this.selected = this.allSafeSelected() ? [] : this.safePaths(); },
+
+  selectedBytes() { var s = this.selected; return this.items.reduce(function(n, i) { return s.indexOf(i.path) !== -1 ? n + i.sizeBytes : n; }, 0); },
+  selectedFormatted() { return this.fmtBytes(this.selectedBytes()); },
+  selectedUserData() { var s = this.selected; return this.items.filter(function(i) { return s.indexOf(i.path) !== -1 && i.holdsUserData; }).length; },
+
+  markCleaning(p) { this.cleaning = Object.assign({}, this.cleaning, { [p]: true }); },
+  clearCleaning(p) { var next = Object.assign({}, this.cleaning); delete next[p]; this.cleaning = next; },
+
+  typeLabel(t) {
+    if (t === 'app-support') return 'Support data';
+    if (t === 'container') return 'Container';
+    if (t === 'saved-state') return 'Window state';
+    if (t === 'http-storage') return 'Web storage';
+    if (t === 'webkit') return 'WebKit';
+    if (t === 'cookie') return 'Cookies';
+    if (t === 'log') return 'Logs';
+    return 'Cache';
+  },
+
+  toast(msg, type) {
+    const id = ++this.toastId;
+    this.toasts = [...this.toasts, { id, msg, type: type || 'info' }];
+    setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 4000);
+  },
+
+  fmtBytes(b) { if (b >= 1e12) return (b/1e12).toFixed(1)+' TB'; if (b >= 1e9) return (b/1e9).toFixed(1)+' GB'; if (b >= 1e6) return (b/1e6).toFixed(1)+' MB'; if (b >= 1e3) return (b/1e3).toFixed(1)+' KB'; return b+' B'; }
+}">
+
+<div class='toast-area'>
+  <template x-for='note in toasts' :key='note.id'>
+    <div class='toast'><span class='toast-glyph' :class="note.type === 'success' ? 'i-f7-checkmark-alt-circle-fill' : note.type === 'error' ? 'i-f7-xmark-circle-fill' : 'i-f7-exclamationmark-triangle-fill'" aria-hidden='true'></span><span x-text='note.msg'></span></div>
+  </template>
+</div>
+
+<div class='main-header'>
+  <div class='main-title'>Leftover Data</div>
+  <div class='main-subtitle'>Caches, logs and support files for apps that are no longer installed</div>
+</div>
+
+<div class='main-content'>
+  <div x-show='loading' class='empty-state'>Checking which apps are still installed&hellip;</div>
+
+  <div x-cloak x-show='!loading && itemCount === 0' class='empty-state'>
+    Nothing left behind. Every support directory on this Mac belongs to an app that is still installed.
+  </div>
+
+  <div x-cloak x-show='!loading && itemCount > 0'>
+    <div style='display: flex; gap: var(--space-2); margin-bottom: var(--space-4); align-items: center; flex-wrap: wrap;'>
+      <button class='btn' @click='toggleAllSafe()'>
+        <span x-text="allSafeSelected() ? 'Deselect All' : 'Select All Rebuildable'">Select All Rebuildable</span>
+      </button>
+      <button class='btn btn-danger' x-cloak x-show='selected.length > 0' onclick='doCleanSelected()'>
+        Move to Trash (<span x-text='selected.length'>0</span>) &middot; <span x-text='selectedFormatted()'>0 B</span>
+      </button>
+      <button class='btn btn-icon btn-sm' style='margin-left: auto;' onclick='scanOrphans()'>
+        <span class='i-f7-arrow-clockwise' aria-hidden='true'></span>
+        Rescan
+      </button>
+    </div>
+
+    <div class='tbl-wrap'>
+      <div class='tbl-bar'>
+        <div>
+          <span class='tbl-title'>Orphaned Data</span>
+          <span class='tbl-count'>
+            <span x-text='itemCount'>0</span> items &middot;
+            <span x-text='totalFormatted'>0 B</span> &middot;
+            <span x-text='reclaimableFormatted'>0 B</span> rebuildable
+          </span>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th style='width: 28px;'><input type='checkbox' class='check' :checked='allSafeSelected()' @click='toggleAllSafe()' /></th>
+            <th>App</th>
+            <th>Kind</th>
+            <th>Size</th>
+            <th>Unused</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for='i in items' :key='i.path'>
+            <tr :data-path='i.path'>
+              <td><input type='checkbox' class='check' :disabled='i.protected' :checked='isOn(i.path)' @change='toggle(i.path)' /></td>
+              <td>
+                <span x-text='i.bundleId'></span>
+                <span class='badge badge-orange' x-cloak x-show='i.holdsUserData'>may hold documents</span>
+                <span class='badge badge-red' x-cloak x-show='i.protected'>protected</span>
+                <div class='item-path' x-text='i.displayPath'></div>
+              </td>
+              <td><span class='badge' x-text='typeLabel(i.type)'></span></td>
+              <td x-text='fmtBytes(i.sizeBytes)'></td>
+              <td><span x-text='i.daysSinceModified'></span> days</td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</div>
+
+<script data-stx-scoped>
+// Same shape as developer.stx: these are `onclick` targets, and the SPA router
+// wraps this block so a plain declaration is not reachable by name from the
+// markup. The window assignments at the bottom are what make them callable.
+
+function _scope() {
+  return document.querySelector('[data-stx-xdata]') || document.querySelector('[x-data]');
+}
+
+function _exec(stmt) {
+  const el = _scope();
+  if (!el) return;
+  try {
+    if (typeof window.__stx_execute === 'function') window.__stx_execute(el, stmt);
+    else if (typeof el.__stx_execute === 'function') el.__stx_execute(stmt);
+  }
+  catch (e) { /* stx logs it */ }
+}
+
+function _api(endpoint, data) {
+  return fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data || {}) })
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+}
+
+function _fmtBytes(b) {
+  if (b >= 1e12) return (b/1e12).toFixed(1)+' TB';
+  if (b >= 1e9) return (b/1e9).toFixed(1)+' GB';
+  if (b >= 1e6) return (b/1e6).toFixed(1)+' MB';
+  if (b >= 1e3) return (b/1e3).toFixed(1)+' KB';
+  return b+' B';
+}
+
+function scanOrphans() {
+  _exec('loading = true');
+  _api('/api/orphaned-data', {}).then(function(r) {
+    if (!r || !r.success) {
+      _exec('loading = false');
+      _exec("toast('Scan failed', 'error')");
+      return;
+    }
+    const items = r.items || [];
+    // Rebuildable means the app regenerates it if ever reinstalled. The rest
+    // is the half that may be the only copy of something, so it is reported
+    // separately rather than folded into one encouraging total.
+    const reclaimable = items.reduce(function(n, i) { return i.holdsUserData ? n : n + i.sizeBytes; }, 0);
+    _exec('items = ' + JSON.stringify(items));
+    _exec('itemCount = ' + items.length);
+    _exec('totalFormatted = ' + JSON.stringify(_fmtBytes(r.totalBytes || 0)));
+    _exec('reclaimableFormatted = ' + JSON.stringify(_fmtBytes(reclaimable)));
+    _exec('loading = false');
+  }).catch(function() {
+    _exec('loading = false');
+    _exec("toast('Scan failed', 'error')");
+  });
+}
+
+// The dialog is the last thing between a click and a delete, so it has to
+// distinguish the two kinds. A departed app's cache is a leftover; its
+// Application Support directory may hold the only copy of something, and the
+// app that could open it is gone.
+async function doCleanSelected() {
+  const scope = _scope();
+  if (!scope || !scope.__stx_state) return;
+  const state = scope.__stx_state;
+  const paths = (state.selected || []).slice();
+  if (paths.length === 0) return;
+
+  const chosen = (state.items || []).filter(function(i) { return paths.indexOf(i.path) !== -1; });
+  const bytes = chosen.reduce(function(n, i) { return n + i.sizeBytes; }, 0);
+  const userData = chosen.filter(function(i) { return i.holdsUserData; }).length;
+
+  let ok = false;
+  try {
+    ok = await window.nativeConfirm({
+      title: 'Move ' + paths.length + (paths.length === 1 ? ' item' : ' items') + ' to the Trash?',
+      message: 'Frees about ' + _fmtBytes(bytes) + '. '
+        + (userData > 0
+          ? userData + (userData === 1 ? ' of these is support data' : ' of these are support data') + ' rather than a cache, and may hold documents only the uninstalled app could read. '
+          : 'Each one is a cache or log an app would rebuild. ')
+        + 'They go to the Trash, so you can put them back until you empty it.',
+      confirmLabel: 'Move to Trash',
+      destructive: true,
+    });
+  }
+  catch (e) {
+    _exec("toast('Could not open the confirmation dialog, so nothing was removed.', 'error')");
+    return;
+  }
+  if (!ok) return;
+
+  paths.forEach(function(p) { _exec('markCleaning(' + JSON.stringify(p) + ')'); });
+
+  _api('/api/clean-orphans', { paths: paths, mode: 'trash' }).then(function(r) {
+    paths.forEach(function(p) { _exec('clearCleaning(' + JSON.stringify(p) + ')'); });
+    if (!r) {
+      _exec("toast('Clean failed', 'error')");
+      return;
+    }
+    const moved = (r.succeeded || []).length;
+    const failed = (r.failed || []).length;
+    const skipped = (r.skipped || []).length;
+    let msg = moved > 0
+      ? 'Moved ' + moved + (moved === 1 ? ' item' : ' items') + ' to the Trash - freed ' + _fmtBytes(r.freedBytes || 0)
+      : 'Nothing could be removed';
+    if (skipped > 0) msg += ' - ' + skipped + ' protected';
+    if (failed > 0) msg += ' - ' + failed + ' failed';
+    _exec('toast(' + JSON.stringify(msg) + ', ' + (moved > 0 ? (failed > 0 ? "'info'" : "'success'") : "'error'") + '); selected = []');
+    scanOrphans();
+  }).catch(function() {
+    paths.forEach(function(p) { _exec('clearCleaning(' + JSON.stringify(p) + ')'); });
+    _exec("toast('Clean failed', 'error')");
+  });
+}
+
+window.scanOrphans = scanOrphans;
+window.doCleanSelected = doCleanSelected;
+</script>
+@endsection

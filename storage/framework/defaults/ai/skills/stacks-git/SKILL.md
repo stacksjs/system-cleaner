@@ -1,6 +1,6 @@
 ---
 name: stacks-git
-description: Use when working with git in a Stacks application — commit conventions, git hooks, changelog generation, commit scopes/types, or GitHub API types. Covers @stacksjs/git, config/git.ts, config/commit.ts, and the git hooks system.
+description: Use when working with git in a Stacks application - commit conventions, git hooks, changelog generation, commit scopes and types, GitHub API types, or resolving an in-progress merge or rebase conflict. Covers @stacksjs/git, config/git.ts, config/commit.ts, and the git hooks system.
 license: MIT
 compatibility: Bun >= 1.3.0, TypeScript
 allowed-tools: Read Edit Write Bash Grep Glob
@@ -83,6 +83,35 @@ Based on `cz-git` UserConfig:
 
 ## Git Utilities
 
+`gitCredentialEnvironment({ url, username, password })` from `@stacksjs/git`
+returns environment variables for a child Git process. Pass the caller's base
+environment as its second argument, then merge the result after that base.
+Existing runtime Git configuration is preserved. The HTTP(S) URL must identify one repository without
+userinfo, query or fragment. The helper supplies credentials only for that
+protocol, host and repository path, refuses redirects for that URL, disables
+interactive prompts, and writes no credential or Git config file. Never log
+the returned environment. Use a credential scoped to the repository and the
+operation; this helper does not grant server permissions.
+
+```typescript
+import { gitCredentialEnvironment } from '@stacksjs/git'
+
+const child = Bun.spawn(['git', 'ls-remote', 'origin'], {
+  cwd: workspace,
+  env: { ...process.env, ...gitCredentialEnvironment({ url: repositoryUrl, username: 'x-access-token', password: jobToken }, process.env) },
+})
+```
+
+The child and its descendants receive the credential. Use this for trusted
+job steps, never to transfer a host credential into an isolated guest.
+
+`buddy release` atomically pushes its commit and version tag to the branch's
+configured upstream remote and branch. A worktree on `codex/example` tracking
+`origin/main` releases to `origin/main`; it does not create a remote feature
+branch. Without an upstream it uses `origin` and the current branch. Detached
+HEAD, incomplete upstreams, local-only remotes and non-branch or ambiguous
+upstreams are rejected before the version bump.
+
 ```typescript
 import { isGitClean } from '@stacksjs/utils'
 
@@ -147,12 +176,51 @@ interface WorkflowRun {
 }
 ```
 
+## Resolving a merge or rebase conflict
+
+Resolve by **intent**, traced back to each side's primary source, never by
+picking lines that look plausible.
+
+1. **See the current state.** `git status`, `git log --oneline --graph -20`, and
+   the conflicting files. Know which operation you are in the middle of, a merge
+   or a rebase, before touching anything.
+2. **Find the primary source for each side.** Read the commit messages, the PR,
+   the issue. Understand deeply why each change was made and what it was for. A
+   conflict is two intents colliding, and you cannot resolve it while you only
+   know one.
+3. **Resolve each hunk.** Preserve both intents where possible. Where they are
+   genuinely incompatible, pick the one matching the merge's stated goal and note
+   the trade-off. Do not invent new behaviour to bridge them. Always resolve,
+   never `--abort`.
+4. **Run the checks.** `./buddy lint`, `./buddy typecheck`, `./buddy test`. In
+   this framework two conflict classes survive a clean textual merge and only
+   show up here: a model changed on both sides, where the generated migrations
+   diverged and one has to be regenerated, and a registry file
+   (`app/Routes.ts`, `app/Events.ts`, `app/Middleware.ts`) where a dropped entry
+   fails silently rather than failing to compile.
+5. **Finish the operation.** Stage everything and commit, or continue the rebase
+   until every commit is replayed.
+
+Credit: adapted from Matt Pocock's `resolving-merge-conflicts` skill (MIT),
+<https://github.com/mattpocock/skills>.
+
 ## Gotchas
-- **`@stacksjs/git` is mostly re-exports** — actual functionality in `@stacksjs/gitlint`, `@stacksjs/gitit`, `bun-git-hooks`
-- **Pre-commit runs lint-staged** — the only default hook
-- **Emoji disabled by default** — `useEmoji: false` but emoji mappings exist for each type
-- **`buddy commit` runs `npm run commit`** — delegates to commitizen/cz-git flow
-- **Scopes dynamically extended** — component and function names merged into scopes at runtime
-- **Breaking changes only for feat/fix** — `allowBreakingChanges: ['feat', 'fix']`
-- **No max header length** — `maxHeaderLength: Infinity`
-- **Git hooks config re-exports** — `git-hooks.config.ts` just re-exports from `config/git.ts`
+
+### Setting up pre-commit checks
+
+The current Matt Pocock `setup-pre-commit` workflow maps to Stacks' existing
+hooks, rather than adding Husky, lint-staged, or Prettier. Inspect `package.json`,
+the installed `better-dx` tooling, `config/git.ts`, and CI. Keep staged formatting
+on pickier and run the repository's actual typecheck and test commands at the
+appropriate gate. Preserve existing hook actions. Prove a deliberate temporary
+violation fails, restore it, and prove the valid state passes. Do not create a
+commit merely to exercise a hook. See [NOTICE.md](NOTICE.md) and
+[the Stacks adaptation rules](../stacks-flow/ENGINEERING.md).
+- **`@stacksjs/git` is mostly re-exports** - actual functionality in `@stacksjs/gitlint`, `@stacksjs/gitit`, `bun-git-hooks`
+- **Pre-commit runs lint-staged** - the only default hook
+- **Emoji disabled by default** - `useEmoji: false` but emoji mappings exist for each type
+- **`buddy commit` runs `npm run commit`** - delegates to commitizen/cz-git flow
+- **Scopes dynamically extended** - component and function names merged into scopes at runtime
+- **Breaking changes only for feat/fix** - `allowBreakingChanges: ['feat', 'fix']`
+- **No max header length** - `maxHeaderLength: Infinity`
+- **Git hooks config re-exports** - `git-hooks.config.ts` just re-exports from `config/git.ts`

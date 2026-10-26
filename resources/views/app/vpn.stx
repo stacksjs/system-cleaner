@@ -1,0 +1,214 @@
+@extends('layouts/app')
+@section('nav', 'vpn')
+@section('body')
+
+<!--
+  No comments and no double quotes inside the `x-data` literal below. STX
+  collapses the attribute onto one line before evaluating it, so a `//` comment
+  swallows the rest of the object and a `"` ends the attribute early — either
+  way every binding on the page renders empty with nothing in the console.
+  `tests/xdata-parses.test.ts` guards both.
+
+  These are methods, not getters. STX evaluates a getter once while building
+  the scope and does not re-run it when the state it reads changes, so the
+  three below rendered their initial answer forever: the Core card still read
+  `Not installed` after a response said the core was healthy, while the version
+  bound directly beside it updated. Direct property reads re-render; derived
+  values have to be called.
+
+  Three more things it would otherwise say inline:
+  - `core` starts as an empty-ish object rather than null so the panel can bind
+    `core.version` before the first response arrives.
+  - `refreshing` is an in-flight guard so a double click cannot post twice.
+  - `refresh()` passes `refresh: true`, which drops the server's one-minute
+    cache of the CLI probe; the background poll does not, so it stays cheap.
+-->
+<div id='vpn-scope' x-data="{
+  loaded: false,
+  refreshing: false,
+  error: '',
+  supported: true,
+  connected: false,
+  core: { available: false, cliPath: null, version: null, healthy: null, detail: null },
+  identity: null,
+  tunnels: [],
+  managedPid: null,
+
+  coordinatorUrl: '',
+  authKey: '',
+  useExit: 'auto',
+  busy: false,
+  notice: '',
+  noticeKind: '',
+
+  canConnect() {
+    return this.core.available && this.core.healthy && !this.busy && this.coordinatorUrl.length > 0;
+  },
+
+  say(message, kind) {
+    this.notice = message;
+    this.noticeKind = kind || 'info';
+  },
+
+  connect() {
+    if (this.busy) return;
+    this.busy = true;
+    this.say('Waiting for authorization\u2026', 'info');
+    window.__vpnPost('/api/vpn-connect', {
+      coordinatorUrl: this.coordinatorUrl,
+      authKey: this.authKey,
+      useExit: this.useExit === 'none' ? '' : this.useExit,
+    }).then((r) => {
+      this.busy = false;
+      if (r.success) this.say('Tunnel is up.', 'success');
+      else if (r.error === 'Cancelled') this.say('Authorization cancelled.', 'info');
+      else this.say(r.error || 'Could not connect.', 'error');
+    });
+  },
+
+  disconnect() {
+    if (this.busy) return;
+    this.busy = true;
+    this.say('Waiting for authorization\u2026', 'info');
+    window.__vpnPost('/api/vpn-disconnect', {}).then((r) => {
+      this.busy = false;
+      if (r.success) this.say('Tunnel is down.', 'success');
+      else if (r.error === 'Cancelled') this.say('Authorization cancelled.', 'info');
+      else this.say(r.error || 'Could not disconnect.', 'error');
+    });
+  },
+
+  coreLabel() {
+    if (!this.core.available) return 'Not installed';
+    return this.core.healthy ? 'Healthy' : 'Unhealthy';
+  },
+  coreBadge() {
+    if (!this.core.available) return 'badge-gray';
+    return this.core.healthy ? 'badge-green' : 'badge-orange';
+  },
+  coreTone() {
+    if (!this.core.available) return '';
+    return this.core.healthy ? 'color: var(--green);' : 'color: var(--orange);';
+  },
+
+  refresh() {
+    if (this.refreshing) return;
+    this.refreshing = true;
+    window.__vpnRefresh().finally(() => { this.refreshing = false; });
+  }
+}">
+
+<div class='main-header'>
+  <div class='main-title'>VPN</div>
+  <div class='main-subtitle'>Encrypted layer-3 networking through localtunnels</div>
+  <!-- Opens the small VPN window. The markup only carries the hook; the
+       `craft.window.open` call is in `resources/scripts/vpn-panel.ts`, because
+       an stx client block cannot import the native bridge. -->
+  <div style='margin-top: var(--space-3);'>
+    <button class='btn btn-sm' type='button' data-open-vpn-window>Open VPN window</button>
+  </div>
+</div>
+<div class='main-content'>
+  <VpnPanel />
+</div>
+</div>
+
+<script data-stx-scoped>
+// ── VPN status feed ───────────────────────────────────────────
+// Same-origin API, polled slowly: none of this moves on its own. A tunnel
+// comes up or goes away when someone runs a command, and the CLI probe behind
+// it is cached server-side for a minute, so a 10s poll is already generous.
+
+(function() {
+  function scope() {
+    return document.getElementById('vpn-scope');
+  }
+
+  // The first response can arrive before STX has finished wiring the scope,
+  // and dropping it then left the panel reading 'Reading VPN status...' until
+  // the next poll — ten seconds of a blank screen on a cold load, with the
+  // answer already in hand. Retry briefly instead of waiting for the timer.
+  function apply(status, attempt) {
+    window.__vpnStatus = status;
+    var el = scope();
+    if (!el || !el.__stx_execute) {
+      var tries = attempt || 0;
+      // ~2s of 50ms retries. Past that the scope is not coming, and the next
+      // poll is the right place to pick it up rather than spinning.
+      if (tries < 40) setTimeout(function() { apply(status, tries + 1); }, 50);
+      return;
+    }
+    // Assignments only, reading from the stashed payload: STX tracks
+    // assignment, so each field has to be set rather than mutated in place.
+    el.__stx_execute(
+      'core = window.__vpnStatus.core;'
+      + ' identity = window.__vpnStatus.identity;'
+      + ' tunnels = window.__vpnStatus.tunnels;'
+      + ' connected = window.__vpnStatus.connected;'
+      + ' managedPid = window.__vpnStatus.managedPid;'
+      + ' supported = window.__vpnStatus.supported;'
+      + " error = '';"
+      + ' loaded = true'
+    );
+  }
+
+  function fail(message) {
+    var el = scope();
+    if (!el || !el.__stx_execute) return;
+    window.__vpnError = message;
+    el.__stx_execute('error = window.__vpnError; loaded = false');
+  }
+
+  async function poll(forceRefresh) {
+    if (!scope()) return;
+    try {
+      var response = await fetch('/api/vpn-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh: forceRefresh === true }),
+      });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      var status = await response.json();
+      if (!status || status.success !== true) throw new Error('Unexpected response');
+      apply(status);
+    } catch (error) {
+      fail('Could not read VPN status: ' + (error.message || 'network error'));
+    }
+  }
+
+  // The panel's Re-check button, which also drops the server-side cache.
+  window.__vpnRefresh = function() { return poll(true); };
+
+  // Connect and disconnect both wait on the macOS authorization dialog, so
+  // they can sit for as long as the person takes to answer it. The status is
+  // re-read afterwards either way: a cancelled connect still needs the panel
+  // to agree with reality.
+  window.__vpnPost = async function(url, body) {
+    try {
+      var response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body || {}),
+      });
+      var data = await response.json().catch(function() { return null; });
+      return data || { success: false, error: 'HTTP ' + response.status };
+    } catch (error) {
+      return { success: false, error: error.message || 'network error' };
+    } finally {
+      poll(false);
+    }
+  };
+
+  poll(false);
+  if (!window.__vpnPollTimer) {
+    window.__vpnPollTimer = setInterval(function() { poll(false); }, 10000);
+  }
+  // STX navigations swap only `[data-stx-content]`, so a remount needs the
+  // last payload painted back immediately rather than waiting for the timer.
+  window.addEventListener('stx:load', function() {
+    if (window.__vpnStatus) apply(window.__vpnStatus);
+    else poll(false);
+  }, { once: true });
+})();
+</script>
+@endsection

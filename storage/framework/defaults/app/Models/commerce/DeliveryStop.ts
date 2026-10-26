@@ -1,16 +1,16 @@
-import { defineModel } from '@stacksjs/orm'
-import { schema } from '@stacksjs/validation'
+import { defineModel, parentOwnership } from '@stacksjs/orm'
+import { schema } from '@stacksjs/validation/runtime'
 
 /**
  * One address on a delivery route.
  *
  * `DeliveryRoute` records that a route happened and how far it went; this is
  * the route itself. Without it `stops` is an integer, which is enough to bill
- * a driver and not nearly enough to tell a customer where their order is: the
+ * a courier and not nearly enough to tell a customer where their order is: the
  * link from an order to the vehicle carrying it runs through here.
  *
  * Sequence is the planned order. `status` is what actually happened, which
- * diverges the moment a driver skips a building and comes back to it.
+ * diverges the moment a courier skips a building and comes back to it.
  */
 export default defineModel({
   name: 'DeliveryStop',
@@ -18,7 +18,13 @@ export default defineModel({
   primaryKey: 'id',
   autoIncrement: true,
 
+  // No owner of its own: these rows are owned by whoever owns the order's customer
+  // (stacksjs/stacks#2375). Resolved through the parent so it follows any change
+  // to how Order decides ownership.
+  ownership: parentOwnership('Order', 'order_id'),
+
   traits: {
+    gdpr: { subject: { via: 'Order' }, erasure: 'anonymize', basis: 'contract', purpose: 'Delivering an order' },
     useUuid: true,
     useTimestamps: true,
 
@@ -26,7 +32,7 @@ export default defineModel({
       displayable: ['id', 'sequence', 'status', 'address', 'etaAt'],
       searchable: ['address', 'recipientName'],
       sortable: ['sequence', 'etaAt', 'createdAt'],
-      filterable: ['status', 'deliveryRouteId'],
+      filterable: ['status', 'type', 'deliveryRouteId'],
     },
 
     useSeeder: { count: 0 },
@@ -73,6 +79,7 @@ export default defineModel({
     },
 
     address: {
+      personal: true,
       order: 3,
       required: true,
       fillable: true,
@@ -82,10 +89,11 @@ export default defineModel({
 
     /**
      * Geocoded destination. Nullable because an address can arrive before it
-     * resolves, and a stop with no coordinates is still a stop the driver can
+     * resolves, and a stop with no coordinates is still a stop the courier can
      * complete; it just cannot be drawn.
      */
     latitude: {
+      personal: true,
       order: 4,
       fillable: true,
       validation: { rule: schema.number().min(-90).max(90) },
@@ -93,6 +101,7 @@ export default defineModel({
     },
 
     longitude: {
+      personal: true,
       order: 5,
       fillable: true,
       validation: { rule: schema.number().min(-180).max(180) },
@@ -100,6 +109,7 @@ export default defineModel({
     },
 
     recipientName: {
+      personal: true,
       order: 6,
       fillable: true,
       validation: { rule: schema.string().max(255) },
@@ -107,13 +117,14 @@ export default defineModel({
     },
 
     recipientPhone: {
+      personal: true,
       order: 7,
       fillable: true,
       validation: { rule: schema.string().max(40) },
       factory: faker => faker.phone.number(),
     },
 
-    /** Current estimate, rewritten as the driver moves. */
+    /** Current estimate, rewritten as the courier moves. */
     etaAt: {
       order: 8,
       fillable: true,
@@ -122,7 +133,7 @@ export default defineModel({
     },
 
     /**
-     * When the customer was told the driver was close.
+     * When the customer was told the courier was close.
      *
      * The latch that makes "nearly there" fire once. Without it every ping
      * inside the radius sends another text, which is roughly one text every
@@ -135,7 +146,7 @@ export default defineModel({
       factory: () => null,
     },
 
-    /** When the driver crossed the arrival radius. */
+    /** When the courier crossed the arrival radius. */
     arrivedAt: {
       order: 10,
       fillable: true,
@@ -151,12 +162,36 @@ export default defineModel({
       factory: () => null,
     },
 
-    /** Why a stop failed, or anything the driver needs to record. */
+    /** Why a stop failed, or anything the courier needs to record. */
     notes: {
+      personal: true,
       order: 12,
       fillable: true,
       validation: { rule: schema.string().max(1000) },
       factory: () => '',
+    },
+
+    /**
+     * Which leg of the run this stop is.
+     *
+     * A delivery is two stops, not one: collect from the merchant, then hand
+     * over to the customer. Without the distinction both legs look like a
+     * dropoff, so arriving at the restaurant would tell the customer their
+     * order is out for delivery, and collecting it would mark the order
+     * delivered before it had left the kitchen.
+     *
+     * Defaults to `dropoff` so existing single-stop routes keep their meaning.
+     */
+    type: {
+      order: 13,
+      required: true,
+      fillable: true,
+      default: 'dropoff',
+      validation: {
+        rule: schema.enum(['pickup', 'dropoff']),
+        message: { enum: 'Type must be one of: pickup, dropoff' },
+      },
+      factory: () => 'dropoff',
     },
   },
 

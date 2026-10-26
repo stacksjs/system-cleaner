@@ -1,6 +1,6 @@
 ---
 name: stacks-api
-description: Use when building, modifying, or debugging API endpoints in a Stacks application — defining routes, handling requests, API middleware, working with the API server, HTTP client (fetcher), API resources, or OpenAPI generation. Covers both @stacksjs/api utilities and the stacks-api server implementation.
+description: Use when building, modifying, or debugging API endpoints in a Stacks application - defining routes, handling requests, API middleware, working with the API server, HTTP client (fetcher), API resources, or OpenAPI generation. Covers both @stacksjs/api utilities and the stacks-api server implementation.
 license: MIT
 compatibility: Bun >= 1.3.0, TypeScript
 allowed-tools: Read Edit Write Bash Grep Glob
@@ -80,7 +80,9 @@ The dev server watches these directories for changes and auto-reloads:
 - `app/Actions/` -- invalidates module cache, hot-reloads actions
 - `app/Controllers/` -- invalidates module cache, hot-reloads controllers
 - `app/Middleware/` -- invalidates module cache, hot-reloads middleware
-- `app/Models/` (user models) -- triggers `buddy generate:model-files`
+- `app/Models/` (user models) -- regenerates the model artifacts (there is no
+  `generate:model-files` command; the dev server does this itself, and
+  `buddy generate:types` is the manual equivalent)
 
 Production build: `bun build.ts` bundles `dev.ts` to `dist/dev.js`.
 
@@ -797,6 +799,12 @@ Models with `traits.useApi` automatically get CRUD routes via ORM actions:
 | PUT/PATCH | `/api/{model}/{id}` | Generated update | 200 |
 | DELETE | `/api/{model}/{id}` | Generated destroy | 204 |
 
+Which `useApi` models get these routes is `security.api.models` in
+`config/security.ts` (`'all'` by default, `'own'`, `'none'`, or a list of model
+names that may include `'own'`), overridden by `STACKS_MODEL_APIS`. `'all'`
+includes the ~80 framework models, so an app that does not use commerce or
+CMS should set `'own'`. The OpenAPI schemas follow the same selection.
+
 Generated store and update handlers accept declared `fillable` attributes and
 the foreign-key attributes derived from `belongsTo`. For example,
 `belongsTo: ['Product', 'Customer']` accepts `productId` / `product_id` and
@@ -805,7 +813,9 @@ the foreign-key attributes derived from `belongsTo`. For example,
 ## CLI Commands
 
 - `buddy dev` -- starts the API server with hot-reload
-- `buddy generate:api-types` -- regenerates API TypeScript types from OpenAPI spec
+- `buddy generate:types` -- regenerates the API TypeScript types and server
+  declarations (there is no `generate:api-types`)
+- `buddy generate:openapi-spec` -- regenerates the OpenAPI spec those types come from
 
 ## Gotchas
 
@@ -828,3 +838,12 @@ the foreign-key attributes derived from `belongsTo`. For example,
 - CORS headers (`Access-Control-Allow-Origin: http://localhost:5173`) are only added in development mode for error responses
 - Body parsing happens once per request (tracked via `_bodyParsed` flag) -- JSON, URL-encoded, and multipart/form-data are all supported
 - `response.json()` catches circular reference errors and returns `{ error: 'Response data could not be serialized' }` instead of throwing
+
+## Sharing an authorized operation across transports
+
+`defineApiOperation({ authorize, handle })` from `@stacksjs/api/operation` returns
+an immutable operation with `execute(context)`. Every execution awaits authorize
+before invoking handle. Authenticate the context at each transport boundary;
+keep scope and resource-ownership checks in the operation and its domain helpers.
+This lets HTTP routes, native MCP tools and jobs share behavior without an HTTP
+loopback or a second implementation of the same business rules.

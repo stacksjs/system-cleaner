@@ -1,6 +1,6 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { formatBytes, getDirSize, isPathSafe } from '@system-cleaner/core'
+import { formatBytes, getDirSize, isPathSafe, classifyByGit, refusesDeletion } from '@system-cleaner/core'
 import { moveManyToTrash } from '@system-cleaner/disk'
 import CleanupRun from '../../Models/CleanupRun'
 import ProtectedPath from '../../Models/ProtectedPath'
@@ -144,8 +144,25 @@ export async function bulkDelete(
   // otherwise count its bytes twice in the freed total.
   const unique = [...new Set(paths.map(p => path.resolve(p)))]
 
+  // One batched question for the whole set, beside the other gates rather
+  // than above them, so `/bulk-delete`, `/clean-orphans` and `/app-uninstall`
+  // all inherit it. Refusals go onto the existing `skipped` channel, which
+  // both modes already surface, instead of failing the whole call.
+  const disposition = await classifyByGit(unique)
+
   const deletable: string[] = []
   for (const target of unique) {
+    const verdict = disposition.get(target) ?? 'unknown'
+    if (refusesDeletion(verdict)) {
+      skipped.push({
+        path: target,
+        reason: verdict === 'tracked'
+          ? 'Git tracks files here — deleting it would destroy committed work'
+          : 'Inside a git repository and git could not be asked what is tracked',
+      })
+      continue
+    }
+
     if (protectedPaths.has(target)) {
       skipped.push({ path: target, reason: 'Protected — remove it from the protected list first' })
       continue

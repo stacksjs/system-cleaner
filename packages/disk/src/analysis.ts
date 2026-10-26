@@ -1,6 +1,6 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { HOME, formatBytes, getDirSize, pathExists } from '@system-cleaner/core'
+import { HOME, classifyByGit, formatBytes, getDirSize, pathExists, refusesDeletion } from '@system-cleaner/core'
 import type { DiskEntry, DiskUsageByCategory, LargeFile, ProjectArtifact } from './types'
 import { categorizeFile, getAllCategories, getProjectArtifactPatterns } from './categories'
 import { flattenTree, scanDirectory } from './scanner'
@@ -94,9 +94,88 @@ export function findLargestFiles(tree: DiskEntry, count = 50): LargeFile[] {
 /**
  * Scan for project build artifacts that can be cleaned up
  */
+/**
+ * Files that mean "a build happens here", so a directory beside one of them
+ * was probably produced rather than written.
+ *
+ * Matching a bare directory name is not enough on its own, and the gap is not
+ * theoretical: with `Documents` among the roots, a synthetic non-developer
+ * tree produced `Insurance/2024/coverage` and `Music/Pods` as `safe`, one
+ * click from deletion. `coverage`, `Pods`, `build`, `dist`, `vendor` and
+ * `target` are ordinary English words before they are build output.
+ */
+const PROJECT_MARKERS = [
+  'package.json',
+  'bun.lock',
+  'deps.yaml',
+  'Cargo.toml',
+  'go.mod',
+  'build.zig',
+  'pyproject.toml',
+  'requirements.txt',
+  'Gemfile',
+  'composer.json',
+  'pom.xml',
+  'build.gradle',
+  'build.gradle.kts',
+  'Package.swift',
+  'Podfile',
+  'pubspec.yaml',
+  'mix.exs',
+  'CMakeLists.txt',
+  'Makefile',
+  'tsconfig.json',
+]
+
+/** True when this directory is plausibly the root of a project. */
+function looksLikeProject(dir: string): boolean {
+  if (fs.existsSync(path.join(dir, '.git')))
+    return true
+  return PROJECT_MARKERS.some(marker => fs.existsSync(path.join(dir, marker)))
+}
+
+/**
+ * True when the candidate is itself a checkout rather than build output.
+ *
+ * `pantry` is a vendored runtime directory in this project and the name of a
+ * repository, and on the machine this was written against both existed:
+ * fourteen vendored directories, and a 665 MB clone of pantry-pm/pantry whose
+ * parent folder simply collects repositories. The clone matched on name, was
+ * classified `safe`, and `cleanDirectory` would have removed every entry
+ * including `.git`. Nothing in this app goes through the Trash, so that is a
+ * repository and any unpushed work in it, gone.
+ */
+function isCheckout(dir: string): boolean {
+  return fs.existsSync(path.join(dir, '.git'))
+}
+
+export const DEFAULT_PROJECT_ROOTS: string[] = [
+  // Checked in order and skipped when absent, so listing several conventions
+  // costs nothing. The original four were `Code`, `Projects`, `Developer` and
+  // `Work` under HOME, which found 11 artifacts on a machine that had 2012:
+  // the repositories were in `~/Documents/Projects`, and a scanner that finds
+  // nothing reads exactly like a machine that is already clean.
+  'Code',
+  'Projects',
+  'Developer',
+  'Work',
+  'src',
+  'dev',
+  'repos',
+  'git',
+  'Sites',
+  'Documents',
+].map(dir => path.join(HOME, dir))
+
 export async function findProjectArtifacts(
-  searchPaths: string[] = [path.join(HOME, 'Code'), path.join(HOME, 'Projects'), path.join(HOME, 'Developer'), path.join(HOME, 'Work')],
+  searchPaths: string[] = DEFAULT_PROJECT_ROOTS,
   maxDepth = 4,
+  /**
+   * Below this, an artifact is noise rather than a finding. On a real machine
+   * 1803 `dist` directories came to 2.9 GB and 82% of them were under a
+   * megabyte — a list nobody can read, hiding the dozen entries that matter.
+   */
+  minSizeBytes = 1_000_000,
 ): Promise<ProjectArtifact[]> {
   const artifacts: ProjectArtifact[] = []
   const patterns = getProjectArtifactPatterns()
@@ -116,7 +195,47 @@ export async function findProjectArtifacts(
     }),
   )
 
-  return artifacts.sort((a, b) => b.sizeBytes - a.sizeBytes)
+  // Ask git last, in one batch, after the size filter has already thinned the
+  // list. Two subprocesses per repository instead of two per candidate: a
+  // machine with 2,606 matches would otherwise pay five thousand spawns to
+  // answer a question that batches into a few dozen.
+  //
+  // The name said `build output`; git gets to say otherwise. On the machine
+  // this was written against it overruled the pattern 48 times, including a
+  // source directory called `build`, a committed GitHub Action bundle, and
+  // the test fixtures every language runtime ships inside `node_modules`.
+  const sized = artifacts.filter(a => a.sizeBytes >= minSizeBytes)
+  const disposition = await classifyByGit(sized.map(a => a.path))
+  for (const artifact of sized) {
+    artifact.git = disposition.get(artifact.path) ?? 'unknown'
+    // `unknown` blocks as firmly as `tracked`. git not answering is not
+    // evidence that nothing is tracked, and treating it as such is how the
+    // gate silently stopped existing on a repository with a corrupt index.
+    if (refusesDeletion(artifact.git))
+      artifact.risk = 'blocked'
+    // `unversioned` stays on its pattern risk. Outside a repository there is
+    // nothing to appeal to, and refusing everything there would exclude the
+    // scratch checkouts and downloaded source trees that hold the most junk.
+  }
+
+  return sized.sort((a, b) => b.sizeBytes - a.sizeBytes)
+}
+
+/**
+ * Lockfiles, in no particular order — any one of them makes an install
+ * reproducible enough that re-downloading is a cost rather than a gamble.
+ */
+const LOCKFILE_NAMES = ['bun.lock', 'bun.lockb', 'pnpm-lock.yaml', 'yarn.lock', 'package-lock.json']
+
+function hasLockfile(projectRoot: string): boolean {
+  return LOCKFILE_NAMES.some((name) => {
+    try {
+      return fs.existsSync(path.join(projectRoot, name))
+    }
+    catch {
+      return false
+    }
+  })
 }
 
 async function scanForArtifacts(
@@ -124,7 +243,7 @@ async function scanForArtifacts(
   depth: number,
   maxDepth: number,
   patternNames: Set<string>,
-  patterns: { dirName: string, type: string, label: string }[],
+  patterns: { dirName: string, type: string, label: string, risk: 'safe' | 'caution' }[],
   artifacts: ProjectArtifact[],
 ): Promise<void> {
   if (depth > maxDepth)
@@ -147,6 +266,14 @@ async function scanForArtifacts(
     const fullPath = path.join(dirPath, entry.name)
 
     if (patternNames.has(entry.name)) {
+      // Two gates before this counts as build output. Without them the
+      // scanner offered a 665 MB git clone and a folder of insurance PDFs,
+      // both marked safe, both one click from an unrecoverable delete.
+      if (!looksLikeProject(dirPath) || isCheckout(fullPath)) {
+        await scanForArtifacts(fullPath, depth + 1, maxDepth, patternNames, patterns, artifacts)
+        continue
+      }
+
       const pattern = patterns.find(p => p.dirName === entry.name)!
       let mtime = new Date()
       try {
@@ -157,6 +284,13 @@ async function scanForArtifacts(
       // Determine project name from parent directory
       const projectName = path.basename(dirPath)
 
+      // `node_modules` is `safe` on the grounds that it comes back from a
+      // command and a network round-trip. That holds while a lockfile is
+      // there to come back to. Without one the restored tree is whatever the
+      // registry resolves today, which is not necessarily what was deleted —
+      // so the name alone no longer justifies putting it in Select All.
+      const missingLockfile = entry.name === 'node_modules' && !hasLockfile(dirPath)
+
       artifacts.push({
         path: fullPath,
         type: pattern.type,
@@ -164,6 +298,10 @@ async function scanForArtifacts(
         sizeFormatted: '...',
         projectName,
         lastModified: mtime,
+        label: missingLockfile ? `${pattern.label} (no lockfile)` : pattern.label,
+        risk: missingLockfile ? 'caution' : pattern.risk,
+        // Settled in one batch once the list is final; see findProjectArtifacts.
+        git: 'unversioned',
       })
       // Don't recurse into artifact directories
       continue

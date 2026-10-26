@@ -1,4 +1,5 @@
-import { exec } from '@system-cleaner/core'
+import { exec, isWindows } from '@system-cleaner/core'
+import { WINDOWS_MAINTENANCE_TASKS } from './maintenance-windows'
 
 /**
  * The macOS maintenance routines an app like this is expected to offer —
@@ -25,11 +26,20 @@ export interface MaintenanceTask {
    * that can only ever fail.
    */
   requiresSudo: boolean
+  /**
+   * Where the person has to run it themselves, when this app cannot.
+   *
+   * Named rather than assumed, because the page is prerendered and cannot be
+   * told which platform it is on. It used to read "needs Terminal" in the
+   * markup, which is wrong on a machine whose answer is an Administrator
+   * PowerShell.
+   */
+  elevationLabel: string
   category: 'caches' | 'services' | 'network' | 'storage'
   icon: string
 }
 
-export const MAINTENANCE_TASKS: MaintenanceTask[] = [
+const MACOS_TASKS: Omit<MaintenanceTask, 'elevationLabel'>[] = [
   {
     id: 'launch-services',
     name: 'Rebuild Launch Services',
@@ -194,6 +204,17 @@ export const MAINTENANCE_TASKS: MaintenanceTask[] = [
   },
 ]
 
+/**
+ * The tasks for the platform this is running on.
+ *
+ * Linux keeps the macOS list, which is wrong there — and `maintenance` is
+ * false for Linux in the capability map, so the screen is replaced with a
+ * sentence rather than reached.
+ */
+export const MAINTENANCE_TASKS: MaintenanceTask[] = isWindows
+  ? WINDOWS_MAINTENANCE_TASKS
+  : MACOS_TASKS.map(task => ({ ...task, elevationLabel: 'Terminal' }))
+
 export function getMaintenanceTask(id: string): MaintenanceTask | undefined {
   return MAINTENANCE_TASKS.find(task => task.id === id)
 }
@@ -247,7 +268,12 @@ export async function runMaintenanceTask(id: string): Promise<MaintenanceRunResu
   }
 
   const startedAt = Date.now()
-  const result = await exec(task.command, { timeout: 120_000 })
+  // `exec` runs everything through `sh -c`, which Windows does not have — and
+  // these commands are cmd syntax regardless, with `%VAR%` expansion and `&`
+  // sequencing that no POSIX shell would read the same way.
+  const result = isWindows
+    ? await runThroughCmd(task.command)
+    : await exec(task.command, { timeout: 120_000 })
 
   return {
     id: task.id,
@@ -261,5 +287,27 @@ export async function runMaintenanceTask(id: string): Promise<MaintenanceRunResu
     output: (result.stdout || '').slice(0, 4000),
     error: result.ok ? undefined : (result.stderr || '').slice(0, 500) || undefined,
     durationMs: Date.now() - startedAt,
+  }
+}
+
+/** Run a cmd.exe command line, without a shell wrapper in between. */
+async function runThroughCmd(command: string): Promise<{ ok: boolean, stdout: string, stderr: string }> {
+  try {
+    const proc = Bun.spawn(['cmd.exe', '/d', '/c', command], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+      stdin: 'ignore',
+    })
+    const timer = setTimeout(() => proc.kill(), 120_000)
+    const [stdout, stderr] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ])
+    const code = await proc.exited
+    clearTimeout(timer)
+    return { ok: code === 0, stdout, stderr }
+  }
+  catch (err) {
+    return { ok: false, stdout: '', stderr: err instanceof Error ? err.message : String(err) }
   }
 }

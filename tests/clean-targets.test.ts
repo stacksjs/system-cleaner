@@ -2,6 +2,7 @@ import * as path from 'node:path'
 import { describe, expect, it } from 'bun:test'
 import { CLEAN_TARGETS, getCategories, getCleanTarget } from '../packages/clean/src/categories'
 import { isCleanable, isPathSafe, isPermissionGated } from '../packages/core/src/paths'
+import { PLATFORM } from '../packages/core/src/platform'
 
 describe('clean targets', () => {
   it('has unique ids', () => {
@@ -68,9 +69,23 @@ describe('clean target risk', () => {
       expect(getCleanTarget(id)?.risk).toBe('caution')
   })
 
+  /**
+   * Named per platform, because `CLEAN_TARGETS` is now the table for the
+   * platform it is running on. `user-caches` and `trash` are macOS concepts —
+   * Windows has no per-user Library, and its Recycle Bin is a shell API rather
+   * than a directory — so asking for them on the Windows leg gets `undefined`
+   * and asserts nothing about risk at all.
+   */
   it('leaves plain caches safe', () => {
-    for (const id of ['user-caches', 'npm-cache', 'chrome-cache', 'trash'])
-      expect(getCleanTarget(id)?.risk).toBe('safe')
+    const ids = PLATFORM === 'windows'
+      ? ['user-temp', 'npm-cache', 'chrome-cache']
+      : ['user-caches', 'npm-cache', 'chrome-cache', 'trash']
+
+    for (const id of ids) {
+      const target = getCleanTarget(id)
+      expect(target, `${id} is missing from the ${PLATFORM} table`).toBeDefined()
+      expect(target!.risk, id).toBe('safe')
+    }
   })
 })
 

@@ -26,8 +26,20 @@ export function registerPurgeCommand(app: CLI): void {
 
       const s = spinner()
       s.start('Scanning for project build artifacts...')
-      const artifacts = await findProjectArtifacts(searchPaths)
+      const found = await findProjectArtifacts(searchPaths)
+
+      // Drop anything git refuses before it can be selected, rather than
+      // after. This command is the reason the gate exists: `--all` takes every
+      // artifact and removes it with no prompt whatsoever, so a `blocked` row
+      // reaching this list is a committed directory deleted without a question
+      // being asked.
+      const artifacts = found.filter(a => a.risk !== 'blocked')
+      const blocked = found.length - artifacts.length
+
       s.stop(`Found ${artifacts.length} artifact(s)`)
+
+      if (blocked > 0)
+        log.info(`Skipped ${blocked} that git tracks, or could not be checked.`)
 
       if (artifacts.length === 0) {
         log.info('No project artifacts found in scan paths.')

@@ -43,12 +43,13 @@ jobs:
       # extracts this tag's section from CHANGELOG.md (written by
       # `buddy release`), attaches the binaries, and generates checksums.
       - name: Publish release
-        uses: pantry-pm/pantry/packages/action@v0.11.45
+        uses: pantry-pm/pantry/packages/action@v0.11.74
         with:
           install: 'false'
           release: 'true'
           release-files: |
             packages/cli/bin/system-cleaner-darwin-arm64.zip
+            packages/cli/bin/system-cleaner-windows-x64.zip
           release-checksums: sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -89,7 +90,7 @@ jobs:
       # certificate at all and stopped with "Apple code signing requires an
       # application certificate" before a single build step ran.
       - name: Setup Pantry
-        uses: pantry-pm/pantry/packages/action@v0.11.45
+        uses: pantry-pm/pantry/packages/action@v0.11.74
         with:
           apple-signing: 'true'
           apple-signing-application-certificate: ${{ secrets.DEVELOPER_ID_CERTIFICATE_BASE64 }}
@@ -125,7 +126,7 @@ jobs:
       # release with the DMG and without the manifest ships an update nobody
       # already running the app will ever be offered.
       - name: Attach the DMG and update manifest to the release
-        uses: pantry-pm/pantry/packages/action@v0.11.45
+        uses: pantry-pm/pantry/packages/action@v0.11.74
         with:
           install: 'false'
           release: 'true'
@@ -135,3 +136,157 @@ jobs:
           release-checksums: sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The Windows desktop bundle, which until now existed only as a CI artifact.
+  #
+  # v0.3.7 shipped the Windows CLI and said the desktop app was macOS-only,
+  # because craft's Windows runtime never initialised COM and the window never
+  # opened. That is fixed upstream and floored at v0.0.175 in
+  # `scripts/build-desktop-windows.ts`, so there is something worth publishing.
+  #
+  # Unsigned, deliberately and visibly: there is no Windows signing identity
+  # configured, SmartScreen will warn, and the release notes say so. An
+  # unsigned .dmg is not worth attaching because Gatekeeper refuses it outright
+  # — a Windows user can still choose to run this one, and the checksum is
+  # their integrity signal.
+  desktop-windows:
+    name: Windows desktop app
+    needs: [release, views]
+    runs-on: windows-latest
+
+    permissions:
+      contents: write
+
+    # Bash, as `ci.yml`'s Windows job does, and for the reason v0.3.8 found the
+    # hard way. `./buddy` is a shell script with no extension; under the
+    # runner's default PowerShell, `./buddy migrate:regenerate --force` reports
+    # success and does nothing at all, and the build then stopped on the
+    # migrations that step was supposed to write:
+    #
+    #     error: no migrations in D:\a\system-cleaner\system-cleaner\database\migrations
+    #
+    # A step that cannot run should fail, not pass quietly. Until buddy says so
+    # itself, the shell that can run it is the guard.
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Dependencies
+        run: bun install
+
+      - name: Build client scripts
+        run: bun run build:scripts
+
+      - name: Generate migrations
+        run: ./buddy migrate:regenerate --force
+
+      # Rendered on Linux by the job above. `./buddy build:views` exits 0 on
+      # Windows in a third of a second having written nothing, so a bundle
+      # built after it there carries no pages at all.
+      - name: Take the rendered views
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-views
+          path: dist
+
+      # `--skip-prepare` because the preparation it skips is `./buddy
+      # build:views`, which the step above supplies, and because `./buddy` is a
+      # shell script that Windows cannot spawn.
+      - name: Build the Windows desktop bundle
+        run: bun scripts/build-desktop-windows.ts --skip-prepare
+
+      - name: Publish release
+        uses: pantry-pm/pantry/packages/action@v0.11.74
+        with:
+          install: 'false'
+          release: 'true'
+          release-files: |
+            storage/framework/desktop-windows/*.zip
+          release-checksums: sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The views the Windows bundle serves, rendered where the renderer works.
+  views:
+    name: Views
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Dependencies
+        run: bun install
+
+      - name: Build client scripts
+        run: bun run build:scripts
+
+      - name: Render the views
+        run: ./buddy build:views
+
+      - name: Check the app pages were written
+        run: |
+          test -f dist/app/large-files.html || { echo "no app pages in dist/"; ls -la dist || true; exit 1; }
+          echo "rendered $(find dist -type f | wc -l) files"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rendered-views
+          path: dist
+          if-no-files-found: error
+          retention-days: 1
+
+  # Both jobs above attach their own files and ask the action for checksums,
+  # and the action checksums the files *it* uploaded. The desktop job runs
+  # second, so its two-asset `checksums.txt` replaced the one covering the CLI
+  # archives — v0.3.5 and v0.3.6 both published with no hash for the CLI zips
+  # at all, which matters most for the unsigned Windows .exe, where a checksum
+  # is the only integrity signal a user has:
+  #
+  #     Release      Generated checksums.txt (sha256) for 2 asset(s)
+  #     Desktop app  Generated checksums.txt (sha256) for 2 asset(s)   <- won
+  #
+  # So checksums are rebuilt once, last, over whatever actually ended up on the
+  # release. `release-manifest.json` had the same hole and is rebuilt with it.
+  checksums:
+    name: Checksums
+    needs: [release, desktop, desktop-windows]
+    # `always()`, because `desktop` is skipped whenever signing is not
+    # configured and a skipped dependency would skip this too. Gated on
+    # `release` instead: if that failed there is nothing to checksum, and if
+    # `desktop` failed the assets that did land should still be covered.
+    if: ${{ always() && needs.release.result == 'success' }}
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # Runs after every asset is attached, so a failure here leaves the
+      # release intact with the previous, incomplete checksums rather than
+      # breaking the release itself.
+      - name: Rebuild checksums over every attached asset
+        run: bun run scripts/release-checksums.ts "${{ github.ref_name }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}

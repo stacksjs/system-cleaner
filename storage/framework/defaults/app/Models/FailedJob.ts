@@ -1,5 +1,5 @@
 import { defineModel } from '@stacksjs/orm'
-import { schema } from '@stacksjs/validation'
+import { schema } from '@stacksjs/validation/runtime'
 
 export default defineModel({
   name: 'FailedJob',
@@ -36,8 +36,12 @@ export default defineModel({
       factory: () => 'default',
     },
 
+    // Both `text`: a payload is a serialized job envelope and an exception
+    // carries a stack trace, and neither fits the default varchar(255) that
+    // Postgres enforces.
     payload: {
       fillable: true,
+      type: 'text',
       validation: {
         rule: schema.string().required(),
       },
@@ -46,6 +50,7 @@ export default defineModel({
 
     exception: {
       fillable: true,
+      type: 'text',
       validation: {
         rule: schema.string().required(),
       },

@@ -4,6 +4,12 @@ import * as path from 'node:path';
 import process from 'node:process';
 import {
   isPathSafe,
+  isWindows,
+  capabilities,
+  classifyByGit,
+  isWithinHome,
+  refusesDeletion,
+  PLATFORM,
   getDirSize,
   HOME,
   sanitizePackageName,
@@ -45,13 +51,17 @@ import {
 } from '@system-cleaner/clean';
 import {
   killProcess,
+  discoverWindowsPrograms,
+  launchWindowsUninstaller,
   toggleStartupItem,
   removeStartupItem,
 } from '@system-cleaner/uninstall';
-import { categoryPresentation, shredPaths } from '@system-cleaner/disk';
-import { getTopProcesses, summarizeProcesses } from '@system-cleaner/monitor';
+import { categoryPresentation, findProjectArtifacts, shredPaths } from '@system-cleaner/disk';
+import { getTopProcesses, sampleCpuUsage, summarizeProcesses } from '@system-cleaner/monitor';
 import { recordSystemActivity } from '../app/Support/System/activity-chart';
 import { isLocalAgent } from '../app/Support/Runtime/local-agent';
+import { invalidateVpnCache, readVpnStatus } from '../app/Support/Vpn/status';
+import { connect as vpnConnect, connectionPid, disconnect as vpnDisconnect } from '../app/Support/Vpn/control';
 import {
   bulkDelete,
   cleanupHistory,
@@ -118,10 +128,74 @@ const systemAppsListCache = new TtlCache<{ name: string; sizeBytes: number | nul
 const systemAppsSizesCache = new TtlCache<{ name: string; sizeBytes: number }[]>(15 * 60_000);
 const dashboardStatsCache = new TtlCache<Record<string, unknown>>(30_000);
 const dirSizesCache = new TtlCache<Record<string, number>>(5 * 60_000);
+
+/**
+ * Bumped by every invalidation, so a walk can tell whether what it measured
+ * still describes the disk.
+ *
+ * Clearing the map is not enough by itself. `/dir-sizes` reads the cache,
+ * spends tens of seconds walking ~76 directories, then writes what it found.
+ * A delete landing inside that window clears an entry the walk is not holding
+ * and cannot reach the numbers already in flight, so the walk stores its
+ * pre-delete measurement afterwards under a fresh five-minute TTL - restoring
+ * the stale total the clear existed to prevent. Comparing the generation
+ * before storing drops exactly those results.
+ */
+let sizeCacheGeneration = 0;
+
+/**
+ * Forget every measured size, because something on disk just stopped existing.
+ *
+ * `/dir-sizes` keys on the sorted path list, and the cleanup screen sends the
+ * same ~76 paths every time, so one entry answers every rescan for five
+ * minutes. Deleting a directory and immediately asking again therefore
+ * returned the size measured *before* the delete: the row kept its old number,
+ * the total never moved, and the screen looked like the button had done
+ * nothing. It had — `~/.bun/install/cache` and `~/.cache/codex-runtimes` were
+ * both empty on disk while the UI still showed 245 MB and 1.7 GB.
+ *
+ * Clearing wholesale rather than evicting one path is deliberate: the key is a
+ * whole path list, so there is no entry that corresponds to the one directory
+ * that changed. The next scan re-walks, which is the point.
+ */
+/**
+ * Refuse a delete that would destroy files git is tracking.
+ *
+ * The scanner marks such directories `blocked` and the screen will not offer
+ * them, but the screen is not the only caller: `buddy purge --all` selects
+ * every artifact and deletes it with no prompt at all, and `/clean-dir`,
+ * `/delete-path` and `/shred-paths` each take a path straight from the client.
+ * A gate that lives only in the UI is a gate on the one path that already has
+ * a confirmation dialog.
+ *
+ * Only `tracked` refuses. `unversioned` is allowed through deliberately -
+ * outside a repository there is nothing to appeal to, and refusing everything
+ * there would block `~/Library/Caches`, which is the app's main job.
+ */
+async function refuseIfTracked(target: string): Promise<Response | null> {
+  const disposition = await classifyByGit([target]) ;
+  const verdict = disposition.get(target) ?? 'unknown';
+  if (!refusesDeletion(verdict)) return null;
+  return badRequest(
+    verdict === 'tracked'
+      ? 'Git tracks files here, so this is not build output. Deleting it would destroy committed work.'
+      : 'This is inside a git repository and git could not be asked whether these files are tracked, so it is not safe to delete.',
+    409,
+  );
+}
+
+function invalidateSizeCaches(): void {
+  dirSizesCache.clear();
+  sizeCacheGeneration++;
+}
 // A full orphan sweep reads every bundle id under ~/Library and sizes what it
 // finds, which is seconds of work for an answer that changes when an app is
 // uninstalled and not otherwise.
 const orphanCache = new TtlCache<{ items: unknown[]; totalBytes: number }>(5 * 60_000);
+// Walking every project root and sizing what it finds is ~8s of disk work for
+// an answer that only moves when a build runs. Long TTL, with an explicit
+// refresh for the person who just deleted something and wants to see it gone.
+const projectArtifactsCache = new TtlCache<{ artifacts: unknown[], totalBytes: number, safeBytes: number }>(10 * 60_000);
 
 /**
  * The account picture and name.
@@ -338,12 +412,21 @@ export default async function (router: Router) {
     catch {
       return badRequest('Path does not exist', 404);
     }
+    const trackedHere = await refuseIfTracked(resolved);
+    if (trackedHere) return trackedHere;
+
+    // Invalidate on both paths. A recursive delete is not atomic: one
+    // undeletable entry throws after the other nine are already gone, so the
+    // error path can have freed gigabytes. Leaving the size cached there keeps
+    // the directory at its old figure for five minutes.
     try {
       fs.rmSync(resolved, { recursive: true, force: true });
     }
     catch (err: any) {
+      invalidateSizeCaches();
       return badRequest(err.message || 'Delete failed', 500);
     }
+    invalidateSizeCaches();
     return Response.json({ success: true, freedBytes: size });
   });
 
@@ -381,7 +464,11 @@ export default async function (router: Router) {
       return badRequest('Path must be under your home directory', 403);
     }
 
+    const tracked = await refuseIfTracked(target);
+    if (tracked) return tracked;
+
     const result = await cleanDirectory(target);
+    invalidateSizeCaches();
     return Response.json({
       success: result.errors.length === 0,
       freedBytes: result.freedBytes,
@@ -389,6 +476,13 @@ export default async function (router: Router) {
       // happened, so the UI says "Cleaned" rather than "0 B freed", which reads
       // as a failure.
       measured: result.measured,
+      // What the filesystem actually gave back, and whether something is
+      // still holding the deleted files open. A log a running service writes
+      // to keeps its blocks until that service restarts, so the delete
+      // succeeds and the disk does not move - which is indistinguishable from
+      // the app lying unless it says so.
+      reclaimedBytes: result.reclaimedBytes,
+      heldOpen: result.heldOpen,
       errors: result.errors.length ? result.errors : undefined,
     });
   });
@@ -450,6 +544,20 @@ export default async function (router: Router) {
     return Response.json(result);
   });
 
+  /**
+   * What this build can actually do on the machine it is running on.
+   *
+   * Screens ask once and render a reason instead of an empty table. Without
+   * it a platform with no implementation reports "0 B recoverable", which a
+   * user reads as "already clean" rather than "cannot see" - the worst
+   * available answer from a tool whose entire claim is what it can reclaim.
+   *
+   * See stacksjs/system-cleaner#23.
+   */
+  await router.post('/platform', async () => {
+    return Response.json({ success: true, platform: PLATFORM, capabilities });
+  });
+
   await router.post('/dir-sizes', async (req: Request) => {
     const body = await readJsonBody<{ paths: unknown }>(req);
     if (body === null) return badJson();
@@ -460,6 +568,7 @@ export default async function (router: Router) {
     const cached = dirSizesCache.get(cacheKey);
     if (cached) return Response.json({ success: true, sizes: cached, cached: true });
 
+    const generation = sizeCacheGeneration;
     const results: Record<string, number> = {};
     // Bound parallelism so we don't fire 1024 simultaneous `du` walks.
     const CONCURRENCY = 8;
@@ -468,18 +577,30 @@ export default async function (router: Router) {
       await Promise.all(
         slice.map(async (p) => {
           const resolved = path.resolve(p);
-          if (!resolved.startsWith(HOME)) return;
+          // Containment, not a prefix: `/Users/glenn2` is not inside
+          // `/Users/glenn`, and measuring another account's home is a smaller
+          // version of the same mistake as deleting it. `isWithinHome` rather
+          // than `isWithin(resolved, HOME)` so Windows' alias spellings - an
+          // 8.3 short name reaching the same directory - are resolved before
+          // the comparison instead of reading as a different account.
+          if (!isWithinHome(resolved)) return;
           try { results[p] = await getDirSize(resolved); }
           catch { results[p] = 0; }
         }),
       );
     }
-    dirSizesCache.set(cacheKey, results);
-    return Response.json({ success: true, sizes: results, cached: false });
+    // Only store this if nothing was deleted while we walked. Caching a
+    // measurement taken before a delete is the stale number all over again,
+    // and it would outlive the invalidation meant to kill it. `stale` lets the
+    // caller drop a payload it can already tell is out of date.
+    const current = sizeCacheGeneration === generation;
+    if (current) dirSizesCache.set(cacheKey, results);
+    return Response.json({ success: true, sizes: results, cached: false, stale: !current });
   });
 
   await router.post('/empty-trash', async () => {
     const result = await emptyTrash();
+    invalidateSizeCaches();
     return Response.json({
       success: result.success,
       freedBytes: result.freedBytes,
@@ -610,6 +731,7 @@ export default async function (router: Router) {
       : 'large-files';
 
     const result = await bulkDelete(paths, mode, source);
+    invalidateSizeCaches();
     return Response.json({
       success: result.failed.length === 0,
       mode,
@@ -876,29 +998,40 @@ export default async function (router: Router) {
     }
 
     const os = await import('node:os');
-    const procs = await getTopProcesses(8);
-    const base = getDashboardStatsCached();
+    // Measured from the kernel's own per-core counters rather than summed out
+    // of `ps`. The old figure was `sum(process %cpu) / cores`, which on
+    // Windows is 0% forever — `ps` is not there, the process list comes back
+    // empty, and a busy machine reports as idle while the health score below
+    // sees no CPU pressure and inflates. It was also a poor number on macOS:
+    // `ps` reports a process's lifetime average, not what it is doing now, and
+    // counts no kernel time.
+    const [procs, cpu] = await Promise.all([getTopProcesses(8), sampleCpuUsage()]);
+    const base = await getDashboardStatsCached();
     const host = getHostSnapshot();
-    const totalCPU = procs.reduce((s, p) => s + p.cpuPercent, 0);
-    const cpuCores = os.default.cpus().length;
     const memPercent = Math.round(((os.default.totalmem() - os.default.freemem()) / os.default.totalmem()) * 100);
-    const cpuAvgPercent = cpuCores > 0 ? Math.round(totalCPU / cpuCores) : 0;
+    const cpuAvgPercent = cpu.usagePercent;
 
     // Read the boot volume once, in bytes, and derive every label from it.
-    // `df -h`'s own "Used" column is not usable here: on APFS the root
-    // volume is the read-only system snapshot (~12Gi) while "Avail" reports
-    // the shared container, so the two columns describe different things.
+    //
+    // Through `getPrimaryDiskInfo` rather than a `df` of its own. The
+    // arithmetic here was already right - `df`'s "Used" column is unusable on
+    // APFS, where the root volume is the read-only system snapshot (~12Gi)
+    // while "Avail" reports the shared container, so the two columns describe
+    // different things - but it reached `df` through `execSync`, which runs a
+    // shell. Windows has no `df` for that shell to find, so every tile on this
+    // card rendered as "-". One shell-free source now answers for both
+    // platforms, and `usedPercent` there is derived the same way: total minus
+    // available, over total.
     let dUsedPct = 0;
     let diskTotalBytes = 0;
     let diskFreeBytes = 0;
     try {
-      const { execSync } = await import('@system-cleaner/core');
-      const dfOut = execSync('df -k / 2>/dev/null');
-      const parts = dfOut.split('\n')[1]?.split(/\s+/);
-      if (parts) {
-        diskTotalBytes = Number.parseInt(parts[1], 10) * 1024;
-        diskFreeBytes = Number.parseInt(parts[3], 10) * 1024;
-        dUsedPct = diskTotalBytes > 0 ? Math.round((1 - diskFreeBytes / diskTotalBytes) * 100) : 0;
+      const { getPrimaryDiskInfo } = await import('@system-cleaner/core');
+      const boot = await getPrimaryDiskInfo();
+      if (boot) {
+        diskTotalBytes = boot.totalBytes;
+        diskFreeBytes = boot.freeBytes;
+        dUsedPct = boot.usedPercent;
       }
     }
     catch {}
@@ -955,7 +1088,7 @@ export default async function (router: Router) {
   });
 
   await router.post('/startup-items', async () => {
-    const { items, cached } = getStartupItemsCached();
+    const { items, cached } = await getStartupItemsCached();
     return Response.json({ success: true, items, cached });
   });
 
@@ -999,6 +1132,11 @@ export default async function (router: Router) {
     if (ids === null) return badRequest('ids must be a non-empty string array');
 
     const outcome = await removeExtensions(ids);
+
+    // Before the history write, not after. The extensions are already gone by
+    // here, and a rejected insert - locked database, unapplied migration, full
+    // disk - must not take the invalidation down with it.
+    invalidateSizeCaches();
 
     if (outcome.removed.length > 0) {
       invalidateExtensionsCache();
@@ -1176,6 +1314,43 @@ export default async function (router: Router) {
   await router.post('/cleanup-targets', async () => {
     const { targets, cached } = getCleanupTargetsCached();
     return Response.json({ success: true, targets, cached });
+  });
+
+  // Developer junk: the build output, vendored runtimes and dependency trees
+  // that live *inside* repositories rather than at a fixed cache path.
+  //
+  // The clean-target table cannot express these — it maps a known path to a
+  // known meaning, and these are discovered by walking project roots. On the
+  // machine this was written against the fixed table offered 6.3 GB while 50.8
+  // GB sat in 162 of these directories.
+  await router.post('/project-artifacts', async (req: Request) => {
+    const body = await readJsonBody<{ refresh?: unknown }>(req);
+    if (body === null) return badJson();
+
+    if (body.refresh !== true) {
+      const hit = projectArtifactsCache.get('artifacts');
+      if (hit) return Response.json({ success: true, ...hit, cached: true });
+    }
+
+    const found = await findProjectArtifacts();
+    // `lastModified` is a Date and would serialize to an ISO string the UI has
+    // no use for; the rest is already JSON-shaped.
+    const artifacts = found.map(a => ({
+      path: a.path,
+      name: path.basename(a.path),
+      project: a.projectName,
+      type: a.type,
+      label: a.label,
+      risk: a.risk,
+      sizeBytes: a.sizeBytes,
+      sizeFormatted: a.sizeFormatted,
+    }));
+    const totalBytes = found.reduce((n, a) => n + a.sizeBytes, 0);
+    const safeBytes = found.filter(a => a.risk === 'safe').reduce((n, a) => n + a.sizeBytes, 0);
+
+    const payload = { artifacts, totalBytes, safeBytes };
+    projectArtifactsCache.set('artifacts', payload);
+    return Response.json({ success: true, ...payload, cached: false });
   });
 
   await router.post('/system-apps', async (req: Request) => {
@@ -1399,6 +1574,34 @@ export default async function (router: Router) {
     const body = await readJsonBody<{ path: unknown }>(req);
     if (body === null) return badJson();
     if (typeof body.path !== 'string' || !body.path) return badRequest('No app path provided');
+
+    // Windows is a different act entirely, not a different path.
+    //
+    // Uninstalling a Mac app means moving a bundle this app chose to the
+    // Trash - our decision, and reversible. A Windows program is a registry
+    // entry pointing at the vendor's own uninstaller, so the most this app can
+    // honestly do is start it and say so. It does not remove anything itself,
+    // does not wait, and does not report bytes freed: most uninstallers open a
+    // window and ask questions, and claiming a program was removed because a
+    // process was spawned is the same class of lie as reporting space that
+    // never came back.
+    if (isWindows) {
+      const programs = await discoverWindowsPrograms();
+      const program = programs.find(entry => entry.key === body.path);
+      if (!program) return badRequest('No such program is registered', 404);
+
+      const launch = await launchWindowsUninstaller(program);
+      return Response.json({
+        success: launch.success,
+        launched: launch.launched,
+        app: program.name,
+        error: launch.error,
+        message: launch.launched
+          ? `Started the uninstaller for ${program.name}. Follow its prompts to finish.`
+          : undefined,
+      }, { status: launch.success ? 200 : 400 });
+    }
+
     if (!pathInAllowedRoots(body.path, ['/Applications', path.join(HOME, 'Applications')]))
       return badRequest('Only apps in /Applications can be uninstalled', 403);
 
@@ -1424,6 +1627,14 @@ export default async function (router: Router) {
 
     const result = await uninstall(path.resolve(body.path), paths, mode);
     if (!result) return badRequest('No app bundle at that path', 404);
+
+    // An uninstall takes the bundle and its remnants under ~/Library/Caches,
+    // ~/Library/Application Support and ~/Library/Containers - inside targets
+    // the cleanup screen measures, and inside the orphan sweep. Both caches
+    // now describe directories that are gone, and a stale orphan row sends the
+    // Leftovers tab's Clean button at a path the scan no longer returns.
+    invalidateSizeCaches();
+    orphanCache.clear();
 
     return Response.json({
       success: result.outcome.failed.length === 0,
@@ -1466,6 +1677,11 @@ export default async function (router: Router) {
 
     const kept = await KeptCookie.all() as Array<{ domain: string }>;
     const outcome = await cleanPrivacyItems(ids, { keepDomains: kept.map(row => row.domain) });
+
+    // The browser cache and service-worker directories this removes are the
+    // same paths as the chrome-cache, chrome-sw and safari-cache targets, so
+    // the cleanup screen's figures are now wrong by whatever was freed.
+    invalidateSizeCaches();
 
     if (outcome.cleaned.length > 0) {
       await CleanupRun.create({
@@ -1540,6 +1756,9 @@ export default async function (router: Router) {
       type: item.type,
       sizeBytes: item.sizeBytes,
       daysSinceModified: item.daysSinceModified,
+      // Application Support and Containers can hold the only copy of
+      // something; the UI must not pre-select these the way it can a cache.
+      holdsUserData: item.holdsUserData,
       protected: protectedPaths.has(path.resolve(item.path)),
     }));
 
@@ -1568,6 +1787,9 @@ export default async function (router: Router) {
     const mode = body.mode === 'permanent' ? 'permanent' : 'trash';
     const outcome = await bulkDelete(targets, mode, 'orphans');
     orphanCache.clear();
+    // Orphan rows live under ~/Library/Caches and ~/Library/Application
+    // Support, which the cleanup screen sizes as targets in their own right.
+    invalidateSizeCaches();
 
     return Response.json({ success: outcome.failed.length === 0, mode, ...outcome });
   });
@@ -1595,11 +1817,14 @@ export default async function (router: Router) {
 
   await router.post('/clean-ds-store', async () => {
     const result = await cleanDsStoreFiles();
+    invalidateSizeCaches();
     return Response.json({ success: result.errors === 0, ...result });
   });
 
   await router.post('/clean-incomplete-downloads', async () => {
     const result = await cleanIncompleteDownloads();
+
+    invalidateSizeCaches();
 
     if (result.removed > 0) {
       await CleanupRun.create({
@@ -1702,6 +1927,9 @@ export default async function (router: Router) {
       return badRequest('Unknown maintenance task');
 
     const result = await runMaintenanceTask(body.id);
+    // Several tasks empty directories under ~/Library. One invariant is easier
+    // to hold than a list of which ones: a route that deletes, invalidates.
+    invalidateSizeCaches();
     return Response.json(result);
   });
 
@@ -1723,7 +1951,22 @@ export default async function (router: Router) {
       ? Math.floor(body.passes)
       : 1;
 
+    // The one action with no recovery at all: the bytes are overwritten, so
+    // not even the git object store helps afterwards.
+    const dispositions = await classifyByGit(paths);
+    const trackedPaths = paths.filter(p => refusesDeletion(dispositions.get(p) ?? 'unknown'));
+    if (trackedPaths.length > 0) {
+      return badRequest(
+        `Git tracks ${trackedPaths.length === 1 ? 'this path' : 'these paths'}: ${trackedPaths.join(', ')}. Shredding is unrecoverable.`,
+        409,
+      );
+    }
+
     const outcome = shredPaths(paths, { passes });
+
+    // Same ordering as /remove-extensions: the bytes are overwritten and
+    // unlinked by now, so the invalidation cannot sit behind a failable write.
+    invalidateSizeCaches();
 
     if (outcome.shredded.length > 0) {
       await CleanupRun.create({
@@ -1775,6 +2018,57 @@ export default async function (router: Router) {
 
   await router.post('/schedule-run', async () => {
     const outcome = await runScheduledClean();
+    // The widest delete in the app: every configured target, then privacy
+    // items, .DS_Store droppings and the Trash. Tens of gigabytes can go, so
+    // every measured size is suspect afterwards.
+    invalidateSizeCaches();
     return Response.json({ success: outcome.errors.length === 0, ...outcome });
+  });
+
+  // ── VPN ──────────────────────────────────────────────────────
+
+  /**
+   * Read-only status of the localtunnels VPN on this machine.
+   *
+   * Observes only: it creates no interface, generates no key and asks for no
+   * password, so opening the panel changes nothing. `refresh` re-probes the
+   * CLI, whose answer is otherwise cached for a minute.
+   *
+   * Bringing a tunnel up needs root, which needs a privileged helper this app
+   * does not have yet — so there is deliberately no counterpart to this route.
+   */
+  await router.post('/vpn-status', async (req: Request) => {
+    const body = await readJsonBody<{ refresh?: unknown }>(req);
+    if (body?.refresh === true)
+      invalidateVpnCache();
+    // `managedPid` is the tunnel *this app* started, which is a different
+    // question from whether a tunnel exists: the interface list reports any
+    // tunnel on the machine, including one someone brought up in Terminal.
+    // Only a managed one can be disconnected from here.
+    // Both awaited together: the status probe and the managed-pid lookup are
+    // independent, and neither blocks the agent now that the probe is async.
+    const [status, managedPid] = await Promise.all([readVpnStatus(), connectionPid()]);
+    return Response.json({ success: true, ...status, managedPid });
+  });
+
+  /**
+   * Bring the VPN up.
+   *
+   * Prompts for authorization through macOS, so it blocks until the person
+   * answers the dialog — or declines, which comes back as `Cancelled` rather
+   * than as a failure. Request validation lives in the control module, beside
+   * the command construction it protects.
+   */
+  await router.post('/vpn-connect', async (req: Request) => {
+    const body = await readJsonBody<unknown>(req);
+    if (body === null) return badJson();
+    const result = await vpnConnect(body);
+    return Response.json(result, { status: result.success ? 200 : 400 });
+  });
+
+  /** Take the VPN down. Also authorized, since the tunnel runs as root. */
+  await router.post('/vpn-disconnect', async () => {
+    const result = await vpnDisconnect();
+    return Response.json(result, { status: result.success ? 200 : 400 });
   });
 }

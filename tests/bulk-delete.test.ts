@@ -52,7 +52,20 @@ beforeAll(async () => {
 })
 
 afterAll(() => {
-  fs.rmSync(root, { recursive: true, force: true })
+  // Windows refuses to unlink a directory while anything still holds a handle
+  // inside it, and SQLite drops its file lock a moment after close() returns -
+  // so the first attempt failed EBUSY on the runner and took the whole suite
+  // down from an afterAll. Retry briefly, then give up: this is a temp
+  // directory, and failing to tidy it is not a test result.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      fs.rmSync(root, { recursive: true, force: true })
+      return
+    }
+    catch {
+      Bun.sleepSync(100)
+    }
+  }
 })
 
 describe('bulkDelete', () => {
@@ -84,11 +97,19 @@ describe('bulkDelete', () => {
   })
 
   it('refuses paths outside the home directory', async () => {
-    const result = await bulk.bulkDelete(['/etc/hosts'], 'permanent', 'large-files')
+    // A real file outside the profile, chosen per platform: /etc/hosts does
+    // not exist on Windows, so the final assertion failed there even though
+    // the refusal itself worked. The test is about the refusal, not about
+    // which operating system ships which file.
+    const outside = process.platform === 'win32'
+      ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'drivers', 'etc', 'hosts')
+      : '/etc/hosts'
+
+    const result = await bulk.bulkDelete([outside], 'permanent', 'large-files')
 
     expect(result.succeeded).toEqual([])
     expect(result.skipped).toHaveLength(1)
-    expect(fs.existsSync('/etc/hosts')).toBe(true)
+    expect(fs.existsSync(outside), 'the file must still be there').toBe(true)
   })
 
   it('refuses paths inside sensitive directories', async () => {

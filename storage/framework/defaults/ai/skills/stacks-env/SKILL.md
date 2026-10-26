@@ -13,13 +13,14 @@ allowed-tools: Read Edit Write Bash Grep Glob
 - Environment config: `config/env.ts`
 - Environment file: `.env`
 - Example: `.env.example`
-- Type definitions: `storage/framework/env.d.ts`
+- Type definitions: core/env/src/types.ts and storage/framework/types/env.d.ts
 
 ## Source Files
 ```
 env/src/
 ├── index.ts     # main exports
-├── utils.ts     # runtime/platform detection, StacksEnv proxy
+├── runtime.ts   # typed/coerced environment proxy
+├── utils.ts     # runtime/platform/environment detection
 ├── plugin.ts    # Bun plugin for auto .env loading
 ├── parser.ts    # .env file parser with encryption support
 ├── cli.ts       # CLI commands (get, set, encrypt, decrypt, rotate)
@@ -33,12 +34,12 @@ env/src/
 import { env } from '@stacksjs/env'
 
 env.APP_NAME        // string
-env.APP_ENV         // 'local' | 'dev' | 'stage' | 'prod'
+env.APP_ENV         // configured environment label, including long and short forms
 env.APP_KEY         // string
 env.APP_URL         // string
 env.DEBUG           // boolean (auto-coerced)
 env.PORT            // number (auto-coerced)
-env.DB_CONNECTION   // 'sqlite' | 'mysql' | 'postgres' | 'dynamodb'
+env.DB_CONNECTION   // declared connection name; availability comes from capabilityRegistry
 env.DB_HOST         // string
 env.DB_PORT         // number
 env.DB_DATABASE     // string
@@ -49,13 +50,18 @@ env.STRIPE_SECRET_KEY    // string
 env.MAIL_MAILER          // string
 env.QUEUE_DRIVER         // string
 env.REDIS_HOST           // string
-env[key]                 // any custom env var
 ```
 
-The `env` proxy auto-coerces: `'true'` → `true`, `'123'` → `123`, etc.
+All values may be undefined. The env proxy coerces true/false case-insensitively.
+Numeric variables declared by the framework or schema.number are numbers;
+recognized numeric-setting suffixes are also coerced. IDs/codes and values with
+leading zeros remain strings unless declared numeric. Arbitrary numeric-looking
+text is not always a number.
 
 ## StacksEnv Type (100+ typed variables)
-App, Ports, API, Database, AWS, Mail, Services (Stripe, Meilisearch), Frontend, Realtime, Redis, Pusher, Auth, Storage, Queue, plus `[key: string]` catch-all.
+The typed interface covers framework variables without a catch-all index
+signature. Declare an application variable in config/env.ts rather than reading
+undeclared names through a dynamic env key.
 
 ## Adding your own variables
 
@@ -63,6 +69,9 @@ Declare them in `config/env.ts`. That is the whole step:
 
 ```typescript
 // config/env.ts
+import { defineEnv } from '@stacksjs/env'
+import { schema } from '@stacksjs/validation/runtime'
+
 export default defineEnv({
   STRIPE_WEBHOOK_SECRET: { validation: schema.string(), default: '' },
   BILLING_RETRIES: { validation: schema.number(), default: 3 },
@@ -87,7 +96,7 @@ which is the failure `config/env.ts` exists to prevent.
 import { isBun, isNode, runtime, runtimeInfo, platform, isWindows, isMacOS, isLinux, hasTTY, hasWindow, isCI, isDebug, isMinimal, isColorSupported, provider, providerInfo } from '@stacksjs/env'
 
 isBun           // true
-isNode          // false
+isNode          // Node-compatible process detection; may also be true under Bun
 runtime         // 'bun'
 platform        // 'darwin'
 isWindows       // false
@@ -106,13 +115,80 @@ provider        // 'github-actions' | 'gitlab-ci' | 'circleci' | 'travis' | 'jen
 providerInfo    // { name: string, ... }
 ```
 
+## Remote integration environments
+
+Gate anything that transmits off the box - error reporting, analytics, log
+shipping - through `@stacksjs/env`, rather than inventing a policy per adapter.
+Without a shared gate, every developer machine and CI run reports into the same
+project as production, and a local startup failure reads as a live incident
+(stacksjs/stacks#2792).
+
+```typescript
+import { initializeIntegration } from '@stacksjs/env'
+
+// The callback does not run when the gate is closed, so constructing a client,
+// registering hooks or starting a flush timer inside it is safe.
+const result = initializeIntegration(config.bughq, ({ environment }) =>
+  installBugHq({ key: config.bughq.key, environment }))
+
+if (!result.initialized)
+  log.debug(`BugHQ not installed: ${result.gate.reason}`)
+```
+
+An application declares **only** `environments`. Do not add a sibling
+`environment` option and do not ask the app to repeat `env.APP_ENV`: the gate
+resolves the effective label once and hands it to the adapter for event
+metadata.
+
+Extend `EnvironmentGatedIntegration` from the adapter's own options type so
+the application gets `enabled` and `environments` and nothing else. Analytics
+is the adapter shipping this today:
+
+```typescript
+// config/analytics.ts
+export default {
+  driver: 'analyticshq',
+  environments: ['production', 'staging'], // omit to get exactly this
+  drivers: { analyticshq: { siteId: '...' } },
+} satisfies AnalyticsConfig
+```
+
+| Configuration | Result |
+|---|---|
+| `environments` omitted | `REMOTE_TELEMETRY_ENVIRONMENTS`, which is `production` and `staging` |
+| `environments: []` | off everywhere, the explicit way to disable without removing credentials |
+| `enabled: false` | off, always; checked before the allowlist so it is the last word |
+| `enabled: true` | does **not** bypass the allowlist |
+| `APP_ENV` unset or malformed | off, with `reason: 'environment-unknown'` |
+
+The gate reads `APP_ENV` only, and reads it at call time. It does not fall back
+to `NODE_ENV` the way `appEnv()` does, because an absent `APP_ENV` must not be
+guessed into a label an allowlist might admit. Call time rather than import time
+matters because a test harness or a CLI resolving `--env` routinely sets it
+after the module graph has loaded (stacksjs/stacks#2581).
+
+`prod`, `stage` and `dev` fold onto `production`, `staging` and `development`.
+`local`, `development` and `test` are deliberately **not** folded together:
+allowing your own machine must not also allow CI.
+
+The answer is the same in a web or API server, the dashboard, a worker and a
+Buddy command, because all of them read the same variable. Browser integrations
+receive only the resolved public label, never server credentials. With the
+AnalyticsHQ driver that label is the tag's `data-environment` attribute, which
+the tracker attaches to every pageview, custom event and Web Vitals beacon, so
+`staging` traffic is distinguishable without a second site id.
+
+`APP_ENV` is a configuration label, not proof of deployment identity: a local
+command launched with `APP_ENV=production` qualifies. It prevents accidents; it
+is not a security boundary.
+
 ## .env File Loading
 
 ```typescript
 import { loadEnv, autoLoadEnv, envPlugin } from '@stacksjs/env'
 
-await loadEnv({ path: '.env', override: false })
-autoLoadEnv()  // detects .env, .env.local, .env.{APP_ENV}
+const loaded = loadEnv({ path: '.env', overload: false }) // { loaded, errors }
+autoLoadEnv()  // .env, .env.local, .env.<effectiveEnv>, .env.<effectiveEnv>.local
 
 // Bun plugin (auto-loads .env before app starts)
 envPlugin()
@@ -123,8 +199,7 @@ envPlugin()
 ```typescript
 import { parse } from '@stacksjs/env'
 
-const vars = parse(envContent, {
-  encryption: true,       // decrypt encrypted values
+const { parsed, errors, skippedEncrypted } = parse(envContent, {
   privateKey: '...'       // decryption key
 })
 ```
@@ -132,7 +207,7 @@ const vars = parse(envContent, {
 ## Encryption (X25519 + AES-256-GCM)
 
 ```typescript
-import { aesEncrypt, aesDecrypt, generateKeypair, encryptValue, decryptValue, getPrivateKey } from '@stacksjs/env'
+import { aesEncrypt, aesDecrypt, generateKeypair, encryptValue, decryptValue, getPrivateKey, isValidPublicKey } from '@stacksjs/env'
 
 // AES-256-GCM symmetric encryption
 const encrypted = aesEncrypt(plaintext, password)
@@ -140,6 +215,7 @@ const decrypted = aesDecrypt(encrypted, password)
 
 // Versioned ephemeral-static X25519 envelope encryption
 const keypair = generateKeypair()
+const validPublicKey = isValidPublicKey(keypair.publicKey) // canonical current X25519 public metadata
 const encrypted = encryptValue(value, keypair.publicKey)
 const decrypted = decryptValue(encrypted, keypair.privateKey)
 ```
@@ -157,6 +233,34 @@ buddy env:rotate                           # rotate encryption keys
 buddy env:check                            # validate env configuration
 buddy env:check --file .env.production     # check a specific environment's file
 ```
+
+`getEnv()` fails a whole-file read if any encrypted entry cannot be decrypted.
+Restore the environment's matching private key through `.env.keys` or its
+`DOTENV_PRIVATE_KEY_<ENVIRONMENT>` process secret. A request for one plaintext
+key remains readable independently. `buddy deploy` stops on an incomplete or
+unreadable environment instead of deploying a partial map.
+
+`isValidPublicKey(value: unknown): value is string` returns false for private,
+legacy, malformed, or noncanonical public metadata without throwing or exposing
+parser errors. Strict committed-env checks reject that metadata and all nonempty
+private-key assignments, including encrypted ones. Legacy decryption remains
+supported for migration through `buddy env:rotate`; non-strict scans retain
+their existing compatibility behavior.
+
+`publicKeyMatchesPrivateKey(publicKey: unknown, privateKey: unknown): boolean`
+validates a current X25519 pair without returning either key or parser errors.
+Use it with the actual private half before accepting public metadata for future
+writes. Strict `env:check` rejects mismatches, and `env:set`/`env:encrypt` refuse
+to add ciphertext under a header unrelated to an available private key. Reading
+old ciphertext and rotating legacy keys retain their existing migration policy.
+
+For CLI/file operations, use
+`resolveEnvPrivateKey({ file?: string, keysFile?: string, cwd?: string })`.
+Its order is target-scoped local key, target-scoped process key, generic local
+key, then generic process key. The keys file defaults to `.env.keys` relative to
+`cwd`. `getEnv`, encrypted writers, and strict Buddy checks share this resolver.
+The cached application-runtime `resolvePrivateKey` remains process-first so
+server/browser test configuration can intentionally override local defaults.
 
 ## Tenant isolation on a shared box
 
@@ -214,12 +318,12 @@ calls or raw client-side `fetch`.
 - **A tenant's keys in your env file get shipped everywhere.** `buddy deploy`
   sends the entire env file as each site's `.env`. Declare `tenants` in
   `config/cloud.ts` so they are stripped, then delete them at source
-- Bun natively loads `.env` — no dotenv package needed
+- Bun natively loads `.env` - no dotenv package needed
 - The `env` proxy auto-coerces strings to booleans/numbers
-- `.env` should never be committed — use `.env.example` as template
+- `.env` should never be committed - use `.env.example` as template
 - New encrypted values use ephemeral-static X25519, HKDF-SHA-256, and
   AES-256-GCM. Legacy ciphertext remains readable for migration
-- `autoLoadEnv()` loads in order: `.env`, `.env.local`, `.env.{APP_ENV}`
+- autoLoadEnv loads least to most specific, including .env.<effectiveEnv>.local; effective env resolution is in plugin.ts and existing shell values are preserved unless overloaded
 - Runtime detection uses Bun globals and process properties
 - CI provider detection checks environment variables specific to each CI system
 - The `StacksEnv` type provides autocomplete for 100+ known variables

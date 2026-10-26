@@ -1,5 +1,5 @@
-import { defineModel } from '@stacksjs/orm'
-import { schema } from '@stacksjs/validation'
+import { customerOwnership, defineModel } from '@stacksjs/orm'
+import { schema } from '@stacksjs/validation/runtime'
 
 export default defineModel({
   name: 'Cart',
@@ -7,7 +7,13 @@ export default defineModel({
   primaryKey: 'id',
   autoIncrement: true,
 
+  // Rows belong to the caller's customer record, one hop from the user
+  // (stacksjs/stacks#2375). Without this the generated writes are reachable by
+  // any authenticated caller for any row.
+  ownership: customerOwnership(),
+
   traits: {
+    gdpr: { subject: { via: 'Customer' }, erasure: 'anonymize', basis: 'contract', purpose: 'Shopping cart' },
     useUuid: true,
     useTimestamps: true,
     useSearch: {
@@ -60,7 +66,8 @@ export default defineModel({
       validation: {
         rule: schema.number().min(0),
       },
-      factory: faker => faker.number.int({ min: 0, max: 1000 }),
+      // Integer minor units, like every commerce amount: 1999 is $19.99.
+      factory: faker => faker.number.int({ min: 1000, max: 20000 }),
     },
 
     taxAmount: {
@@ -70,7 +77,7 @@ export default defineModel({
       validation: {
         rule: schema.number().min(0),
       },
-      factory: faker => faker.number.int({ min: 0, max: 200 }),
+      factory: faker => faker.number.int({ min: 0, max: 1500 }),
     },
 
     discountAmount: {
@@ -80,7 +87,7 @@ export default defineModel({
       validation: {
         rule: schema.number().min(0),
       },
-      factory: faker => faker.number.int({ min: 0, max: 100 }),
+      factory: faker => faker.number.int({ min: 0, max: 1000 }),
     },
 
     total: {
@@ -90,7 +97,7 @@ export default defineModel({
       validation: {
         rule: schema.number().min(0),
       },
-      factory: faker => faker.number.int({ min: 0, max: 1200 }),
+      factory: faker => faker.number.int({ min: 1000, max: 21500 }),
     },
 
     expiresAt: {
@@ -116,6 +123,7 @@ export default defineModel({
     },
 
     notes: {
+      personal: true,
       order: 9,
       fillable: true,
       validation: {

@@ -1,5 +1,8 @@
+import * as fs from 'node:fs'
 import * as os from 'node:os'
 import type { DiskInfo, SystemInfo } from './types'
+import { bootMountPoint, listDisks } from './disks'
+import { NEEDS_PORTABLE_SIZER, sizeOfTree, sizeOfTreeAsync } from './dirsize'
 import { exec, execSync, shellEscape } from './exec'
 
 /**
@@ -54,52 +57,16 @@ export function getSystemInfoSync(): SystemInfo {
 }
 
 /**
- * Get disk usage information for all mounted volumes
+ * Get disk usage information for all mounted volumes.
+ *
+ * The implementation moved to ./disks, which reads the sizes from `statfs`
+ * rather than out of `df`'s columns. Two reasons, both load-bearing: `exec`
+ * runs every command through `sh -c` and Windows has no `sh`, and on APFS the
+ * `used` and `total` columns describe different scopes, so dividing one by the
+ * other reported this 85%-full disk as 2% full.
  */
 export async function getDiskInfo(): Promise<DiskInfo[]> {
-  const result = await exec('df -k 2>/dev/null')
-  if (!result.ok)
-    return []
-
-  const lines = result.stdout.split('\n').slice(1)
-  const disks: DiskInfo[] = []
-  const seen = new Set<string>()
-
-  for (const line of lines) {
-    const parts = line.trim().split(/\s+/)
-    if (parts.length < 6)
-      continue
-
-    const mountPoint = parts.slice(5).join(' ')
-
-    // Skip virtual/system volumes
-    if (
-      mountPoint.startsWith('/System/Volumes/')
-      || mountPoint === '/dev'
-      || mountPoint.startsWith('/private/var/vm')
-      || seen.has(parts[0])
-    )
-      continue
-
-    const totalKB = Number.parseInt(parts[1]) || 0
-    const usedKB = Number.parseInt(parts[2]) || 0
-    const freeKB = Number.parseInt(parts[3]) || 0
-
-    if (totalKB < 1_048_576)
-      continue // Skip volumes < 1GB
-
-    seen.add(parts[0])
-    disks.push({
-      mountPoint,
-      filesystem: parts[0],
-      totalBytes: totalKB * 1024,
-      usedBytes: usedKB * 1024,
-      freeBytes: freeKB * 1024,
-      usedPercent: totalKB > 0 ? Math.round((usedKB / totalKB) * 100) : 0,
-    })
-  }
-
-  return disks
+  return await listDisks()
 }
 
 /**
@@ -107,13 +74,30 @@ export async function getDiskInfo(): Promise<DiskInfo[]> {
  */
 export async function getPrimaryDiskInfo(): Promise<DiskInfo | null> {
   const disks = await getDiskInfo()
-  return disks.find(d => d.mountPoint === '/') || disks[0] || null
+  const boot = bootMountPoint()
+  // Matched against the platform's own boot mount rather than a literal '/',
+  // which no Windows volume is ever called.
+  return disks.find(d => d.mountPoint === boot) || disks[0] || null
 }
 
 /**
- * Get the size of a directory using `du`
+ * Get the size of a directory using `du`, or a portable walk where there is no
+ * `du` to run.
+ *
+ * Windows has no `du`. The spawn failed ENOENT, `exec` reported not-ok, and
+ * this returned 0 — which the screens above it render as an empty chart and a
+ * clean machine. A size of zero and "I could not measure" have to be
+ * different answers, so on Windows the walk in `dirsize.ts` does the job
+ * instead. `du` stays the default wherever it exists, because it is several
+ * times faster.
  */
 export async function getDirSize(dirPath: string): Promise<number> {
+  // The async form on purpose. `du` ran in another process, so a 15-second
+  // measure cost this one nothing; an in-process walk awaited from a request
+  // handler would freeze the agent that serves the UI for the whole duration.
+  if (NEEDS_PORTABLE_SIZER)
+    return await sizeOfTreeAsync(dirPath, { deadline: Date.now() + 15_000 })
+
   const result = await exec(`du -sk ${shellEscape(dirPath)} 2>/dev/null | cut -f1`, { timeout: 15_000 })
   if (!result.ok)
     return 0
@@ -124,6 +108,9 @@ export async function getDirSize(dirPath: string): Promise<number> {
  * Get the size of a directory synchronously
  */
 export function getDirSizeSync(dirPath: string): number {
+  if (NEEDS_PORTABLE_SIZER)
+    return sizeOfTree(dirPath, { deadline: Date.now() + 15_000 })
+
   const out = execSync(`du -sk ${shellEscape(dirPath)} 2>/dev/null | cut -f1`, { timeout: 15_000 })
   return (Number.parseInt(out) || 0) * 1024
 }
@@ -160,4 +147,35 @@ export function isAppleSilicon(): boolean {
 export function getMacOSMajorVersion(): number {
   const version = execSync('sw_vers -productVersion')
   return Number.parseInt(version.split('.')[0]) || 0
+}
+
+/**
+ * Free bytes on the filesystem that holds this path, or null if it cannot be
+ * read.
+ *
+ * `statfs` rather than a directory walk, because the two disagree in exactly
+ * the case that matters. Unlinking a file a process still holds open removes
+ * its directory entry immediately but frees none of its blocks until the
+ * holder closes it. `du` stops counting the file; the disk does not give the
+ * space back. Measured on a 200 MB file held open by a live process:
+ *
+ *   du  delta: 200.0 MB freed
+ *   df  delta:  -0.1 MB freed
+ *   after the holder exited: the 200 MB came back
+ *
+ * So a clean that reports its `du` delta can claim hundreds of megabytes while
+ * Disk Free does not move - which is the complaint this app has already had
+ * once, for a different reason, in the words "its either misreading the size
+ * or cleaning here does nothing, just fake stuff".
+ *
+ * One syscall, ~0.4ms, and it agrees with `df` to the byte.
+ */
+export function freeSpaceOf(target: string): number | null {
+  try {
+    const st = fs.statfsSync(target)
+    return Number(st.bavail) * Number(st.bsize)
+  }
+  catch {
+    return null
+  }
 }

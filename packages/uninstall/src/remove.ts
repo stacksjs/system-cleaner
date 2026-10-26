@@ -1,6 +1,7 @@
 import * as fs from 'node:fs'
 import * as os from 'node:os'
-import { exec, formatBytes, getDirSize, isPathSafe } from '@system-cleaner/core'
+import { exec, formatBytes, getDirSize, isPathSafe, isWindows } from '@system-cleaner/core'
+import { parseTasklist } from '@system-cleaner/monitor'
 import type { AppInfo, AppRemnant, UninstallOptions, UninstallResult } from './types'
 import { findRemnants } from './remnants'
 
@@ -122,22 +123,74 @@ export async function killProcess(pid: number): Promise<{ success: boolean, erro
   if (!Number.isInteger(pid) || pid <= 0)
     return { success: false, error: 'Invalid PID' }
 
-  const uid = os.userInfo().uid
-
-  const result = await exec(`ps -p ${pid} -o uid=`, { timeout: 3000 })
-  if (!result.ok)
-    return { success: false, error: 'Process not found' }
-
-  if (Number.parseInt(result.stdout.trim()) !== uid)
-    return { success: false, error: 'Can only kill your own processes' }
+  const owned = isWindows ? await ownedOnWindows(pid) : await ownedOnPosix(pid)
+  if (!owned.ok)
+    return { success: false, error: owned.error }
 
   try {
+    // Node maps SIGTERM onto TerminateProcess on Windows, so the same call
+    // works on both.
     process.kill(pid, 'SIGTERM')
     return { success: true }
   }
   catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) }
   }
+}
+
+/** Whether this pid belongs to the current user, by uid. */
+async function ownedOnPosix(pid: number): Promise<{ ok: true } | { ok: false, error: string }> {
+  const result = await exec(`ps -p ${pid} -o uid=`, { timeout: 3000 })
+  if (!result.ok)
+    return { ok: false, error: 'Process not found' }
+
+  return Number.parseInt(result.stdout.trim()) === os.userInfo().uid
+    ? { ok: true }
+    : { ok: false, error: 'Can only kill your own processes' }
+}
+
+/**
+ * The same ownership check, by account name.
+ *
+ * Windows has no uid to compare, so `tasklist` is asked for the one process
+ * and its owner is matched against the current account. Without this the
+ * check ran `ps`, which is not there — so every kill came back "Process not
+ * found", including for a process plainly listed on the screen beside the
+ * button.
+ *
+ * Spawned directly rather than through `exec`, which wraps everything in
+ * `sh -c`.
+ */
+async function ownedOnWindows(pid: number): Promise<{ ok: true } | { ok: false, error: string }> {
+  let stdout: string
+  try {
+    const proc = Bun.spawn(['tasklist.exe', '/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH', '/V'], {
+      stdout: 'pipe',
+      stderr: 'ignore',
+    })
+    const timer = setTimeout(() => proc.kill(), 5000)
+    stdout = await new Response(proc.stdout).text()
+    const code = await proc.exited
+    clearTimeout(timer)
+    if (code !== 0)
+      return { ok: false, error: 'Could not read the process list' }
+  }
+  catch {
+    return { ok: false, error: 'Could not read the process list' }
+  }
+
+  // A filter that matches nothing prints an INFO line rather than failing, so
+  // an empty parse is the "no such process" signal.
+  const row = parseTasklist(stdout).get(pid)
+  if (!row)
+    return { ok: false, error: 'Process not found' }
+
+  // The domain prefix varies by machine and is localised, so only the account
+  // name is compared.
+  const owner = (row.user.split('\\').pop() || row.user).trim().toLowerCase()
+  return owner === os.userInfo().username.trim().toLowerCase()
+    ? { ok: true }
+    : { ok: false, error: 'Can only kill your own processes' }
 }
 
 /** Get directory size with safe fallback to stat */

@@ -1,8 +1,8 @@
-import { Action } from '@stacksjs/actions'
-import { Auth, authCookie, register } from '@stacksjs/auth'
+import { Action } from '@stacksjs/actions/runtime'
+import { Auth, authCookieForBrowserSession, register, resolveBrowserSessionPolicy } from '@stacksjs/auth'
 import { dispatch } from '@stacksjs/events'
 import { response } from '@stacksjs/router'
-import { schema } from '@stacksjs/validation'
+import { schema } from '@stacksjs/validation/runtime'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_MESSAGE } from '../../password-policy'
 
 export default new Action({
@@ -29,8 +29,13 @@ export default new Action({
     const email = request.get('email')
     const password = request.get('password')
     const name = request.get('name')
+    const policy = resolveBrowserSessionPolicy(request.get('remember'))
 
-    const result = await register({ email, password, name })
+    const referralCode = request.get('referralCode')
+    const result = await register(
+      { email, password, name, referralCode: typeof referralCode === 'string' ? referralCode : undefined },
+      { expiresInMinutes: policy.expiresInMinutes, withRefreshToken: policy.withRefreshToken },
+    )
 
     if (result) {
       const user = await Auth.getUserFromToken(result.token)
@@ -71,7 +76,7 @@ export default new Action({
           email: user?.email,
           name: user?.name,
         },
-      }, { headers: { 'Set-Cookie': authCookie(result.token) } })
+      }, { headers: { 'Set-Cookie': authCookieForBrowserSession(result.token, result.expiresIn) } })
     }
 
     return response.error('Registration failed')

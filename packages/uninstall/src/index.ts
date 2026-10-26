@@ -1,5 +1,7 @@
 export * from './types'
+export * from './apps-windows'
 export * from './discover'
+export * from './startup-windows'
 export * from './bundle'
 export * from './remnants'
 export * from './remove'

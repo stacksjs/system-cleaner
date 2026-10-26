@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import * as fs from 'node:fs'
+import * as os from 'node:os'
 import * as path from 'node:path'
-import { HOME, isCleanable, isPathSafe } from '../src/paths'
+import process from 'node:process'
+import { HOME, isCleanable, isPathSafe, isWithin, isWithinHome } from '../src/paths'
 import { makeTmpDir } from './_tmp'
 
 let TMP: string
@@ -40,6 +42,13 @@ describe('isPathSafe', () => {
   })
 
   it('rejects /Applications root but not the prefix check for /Applications/<App>', () => {
+    // macOS only, on purpose. Windows uninstalls through the registry rather
+    // than by deleting a bundle, so isPathSafe grants no equivalent allowance
+    // for Program Files - there, /Applications resolves to C:\Applications and
+    // is correctly refused as outside the profile.
+    if (process.platform === 'win32')
+      return
+
     expect(isPathSafe('/Applications').safe).toBe(false)
     const r = isPathSafe('/Applications/NotARealApp.app')
     expect(r.safe).toBe(false)
@@ -98,5 +107,121 @@ describe('isCleanable', () => {
 
   it('rejects paths that do not exist', () => {
     expect(isCleanable(path.join(HOME, 'no-such-thing-here-xyz-12345')).safe).toBe(false)
+  })
+})
+
+/**
+ * A prefix is not a containment test.
+ *
+ * `isPathSafe` admitted anything starting with HOME, and PROTECTED_PATHS only
+ * ever holds the *current* user's roots - so once the boundary wrongly let a
+ * sibling profile through, nothing behind it refused. With HOME
+ * `/Users/glenn`, the whole of `/Users/glenn2` came back safe to delete:
+ * Documents, Pictures, Library, the lot.
+ *
+ * glenn/glenn2 and ci/ci-runner are ordinary account pairs. The reviewer that
+ * found this rated it non-blocking; reaching another account's home through
+ * the delete gate is worse than that.
+ */
+describe('isWithin', () => {
+  const HOME = '/Users/glenn'
+
+  it('accepts the directory itself and its children', () => {
+    expect(isWithin(HOME, HOME)).toBe(true)
+    expect(isWithin('/Users/glenn/Documents', HOME)).toBe(true)
+    expect(isWithin('/Users/glenn/Library/Caches/x', HOME)).toBe(true)
+  })
+
+  it('refuses a sibling whose name merely starts the same way', () => {
+    for (const sibling of ['/Users/glenn2', '/Users/glenn2/Documents', '/Users/glenn-old/Desktop', '/Users/glennx']) {
+      expect(isWithin(sibling, HOME), `${sibling} is not inside ${HOME}`).toBe(false)
+      // And the bare check this replaced would have admitted every one.
+      expect(sibling.startsWith(HOME), 'the old check admitted it').toBe(true)
+    }
+  })
+
+  it('refuses an unrelated account', () => {
+    expect(isWithin('/Users/alice/Documents', HOME)).toBe(false)
+  })
+
+  it('tolerates a trailing separator on the parent', () => {
+    expect(isWithin('/Users/glenn/Documents', '/Users/glenn/')).toBe(true)
+  })
+
+  it('keeps the real home boundary working end to end', () => {
+    // The sibling of the actual HOME on this machine, whatever it is called.
+    const sibling = `${HOME.replace(/\/$/, '')}2/Documents`
+    expect(isWithin(sibling, HOME)).toBe(false)
+  })
+
+  /**
+   * Windows separates paths with either character, so a containment test that
+   * only knows `\` answers "not inside" for every forward-slash path. That is
+   * the safe direction - it refuses rather than deletes - but it is still
+   * wrong, and it is what the Windows CI leg caught: the prefix was built with
+   * `path.sep` and compared against the POSIX spellings above, so even
+   * `isWithin(HOME, HOME)` came back false there.
+   *
+   * On macOS a backslash is an ordinary filename character and must not read
+   * as a separator, which is why this asserts opposite answers per platform
+   * rather than skipping one of them.
+   */
+  it('reads either separator on Windows, and only the slash on macOS', () => {
+    const onWindows = process.platform === 'win32'
+    const parent = 'C:\\Users\\glenn'
+
+    expect(isWithin('C:/Users/glenn/AppData/Local/Thing', parent)).toBe(onWindows)
+    expect(isWithin('C:/Users/glenn', parent)).toBe(onWindows)
+
+    // The fold must not widen the boundary it was added to narrow.
+    expect(isWithin('C:/Users/glenn2/Documents', parent)).toBe(false)
+    expect(isWithin('C:\\Users\\glenn-old', parent)).toBe(false)
+  })
+})
+
+/**
+ * Windows lets the same directory be named more than one way, and a string
+ * comparison between two spellings answers confidently and wrongly.
+ *
+ * Found by the Windows CI leg against a real runner: `%TEMP%` there is
+ * `C:\\Users\\RUNNER~1\\AppData\\Local\\Temp` while `os.homedir()` is
+ * `C:\\Users\\runneradmin`, so `user-temp` — the single largest Windows clean
+ * target — was refused as being outside the user's own home. The refusal was
+ * the safe direction and it still broke the feature.
+ */
+describe('isWithinHome', () => {
+  it('accepts the home directory and what is under it', () => {
+    expect(isWithinHome(HOME)).toBe(true)
+    expect(isWithinHome(path.join(HOME, 'Library'))).toBe(true)
+    expect(isWithinHome(path.join(HOME, 'a', 'b', 'c'))).toBe(true)
+  })
+
+  it('refuses a sibling account, whatever its name shares with yours', () => {
+    expect(isWithinHome(`${HOME}2`)).toBe(false)
+    expect(isWithinHome(`${HOME}-old`)).toBe(false)
+  })
+
+  it('agrees with the temp directory it is actually given', () => {
+    // The case from CI, where `%TEMP%` is `%LOCALAPPDATA%\\Temp` — inside home,
+    // reached through a spelling that did not string-match it. On POSIX
+    // os.tmpdir() is simply outside home and the answer is a plain false.
+    //
+    // `realpathSync.native` is the same primitive the implementation uses:
+    // plain `realpathSync` does not expand an 8.3 name, so recomputing the
+    // expectation with it disagreed about spelling rather than about
+    // containment.
+    const canon = (p: string): string => {
+      try { return fs.realpathSync.native(p) }
+      catch { return p }
+    }
+    expect(isWithinHome(os.tmpdir())).toBe(isWithin(canon(os.tmpdir()), canon(HOME)))
+  })
+
+  it('judges a path that does not exist by where it would live', () => {
+    // `realpath` throws on a missing path, so the nearest existing ancestor
+    // is resolved and the tail reattached. Most of what the guards are
+    // asked about does not exist: nobody has all six browsers installed.
+    expect(isWithinHome(path.join(HOME, 'no-such-dir', 'nor-this-one'))).toBe(true)
+    expect(isWithinHome(path.join(`${HOME}2`, 'no-such-dir'))).toBe(false)
   })
 })

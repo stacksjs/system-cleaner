@@ -1,7 +1,8 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { Database } from 'bun:sqlite'
-import { HOME, formatBytes, pathExists, safeStat } from '@system-cleaner/core'
+import process from 'node:process'
+import { HOME, formatBytes, isWindows, pathExists, safeStat } from '@system-cleaner/core'
 import { blockedByRunningBrowser, detectBrowserProfiles, runningBrowsers } from './browser'
 
 /**
@@ -143,6 +144,94 @@ export function buildKeepClause(hostColumn: string, domains: string[]): { clause
  * Items with no data on disk are dropped: a row for a browser profile that has
  * never stored a cookie is a checkbox that can only ever free zero bytes.
  */
+/** `%APPDATA%`, read from the environment because folder redirection moves it. */
+function roamingAppData(): string {
+  return process.env.APPDATA || path.win32.join(HOME, 'AppData', 'Roaming')
+}
+
+/** One system privacy item, before anything checks whether it is on disk. */
+export interface SystemPrivacyDefinition {
+  id: string
+  label: string
+  description: string
+  paths: string[]
+  sensitive: boolean
+}
+
+/**
+ * The system items this platform has, independent of what exists on this
+ * machine.
+ *
+ * Separate from `scanPrivacyItems`, which filters to paths that are actually
+ * present. That filter is right for the UI and useless for checking the
+ * platform logic: on a Linux runner none of the macOS paths exist, so the
+ * filtered list is empty and a test over it passes or fails for reasons that
+ * have nothing to do with the code.
+ */
+export function systemPrivacyDefinitions(): SystemPrivacyDefinition[] {
+  return [
+    ...(isWindows
+      ? [
+          {
+            id: 'recent-items',
+            label: 'Recent items',
+            description: 'The shortcuts Windows keeps for every file you have opened recently',
+            paths: [path.win32.join(roamingAppData(), 'Microsoft', 'Windows', 'Recent')],
+            sensitive: false,
+          },
+          {
+            id: 'shell-history',
+            label: 'Shell history',
+            description: 'Every command typed into a terminal, including any with a secret in it',
+            paths: [
+              // PSReadLine keeps PowerShell's history in plain text, forever,
+              // across sessions - the Windows equivalent of .zsh_history and
+              // just as likely to hold a pasted token.
+              path.win32.join(roamingAppData(), 'Microsoft', 'Windows', 'PowerShell', 'PSReadLine', 'ConsoleHost_history.txt'),
+              // A machine with Git Bash or WSL has these too.
+              path.join(HOME, '.bash_history'),
+              path.join(HOME, '.zsh_history'),
+            ],
+            sensitive: true,
+          },
+          // No `quarantine-log`. Windows records a download's origin in a
+          // Zone.Identifier stream on each file rather than in one log, so
+          // there is nothing here to clear - and inventing a path that cleared
+          // something else would be worse than the gap.
+        ]
+      : [
+          {
+            id: 'recent-items',
+            label: 'Recent items',
+            description: 'The recent documents, applications and servers lists across the system',
+            paths: [path.join(HOME, 'Library/Application Support/com.apple.sharedfilelist')],
+            sensitive: false,
+          },
+          {
+            id: 'quarantine-log',
+            label: 'Download log',
+            description: 'The record macOS keeps of every file downloaded, and the URL it came from',
+            paths: [
+              path.join(HOME, 'Library/Preferences/com.apple.LaunchServices.QuarantineEventsV2'),
+              path.join(HOME, 'Library/Preferences/com.apple.LaunchServices.QuarantineEventsV2-shm'),
+              path.join(HOME, 'Library/Preferences/com.apple.LaunchServices.QuarantineEventsV2-wal'),
+            ],
+            sensitive: false,
+          },
+          {
+            id: 'shell-history',
+            label: 'Shell history',
+            description: 'Every command typed into a terminal, including any with a secret in it',
+            paths: [
+              path.join(HOME, '.zsh_history'),
+              path.join(HOME, '.bash_history'),
+            ],
+            sensitive: true,
+          },
+        ]),
+  ]
+}
+
 export function scanPrivacyItems(): PrivacyItem[] {
   const items: PrivacyItem[] = []
 
@@ -270,42 +359,7 @@ export function scanPrivacyItems(): PrivacyItem[] {
  * is in it, with the URL it came from and when, going back years.
  */
 function scanSystemPrivacyItems(): PrivacyItem[] {
-  const definitions: Array<{
-    id: string
-    label: string
-    description: string
-    paths: string[]
-    sensitive: boolean
-  }> = [
-    {
-      id: 'recent-items',
-      label: 'Recent items',
-      description: 'The recent documents, applications and servers lists across the system',
-      paths: [path.join(HOME, 'Library/Application Support/com.apple.sharedfilelist')],
-      sensitive: false,
-    },
-    {
-      id: 'quarantine-log',
-      label: 'Download log',
-      description: 'The record macOS keeps of every file downloaded, and the URL it came from',
-      paths: [
-        path.join(HOME, 'Library/Preferences/com.apple.LaunchServices.QuarantineEventsV2'),
-        path.join(HOME, 'Library/Preferences/com.apple.LaunchServices.QuarantineEventsV2-shm'),
-        path.join(HOME, 'Library/Preferences/com.apple.LaunchServices.QuarantineEventsV2-wal'),
-      ],
-      sensitive: false,
-    },
-    {
-      id: 'shell-history',
-      label: 'Shell history',
-      description: 'Every command typed into a terminal, including any with a secret in it',
-      paths: [
-        path.join(HOME, '.zsh_history'),
-        path.join(HOME, '.bash_history'),
-      ],
-      sensitive: true,
-    },
-  ]
+  const definitions = systemPrivacyDefinitions()
 
   const items: PrivacyItem[] = []
 
@@ -316,8 +370,11 @@ function scanSystemPrivacyItems(): PrivacyItem[] {
 
     const sizeBytes = sizeOfPaths(present)
     items.push({
-      id: `macos::${definition.id}`,
-      browser: 'macOS',
+      // Named for the system it came from. Hardcoded `macos::` here would have
+      // labelled a Windows machine's PowerShell history as a macOS item, in an
+      // id the UI keys selections off.
+      id: `${isWindows ? 'windows' : 'macos'}::${definition.id}`,
+      browser: isWindows ? 'Windows' : 'macOS',
       browserIcon: 'i-f7-desktopcomputer',
       profile: '',
       profilePath: HOME,

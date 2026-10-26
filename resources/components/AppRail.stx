@@ -34,10 +34,26 @@ export const groups = [
     { id: 'disk', label: 'Disk Usage', icon: 'i-f7-chart-pie-fill', href: '/app/disk' },
     { id: 'large-files', label: 'Large Files', icon: 'i-f7-doc-on-doc-fill', href: '/app/large-files' },
     { id: 'duplicates', label: 'Duplicates', icon: 'i-f7-square-on-square', href: '/app/duplicates' },
+    { id: 'developer', label: 'Developer Junk', icon: 'i-f7-chevron-left-slash-chevron-right', href: '/app/developer' },
   ],
   [
     { id: 'applications', label: 'Applications', icon: 'i-f7-app-fill', href: '/app/applications' },
     { id: 'extensions', label: 'Extensions', icon: 'i-f7-square-stack-3d-up-fill', href: '/app/extensions' },
+    // Sits with Applications because it is about apps, not storage: what an
+    // uninstall left behind. Disk Usage above answers "what is big"; this
+    // answers "what has no owner any more".
+    { id: 'orphans', label: 'Leftover Data', icon: 'i-f7-tray-fill', href: '/app/orphans' },
+  ],
+  // VPN sits in its own group because it is the one row that is not about
+  // what is on this Mac. Everything above scans local storage or local
+  // processes; this is the state of a network the Mac is joined to. Grouping
+  // it with Applications would have read as a sixth kind of thing to clean.
+  //
+  // It is in the rail rather than the top strip for the reason that separates
+  // the two: it is a place you go to look at something, not an errand you run
+  // or a preference you set once.
+  [
+    { id: 'vpn', label: 'VPN', icon: 'i-f7-lock-shield-fill', href: '/app/vpn' },
   ],
 ]
 </script>

@@ -118,6 +118,7 @@ travel on `/api/dashboard-stats` and are bound client-side.
 
 - Lint: `./buddy lint` (fix with `./buddy lint:fix`)
 - Type check: `./buddy typecheck`
-- Test: `./buddy test`
+- Test: `bun run test` — not `./buddy test`, which globs `tests/` only and
+  silently skips the ten suites under `packages/*/test/`
 - Touching an app view or the API? Rebuild and launch the bundle:
   `bun run build:app && open storage/framework/desktop-dist/SystemCleaner.app`

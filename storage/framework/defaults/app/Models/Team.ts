@@ -1,11 +1,16 @@
-import { defineModel } from '@stacksjs/orm'
-import { schema } from '@stacksjs/validation'
+import { defineModel, teamMembershipOwnership } from '@stacksjs/orm'
+import { schema } from '@stacksjs/validation/runtime'
 
 export default defineModel({
   name: 'Team',
   table: 'teams',
   primaryKey: 'id',
   autoIncrement: true,
+
+  // The owner column is the primary key: a caller may write the team they are
+  // actually a member of, resolved by the same auth path every other
+  // team-scoped model uses (stacksjs/stacks#2375).
+  ownership: teamMembershipOwnership(),
 
   traits: {
     useUuid: true,

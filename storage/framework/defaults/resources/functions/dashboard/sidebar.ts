@@ -111,14 +111,41 @@ interface NavItem {
 }
 
 /**
- * Pull the discovered-models manifest from the framework defaults dir.
- * Returns the default empty payload when the file is absent (fresh project
+ * Where `buddy dev --dashboard` writes the discovered-models manifest, and
+ * where this reads it: under `storage/framework/runtime/`, which `.gitignore`
+ * covers.
+ */
+export const DISCOVERED_MANIFEST_PATH = 'storage/framework/runtime/dashboard/.discovered-models.json'
+
+/**
+ * Where it used to be written, inside the vendored framework tree.
+ *
+ * Read as a fallback rather than dropped, because an app that upgrades does
+ * not get a new manifest until its next `buddy dev --dashboard` - and without
+ * this it would render an empty sidebar until then. New writes only ever go
+ * to the path above.
+ */
+export const LEGACY_DISCOVERED_MANIFEST_PATH = 'storage/framework/defaults/views/dashboard/.discovered-models.json'
+
+/** The first of the two manifest paths that exists, or null when neither does. */
+function discoveredManifestPath(cwd: string): string | null {
+  for (const rel of [DISCOVERED_MANIFEST_PATH, LEGACY_DISCOVERED_MANIFEST_PATH]) {
+    const candidate = resolve(cwd, rel)
+    if (existsSync(candidate))
+      return candidate
+  }
+  return null
+}
+
+/**
+ * Pull the discovered-models manifest written by the dashboard dev server.
+ * Returns the default empty payload when neither path has one (fresh project
  * before the first dashboard run regenerates it).
  */
 export function loadDiscoveredManifest(
-  manifestPath = resolve(process.cwd(), 'storage/framework/defaults/views/dashboard/.discovered-models.json'),
+  manifestPath = discoveredManifestPath(process.cwd()),
 ): DiscoveredManifest {
-  if (!existsSync(manifestPath))
+  if (manifestPath === null || !existsSync(manifestPath))
     return { models: [], sections: defaultToggles(), nav: [] }
 
   try {
@@ -417,7 +444,7 @@ export function buildNavSections(
         'manufacturer', 'review', 'coupon', 'gift-card', 'payment', 'category',
         'cart', 'cart-item', 'order-item', 'tax-rate',
         'shipping-method', 'shipping-rate', 'shipping-zone',
-        'delivery-route', 'driver', 'license-key', 'digital-delivery',
+        'delivery-route', 'courier', 'license-key', 'digital-delivery',
         'print-device', 'receipt',
         'waitlist-product', 'waitlist-restaurant',
       ])),
@@ -431,7 +458,7 @@ export function buildNavSections(
       { to: '/commerce/delivery/shipping-methods', icon: 'truck', text: 'Shipping Methods' },
       { to: '/commerce/delivery/shipping-rates', icon: 'percent', text: 'Shipping Rates' },
       { to: '/commerce/delivery/shipping-zones', icon: 'globe', text: 'Shipping Zones' },
-      { to: '/commerce/delivery/drivers', icon: 'user', text: 'Drivers' },
+      { to: '/commerce/delivery/couriers', icon: 'user', text: 'Couriers' },
       { to: '/commerce/delivery/delivery-routes', icon: 'globe', text: 'Routes' },
       { to: '/commerce/delivery/license-keys', icon: 'lock', text: 'License Keys' },
       { to: '/commerce/delivery/digital-delivery', icon: 'package', text: 'Digital Delivery' },
@@ -443,6 +470,7 @@ export function buildNavSections(
       { to: '/marketing/lists', icon: 'list-settings', text: 'Lists' },
       { to: '/marketing/social-posts', icon: 'clock', text: 'Social Posts' },
       { to: '/marketing/campaigns', icon: 'rocket', text: 'Campaigns' },
+      { to: '/marketing/abandoned-carts', icon: 'cart', text: 'Abandoned Carts' },
       { to: '/marketing/reviews', icon: 'star', text: 'Reviews' },
       ...categoryNavItems(discoveredModels, 'marketing', new Set(['campaign'])),
     ]])
@@ -476,6 +504,9 @@ export function buildNavSections(
     const managementItems: NavItem[] = [
       { to: '/cloud', icon: 'cloud', text: 'Cloud' },
       { to: '/servers', icon: 'server', text: 'Servers' },
+      // Named commands and terminals on configured hosts (stacksjs/stacks#960).
+      // Hidden from client-role viewers; the gates decide who may use it.
+      { to: '/remote', icon: 'terminal', text: 'Remote', roles: ['admin', 'dev'] },
       { to: '/serverless', icon: 'zap', text: 'Serverless' },
       { to: '/dns', icon: 'globe-search', text: 'DNS' },
       { to: '/management/permissions', icon: 'lock', text: 'Permissions' },
@@ -677,10 +708,5 @@ export function buildWebSidebarSections(): WebSidebarSection[] {
         ...(item.roles && item.roles.length > 0 ? { roles: item.roles } : {}),
       })),
     })),
-    {
-      id: 'system',
-      label: '',
-      items: [{ id: 'settings', label: 'Settings', icon: NAV_ICON_CLASSES.settings, iconColor: 'blue', href: '/settings' }],
-    },
   ]
 }

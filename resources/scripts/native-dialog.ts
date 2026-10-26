@@ -22,6 +22,56 @@ import { clipboard, notifications, showMessageBox, showOpenDialog } from '@stack
 
 const APP_NAME = 'SystemCleaner'
 
+/**
+ * How long someone gets to answer before the bridge abandons the request.
+ *
+ * The injected bridge reaps every in-flight request after
+ * `__craftBridgeRequestTimeoutMs` — 30s by default — and rejects it. That is
+ * right for a native side that has gone quiet and wrong for a sheet the user
+ * is still reading: past 30s the sheet is still up, the user clicks the
+ * action, and the reply arrives to find no pending entry and is dropped.
+ *
+ * Passing 0 switches the reaper off entirely, which does stop an answer being
+ * thrown away and also means a reply that never arrives hangs the click
+ * forever with nothing on screen — no error, no toast, no way to tell a wedged
+ * dialog from one nobody clicked. Five minutes is far longer than anyone
+ * spends on a two-line sheet and short enough that a bridge which has stopped
+ * answering still surfaces as a failure. A reap inside that window costs a
+ * re-ask rather than the answer, which is what `nativeConfirm` does with it.
+ */
+const DECISION_TIMEOUT_MS = 300_000
+
+let decisionsInFlight = 0
+
+/**
+ * Run a call that blocks on the user, with the bridge's reaper held back.
+ *
+ * The bridge reads the knob once per call, and its own comment names modal
+ * dialogs as the case for raising it. Set it only around these calls rather
+ * than globally, so a native call that really has stranded anywhere else is
+ * still reaped on the usual 30s. Depth-counted because the pickers go through
+ * the same helper and a sheet can open over one.
+ */
+async function whileUserDecides<T>(call: () => Promise<T>): Promise<T> {
+  const host = window as unknown as { __craftBridgeRequestTimeoutMs?: number }
+  const previous = host.__craftBridgeRequestTimeoutMs
+  if (decisionsInFlight === 0)
+    host.__craftBridgeRequestTimeoutMs = DECISION_TIMEOUT_MS
+  decisionsInFlight++
+  try {
+    return await call()
+  }
+  finally {
+    decisionsInFlight--
+    if (decisionsInFlight === 0) {
+      if (previous === undefined)
+        delete host.__craftBridgeRequestTimeoutMs
+      else
+        host.__craftBridgeRequestTimeoutMs = previous
+    }
+  }
+}
+
 export interface ConfirmOptions {
   /** The question, as the bold first line of the sheet. */
   title: string
@@ -57,20 +107,115 @@ async function nativeConfirm(options: ConfirmOptions): Promise<boolean> {
   // So say it once. `cancelButton` already carries the whole intent: Escape
   // dismisses, and a host that keys Return to the cancel button honours the
   // safe default without a second field to disagree about.
-  const { response } = await showMessageBox({
+  // Ask the host for a yes/no, not for a button index.
+  //
+  // `showMessageBox` answers `{ response: n }`, and n does not mean what the
+  // Electron-shaped type implies. Pressing the action button on
+  // ['Clean Selected', 'Cancel'] returns 1 — the index of Cancel — so every
+  // confirmed dialog read as a cancellation and the caller did nothing.
+  //
+  // Two readings fit that one observation: the host is 1-based
+  // (NSAlertFirstButtonReturn), or it adds buttons in the AppKit order with
+  // the default first. They disagree about what Cancel returns, and picking
+  // wrong maps Cancel onto the destructive action. So do not pick: the bridge
+  // also exposes `showConfirm`, documented as "true if OK was clicked, false
+  // if cancelled", which carries no index to misread. It takes okLabel and
+  // cancelLabel, so the action button keeps its name.
+  // The injected `craft.dialog.showConfirm` takes a message STRING, not the
+  // options object craft-native's own wrapper accepts — passing an object
+  // renders "[object Object]" and falls back to OK/Cancel. So compose the
+  // question and the consequence into one string.
+  //
+  // The cost is the named action button: this path can only offer OK/Cancel,
+  // where `showMessageBox` could say "Clean Selected". That is a real loss and
+  // it is worth it, because showMessageBox's answer cannot be trusted. It
+  // returns `{ response: 1 }` when the action is pressed on a two-button
+  // sheet, and the two readings that explain it — 1-based indexing, or AppKit
+  // button order — disagree about what Cancel returns. Picking wrong maps
+  // Cancel onto the destructive action. `showConfirm` answers a boolean, which
+  // has no index to misread, so it cannot be wrong in that direction.
+  const dialogApi = (window as unknown as {
+    craft?: { dialog?: { showConfirm?: (message: string) => Promise<unknown> } }
+  }).craft?.dialog
+
+  if (typeof dialogApi?.showConfirm === 'function') {
+    const prompt = options.message
+      ? `${options.title}\n\n${options.message}`
+      : options.title
+    // Craft answers `{ ok: true }`, not a bare boolean — craft-native's own
+    // wrapper reads `!!(payload && payload.ok === true)` for this exact
+    // reason. Accept either, because the documented return type is boolean
+    // and a host that honours it should also work.
+    //
+    // Returning false on anything else is what made a sheet the user had
+    // already confirmed do nothing at all: a rejected call became a silent
+    // "no", indistinguishable from a dead button. An answer nobody could read
+    // is not a refusal, it is a reason to ask again.
+    //
+    // Two attempts, and which failure happened decides what comes next.
+    //
+    // A rejection means the reply was lost, not that the route is wrong: the
+    // reaper fired while the sheet was still up, or the bridge threw. Asking
+    // again through `showConfirm` puts the question back by the one route this
+    // host answers readably, so the second answer is honoured. Falling through
+    // to `showMessageBox` instead would ask a second time and then discard
+    // whatever was clicked — the injected bridge routes a two-button
+    // `showMessageBox` to the same native action, which replies `{ ok: true }`,
+    // and the normalizer looks for `response`/`buttonIndex`, finds neither and
+    // synthesizes the cancel index. On the packaged host that path cannot
+    // return true, so it is a second prompt rather than a second chance, and a
+    // slow reader's confirmed delete would do nothing twice over.
+    //
+    // An unreadable answer is the opposite case: the route answered, and
+    // answered in a shape no retry will change. That one does fall through,
+    // because `showMessageBox` is then a genuinely different question.
+    let unreadable = false
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let answer: unknown
+      try {
+        answer = await whileUserDecides(() => dialogApi.showConfirm!(prompt))
+      }
+      catch {
+        continue
+      }
+
+      if (answer === true)
+        return true
+      if (answer && typeof answer === 'object' && 'ok' in (answer as object))
+        return (answer as { ok?: unknown }).ok === true
+
+      unreadable = true
+      break
+    }
+
+    // Both attempts failed outright. `showMessageBox` rides the same
+    // transport, so a third sheet fails the same way — or throws out of here
+    // and kills the `@click` handler with nothing on screen to show for it.
+    // Decline: a question nobody could hear the answer to is not a yes.
+    if (!unreadable)
+      return false
+  }
+
+  // Reached when the host has no `showConfirm`, and when it has one that
+  // answered in a shape this cannot read. Fall back to the index comparison,
+  // which reads the documented 0-based convention and so fails closed on a
+  // host that means something else — a second click, rather than a deletion
+  // nobody asked for.
+  const raw = await whileUserDecides(() => showMessageBox({
     type: options.destructive ? 'warning' : 'question',
     title: APP_NAME,
     message: options.title,
     detail: options.message,
     buttons,
     cancelButton: CANCEL,
-  })
+  }))
+  const { response } = raw as { response?: number }
 
   // Index into the array rather than comparing the number, so an index the
   // host never should have sent reads as "not the action" instead of as a
   // confirmation. Being wrong in that direction costs a second click; being
   // wrong in the other empties a folder nobody asked about.
-  return buttons[response] === buttons[0]
+  return typeof response === 'number' && buttons[response] === buttons[0]
 }
 
 /** Report something that already happened and cannot be undone from here. */
@@ -110,11 +255,11 @@ async function nativeCopy(text: string): Promise<boolean> {
  */
 async function nativeChooseFolder(title?: string): Promise<string | null> {
   try {
-    const result = await showOpenDialog({
+    const result = await whileUserDecides(() => showOpenDialog({
       title: title || 'Choose a folder to scan',
       canChooseDirectories: true,
       buttonLabel: 'Scan',
-    })
+    }))
     return result.canceled ? null : (result.filePaths?.[0] ?? null)
   }
   catch {
@@ -131,13 +276,13 @@ async function nativeChooseFolder(title?: string): Promise<string | null> {
  */
 async function nativeChooseItems(title?: string): Promise<string[]> {
   try {
-    const result = await showOpenDialog({
+    const result = await whileUserDecides(() => showOpenDialog({
       title: title || 'Choose files or folders',
       canChooseFiles: true,
       canChooseDirectories: true,
       multiSelections: true,
       buttonLabel: 'Choose',
-    })
+    }))
     return result.canceled ? [] : (result.filePaths ?? [])
   }
   catch {

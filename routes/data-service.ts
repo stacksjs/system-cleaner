@@ -4,7 +4,7 @@ import * as path from 'node:path'
 import { CLEAN_TARGETS, getAllExtensions, sizeExtensions } from '@system-cleaner/clean'
 import { discoverStartupItems } from '@system-cleaner/uninstall'
 
-const startupCache = new TtlCache<ReturnType<typeof discoverStartupItems>>(60_000)
+const startupCache = new TtlCache<Awaited<ReturnType<typeof discoverStartupItems>>>(60_000)
 const extensionsCache = new TtlCache<ReturnType<typeof getAllExtensions>>(60_000)
 const extensionSizesCache = new TtlCache<Record<string, number>>(5 * 60_000)
 const diskInfoCache = new TtlCache<Record<string, unknown>>(30_000)
@@ -27,10 +27,10 @@ function safeExec(cmd: string, fallback = ''): string {
   }
 }
 
-export function getStartupItemsCached() {
+export async function getStartupItemsCached() {
   const hit = startupCache.get('items')
   if (hit) return { items: hit, cached: true }
-  const items = discoverStartupItems()
+  const items = await discoverStartupItems()
   startupCache.set('items', items)
   return { items, cached: false }
 }
@@ -160,8 +160,8 @@ export function getCleanupTargetsCached() {
   return { targets, cached: false }
 }
 
-export function getDashboardStatsCached() {
-  const { items: startupItems, cached: startupCached } = getStartupItemsCached()
+export async function getDashboardStatsCached() {
+  const { items: startupItems, cached: startupCached } = await getStartupItemsCached()
   const { extensions, cached: extCached } = getExtensionsCached()
 
   return {

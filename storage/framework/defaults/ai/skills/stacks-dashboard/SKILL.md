@@ -1,6 +1,6 @@
 ---
 name: stacks-dashboard
-description: Use when building or customizing the Stacks admin dashboard, including dashboard pages, model management views, analytics widgets, commerce dashboards, content management, settings panels, deployment monitoring, job/queue management, or the 250+ built-in dashboard components. Covers the dashboard system at storage/framework/defaults/.
+description: Use when building or customizing the Stacks admin dashboard, including dashboard pages, model management views, analytics widgets, commerce dashboards, content management, settings panels, deployment monitoring, job/queue management, or the 413 built-in dashboard components. Covers the dashboard system at storage/framework/defaults/.
 license: MIT
 compatibility: Bun >= 1.3.0, TypeScript
 allowed-tools: Read Edit Write Bash Grep Glob
@@ -8,7 +8,7 @@ allowed-tools: Read Edit Write Bash Grep Glob
 
 # Stacks Dashboard
 
-The Stacks admin dashboard provides a full-featured admin panel with 100+ route views, 250+ components, and a multi-section layout.
+The Stacks admin dashboard provides a full-featured admin panel with 100+ route views, 413 components, and a multi-section layout.
 
 ## Key Paths
 - Dashboard components: `storage/framework/defaults/resources/components/Dashboard/`
@@ -20,6 +20,14 @@ The Stacks admin dashboard provides a full-featured admin panel with 100+ route 
 - Configuration: `config/ui.ts`
 
 ## Dashboard Sections
+
+Enable/install the dashboard feature before expecting its default route bundle
+and owned application scaffolds. Keep custom page/component overrides under
+`resources/` and custom Actions under `app/` at their matching relative paths.
+The sidebar registry determines navigation; a page existing on disk does not
+add a sidebar entry or authorize its data Action. Feature sections can be
+disabled independently in configuration. Pair new model views with
+`stacks-models`, `stacks-actions`, and the route registry actually mounted.
 
 Dashboard route views are mounted at the dashboard server root. Do not prefix
 page links with `/dashboard`. The `/api/dashboard/*` prefix is reserved for
@@ -60,6 +68,145 @@ dashboard data Actions.
 - `/content/tags` - tag management
 - `/content/comments` - comment moderation
 - `/content/files`, `/content/blog`, `/content/seo` - files, blog operations, and SEO
+
+### The file manager's two layers (stacksjs/stacks#2577)
+
+Worth knowing before adding anything to it, because the split is not obvious
+from the endpoints:
+
+- **Storage operations** map to a `StorageAdapter` method and go straight to the
+  disk: list, upload, create folder, rename, visibility, duplicate, delete.
+- **Metadata** - favourites and tags - has nowhere to live on a disk (extended
+  attributes do not survive a copy; S3 object metadata is set at write time, so
+  starring a 2 GB video would rewrite 2 GB). It lives in `storage_items`, keyed
+  by `(disk, path)`, written by `PUT /files/favorite` and `PUT /files/tags`.
+
+**The disk is authoritative and the table is advisory.** The listing comes from
+the disk and rows are joined onto it, so a path with no row is a file with
+nothing recorded - which is most files. Renames and deletes made THROUGH the
+dashboard reconcile eagerly (a folder is a prefix update, because moving a
+folder moves everything under it); a completed listing sweeps rows for paths it
+did not see, which is free because the walk already enumerated them. A TRUNCATED
+listing sweeps nothing - it has not proved a path is absent.
+
+A file renamed outside the dashboard loses its metadata, and that is by design:
+a rename and a copy-then-delete are the same two events to a bucket listing, so
+reconciling would be guessing.
+
+### The media pipeline (stacksjs/stacks#2578)
+
+None of the three things an upload might need can happen inside the request: a
+transcode is minutes, a vision call is a round trip to a third party. So an
+upload dispatches and the dashboard shows state.
+
+- `storage_item_tasks`, one row per `(disk, path, kind)`, kind being
+  `optimize` (images, via `ts-images`), `transcode` (video, via `ts-videos`),
+  `tag` (a vision model) or `preview` (the file manager thumbnail, #308). They succeed and fail independently, which is why this
+  is not a column on `storage_items` - a video whose transcode finished and
+  whose tagging failed is a normal state.
+- `dispatchDashboardFileTasks` decides from the CONTENT TYPE what a file needs.
+  Most uploads are documents and get nothing. A transcode waits for a video
+  profile, because the ladder is derived from the source dimensions.
+- A dispatch failure is RECORDED, not thrown: a queue that is down leaves a
+  visible failure rather than an upload that fails or a file that is silently
+  never processed.
+- `runTask` owns the queued -> running -> done/failed transitions so the three
+  jobs cannot disagree about them. It rethrows after recording, because the row
+  and the queue answer different questions - the queue decides whether to retry,
+  the row is what somebody looking at the file sees.
+- `POST /files/reprocess` re-runs everything, or the kinds you name.
+- `preview` is decided by `file-preview.ts`, from the type the file CLAIMS
+  (the disk's answer, or the extension when that is `octet-stream`), and the
+  job checks the bytes agree before drawing. Images, WAV waveforms and TrueType
+  specimens become `.variants/<path>/preview.png`; text becomes a
+  `preview.txt` snippet. SVG, video, compressed audio, PDF, CFF/WOFF fonts,
+  HEIC and TIFF are recorded `skipped` with the reason in `error` - no
+  homegrown renderer draws them, and SVG is never rasterized. Never add a
+  renderer that shells out: that is the rule the skips exist to keep.
+- `skipped` is terminal: `runTask` records a thrown `StorageTaskSkipped`
+  without rethrowing, so the queue does not retry it, and `aggregateTaskState`
+  ignores it unless nothing else applied.
+
+Derivatives are written back to the same disk under `.variants/<path>/`. The
+leading dot keeps them out of the listing, which skips hidden components - a
+folder of thirty derivatives beside every photo makes the browser useless.
+A rename or delete through the dashboard moves or removes that folder with the
+file, after the storage operation succeeds and best effort, since the task rows
+already followed and a missing derivative is regenerated by reprocessing.
+
+### Remote commands (stacksjs/stacks#960)
+
+Running a configured operation on a configured host over SSH: the request
+names a host KEY and a command KEY, both from `config/remote.ts`, so there is
+nothing to escape and no shell to reach. The interactive terminal beside it is
+covered below.
+
+Four things make it safe to expose, and each is a rule to keep:
+
+- **Host keys are verified.** `StrictHostKeyChecking=yes` against the host's
+  declared `knownHosts`. Do NOT reuse `sshExec` from `@stacksjs/ts-cloud` for
+  anything long-lived: it disables host key checking on purpose, for boxes a
+  minute old whose keys cannot be known.
+- **Hosts and commands come from config, never the request.** A `RemoteCommand`
+  carries an `argv` ARRAY that is never interpolated.
+- **The routes do NOT use `guard()`.** That helper drops auth entirely under
+  `APP_ENV=local|development|test`, which here would be an unauthenticated
+  command runner on any dev machine on the network. They use
+  `authenticatedGuard`, and `remote-routes.test.ts` asserts it.
+- **Authorization fails CLOSED.** The `run-remote-command` gate receives the
+  host and command keys; with no gate defined, every run is refused. This is the
+  opposite of the websocket authenticator in `@stacksjs/realtime`, which
+  proceeds when none is installed.
+
+Runs are recorded before AND after - a run recorded only on completion loses the
+command that hung and the one whose process died with the box. The audit sink
+writes to the application log rather than the dashboard's own database, which is
+the thing an operator with dashboard access could edit.
+
+### Remote terminals (stacksjs/stacks#960)
+
+`/remote` in the dashboard also opens an interactive shell on a host that sets
+`terminal: true`. Every command-runner rule above holds, plus:
+
+- **A host opts in, and a gate decides.** `terminal: true` on the host, and the
+  `open-remote-terminal` gate (receives the host key). No gate, no session.
+- **A session belongs to the user who opened it.** 128-bit id; another user
+  naming it gets the same 404 as a missing id.
+- **It does not outlive its purpose.** 15 minutes without input, 2 hours in all,
+  30 seconds after the last viewer leaves: the remote shell is killed, never
+  left running. At most 4 per user.
+- **What is typed is audited line by line** in the application log, so hosts
+  should take keys and passwordless sudo, not typed passwords.
+
+Transport: a local PTY (`Bun.spawn({ terminal })`, which Bun now has) running
+`ssh -tt` with the pinned host key, so a browser resize reaches the remote side.
+Output reaches the browser as server-sent events, base64 and sequence-numbered
+for replay on reconnect; input and resize are small POSTs that each pass auth,
+CSRF and the session-owner check. Sessions live in the server process.
+
+In the browser it is `<stacks-remote-terminal host="...">` (xterm.js), from
+`functions/remote-terminal-element.ts`. Two rules that module follows:
+
+- **Nothing browser-only at module top level.** `defaults/functions` is also
+  auto-imported on the SERVER; a top-level `class extends HTMLElement` threw
+  there and took every function in the barrel down. xterm and the class load
+  inside `registerRemoteTerminal()`.
+- **Survive being moved.** stx's `:if` detaches and re-inserts the SAME nodes, so
+  the element acts on a removal only if it is still detached a tick later, and
+  starts a fresh session whenever it is attached again.
+
+`remote-terminal.test.ts` runs a real session through a throwaway user-level
+`sshd` on a loopback port when one is installed (macOS and the CI image both
+have one), including a host whose key does not match the pinned one.
+
+**There is no ffmpeg.** #2578 asked whether video was in scope given the
+external binary, its licensing and its provisioning; `@stacksjs/video` is built
+on `ts-videos`, which encodes itself, so that question was already answered.
+
+Tags go through `taggables` + `taggable_models` with `taggable_type =
+'storage_items'` - the trait the CMS already uses. Do NOT declare a
+`belongsToMany` to the `Tag` model for this: `taggable_models.tag_id` resolves
+against `taggables`, which is a different table from `tags`.
 
 ### Data Management
 - `/data/dashboard` - data overview
@@ -171,6 +318,48 @@ review and must not be silently recorded.
 - `/management/permissions` - RBAC management
 - `/kanban` - model-backed board management
 - `/ci`, `/buddy` - CI and Buddy workflows
+
+## Who may reach a dashboard surface
+
+Two axes, declared in different places.
+
+**Route groups** are gated in `config/dashboard.ts`, keyed by the group's path
+prefix:
+
+```ts
+access: {
+  '/api/commerce': ['admin', 'superadmin'],
+  '/dashboard/commerce': ['admin', 'superadmin'],
+  '/cms': ['admin', 'editor'],
+}
+```
+
+Each entry appends `role:<the list>` after that group's `auth`, so any one of
+the named roles admits. Every group ships `auth` and nothing more, so an
+omitted group stays reachable by any signed-in user; naming it is the only way
+to tighten it, since `defaults/routes/dashboard.ts` is framework-owned
+(stacksjs/stacks#2883). Keyed by prefix, so gating `/api/commerce` does not
+gate `/dashboard/commerce`: name both when you mean both. The prefixes are a
+typed union, so a typo is a compile error rather than a gate that is quietly
+absent.
+
+**A model's own generated API** is gated on the model, not here: either
+`dashboard: { roles: ['admin'] }`, which gates the sidebar row and every
+generated route together, or `useApi.middleware` for per-ability control. See
+`stacks-models`.
+
+**The sidebar** filters itself. A row carrying roles (from a model's
+`dashboard.roles` or a `nav` item's `roles`) is hidden client-side from viewers
+holding none of them, permissively for unauthenticated viewers so the local dev
+dashboard stays usable (#1843). That is presentation: it hides the link, not
+the endpoint, so it is never the gate on its own.
+
+**SSR pages** take the same middleware names as an API route, because the page
+servers build their registry from `app/Middleware.ts`:
+
+```stx
+definePageMeta({ middleware: ['auth', 'role:admin'] })
+```
 
 ## Dashboard Components (250+)
 
@@ -452,7 +641,7 @@ or a fake success response.
 
 ## Gotchas
 - Dashboard runs on port 3002 by default (separate from frontend on 3000)
-- Dashboard components use STX templating with crosswind CSS
+- Dashboard components use STX templating with ts-css utilities
 - Dashboard routes are registered from `storage/framework/defaults/routes/`, not from a generated type file
 - Settings panels read/write from the corresponding `config/*.ts` files
 - Models with `useApi` get generated REST actions and routes, not bespoke dashboard views
@@ -463,3 +652,18 @@ or a fake success response.
 - Preserve the existing sidebar information architecture and styling when redesigning page content
 - Use `dashboard-modal-layer` for every fixed dashboard dialog or drawer
 - The live terminal component polls real deployment output and pauses while the document is hidden
+
+## Generic model exposure
+
+Set `dashboard: { access: false }` on a model to exclude it server-side from
+the generic model catalog and its totals, legacy highlighted model counts,
+User/Subscriber count Actions, global model search, and generic model-browser
+read/store/update/destroy Actions. Direct model-browser requests return 404
+before row queries. Omission preserves existing exposure.
+
+`dashboard.enabled: false` only hides a sidebar row and still permits generic
+model access. `access` does not disable direct ORM calls, named domain Actions,
+or separate routes generated by `useApi`. Configure `security.api.models` or
+`STACKS_MODEL_APIS`, middleware, ownership and policies for those APIs. The
+new boundary does not provide row ownership or permission checks for models
+that remain exposed.

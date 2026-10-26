@@ -10,6 +10,7 @@ function esc(str) { return escapeHtml(str || '') }
 <div x-data="{
   selected: [],
   cleaning: {},
+  cleanProgress: null,
   toasts: [],
   toastId: 0,
   cleanCategories: [],
@@ -43,6 +44,9 @@ function esc(str) { return escapeHtml(str || '') }
   safeIds() { return this.cleanCategories.filter(function(c) { return c.risk !== 'caution'; }).map(function(c) { return c.id; }); },
   allSafeSelected() { var s = this.selected; var ids = this.safeIds(); return ids.length > 0 && ids.every(function(id) { return s.indexOf(id) !== -1; }); },
   toggleAllSafe() { this.selected = this.allSafeSelected() ? [] : this.safeIds(); },
+
+  markCleaning(id) { this.cleaning = Object.assign({}, this.cleaning, { [id]: true }); },
+  clearCleaning(id) { var next = Object.assign({}, this.cleaning); delete next[id]; this.cleaning = next; },
   categoriesPresent() { var seen = []; this.cleanCategories.forEach(function(c) { if (seen.indexOf(c.category) === -1) seen.push(c.category); }); return seen.sort(); },
   setFilter(c) { this.filter = c; applyCleanupFilter(c); },
   shortPath(p) {
@@ -96,7 +100,7 @@ function _api(endpoint, data) {
 // permanently and the UI button stayed frozen with no message.
 function _apiCatch(label, opts) {
   return function(err) {
-    if (opts && opts.clearCleaning) _exec("delete cleaning['' + " + JSON.stringify(opts.clearCleaning) + " + '']");
+    if (opts && opts.clearCleaning) _exec("clearCleaning(" + JSON.stringify(opts.clearCleaning) + ")");
     var msg = (err && err.message) ? err.message : 'Network error';
     _exec("toast(" + JSON.stringify(label + ': ' + msg) + ", 'error')");
   };
@@ -131,20 +135,49 @@ async function doCleanDir(p, name, id, risk) {
     confirmLabel: 'Clean',
     destructive: true,
   })) return;
-  _exec("cleaning['' + id + ''] = true");
+  _exec("markCleaning(" + JSON.stringify(id) + ")");
   _api('/api/clean-dir', { path: p }).then(function(r) {
-    _exec("delete cleaning['' + id + '']");
-    if (r.success) {
+    _exec("clearCleaning(" + JSON.stringify(id) + ")");
+
+    // Refresh whenever bytes actually went, not only after a flawless sweep.
+    //
+    // /clean-dir reports success only when its error list is empty, so one
+    // file held open by a running app turns a clean that freed gigabytes into
+    // success:false. Gating the refresh on that flag left the row sitting at
+    // its pre-delete size under a "Clean failed" toast - the original
+    // "nothing happened" symptom, on the path where it is most likely rather
+    // than least: ~/Library/Caches always has a few files locked by whatever
+    // happens to be running.
+    var freed = r.freedBytes || 0;
+    var removed = r.success || freed > 0 || r.measured === false;
+    var failedCount = (r.errors || []).length;
+
+    if (removed) {
       try { localStorage.removeItem(CACHE_KEY); } catch (e) {}
-      // An unmeasured clean really did happen; only its size is unknown.
-      // Saying "freed 0 B" would read as a failure.
-      var freedNote = r.measured === false ? '' : ' - freed ' + _fmtBytes(r.freedBytes);
-      _exec("toast('Cleaned " + name.replace(/'/g, "\\'") + freedNote + "', 'success')");
       // Re-scan so the row's size cell reflects the cleaned-up state
       // instead of holding stale numbers until the user manually rescans.
       scanCleanupSizes(true);
     }
-    else _exec("toast('Clean failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");
+
+    // An unmeasured clean really did happen; only its size is unknown.
+    // Saying "freed 0 B" would read as a failure.
+    var freedNote = r.measured === false ? '' : ' - freed ' + _fmtBytes(freed);
+
+    if (r.heldOpen) {
+      // The delete worked and the disk did not move. On Unix, unlinking a
+      // file a process still holds open frees nothing until that process
+      // closes it - a log a running service writes to is the ordinary case.
+      // Saying "freed 470 MB" here and watching Disk Free sit still is how
+      // this app earned "its either misreading the size or cleaning here does
+      // nothing, just fake stuff".
+      _exec("toast(" + JSON.stringify('Cleaned ' + name + ' - ' + _fmtBytes(freed) + ' will free up once the apps using those files are closed') + ", 'info')");
+    }
+    else if (r.success)
+      _exec("toast('Cleaned " + name.replace(/'/g, "\\'") + freedNote + "', 'success')");
+    else if (removed)
+      _exec("toast(" + JSON.stringify('Cleaned ' + name + freedNote + ' - ' + failedCount + ' item' + (failedCount === 1 ? '' : 's') + ' in use, left in place') + ", 'info')");
+    else
+      _exec("toast('Clean failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");
   }).catch(_apiCatch('Clean failed', { clearCleaning: id }));
 }
 
@@ -156,7 +189,21 @@ async function doEmptyTrash() {
     destructive: true,
   })) return;
   _api('/api/empty-trash', {}).then(function(r) {
-    if (r.success) _exec("toast('Trash emptied - freed ' + _fmtBytes(r.freedBytes) + '', 'success')");
+    // Same reasoning as doCleanDir: an item the Finder still has open makes
+    // this report failure after emptying everything else, and the Trash row
+    // must not keep its old figure on that path.
+    if (r.success || (r.freedBytes || 0) > 0) {
+      // Same two steps doCleanDir takes, and for the same reason. The server
+      // forgets its measured sizes, but the client keeps its own five-minute
+      // copy in localStorage; without dropping that and rescanning, the next
+      // render redraws the Trash row at its pre-empty size and Space
+      // Recoverable never moves. The toast says 12 GB freed, the table
+      // disagrees, and the server-side fix is invisible from here.
+      try { localStorage.removeItem(CACHE_KEY); } catch (e) {}
+      _exec("toast(" + JSON.stringify('Trash emptied - freed ' + _fmtBytes(r.freedBytes || 0)) + ", "
+        + (r.success ? "'success')" : "'info')"));
+      scanCleanupSizes(true);
+    }
     else _exec("toast('Failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");
   }).catch(_apiCatch('Empty Trash failed'));
 }
@@ -214,29 +261,56 @@ async function doCleanSelected() {
   }
   if (!confirmed) return;
 
-  var freed = 0, failed = 0, done = 0;
+  var failed = 0, done = 0, heldOpen = 0;
+  // Keyed by path rather than summed as we go. 97 of the cleanable categories
+  // sit inside another one - ~/Library/Caches/Google/Chrome and about thirty
+  // more live under User Caches - so adding every response counts those bytes
+  // once per level and claims more than the disk gave back. The headline total
+  // has carried _sumWithoutOverlap for this reason since it was written; this
+  // toast never did.
+  var freedByPath = {};
+  // A new object each tick: stx tracks assignment, not a field written on the
+  // old one, so `cleanProgress.done++` would move the number and leave the bar
+  // where it was.
+  _exec("cleanProgress = { done: 0, total: " + targets.length + " }");
+
   function settle(id) {
-    _exec("delete cleaning['" + id + "']");
-    if (++done < targets.length) return;
+    _exec("clearCleaning(" + JSON.stringify(id) + ")");
+    done++;
+    _exec("cleanProgress = { done: " + done + ", total: " + targets.length + " }");
+    if (done < targets.length) return;
     try { localStorage.removeItem(CACHE_KEY); } catch (e) {}
+    var freed = _sumWithoutOverlap(Object.keys(freedByPath), freedByPath);
     var cleaned = targets.length - failed;
     var msg = cleaned > 0
       ? 'Cleaned ' + cleaned + (cleaned === 1 ? ' category' : ' categories') + ' - freed ' + _fmtBytes(freed)
       : 'Nothing could be cleaned';
     if (failed > 0) msg += ' - ' + failed + ' failed';
+    // Carried through from the server. Without it a batch clean still claims
+    // bytes that are waiting on a process to let go of them.
+    if (heldOpen > 0) msg += ' - some of it frees up once the apps using those files close';
     if (unknown.length > 0) msg += ' - ' + unknown.length + ' no longer listed';
-    _exec("toast('" + msg.replace(/'/g, "\\'") + "', '" + (cleaned > 0 ? (failed > 0 ? 'info' : 'success') : 'error') + "'); selected = []");
+    _exec("toast('" + msg.replace(/'/g, "\\'") + "', '" + (cleaned > 0 ? (failed > 0 ? 'info' : 'success') : 'error') + "'); selected = []; cleanProgress = null");
     scanCleanupSizes(true);
   }
 
   targets.forEach(function(t) {
-    // The id has to be interpolated into the statement here rather than left
-    // as `'' + id + ''` inside the quoted string: the statement is evaluated
-    // in the x-data scope, which has no `id` of its own to read.
-    _exec("cleaning['" + t.id + "'] = true");
+    // Two rules at once, and doCleanDir broke both for a release. The
+    // statement is evaluated in the x-data scope, so a name only this closure
+    // has — `t`, `id`, `_fmtBytes`, a fetch result — is not in scope and the
+    // whole statement throws, caught and turned into a console.warn nobody
+    // sees. And `cleaning[x] = true` writes a field on the object the signal
+    // already holds, which stx does not track. So pass the id as an argument
+    // to a method that assigns a new object.
+    _exec("markCleaning(" + JSON.stringify(t.id) + ")");
     _api('/api/clean-dir', { path: t.path }).then(function(r) {
-      if (r && r.success) freed += r.freedBytes || 0;
-      else failed++;
+      // Count the bytes a partial clean freed. success is false whenever any
+      // entry could not be removed, so crediting only flawless cleans made a
+      // run that freed gigabytes report them as zero and call itself failed.
+      var got = (r && r.freedBytes) || 0;
+      freedByPath[t.path] = got;
+      if (r && r.heldOpen) heldOpen++;
+      if (!r || (!r.success && got === 0 && r.measured !== false)) failed++;
       settle(t.id);
     }).catch(function() {
       failed++;
@@ -351,29 +425,84 @@ function scanCleanupSizes(force) {
   rows.forEach(function(r) { paths.push(r.getAttribute('data-clean-path')); });
   if (paths.length === 0) return;
 
+  // Put the screen back into its loading state. The class was only ever
+  // removed, never re-added, so every rescan after the first rendered the word
+  // "Scanning" in --green - the success colour - which is the one thing the
+  // markup's own comment says not to do. Dim the existing size cells too: the
+  // old figures stay readable while the walk runs, but reading as superseded
+  // rather than as current.
   var totalEl = document.getElementById('total-cleanable');
-  if (totalEl) totalEl.textContent = 'Scanning...';
+  if (totalEl) {
+    totalEl.textContent = 'Scanning';
+    totalEl.classList.add('is-scanning');
+  }
+  rows.forEach(function(r) {
+    var cell = r.querySelector('.clean-size');
+    if (cell) cell.classList.add('is-pending');
+  });
+
+  // A forced rescan supersedes a walk already in flight instead of being
+  // dropped by the single-flight guard. Deduping is right for two cold loads
+  // racing each other; it is wrong straight after a clean, because the one
+  // request that could report the new size is the one being skipped. The
+  // in-flight walk then lands holding pre-delete numbers and writes them to
+  // the table and to localStorage - the "nothing happened" bug, seen from the
+  // client side rather than the server's.
+  if (force) window._cleanupScanGen = (window._cleanupScanGen || 0) + 1;
+  else if (window._cleanupScanPromise) return;
+
+  var gen = window._cleanupScanGen || 0;
 
   // Run scan detached so navigation doesn't kill it
-  if (!window._cleanupScanPromise) {
-    window._cleanupScanPromise = _api('/api/dir-sizes', { paths: paths }).then(function(r) {
-      window._cleanupScanPromise = null;
-      if (!r.success || !r.sizes) return;
-      setCachedSizes(r.sizes);
-      if (document.getElementById('total-cleanable')) {
-        applySizes(r.sizes);
-      }
-    }).catch(function(err) {
-      window._cleanupScanPromise = null;
-      if (totalEl) {
-        totalEl.textContent = '—';
-        totalEl.classList.remove('is-scanning');
-      }
-      _exec("toast('Scan failed: " + (err && err.message || 'network').replace(/'/g, "\\'") + "', 'error')");
-    });
-  }
+  var pending = null;
+  pending = _api('/api/dir-sizes', { paths: paths }).then(function(r) {
+    if (window._cleanupScanPromise === pending) window._cleanupScanPromise = null;
+    // Superseded: a clean happened after this walk was asked for, so what it
+    // measured describes a disk that no longer exists.
+    if (gen !== (window._cleanupScanGen || 0)) return;
+    if (!r.success || !r.sizes) return;
+    // The server reports it cleared its own cache mid-walk, so don't persist
+    // these for five minutes - show them until the next scan replaces them.
+    if (!r.stale) setCachedSizes(r.sizes);
+    if (document.getElementById('total-cleanable')) {
+      applySizes(r.sizes);
+    }
+  }).catch(function(err) {
+    if (window._cleanupScanPromise === pending) window._cleanupScanPromise = null;
+    if (gen !== (window._cleanupScanGen || 0)) return;
+    if (totalEl) {
+      totalEl.textContent = '—';
+      totalEl.classList.remove('is-scanning');
+    }
+    _exec("toast('Scan failed: " + (err && err.message || 'network').replace(/'/g, "\\'") + "', 'error')");
+  });
+  window._cleanupScanPromise = pending;
 }
 
 // Load after targets render (init() triggers scanCleanupSizes).
+
+
+
+// Hand the click handlers to `window`. Still needed, for now.
+//
+// The buttons call these from `onclick="..."`, which is evaluated in global
+// scope. stx's router re-runs a route's script wrapped in a bare block, to
+// stop two pages' `const` declarations colliding across a navigation. Annex
+// B.3.3 hoists a plain `function` out of a block; it was never extended to
+// `async function`, which is what three of these are — so they were reachable
+// in dev, where the browser parses the page's script itself, and undefined in
+// the packaged build, where the router re-runs it.
+//
+// Fixed upstream in stacksjs/stx 0d85f7895b (stacksjs/stx#2041), which
+// republishes block-scoped function values after the wrap. Not yet released:
+// stx-router@0.2.383, the newest published, still carries the wrap with no
+// republish guard. Delete this block once a release contains it — the test is
+// whether `stx-router/dist/client.js` has a `typeof ...[...] === "function"`
+// guard beside `alreadyScoped`.
+window.doCleanSelected = doCleanSelected
+window.doEmptyTrash = doEmptyTrash
+window.doCleanDir = doCleanDir
+window.scanCleanupSizes = scanCleanupSizes
+
 </script>
 @endsection

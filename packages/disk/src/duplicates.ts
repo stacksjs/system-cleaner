@@ -178,10 +178,26 @@ function chooseKeeper(files: Array<{ path: string, mtimeMs: number }>): string {
       best = file
       continue
     }
-    if (file.mtimeMs === best.mtimeMs && file.path.split('/').length < best.path.split('/').length)
+    if (file.mtimeMs === best.mtimeMs && depthOf(file.path) < depthOf(best.path))
       best = file
   }
   return best.path
+}
+
+/**
+ * How deep a path sits, counted on either separator.
+ *
+ * This was `split('/')`, which on a backslash path returns one segment for
+ * everything — so on Windows every depth compared equal, the tie-break never
+ * fired, and which copy got called the original came down to iteration order.
+ *
+ * Both separators unconditionally, unlike `isPathSafe`, which gates that fold
+ * on the platform. There a stray backslash in a macOS filename would change a
+ * safety verdict; here the worst case is preferring one of two byte-identical
+ * files over the other.
+ */
+function depthOf(p: string): number {
+  return p.split(/[\\/]+/).length
 }
 
 export function findDuplicates(options: DuplicateScanOptions = {}): DuplicateScanResult {

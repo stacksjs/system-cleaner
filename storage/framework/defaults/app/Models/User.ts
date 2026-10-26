@@ -1,8 +1,8 @@
 import type { Attributes } from '@stacksjs/types'
-import { defineModel } from '@stacksjs/orm'
+import { defineModel, selfOwnership } from '@stacksjs/orm'
 import { makeHash } from '@stacksjs/security'
 // soon, these will be auto-imported
-import { schema } from '@stacksjs/validation'
+import { schema } from '@stacksjs/validation/runtime'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../password-policy'
 
 export default defineModel({
@@ -19,7 +19,13 @@ export default defineModel({
     },
   ],
 
+  // A caller may write their own row and no other (stacksjs/stacks#2375). The
+  // owner column IS the primary key here, so without this `User` is the worst
+  // case the issue describes: an authenticated caller able to PATCH any user.
+  ownership: selfOwnership(),
+
   traits: {
+    gdpr: { erasure: 'anonymize', basis: 'contract', purpose: 'User account and sign-in' },
     useAuth: {
       usePasskey: true,
     },
@@ -58,15 +64,16 @@ export default defineModel({
     },
   },
 
-  hasOne: ['Subscriber', 'Driver', 'Author'],
+  hasOne: ['Subscriber', 'Courier', 'Author'],
 
   hasMany: [
-    'PersonalAccessToken',
     'Customer',
     'TeamMember',
   ],
+
   attributes: {
     name: {
+      personal: true,
       order: 2,
       fillable: true,
       validation: {
@@ -81,6 +88,7 @@ export default defineModel({
     },
 
     email: {
+      personal: true,
       unique: true,
       order: 1,
       fillable: true,
@@ -95,6 +103,7 @@ export default defineModel({
       factory: faker => faker.internet.email(),
     },
     password: {
+      personal: { export: false },
       order: 3,
       hidden: true,
       fillable: true,
@@ -113,6 +122,7 @@ export default defineModel({
     },
 
     avatar: {
+      personal: true,
       order: 4,
       fillable: true,
       validation: {

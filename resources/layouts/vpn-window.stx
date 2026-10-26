@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+  <meta charset='UTF-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+  <title>VPN</title>
+  <!--
+    The VPN window's shell.
+
+    A third window, like Settings, and for the same reason: this is not a panel
+    inside the dashboard. A consumer VPN is one small window you keep in a
+    corner and press one button on — ExpressVPN, Mullvad and Proton are all
+    the same shape, and none of them is a page inside a file manager. The
+    technical panel at `/app/vpn` stays where it is; it answers "what is this
+    Mac's VPN state", which is a different question from "take me to Germany".
+
+    Craft opens it with `craft.window.open({ name: 'vpn', ... })` from
+    `resources/scripts/vpn-panel.ts`, and the name is what makes a second press
+    bring this window forward rather than stack another behind it.
+
+    The same appearance key as every other window, so the app is not light here
+    and dark there.
+  -->
+  @appearanceBootstrap({
+    storageKey: 'systemcleaner-appearance',
+    appearance: { key: 'sidebarStyle', attribute: 'appearance', allowed: ['macos'], default: 'macos' },
+    colorMode: { key: 'colorMode', attribute: 'color-mode', default: 'system' },
+  })
+  <style>
+    :root {
+      color-scheme: light;
+      --app-bg: #f5f5f7;
+      --surface: #ffffff;
+      --surface-soft: #eeeef1;
+      --surface-inset: #e9e9ed;
+      --line: rgba(60, 60, 67, .14);
+      --line-soft: rgba(60, 60, 67, .08);
+      --ink: #1d1d1f;
+      --secondary: #6e6e73;
+      --tertiary: #8e8e93;
+      --hover: rgba(0, 0, 0, .04);
+      --pressed: rgba(0, 0, 0, .075);
+      --accent: #007aff;
+      --green: #248a3d;
+      --orange: #c45d00;
+      --red: #d70015;
+
+      --space-half: 2px;
+      --space-1: 4px;
+      --space-tight: 6px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 20px;
+      --space-6: 24px;
+      --space-8: 32px;
+      --space-10: 40px;
+
+      --vpn-card: #ffffff;
+      --vpn-card-line: rgba(60, 60, 67, .1);
+      --vpn-wash: rgba(245, 245, 247, .55);
+    }
+    :root.dark {
+      color-scheme: dark;
+      --app-bg: #1a1a1c;
+      --surface: #242426;
+      --surface-soft: #2c2c2e;
+      --surface-inset: #202022;
+      --line: rgba(255, 255, 255, .1);
+      --line-soft: rgba(255, 255, 255, .055);
+      --ink: #f5f5f7;
+      --secondary: #98989d;
+      --tertiary: #6c6c70;
+      --hover: rgba(255, 255, 255, .055);
+      --pressed: rgba(255, 255, 255, .1);
+      --accent: #0a84ff;
+      --green: #30d158;
+      --orange: #ff9f0a;
+      --red: #ff453a;
+
+      --vpn-card: #242426;
+      --vpn-card-line: rgba(255, 255, 255, .07);
+      --vpn-wash: rgba(26, 26, 28, .5);
+    }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      height: 100%; overflow: hidden;
+      background: var(--app-bg); color: var(--ink);
+      font-family: -apple-system, 'SF Pro Text', BlinkMacSystemFont, system-ui, sans-serif;
+      font-size: 13px;
+      -webkit-font-smoothing: antialiased;
+    }
+    [x-cloak] { display: none !important; }
+    [hidden] { display: none !important; }
+
+    /* Craft paints one material behind the whole web view; the page washes it
+       in its own colour so the window buttons sit on something. In a browser
+       there is no material and the opaque `--app-bg` above is correct, so the
+       wash is applied only when Craft says it drew one. */
+    :root[data-craft-native-sidebar] body { background: var(--vpn-wash); }
+
+    .vpn-window {
+      display: flex; flex-direction: column;
+      width: 100vw; height: 100vh; overflow: hidden;
+    }
+
+    /* The window has no titlebar, so AppKit's three buttons sit over this
+       strip and it has to be at least as tall as they are. The whole strip is
+       a drag handle — WebKit discards `-webkit-app-region: drag`, so the press
+       is handed to AppKit by `startDrag()` in `vpn-window.ts`. */
+    .vpn-chrome {
+      --chrome-band: calc(
+        2 * var(--craft-window-buttons-y, var(--craft-window-controls-inset-y, 0px))
+        + var(--craft-window-buttons-height, var(--craft-window-controls-height, 0px))
+      );
+      display: flex; align-items: center; justify-content: center;
+      flex: none; height: max(44px, var(--chrome-band));
+      font-size: 13px; font-weight: 600; letter-spacing: -.01em;
+    }
+
+    .vpn-body {
+      flex: 1; min-height: 0; overflow-y: auto;
+      display: flex; flex-direction: column;
+      padding: 0 var(--space-5) var(--space-5);
+    }
+
+    @yield('styles')
+  </style>
+</head>
+<body>
+  <div class='vpn-window'>
+    <header class='vpn-chrome' data-window-drag>VPN</header>
+    <div class='vpn-body'>
+      @yield('body')
+    </div>
+  </div>
+
+  <script src="/vpn-window.js"></script>
+</body>
+</html>

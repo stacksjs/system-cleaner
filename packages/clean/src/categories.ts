@@ -1,36 +1,9 @@
-import { HOME, macPaths } from '@system-cleaner/core'
-import * as path from 'node:path'
 import type { CleanTarget } from './types'
+import { HOME, macPaths, PLATFORM } from '@system-cleaner/core'
+import { WINDOWS_TARGETS } from './categories-windows'
+import { c, iconForCategory, t } from './target-factory'
 
-/**
- * One Framework7 glyph per category.
- *
- * Targets used to carry a per-entry emoji, which put 61 different multi-color
- * glyphs into a list the rest of the app renders as single-tint icons. The row
- * already names the target and its category, so the icon only has to say which
- * kind of thing this is.
- *
- * Declared above CLEAN_TARGETS on purpose: the array literal calls `t()` during
- * module evaluation, so a later `const` would still be in its temporal dead
- * zone by the time the first target is built.
- */
-const CATEGORY_ICONS: Record<CleanTarget['category'], string> = {
-  cache: 'i-f7-archivebox-fill',
-  log: 'i-f7-doc-text-fill',
-  browser: 'i-f7-globe',
-  developer: 'i-f7-chevron-left-slash-chevron-right',
-  homebrew: 'i-f7-cube-box-fill',
-  application: 'i-f7-app-fill',
-  system: 'i-f7-desktopcomputer',
-  trash: 'i-f7-trash-fill',
-  // Emitted by the disk analyzer for build output it finds inside projects.
-  'project-artifact': 'i-f7-hammer-fill',
-}
-
-/** Iconify class for a clean-target category. */
-export function iconForCategory(category: CleanTarget['category']): string {
-  return CATEGORY_ICONS[category] ?? 'i-f7-archivebox-fill'
-}
+export { iconForCategory }
 
 /**
  * Comprehensive cleaning database — 260+ targets, organized by category.
@@ -40,7 +13,7 @@ export function iconForCategory(category: CleanTarget['category']): string {
  * below came from auditing a working developer Mac where the previous list
  * surfaced 32 targets and walked past roughly 30 GB it had no entry for.
  */
-export const CLEAN_TARGETS: CleanTarget[] = [
+const MACOS_TARGETS: CleanTarget[] = [
   // ═══════════════════════════════════════════════════════════════
   // USER CACHES
   // ═══════════════════════════════════════════════════════════════
@@ -433,36 +406,15 @@ export const CLEAN_TARGETS: CleanTarget[] = [
   t('trash', 'Trash', macPaths.trash, 'trash', 'Files in your Trash', true),
 ]
 
-// ── Helpers ────────────────────────────────────────────────────
-
-function t(
-  id: string,
-  name: string,
-  p: string,
-  category: CleanTarget['category'],
-  description: string,
-  contentsOnly = true,
-  requiresSudo = false,
-  skipPatterns?: string[],
-): CleanTarget {
-  return { id, name, path: p, icon: iconForCategory(category), category, description, contentsOnly, requiresSudo, risk: 'safe', skipPatterns }
-}
-
 /**
- * A target holding content the machine cannot get back on its own — session
- * transcripts, downloaded models, VM boxes. Same shape as `t()`, marked so the
- * UI can keep it out of "Select All" and label it.
+ * The table for the platform this is running on.
+ *
+ * Linux keeps the macOS table rather than getting one of its own: every path
+ * in it is wrong there, which is exactly why `cleanTargets` is false for Linux
+ * and the screen is replaced with a sentence saying so. A table nobody reaches
+ * is better than a half-right one that deletes something.
  */
-function c(
-  id: string,
-  name: string,
-  p: string,
-  category: CleanTarget['category'],
-  description: string,
-  contentsOnly = true,
-): CleanTarget {
-  return { ...t(id, name, p, category, description, contentsOnly), risk: 'caution' }
-}
+export const CLEAN_TARGETS: CleanTarget[] = PLATFORM === 'windows' ? WINDOWS_TARGETS : MACOS_TARGETS
 
 /**
  * Get all clean targets, optionally filtered by category

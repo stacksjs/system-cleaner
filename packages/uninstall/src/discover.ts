@@ -1,6 +1,8 @@
 import * as path from 'node:path'
-import { HOME, appleScriptEscape, pathExists, safeReadDir, safeStat, parsePlist, exec, shellEscape } from '@system-cleaner/core'
+import { HOME, appleScriptEscape, pathExists, safeReadDir, safeStat, parsePlist, exec, isWindows, shellEscape } from '@system-cleaner/core'
 import { readBundleInfo } from './bundle'
+import { discoverWindowsPrograms, toAppInfo } from './apps-windows'
+import { discoverWindowsStartup, toggleWindowsStartupItem } from './startup-windows'
 import type { AppInfo, StartupItem } from './types'
 
 const APP_SEARCH_DIRS = [
@@ -18,6 +20,15 @@ const SYSTEM_APP_PATTERNS = [
  * Discover all installed applications
  */
 export async function discoverApps(includeSystemApps = false): Promise<AppInfo[]> {
+  if (isWindows) {
+    // A Windows program is a registry entry, not a directory, and there are no
+    // `.app` bundles to walk. `includeSystemApps` has no counterpart either:
+    // what Windows considers its own is marked `SystemComponent` and dropped
+    // during discovery rather than filtered here.
+    const programs = await discoverWindowsPrograms()
+    return programs.map(toAppInfo)
+  }
+
   const apps: AppInfo[] = []
   const seen = new Set<string>()
 
@@ -136,7 +147,19 @@ function categorizeAgent(label: string): { vendor: string, category: StartupItem
 /**
  * Discover all startup items (launch agents and daemons)
  */
-export function discoverStartupItems(): StartupItem[] {
+/**
+ * Everything that starts at login.
+ *
+ * Asynchronous because Windows keeps half of this in the registry, and reading
+ * it means spawning `reg.exe`. The macOS path below awaits nothing — it reads
+ * plists off disk exactly as before — but a function that blocks the agent on
+ * one platform and not the other is the kind of difference that only shows up
+ * as a frozen UI on the platform nobody is testing on.
+ */
+export async function discoverStartupItems(): Promise<StartupItem[]> {
+  if (isWindows)
+    return discoverWindowsStartup()
+
   const items: StartupItem[] = []
 
   for (const dir of AGENT_DIRS) {
@@ -201,6 +224,9 @@ function validateLaunchAgentPath(filepath: string): string | null {
  * sequences can't reach non-LaunchAgents files.
  */
 export async function toggleStartupItem(filepath: string, action: 'enable' | 'disable'): Promise<{ success: boolean, error?: string }> {
+  if (isWindows)
+    return toggleWindowsStartupItem(filepath, action)
+
   const resolved = validateLaunchAgentPath(filepath)
   if (resolved === null) return { success: false, error: 'Invalid launch agent path' }
   const isUserAgent = resolved.startsWith(path.join(HOME, 'Library/LaunchAgents'))

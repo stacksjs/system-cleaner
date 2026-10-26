@@ -16,6 +16,7 @@
  * unauthenticated.
  */
 
+import { isLocalDeployment } from '@stacksjs/env'
 import { route } from '@stacksjs/router'
 
 // The `/api/dashboard/*` surface is unauthenticated by design for the local
@@ -25,8 +26,15 @@ import { route } from '@stacksjs/router'
 // (assign-any-role-to-any-user = privilege escalation) and the model-row dump
 // (arbitrary DB read) — must be gated server-side. In a local/dev/test env the
 // guard is a no-op so the dev dashboard keeps working without a token.
-const APP_ENV = (process.env.APP_ENV ?? process.env.NODE_ENV ?? '').toLowerCase()
-const IS_LOCAL_ENV = APP_ENV === '' || APP_ENV === 'local' || APP_ENV === 'development' || APP_ENV === 'dev' || APP_ENV === 'test' || APP_ENV === 'testing'
+//
+// The gate is the deployment, not the environment NAME. `.env.example` ships
+// `APP_ENV=development`, so every app that never edited that line called
+// itself development in production - and this gate then attached no
+// middleware at all to the 300-plus routes below, including the ones that
+// read and rewrite the project's `.env`, write the deploy script, sync RBAC
+// roles and dump arbitrary model rows. `@stacksjs/auth`'s cookie policy hit
+// the same shape in stacksjs/stacks#2275 and moved to the URL; this follows.
+const IS_LOCAL_ENV = isLocalDeployment()
 
 // Apply auth + admin-role middleware to a sensitive route outside local envs.
 // Returns the route builder so calls read as `guard(route.post(...))`.
@@ -245,7 +253,42 @@ route.group({ prefix: '/api/dashboard', apiResponse: true }, () => {
   guard(route.get('/files', 'Actions/Dashboard/Content/FileIndexAction'))
   guard(route.post('/files/directories', 'Actions/Dashboard/Content/FileDirectoryStoreAction'))
   guard(route.post('/files/uploads', 'Actions/Dashboard/Content/FileUploadAction'))
+  guard(route.patch('/files', 'Actions/Dashboard/Content/FileRenameAction'))
+  guard(route.put('/files/visibility', 'Actions/Dashboard/Content/FileVisibilityAction'))
+  // Favourites and tags are the metadata layer, not a storage operation: a disk
+  // has nowhere to record either, so both write `storage_items` and the listing
+  // above joins them back on (stacksjs/stacks#2577).
+  guard(route.put('/files/favorite', 'Actions/Dashboard/Content/FileFavoriteAction'))
+  guard(route.put('/files/tags', 'Actions/Dashboard/Content/FileTagsAction'))
+  // Re-running the background processing (stacksjs/stacks#2578). Not optional:
+  // the first version of any of these produces output somebody wants
+  // regenerated - a better ladder, a model that has improved, an optimization
+  // that ran before a preset changed.
+  guard(route.post('/files/reprocess', 'Actions/Dashboard/Content/FileReprocessAction'))
+  guard(route.post('/files/duplicates', 'Actions/Dashboard/Content/FileDuplicateAction'))
   guard(route.delete('/files', 'Actions/Dashboard/Content/FileDestroyAction'))
+
+  /*
+   * Remote commands (stacksjs/stacks#960).
+   *
+   * Deliberately NOT behind `guard()`. That helper drops auth entirely when
+   * `APP_ENV` is local, development or test - which is a reasonable trade for
+   * operational telemetry on a developer machine, and an unauthenticated
+   * command runner for this. `authenticatedGuard` keeps `auth` in every
+   * environment, the same treatment billing gets and for the same reason.
+   *
+   * Authorization proper is the `run-remote-command` gate, checked per host and
+   * per command inside the action. Being authenticated is not being allowed.
+   */
+  authenticatedGuard(route.get('/remote/commands', 'Actions/Dashboard/Remote/RemoteCommandIndexAction'))
+  authenticatedGuard(route.post('/remote/run', 'Actions/Dashboard/Remote/RemoteCommandRunAction'))
+  // Interactive terminals into hosts that opt in with `terminal: true`,
+  // authorized by the `open-remote-terminal` gate. Same guard, same reason.
+  authenticatedGuard(route.post('/remote/terminals', 'Actions/Dashboard/Remote/RemoteTerminalOpenAction'))
+  authenticatedGuard(route.get('/remote/terminals/{id}/stream', 'Actions/Dashboard/Remote/RemoteTerminalStreamAction'))
+  authenticatedGuard(route.post('/remote/terminals/{id}/input', 'Actions/Dashboard/Remote/RemoteTerminalInputAction'))
+  authenticatedGuard(route.post('/remote/terminals/{id}/resize', 'Actions/Dashboard/Remote/RemoteTerminalResizeAction'))
+  authenticatedGuard(route.delete('/remote/terminals/{id}', 'Actions/Dashboard/Remote/RemoteTerminalCloseAction'))
 
   guard(route.get('/ci/status', 'Actions/Dashboard/Ci/StatusAction'))
   // CI drilldown (stacksjs/stacks#1848): per-repo run history + per-run
@@ -351,7 +394,7 @@ route.group({ prefix: '/api/dashboard', apiResponse: true }, () => {
   // guard so production totals are never protected by client-side role checks.
   guard(route.get('/commerce/stats', 'Actions/Dashboard/Commerce/CommerceDashboardAction'))
 
-  // Delivery operations overview. Guarded because route and driver data is
+  // Delivery operations overview. Guarded because route and courier data is
   // operational information even though the underlying models expose their
   // own generated useApi endpoints.
   guard(route.get('/commerce/delivery', 'Actions/Dashboard/Commerce/CommerceDeliveryAction'))
@@ -383,11 +426,11 @@ route.group({ prefix: '/api/dashboard', apiResponse: true }, () => {
   guard(route.patch('/commerce/delivery-routes/{id}', 'Actions/Commerce/Shipping/DeliveryRouteUpdateAction'))
   guard(route.delete('/commerce/delivery-routes/{id}', 'Actions/Commerce/Shipping/DeliveryRouteDestroyAction'))
 
-  guard(route.get('/commerce/drivers', 'Actions/Dashboard/Commerce/DriverIndexAction'))
-  guard(route.get('/commerce/drivers/{id}', 'Actions/Commerce/Shipping/DriverShowAction'))
-  guard(route.post('/commerce/drivers', 'Actions/Commerce/Shipping/DriverStoreAction'))
-  guard(route.patch('/commerce/drivers/{id}', 'Actions/Commerce/Shipping/DriverUpdateAction'))
-  guard(route.delete('/commerce/drivers/{id}', 'Actions/Commerce/Shipping/DriverDestroyAction'))
+  guard(route.get('/commerce/couriers', 'Actions/Dashboard/Commerce/CourierIndexAction'))
+  guard(route.get('/commerce/couriers/{id}', 'Actions/Commerce/Shipping/CourierShowAction'))
+  guard(route.post('/commerce/couriers', 'Actions/Commerce/Shipping/CourierStoreAction'))
+  guard(route.patch('/commerce/couriers/{id}', 'Actions/Commerce/Shipping/CourierUpdateAction'))
+  guard(route.delete('/commerce/couriers/{id}', 'Actions/Commerce/Shipping/CourierDestroyAction'))
 
   guard(route.get('/commerce/digital-deliveries', 'Actions/Dashboard/Commerce/DigitalDeliveryIndexAction'))
   guard(route.get('/commerce/digital-deliveries/{id}', 'Actions/Commerce/Shipping/DigitalDeliveryShowAction'))
@@ -413,6 +456,11 @@ route.group({ prefix: '/api/dashboard', apiResponse: true }, () => {
   guard(route.post('/marketing/campaigns/{id}/send', 'Actions/Dashboard/Marketing/CampaignSendAction'))
   guard(route.post('/marketing/campaigns/{id}/schedule', 'Actions/Dashboard/Marketing/CampaignScheduleAction'))
   guard(route.post('/marketing/campaigns/{id}/cancel', 'Actions/Dashboard/Marketing/CampaignCancelAction'))
+  // Abandoned carts: the audience a shop already has, and the campaign that
+  // goes after it. The campaign it writes is an ordinary Campaign row, so it
+  // shows up on /marketing/campaigns and sends through the same pipeline.
+  guard(route.get('/marketing/abandoned-carts', 'Actions/Dashboard/Marketing/AbandonedCartIndexAction'))
+  guard(route.post('/marketing/abandoned-carts/campaign', 'Actions/Dashboard/Marketing/AbandonedCartCampaignAction'))
   guard(route.get('/marketing/social-posts', 'Actions/Dashboard/Marketing/SocialPostIndexAction'))
   guard(route.post('/marketing/social-posts', 'Actions/Dashboard/Marketing/SocialPostStoreAction'))
   guard(route.patch('/marketing/social-posts/{id}', 'Actions/Dashboard/Marketing/SocialPostUpdateAction'))

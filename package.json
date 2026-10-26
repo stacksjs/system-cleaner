@@ -1,7 +1,7 @@
 {
   "name": "system-cleaner",
   "type": "module",
-  "version": "0.3.1",
+  "version": "0.3.8",
   "private": true,
   "workspaces": [
     "packages/*"
@@ -13,6 +13,7 @@
     "build:scripts": "bun ./scripts/build-client-scripts.ts",
     "build:binaries": "bun ./scripts/build-binaries.ts",
     "build:app": "bun ./scripts/build-desktop-app.ts",
+    "build:app:windows": "bun ./scripts/build-desktop-windows.ts",
     "release": "./buddy release",
     "release:patch": "./buddy release --bump patch --no-interaction",
     "release:minor": "./buddy release --bump minor --no-interaction",
@@ -29,7 +30,7 @@
     "typecheck": "bun x --bun tsc --noEmit -p tsconfig.json --pretty false",
     "typecheck:app": "bun x --bun tsc --noEmit -p tsconfig.json --pretty false",
     "types:check": "bun x --bun tsc --noEmit -p tsconfig.json --pretty false",
-    "test": "bun ./scripts/build-client-scripts.ts && ./buddy test"
+    "test": "bun ./scripts/build-client-scripts.ts && bun test --timeout 30000"
   },
   "dependencies": {
     "@system-cleaner/clean": "workspace:*",
@@ -40,12 +41,16 @@
     "@ts-charts/format": "^0.2.7",
     "@ts-charts/scale": "^0.2.7",
     "@ts-charts/shape": "^0.2.7",
-    "stacks": "^0.74.32"
+    "stacks": "0.75.262"
   },
   "devDependencies": {
     "@fontsource-variable/geist": "^5.3.0",
     "@iconify-json/f7": "^1.2.2",
     "better-dx": "^0.2.25",
     "puppeteer": "^24.43.1"
+  },
+  "overrides": {
+    "@stacksjs/stx": "0.2.382",
+    "@stacksjs/desktop": "0.2.383"
   }
 }

@@ -1,6 +1,6 @@
 ---
 name: stacks-desktop
-description: Use when building or publishing desktop applications with Stacks — Craft native windows, system tray, desktop packaging, or Mac App Store delivery.
+description: Use when building or publishing desktop applications with Stacks - Craft native windows, local launchers, helper processes, packaging, capability probes, or Mac App Store delivery. Covers @stacksjs/desktop-build and the browser bridge boundary.
 license: MIT
 compatibility: Bun >= 1.3.0, TypeScript
 allowed-tools: Read Edit Write Bash Grep Glob
@@ -13,7 +13,8 @@ allowed-tools: Read Edit Write Bash Grep Glob
 - Source: `storage/framework/core/desktop/src/index.ts`
 - System tray views: `storage/framework/defaults/views/system-tray/`
 - System tray layouts: `storage/framework/defaults/resources/layouts/`
-- Package: `@stacksjs/desktop`
+- Build/host package: `@stacksjs/desktop-build`
+- Browser bridge package: `@stacksjs/desktop/browser` (from the STX ecosystem)
 
 ## Runtime
 
@@ -37,9 +38,17 @@ navigation otherwise appears as a blank native window.
 
 ## API
 
+Two packages carry "desktop" in their name. `@stacksjs/desktop-build` (this
+repo, `storage/framework/core/desktop`) holds the build and launch helpers
+below. `@stacksjs/desktop` (the stx repo) wraps the Craft bridge for code
+running inside the window; import it from `@stacksjs/desktop/browser` there,
+since its root entry also carries host-side modules that pull in Node builtins
+and fail a browser bundle. Attic (`~/Code/Apps/attic`) uses it for native
+menus, context menus and alerts.
+
 ```typescript
-import { openDevWindow } from '@stacksjs/desktop'
-import type { Desktop, OpenDevWindowOptions } from '@stacksjs/desktop'
+import { openDevWindow } from '@stacksjs/desktop-build'
+import type { Desktop, OpenDevWindowOptions } from '@stacksjs/desktop-build'
 
 interface OpenDevWindowOptions {
   title?: string
@@ -78,7 +87,7 @@ interface Desktop {
 
 The launcher Stacks compiles opens a Craft window on the URL in `desktop.json`,
 which is what a hosted Stacks application wants. An app whose subject is the
-machine it runs on — a disk cleaner, a log viewer, a device tool — has no such
+machine it runs on - a disk cleaner, a log viewer, a device tool - has no such
 URL: it starts something locally and opens a window on that, on a port it does
 not know until launch.
 
@@ -87,7 +96,7 @@ same way anything under `app/` overrides its framework default. `DESKTOP_URL`
 and `APP_URL` then become optional, because the launcher decides what to open.
 
 ```ts
-// app/Desktop/launcher.ts — compiled to Contents/MacOS/<AppName>
+// app/Desktop/launcher.ts - compiled to Contents/MacOS/<AppName>
 import { dirname, join } from 'node:path'
 
 const macos = dirname(process.execPath)          // siblings live here
@@ -109,7 +118,7 @@ Two things follow from declaring your own launcher:
   copied into `Contents/MacOS`.** Compile the sibling binaries your launcher
   spawns into that directory and they ship with it.
 - **`app/Desktop/Resources/` is copied into `Contents/Resources`.** A
-  prerendered UI, a schema, seed data — a local-first app has a payload, and
+  prerendered UI, a schema, seed data - a local-first app has a payload, and
   this is where it goes.
 
 `build:dmg` also narrows App Transport Security for these bundles: an exception
@@ -119,7 +128,7 @@ permit every unencrypted host on the internet.
 ### Info.plist entries
 
 `app/Desktop/Info.plist.json` is merged into the generated `Info.plist`. The
-entries that matter most are the `NS*UsageDescription` strings — they are the
+entries that matter most are the `NS*UsageDescription` strings - they are the
 sentences a person reads when macOS asks whether your app may look in their
 Downloads folder or drive Finder, and without them the prompt is generic or the
 request is refused outright.
@@ -136,18 +145,74 @@ JSON, not XML: a malformed plist produces a bundle macOS silently refuses to
 launch, which surfaces long after the build reported success. Strings, numbers,
 booleans, arrays, and nested objects all render.
 
-Keys the bundle must own — `CFBundleIdentifier`, `CFBundleExecutable`,
-`CFBundleVersion`, and the rest of the identity — are ignored with a note.
+Keys the bundle must own - `CFBundleIdentifier`, `CFBundleExecutable`,
+`CFBundleVersion`, and the rest of the identity - are ignored with a note.
 Rewriting those produces a bundle that does not match what was signed.
 
 Inside the bundle the launcher is named after the app, not `stacks-desktop`.
 macOS names the *process* in every permission prompt, so a launcher keeping the
 framework's build name asks "stacks-desktop would like to access files in your
-Downloads folder" — which reads like something to refuse.
+Downloads folder" - which reads like something to refuse.
 
 Application data belongs in `~/Library/Application Support/<AppName>`, never
-inside the bundle — `/Applications` is not writable by the user, and the bundle
+inside the bundle - `/Applications` is not writable by the user, and the bundle
 is replaced wholesale on update.
+
+## Helper processes: one binary, not three
+
+An app that owns its launcher usually needs more than the launcher - an agent
+serving on loopback, a worker doing something slow out of process. Compile each
+as its own binary and the bundle gets very large very quietly.
+
+`bun build --compile` embeds the entire Bun runtime in **every** executable it
+writes. `console.log("hi")` measures **60.5 MB**. So three binaries means three
+copies of the same runtime, and nothing says so - the bundle is simply big, and
+a big desktop app looks unremarkable. One real app shipped 230 MB this way, of
+which about 180 MB was the runtime repeated; its own code plus the native Craft
+runtime came to under 40 MB.
+
+Compile **one** binary and dispatch on a subcommand. The helpers stay separate
+*processes* - which is what actually matters for isolation and for killing one
+that wedges - they just stop being separate *files*.
+
+```ts
+// app/Desktop/launcher.ts - before anything else at module scope
+const subcommand = process.argv[2]
+
+if (subcommand === 'agent' || subcommand === 'scan') {
+  if (subcommand === 'agent') {
+    const { runAgent } = await import('./server')
+    await runAgent()
+  }
+  else {
+    const { runScannerCli } = await import('../Workers/scan')
+    await runScannerCli(process.argv[3] ?? '')
+  }
+
+  // Park. Everything below is the launcher, and a subcommand reaching it would
+  // spawn a second agent and open a second window.
+  await new Promise(() => {})
+}
+```
+
+Then spawn `process.execPath` instead of a sibling path:
+
+```ts
+const agent = Bun.spawn([process.execPath, 'agent'], { stdout: 'pipe' })
+```
+
+Two things that bite, both silently:
+
+- **The dispatch must come first.** A launcher's body is top-level code that
+  starts a server and opens a window as a side effect of loading.
+- **Do not `process.exit()` after starting a server.** A `runAgent()` that
+  returns once `Bun.serve` is listening has not finished - `Bun.serve` is what
+  holds the process open. Exiting after it kills the agent one line after it
+  printed the port the launcher is still waiting for, and the launcher reports
+  a timeout that says nothing about the cause.
+
+`buddy build:dmg` warns when a finished bundle contains more than one
+Bun-compiled executable, naming them and what the repetition costs.
 
 ## CLI Commands
 
@@ -158,7 +223,19 @@ buddy desktop:apple:init       # generate the reusable GitHub Actions caller
 buddy desktop:apple:doctor     # validate Apple tooling, identities, profile, and API key
 buddy desktop:apple:package    # build, sandbox, sign, and create a Store .pkg
 buddy desktop:apple:publish    # validate or upload the package to App Store Connect
+buddy desktop:probe            # measure what a Craft window offers interactive/game content
 ```
+
+`desktop:probe` opens a visible Craft window (not `--headless`, which stops
+requestAnimationFrame) and measures WebGL2/WebGPU, frame pacing under load,
+input and audio latency, the Gamepad API, fullscreen and pointer lock.
+`--browser[=Safari]` runs the same page in a browser for comparison, and
+`--record` writes the result into `storage/framework/core/desktop/src/probe/results/`,
+which `buddy docs:capabilities` publishes in `docs/features/capabilities.md`.
+Probes that need a real click or key press are recorded as
+`requires-interaction`, never as a number. Stacks ships no game engine,
+physics or asset pipeline; this only says what an engine someone else wrote
+would get.
 
 ## Mac App Store
 
@@ -171,6 +248,15 @@ uses App Store Connect API-key authentication for validation/upload.
 
 Start with `validate-only: true`. Upload only after the signed artifact passes
 local launch and UI QA.
+
+To package on a developer machine without importing distribution keys into the
+login keychain, generate keys and certificates with `buddy desktop:apple:csr`
+and `buddy desktop:apple:provision --apply`, import the two `.p12` files into a
+throwaway keychain file, and point `--keychain <path>` (or `APPLE_KEYCHAIN`) at
+it. `codesign` and `productbuild` then look for identities in that file only,
+so the search list never changes. The Mac App Distribution identity is named
+`3rd Party Mac Developer Application: ...` and the installer one
+`3rd Party Mac Developer Installer: ...`.
 
 Human-owned prerequisites that Buddy does not pretend to automate:
 
@@ -189,6 +275,7 @@ Repository variables:
 - `DESKTOP_URL`
 - `APPLE_APP_SIGNING_IDENTITY`
 - `APPLE_INSTALLER_SIGNING_IDENTITY`
+- `APPLE_KEYCHAIN` (local only, optional): sign from this keychain file instead of the search list
 
 Repository secrets:
 
@@ -201,6 +288,11 @@ Repository secrets:
 - `APP_STORE_CONNECT_API_ISSUER_ID`
 
 ## Gotchas
+- Configure build identity and browser UI separately; the host build package is
+  not a browser-safe native API import. Verify bridge readiness inside the
+  actual Craft window before enabling native-only flows.
+- Probe results describe the recorded host/runtime version. A successful
+  packaging command is not evidence of input/audio/graphics capability parity.
 - App Store packaging runs on macOS with Xcode command-line tools.
 - The embedded Craft runtime must inherit the parent App Sandbox.
 - A Mac App Distribution identity and Mac Installer Distribution identity serve different signing steps.

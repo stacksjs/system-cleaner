@@ -352,9 +352,9 @@ window.updatesXData = function () {
     },
 
     toggle(name) {
-      var i = this.selected.indexOf(name)
-      if (i === -1) this.selected.push(name)
-      else this.selected.splice(i, 1)
+      this.selected = this.selected.indexOf(name) === -1
+        ? this.selected.concat([name])
+        : this.selected.filter(function (n) { return n !== name })
     },
 
     isOn(name) { return this.selected.includes(name) },
@@ -362,10 +362,9 @@ window.updatesXData = function () {
     isUpdated(name) { return !!this.updated[name] },
 
     allOn(names) {
-      if (names.every(function (n) { return this.selected.includes(n) }.bind(this)))
-        this.selected = this.selected.filter(function (n) { return !names.includes(n) })
-      else
-        names.forEach(function (n) { if (!this.selected.includes(n)) this.selected.push(n) }.bind(this))
+      var keep = this.selected.filter(function (n) { return !names.includes(n) })
+      var every = names.every(function (n) { return this.selected.includes(n) }.bind(this))
+      this.selected = every ? keep : keep.concat(names)
     },
 
     toast(msg, type) {

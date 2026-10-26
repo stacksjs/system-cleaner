@@ -3,8 +3,43 @@ import type { ExecOptions, ExecResult } from './types'
 
 const DEFAULT_TIMEOUT = 10_000
 
+/** Returned when the deadline passes before the command produced a result. */
+const TIMED_OUT = Symbol('exec-timed-out')
+
 /**
  * Execute a shell command asynchronously using Bun.spawn.
+ *
+ * **POSIX only, and not by accident.** Everything here goes through `sh -c`,
+ * and Windows has no `sh`. It is on the PATH of a developer machine with Git
+ * for Windows installed and absent from everyone else's, so a feature built
+ * on this works for whoever wrote it and silently returns nothing for the
+ * rest — which is the shape of a bug that passes CI and ships.
+ *
+ * The spawn fails ENOENT and the catch below turns it into `ok: false`, so
+ * nothing here is unsafe. It is just unavailable, and a caller that treats an
+ * empty result as a fact about the machine rather than about the shell will
+ * report a clean disk or an idle system. Every capability in ./platform that
+ * depends on this is false on Windows for that reason; see ./disks for what
+ * replacing one of them looks like.
+ *
+ * The deadline bounds the call, not just the shell. `proc.kill()` signals the
+ * `sh` we spawned, and `sh -c` only *becomes* the command when it can exec it
+ * away — a single simple command. Give it a pipeline or two statements and it
+ * forks instead, so killing the shell leaves a grandchild holding the write
+ * end of both pipes, and reading them to EOF blocks until that grandchild
+ * exits on its own. The timeout then did nothing at all. Measured before this
+ * changed, all with `timeout: 200`:
+ *
+ *     sleep 5              203ms   killing sh killed it
+ *     sleep 5 | cat       5021ms   ran to completion
+ *     sleep 5; echo done  5016ms   ran to completion
+ *
+ * So race the deadline against the read rather than trusting the kill to end
+ * it. A forked grandchild can still outlive the call — nothing portable
+ * reaches it, since the child is not a process-group leader and signalling
+ * `-pid` from here would hit this process's own group — but it no longer
+ * holds the caller.
+ *
  * Timer is always cleared via try/finally to prevent leaks.
  */
 export async function exec(command: string, options: ExecOptions = {}): Promise<ExecResult> {
@@ -19,19 +54,37 @@ export async function exec(command: string, options: ExecOptions = {}): Promise<
       env: options.env ? { ...process.env, ...options.env } : undefined,
     })
 
-    timer = setTimeout(() => proc.kill(), timeout)
+    const collected = (async () => {
+      const [stdout, stderr] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ])
+      return { stdout, stderr, exitCode: await proc.exited }
+    })()
 
-    const [stdout, stderr] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-    ])
-    const exitCode = await proc.exited
+    const deadline = new Promise<typeof TIMED_OUT>((resolve) => {
+      timer = setTimeout(() => {
+        proc.kill('SIGKILL')
+        resolve(TIMED_OUT)
+      }, timeout)
+    })
+
+    const settled = await Promise.race([collected, deadline])
+
+    if (settled === TIMED_OUT) {
+      return {
+        stdout: '',
+        stderr: `timed out after ${timeout}ms`,
+        exitCode: -1,
+        ok: false,
+      }
+    }
 
     return {
-      stdout: stdout.trim(),
-      stderr: stderr.trim(),
-      exitCode,
-      ok: exitCode === 0,
+      stdout: settled.stdout.trim(),
+      stderr: settled.stderr.trim(),
+      exitCode: settled.exitCode,
+      ok: settled.exitCode === 0,
     }
   }
   catch (err) {

@@ -46,6 +46,7 @@ function esc(str) { return escapeHtml(str || '') }
   enabledStartup() { return this.startupItems.filter(function(i) { return !this.disabledItems.includes(i.id); }.bind(this)); },
   disabledStartup() { return this.startupItems.filter(function(i) { return this.disabledItems.includes(i.id); }.bind(this)); },
   enabledIds() { return this.enabledStartup().map(function(i) { return i.id; }); },
+  startupSources(scope) { const seen = []; this.startupItems.forEach(function(i) { if (i.scope === scope && seen.indexOf(i.type) === -1) { seen.push(i.type); } }); const names = { agent: 'Launch agents', daemon: 'Launch daemons', registry: 'Registry', 'startup-folder': 'Startup folder' }; const labels = seen.map(function(t) { return names[t] || t; }); return labels.length ? labels.join(' + ') : 'None found'; },
 
   toggle(id) { this.selected = this.selected.indexOf(id) === -1 ? this.selected.concat([id]) : this.selected.filter(function(x) { return x !== id; }); },
   isOn(id) { return this.selected.includes(id); },
@@ -135,7 +136,7 @@ async function doRemove(fp, name, itemId) {
   })) return;
   _api('/api/remove-startup', { filepath: fp }).then(function(r) {
     if (r.success) {
-      _exec("removedItems = [...removedItems, '' + itemId + '']");
+      _exec("removedItems = [...removedItems, " + JSON.stringify(itemId) + "]");
       _exec("toast('" + name.replace(/'/g, "\\'") + " removed', 'success')");
     } else {
       _exec("toast('Failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");

@@ -18,6 +18,11 @@
  * missing from this list.
  */
 export const RUNTIME_ICON_CLASSES: string[] = [
+  // Windows maintenance tasks. The stylesheet is built once and shipped to
+  // both platforms, so this list has to cover every platform's glyphs rather
+  // than the running one's.
+  'i-f7-checkmark-shield-fill',
+  'i-f7-speedometer',
   // Clean-target categories
   'i-f7-archivebox-fill',
   'i-f7-doc-text-fill',

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
+import process from 'node:process'
 import { HOME } from '../packages/core/src/paths'
 import { shredPaths } from '../packages/disk/src/shred'
 
@@ -30,7 +31,42 @@ afterAll(() => {
 })
 
 describe('shredPaths', () => {
+  /**
+   * A path that is outside home on whatever platform this is, and that does
+   * not need to exist: `isPathSafe` answers the containment question before it
+   * ever stats anything.
+   *
+   * This used to use `os.tmpdir()`, which is outside home on macOS and
+   * *inside* it on Windows — `%TEMP%` is `%LOCALAPPDATA%\\Temp`. It passed on
+   * the Windows leg anyway, for the wrong reason: `%TEMP%` came back as an 8.3
+   * short name that no longer string-matched the long-form home, so the guard
+   * refused a path that was in fact inside home. Canonicalising the two
+   * spellings fixed the guard and left this test asserting a premise that was
+   * never true there.
+   */
+  const outsideHome = path.join(path.dirname(HOME), 'sc-not-your-home', 'shred-me.txt')
+
   it('refuses paths outside the home directory', () => {
+    const outcome = shredPaths([outsideHome])
+
+    expect(outcome.shredded).toEqual([])
+    expect(outcome.skipped).toHaveLength(1)
+    expect(outcome.skipped[0].reason).toContain('outside home')
+  })
+
+  /**
+   * The same refusal against a file that really is on disk, so "it refused"
+   * is backed by "and it is still there".
+   *
+   * POSIX only, because it needs somewhere writable that is genuinely outside
+   * the user profile, and on Windows the obvious candidates — `C:\\Users`,
+   * `C:\\`, `%TEMP%` — are respectively not writable, not writable, and not
+   * outside.
+   */
+  it('leaves a real file outside home untouched', () => {
+    if (process.platform === 'win32')
+      return
+
     const outside = path.join(fs.realpathSync(os.tmpdir()), 'system-cleaner-shred-outside.txt')
     fs.writeFileSync(outside, 'not yours to erase')
 
@@ -38,7 +74,6 @@ describe('shredPaths', () => {
       const outcome = shredPaths([outside])
 
       expect(outcome.shredded).toEqual([])
-      expect(outcome.skipped).toHaveLength(1)
       expect(outcome.skipped[0].reason).toContain('outside home')
       // The refusal must not have deleted it anyway.
       expect(fs.existsSync(outside)).toBe(true)

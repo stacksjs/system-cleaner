@@ -1,5 +1,5 @@
-import { defineModel } from '@stacksjs/orm'
-import { schema } from '@stacksjs/validation'
+import { defineModel, siteOwnership } from '@stacksjs/orm'
+import { schema } from '@stacksjs/validation/runtime'
 
 /**
  * A user-defined form: inquiry, permission slip, event registration,
@@ -22,6 +22,10 @@ export default defineModel({
       unique: true,
     },
   ],
+
+  // Owned through the site, which belongs to a team, so the owner is the set of
+  // site ids the caller's team owns rather than a single id (stacksjs/stacks#2375).
+  ownership: siteOwnership(),
 
   traits: {
     useUuid: true,

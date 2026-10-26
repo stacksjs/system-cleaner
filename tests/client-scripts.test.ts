@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test'
+import * as path from 'node:path'
 
 /**
  * The bundled client scripts, and the tags that load them.
@@ -18,7 +19,10 @@ const MARKUP = new Bun.Glob('resources/**/*.stx')
 async function sourceNames(): Promise<string[]> {
   const names: string[] = []
   for await (const file of SOURCES.scan('.'))
-    names.push(file.split('/').pop()!.replace(/\.ts$/, ''))
+    // path.basename, not split('/'): Bun.Glob yields backslash-separated
+    // paths on Windows, where splitting on a forward slash returns the
+    // whole path and every name becomes `resources\scripts\foo`.
+    names.push(path.basename(file).replace(/\.ts$/, ''))
   return names.sort()
 }
 
@@ -62,8 +66,16 @@ describe('bundled client scripts', () => {
     // bugs, none shared with the other apps that hit the same problems.
     for (const name of await sourceNames()) {
       const source = await Bun.file(`resources/scripts/${name}.ts`).text()
-      expect(source).toContain('@stacksjs/desktop/browser')
-      expect(source).not.toMatch(/window\.craft\b/)
+
+      // Hand-rolling a bridge call is the fault; not needing the bridge is
+      // not. A script that only talks to the agent over HTTP has nothing to
+      // import, and requiring the import anyway would mean adding a fake use
+      // of the package to satisfy a test.
+      expect(source, `${name} reaches for the bridge directly`).not.toMatch(/window\.craft\b/)
+
+      const usesNative = /showMessageBox|showOpenDialog|clipboard|notifications|nativeConfirm|nativeAlert/.test(source)
+      if (usesNative)
+        expect(source, `${name} uses native APIs without the package`).toContain('@stacksjs/desktop/browser')
     }
   })
 

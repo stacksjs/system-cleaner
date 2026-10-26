@@ -1,10 +1,10 @@
 import process from 'node:process'
 import { stat, statfs } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { Action } from '@stacksjs/actions'
+import { Action } from '@stacksjs/actions/runtime'
 import { cache } from '@stacksjs/cache'
 import { config } from '@stacksjs/config'
-import { db } from '@stacksjs/database'
+import { db } from '@stacksjs/database/runtime'
 import { checkQueueHealth } from '@stacksjs/queue'
 import { dashboardOperationalIssue } from '../dashboard-response'
 import {

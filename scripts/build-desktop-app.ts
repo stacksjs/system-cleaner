@@ -240,11 +240,81 @@ run('./buddy', ['build:desktop'])
 
 // ── 5. Bundle and image ─────────────────────────────────────────
 console.log('[desktop] packaging')
+/** Staging directories `build:dmg` leaves in the temp dir, by name. */
+function stagingDirs(): Set<string> {
+  try {
+    return new Set(fs.readdirSync(os.tmpdir()).filter(d => d.startsWith('stacks-dmg-')))
+  }
+  catch {
+    return new Set()
+  }
+}
+
+/**
+ * Image the bundle `build:dmg` staged but could not write.
+ *
+ * `buddy build:dmg` always names the volume after the app, so the staged
+ * bundle lands at `/Volumes/SystemCleaner/SystemCleaner.app`. On a Mac where
+ * SystemCleaner is already installed, macOS refuses that path outright:
+ *
+ *     could not access /Volumes/SystemCleaner/SystemCleaner.app
+ *     hdiutil: create failed - Operation not permitted
+ *
+ * The installed copy carries `com.apple.macl` and `com.apple.provenance`, so
+ * TCC is managing that bundle and will not let a process without App
+ * Management rights create one that shadows it. Nothing is wrong with the
+ * build: the `.app` is complete by this point and only the final imaging
+ * fails, which is why this re-images rather than reporting a failure.
+ *
+ * Naming the volume `SystemCleaner <version>` sidesteps it and is the usual
+ * macOS convention anyway. Developers without the app installed never hit the
+ * collision and never reach here.
+ */
+function imageStagedBundle(before: Set<string>): void {
+  const tmp = os.tmpdir()
+  const staged = fs.readdirSync(tmp)
+    .filter(d => d.startsWith('stacks-dmg-') && !before.has(d))
+    .map(d => path.join(tmp, d))
+    .filter(d => fs.existsSync(path.join(d, `${APP_NAME}.app`)))
+
+  if (staged.length === 0)
+    throw new Error('build:dmg failed before it staged a bundle - nothing to image')
+
+  // Newest wins: a run stages more than one directory, only one holds the app.
+  staged.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)
+
+  const outDir = path.join(ROOT, 'storage/framework/desktop-dmg')
+  fs.mkdirSync(outDir, { recursive: true })
+  const out = path.join(outDir, `${APP_NAME}-${APP_VERSION}.dmg`)
+  fs.rmSync(out, { force: true })
+
+  const volume = `${APP_NAME} ${APP_VERSION}`
+  console.log(`[desktop] re-imaging as "${volume}" (the app name collides with the installed copy)`)
+  const imaged = spawnSync('hdiutil', [
+    'create', '-volname', volume, '-srcfolder', staged[0], '-ov', '-format', 'UDZO', out,
+  ], { stdio: 'inherit' })
+  if (imaged.status !== 0)
+    throw new Error(`hdiutil failed to image ${out}`)
+
+  // build:dmg removes its staging only after a successful create, so a failed
+  // run leaves ~90 MB behind each time. Clear what this run made.
+  for (const d of fs.readdirSync(tmp)) {
+    if (d.startsWith('stacks-dmg-') && !before.has(d))
+      fs.rmSync(path.join(tmp, d), { recursive: true, force: true })
+  }
+}
+
 // The framework cannot yet distinguish executable payloads from its JSON
 // metadata when signing an app with a userland launcher. Build the image
-// unsigned here; `sealSignedBundle` below performs the authoritative,
+// unsigned here; `sealBundle` below performs the authoritative,
 // verified inside-out signing pass.
-run('./buddy', ['build:dmg'], { DESKTOP_SIGNING_IDENTITY: '' })
+const stagedBefore = stagingDirs()
+try {
+  run('./buddy', ['build:dmg'], { DESKTOP_SIGNING_IDENTITY: '' })
+}
+catch {
+  imageStagedBundle(stagedBefore)
+}
 
 const dmgDir = path.join(ROOT, 'storage/framework/desktop-dmg')
 const dmg = (fs.existsSync(dmgDir) ? fs.readdirSync(dmgDir) : []).find(file => file.endsWith('.dmg'))
@@ -264,11 +334,24 @@ const dmgPath = path.join(dmgDir, dmg)
  * metadata under Resources, then sign the executable leaves before sealing the
  * app itself. Rebuilding the image here also makes a failed framework signing
  * attempt impossible to mistake for a distributable artifact.
+ *
+ * This runs whether or not there is an identity to sign with, because an
+ * unsealed bundle does not launch *anywhere* — not just on someone else's
+ * Mac. `bun build --compile` leaves the launcher linker-signed ad hoc while
+ * the bundle around it has no `_CodeSignature` at all, and macOS kills that
+ * combination on exec with SIGTRAP and no message: the app bounces once in the
+ * Dock and is gone. `codesign --verify` is the only thing that says why —
+ * "code has no resources but signature indicates they must be present".
+ *
+ * So with no identity the bundle is sealed ad hoc, which is enough to run it
+ * on the machine that built it and is what a local `bun run build:app` is for.
+ * Hardened runtime, entitlements and a timestamp belong to the Developer ID
+ * pass and are skipped: `--options runtime` is what makes the entitlements
+ * load-bearing, and an ad-hoc signature cannot be notarized regardless.
  */
-function sealSignedBundle(imagePath: string): void {
+function sealBundle(imagePath: string): void {
   const identity = process.env.DESKTOP_SIGNING_IDENTITY
-  if (!identity)
-    return
+  const adhoc = !identity
 
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'system-cleaner-sign-'))
   const mountDir = path.join(workDir, 'mounted')
@@ -315,16 +398,18 @@ function sealSignedBundle(imagePath: string): void {
     // `plutil -lint` and rejects them outright — "syntax error near line 12",
     // pointing at a comment plutil had just called valid.
     const entitlements = path.join(ROOT, 'app/Desktop/Entitlements.plist')
-    if (!fs.existsSync(entitlements))
+    if (!adhoc && !fs.existsSync(entitlements))
       throw new Error(`Signing needs ${entitlements}`)
 
-    const signArgs = [
-      '--force',
-      '--options', 'runtime',
-      '--entitlements', entitlements,
-      '--timestamp',
-      '--sign', identity,
-    ]
+    const signArgs = adhoc
+      ? ['--force', '--sign', '-']
+      : [
+          '--force',
+          '--options', 'runtime',
+          '--entitlements', entitlements,
+          '--timestamp',
+          '--sign', identity as string,
+        ]
 
     for (const name of ['craft-runtime', APP_NAME])
       run('codesign', [...signArgs, path.join(macosDir, name)])
@@ -333,9 +418,13 @@ function sealSignedBundle(imagePath: string): void {
     run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', appBundle])
 
     fs.symlinkSync('/Applications', path.join(imageRoot, 'Applications'))
+    // Versioned, for the reason `imageStagedBundle` is: on a Mac with the app
+    // installed, TCC refuses to let anything create
+    // `/Volumes/SystemCleaner/SystemCleaner.app` over the copy it manages, and
+    // `hdiutil` fails with "Operation not permitted".
     run('hdiutil', [
       'create',
-      '-volname', APP_NAME,
+      '-volname', `${APP_NAME} ${APP_VERSION}`,
       '-srcfolder', imageRoot,
       '-ov',
       '-format', 'UDZO',
@@ -354,7 +443,7 @@ function sealSignedBundle(imagePath: string): void {
   }
 }
 
-sealSignedBundle(dmgPath)
+sealBundle(dmgPath)
 
 // ── 6. Notarize ─────────────────────────────────────────────────
 // Signing is `build:dmg`'s job; notarization is not, and a signed but
@@ -389,7 +478,7 @@ fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
 console.log(`[desktop] ${manifestPath}`)
 
 if (!process.env.DESKTOP_SIGNING_IDENTITY)
-  console.warn('[desktop] DESKTOP_SIGNING_IDENTITY is unset — the bundle is unsigned and will not launch on another Mac')
+  console.warn('[desktop] DESKTOP_SIGNING_IDENTITY is unset — the bundle is sealed ad hoc, so it runs on this Mac and is refused on every other')
 else if (!process.env.NOTARY_PROFILE)
   console.warn('[desktop] NOTARY_PROFILE is unset — the DMG is signed but not notarized')
 

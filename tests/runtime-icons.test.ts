@@ -4,6 +4,7 @@ import { RUNTIME_COLOR_CLASSES } from '../app/Support/UI/runtime-colors'
 import { RUNTIME_ICON_CLASSES } from '../app/Support/UI/runtime-icons'
 import { CLEAN_TARGETS } from '../packages/clean/src/categories'
 import { MAINTENANCE_TASKS } from '../packages/clean/src/maintenance'
+import { WINDOWS_MAINTENANCE_TASKS } from '../packages/clean/src/maintenance-windows'
 import { getAllCategories } from '../packages/disk/src/categories'
 import { REMNANT_PRESENTATION } from '../packages/uninstall/src/remnants'
 
@@ -35,9 +36,17 @@ describe('runtime icon safelist', () => {
   // Same failure mode as the clean targets: the maintenance list arrives over
   // `/api/maintenance-tasks` and every glyph is bound with `:class`, so an
   // unlisted one renders as a gap in the middle of a table of icons.
-  it('covers every maintenance-task icon', () => {
-    const uncovered = [...new Set(MAINTENANCE_TASKS.map(task => task.icon))]
-      .filter(icon => !safelist.has(icon))
+  /**
+   * Both platforms' lists, not the running one's.
+   *
+   * `MAINTENANCE_TASKS` is whichever list this machine uses, so checking only
+   * that meant a missing Windows glyph was invisible on macOS and failed the
+   * Windows leg instead. The stylesheet is built once and shipped to both, so
+   * the safelist has to cover both.
+   */
+  it('covers every maintenance-task icon, on either platform', () => {
+    const everyIcon = [...MAINTENANCE_TASKS, ...WINDOWS_MAINTENANCE_TASKS].map(task => task.icon)
+    const uncovered = [...new Set(everyIcon)].filter(icon => !safelist.has(icon))
 
     expect(uncovered).toEqual([])
   })

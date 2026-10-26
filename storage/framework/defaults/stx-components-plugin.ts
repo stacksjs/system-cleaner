@@ -19,7 +19,55 @@ const candidates = [
   join(process.cwd(), 'node_modules/@stacksjs/components/src/ui'),
 ].filter((dir): dir is string => Boolean(dir))
 
+const library = candidates.find(dir => existsSync(dir)) ?? candidates[candidates.length - 1]
+
+/**
+ * Component directories contributed by installed packages.
+ *
+ * Wrapped on its own rather than left to the plugin loader's catch. stx wraps
+ * plugin loading in `try { … } catch { console.warn(…) }`, so an exception
+ * raised here would drop the WHOLE plugin - and this plugin is what supplies
+ * the dashboard's sidebar. Degrading to "no package components" keeps the
+ * library and the framework defaults working.
+ *
+ * `@stacksjs/config` is imported for the resolution rather than re-implemented,
+ * because it carries the guard that refuses a path escaping the package.
+ */
+function packageDirs(): string[] {
+  try {
+    // eslint-disable-next-line ts/no-require-imports
+    const { packageComponentRoots } = require('@stacksjs/config')
+    return packageComponentRoots().map((root: { dir: string }) => root.dir)
+  }
+  catch {
+    return []
+  }
+}
+
 export default {
   name: '@stacksjs/components',
-  components: candidates.find(dir => existsSync(dir)) ?? candidates[candidates.length - 1],
+  /*
+   * Order is the precedence, because stx searches this list and takes the
+   * first match.
+   *
+   * The framework's own components are listed explicitly, ahead of any
+   * package's. They already resolve today through stx's fallback directory, so
+   * naming them here changes nothing on its own - what it does is put a floor
+   * under the package roots, making an installed package purely ADDITIVE. A
+   * package shipping its own `Button.stx` gets it used where nothing else
+   * defines `<Button />`, and cannot quietly replace the framework's.
+   */
+  components: [
+    // Relative to this file, which is what stx resolves plugin entries against.
+    'resources/components',
+    // `library` is a package root too, and it used to sit above the line
+    // before this one - so for 16 names present in both trees the package
+    // answered, which is the exact thing the paragraph above says cannot
+    // happen. `<EmptyState>` was the visible one: the framework's takes an
+    // Iconify class, the package's takes raw SVG and prints it through
+    // `{!! icon !!}`, so ten dashboard components rendered the class name as
+    // text inside a grey circle. See stacksjs/stacks#2927.
+    library,
+    ...packageDirs(),
+  ],
 }

@@ -1,6 +1,6 @@
 ---
 name: stacks-models
-description: Use when working with data models in Stacks — the defineModel() API, model attributes with validation and factories, relationships (hasOne/hasMany/belongsTo/belongsToMany), traits (useAuth, useUuid, useTimestamps, useSearch, useApi, billable, taggable, categorizable, commentable, likeable, observe), computed properties (get/set), model generation, and the 50+ built-in framework models. Covers model definitions and storage/framework/defaults/app/Models/.
+description: Use when defining or extending Stacks models, deriving migrations and CRUD, configuring attributes/relationships/traits/ownership, or preserving model inference. Covers defineModel, extendModel, model types, native data workflows, and the 107 built-in framework models.
 license: MIT
 compatibility: Bun >= 1.3.0, TypeScript, SQLite >= 3.47.2
 allowed-tools: Read Edit Write Bash Grep Glob
@@ -10,14 +10,20 @@ allowed-tools: Read Edit Write Bash Grep Glob
 
 ## Key Paths
 - Your models: `app/Models/` (create it; it does not exist in a fresh project)
-- Built-in models: `storage/framework/defaults/app/Models/` (62 files, grouped
+- Built-in models: `storage/framework/defaults/app/Models/` (grouped
   into `commerce/`, `Content/`, `realtime/` and a flat top level)
-- `ModelOptions` / `Attribute` types: `storage/framework/core/types/src/model.ts`
+- Actual `defineModel` contract: `storage/framework/core/orm/src/define-model.ts`
+- Compatibility `ModelOptions` / `Attribute` types: `storage/framework/core/types/src/model.ts`
 - Attribute presets: `storage/framework/types/attributes.ts`
 
 To customize a built-in model, create the same filename under `app/Models/` -
 `app/Models/User.ts` wins over the default. `buddy publish:model User` copies the
 default across as a starting point.
+
+For an additive override, use `extendModel` rather than copying the full built-in
+definition. Read [references/model-capabilities.md](references/model-capabilities.md)
+for merge rules, casts, encryption, ownership, validation, lifecycle, search,
+pagination, sharding, and the native type utilities.
 
 ## Writing a model
 
@@ -31,8 +37,8 @@ import { defineModel } from '@stacksjs/orm'
 import { schema } from '@stacksjs/validation'
 
 export default defineModel({
-  name: 'Product',        // defaults to the file name
-  table: 'products',      // defaults to lowercase plural of `name`
+  name: 'Product',        // declare the model identity explicitly
+  table: 'products',      // declare the database table explicitly
   primaryKey: 'id',       // default
   autoIncrement: true,    // default
 
@@ -74,7 +80,11 @@ generated model types stay precise.
 
 ### Attribute fields
 
-`validation.rule` is the only required key on an attribute.
+The modern `defineModel` contract accepts attributes inferred from an explicit
+type, validation rule, factory, or default. A validator is recommended for
+request-facing values, but is not mandatory for every internal attribute.
+An unclassified value can infer `unknown`; declare the intended type instead
+of forcing a cast. See `orm/tests/inference-attributes.test-d.ts`.
 
 | Field | Effect |
 |---|---|
@@ -88,8 +98,10 @@ generated model types stay precise.
 | `guarded` | Block mass assignment |
 | `hidden` | Exclude from JSON serialization (passwords, tokens) |
 | `foreignKey` | Disable, infer, or configure the FK constraint |
-| `factory` | `(faker) => value`, used by seeders and tests |
-| `validation` | `{ rule, message? }` - `rule` from `schema`, `message` keyed by rule name |
+| `personal` | Personal data: exported by `gdpr:export`, anonymized by erasure and retention. `true`, or `{ anonymize?, export? }`. See "Personal data (GDPR)" below |
+| `factory` | `(faker, attributes) => value`, used by seeders and tests. `attributes` holds what this record's earlier-declared factories produced, so one value can depend on another: `(faker, { discountType }) => ...` |
+| `validation` | `{ rule, message? }` - declared rules are enforced on direct ORM writes and generated CRUD |
+| `encrypted` | Encrypt persisted values and decrypt model reads; raw queries still see stored ciphertext |
 
 ### Traits
 
@@ -98,18 +110,25 @@ generated model types stay precise.
 | `useUuid` | UUID column alongside the primary key |
 | `useTimestamps` (alias `timestampable`) | `created_at` / `updated_at`. On by default |
 | `useSoftDeletes` (alias `softDeletable`) | `deleted_at` plus soft-delete query scopes |
-| `useAuth` (alias `authenticatable`) | Auth columns; `{ usePasskey: true }` adds passkeys |
+| `useAuth` (alias `authenticatable`) | Auth columns; `{ usePasskey: true }` adds passkeys. Also confers `morphMany: { tokenable: 'PersonalAccessToken' }`, so any authenticatable model can hold API tokens |
 | `useApi` | Generates REST actions and routes: `{ uri, routes, middleware? }` |
 | `useSearch` (alias `searchable`) | Search-engine indexing: `{ displayable, searchable, sortable, filterable }` |
 | `useSocials` | OAuth identities, e.g. `['github']` |
-| `useActivityLog` | Writes an `Activity` row per change |
+| `useActivityLog` | Writes an `activities` feed row per change: `{ logOnly }` / `{ include }` / `{ exclude }` pick the attributes |
+| `useAudit` | Writes a `model_audits` row per change with an old/new diff |
 | `observe` | Emits `{model}:created` / `:updated` / `:deleted` events |
 | `billable` | Stripe methods (`checkout()`, `activeSubscription()`, ...) |
 | `taggable` / `categorizable` / `commentable` / `likeable` | Pivot tables and their relation methods |
+| `gdpr` | Whose data the rows are (`subject`), what erasure does (`erasure`), how long rows live (`retention`), and why (`basis`, `purpose`). See "Personal data (GDPR)" below |
 
 Also at the top level: `indexes: [{ name, columns, unique?, where? }]` for
 composite and partial-unique indexes, and `dashboard: { highlight: true }` to
-feature the model in the admin UI.
+feature the model in the admin UI. Use `dashboard: { access: false }` to
+exclude a model from generic dashboard catalogs/counts/search and the generic
+model-browser CRUD Actions before database work. Its default is `true`;
+`dashboard.enabled: false` still only hides the sidebar row. `access` leaves
+direct ORM calls, named domain Actions and generated `useApi` routes available.
+Those APIs require their own route selection, middleware, ownership and policies.
 
 `useApi` is an API capability, not a dashboard-view generator. Its generated
 routes are registered from the merged model registry. Framework defaults are
@@ -124,10 +143,90 @@ useApi: {
 }
 ```
 
+`security.api.models` and `STACKS_MODEL_APIS` select which `useApi` definitions
+publish routes. The environment setting wins; `all`, `own`, `none`, or named
+models can narrow the surface. An app override counts as its own model.
+Selection does not add the trait or replace middleware/ownership checks, and
+it is separate from feature bundle and database migration selection. See
+`orm/tests/model-api-selection.test.ts` before configuring a restricted API.
+
 Dashboard-specific endpoints may still use scoped Actions when their transport
 shape, authorization boundary, or aggregation differs from generic CRUD. Do
 not expose a sensitive model through unguarded generated routes just because a
 separate dashboard endpoint is protected.
+
+#### Who may reach the generated routes
+
+Omit `middleware` and reads AND writes get `auth`: an undeclared read route is
+how a customer list leaks (#2224). Four declaration forms, narrowest last:
+
+```ts
+middleware: ['auth']                       // every ability
+middleware: []                             // every ability public; warns at boot
+middleware: { read: [], write: ['auth'] }  // public catalog, guarded writes
+middleware: { write: ['auth'], destroy: ['auth', 'role:admin'] }  // per ability
+```
+
+`read` covers `index` and `show`; `write` covers `store`, `update` and
+`destroy`; an ability name overrides its side; and `destroy` covers bulk-delete
+with the single delete. Use the per-ability form for the "fewer actions" half of
+a tiered role - "may file an order, may not void one" is `store` versus
+`destroy`, which the read/write split cannot express. Declaring one ability
+leaves the other four on `auth`, so narrowing one route never widens another.
+
+A model is also gated by the roles it declares for the dashboard:
+
+```ts
+dashboard: { roles: ['admin'] }   // hides the sidebar row AND gates every generated route
+```
+
+That one declaration covers both surfaces (#2883). It appends `role:admin` to
+the resolved middleware of each ability, unless that ability names a `role:`
+itself (explicit wins) or was explicitly emptied (a deliberately public surface
+is reported at boot, not quietly closed). `dashboard: { roles: [...], enforce:
+false }` keeps the row hidden and the API as the middleware leaves it, for a row
+hidden only to reduce clutter.
+
+Row-level scoping is separate and already on: a model scopes rows by an
+`ownership` config or a `team_id` column, and `security.api.rowScoping` defaults
+to `'deny'`, which withholds store/update/destroy from a model that scopes
+neither (#2375). A role says who may call the route; ownership says which rows
+are theirs. A tiered app usually needs both.
+
+#### Per-row rules: a policy
+
+Middleware answers "may this caller use this endpoint". A policy answers "may
+this caller do this to THIS row", which is the part a role cannot express. The
+generated routes consult one when the model has one (#2883):
+
+| Route | Ability | Subject |
+|---|---|---|
+| `index` | `viewAny` | none |
+| `show` | `view` | the row |
+| `store` | `create` | none |
+| `update` | `update` | the existing row |
+| `destroy`, bulk-delete | `delete` | the row, one call each |
+
+```ts
+// app/Policies/OrderPolicy.ts
+export default class OrderPolicy {
+  viewAny(user) { return user !== null }
+  view(user, order) { return order.customer_id === user?.id }
+  delete(user, order) { return order.status === 'draft' && order.customer_id === user?.id }
+}
+```
+
+Register it in `app/Gates.ts` under `policies`, or name it `<Model>Policy` under
+`app/Policies/` and it is discovered by convention. A model with no policy is
+unaffected, so adding one is opt-in per model. A refusal is a 403 carrying the
+policy's own message; an ability the policy does not implement is a refusal too,
+so a partial policy does not leave the rest open.
+
+`Gate.inspectFor(model, ability, user, row)` is the same check from your own
+code, keyed by model NAME rather than by instance - which is what a dashboard
+action holding a query-builder row needs. It answers null for "no policy
+registered", which is deliberately distinct from a denial; `Gate.allowsFor`
+is the boolean form that reads null as allowed.
 
 Generated store and update routes accept both spellings of every fillable
 attribute and each foreign key implied by `belongsTo`. Declaring Product as a
@@ -204,12 +303,46 @@ get: {
   fullName: (model) => `${model.firstName} ${model.lastName}`,
 },
 set: {
-  password: (value) => makeHash(value),
+  password: (attributes) => makeHash(attributes.password),
 },
 scopes: {
   published: (query) => query.where('status', 'published'),
 },
 ```
+
+## Personal data (GDPR)
+
+Declared on the model, read by access exports, erasure, retention and the
+processing register (stacksjs/stacks#365). Full guide: `docs/guide/gdpr.md`.
+
+```ts
+belongsTo: ['Customer'],
+traits: {
+  gdpr: {
+    subject: { via: 'Customer' },   // or 'user_id', ['a_id', 'b_id'], { column, where }, { email: 'col' }
+    erasure: 'anonymize',           // default; or 'delete' | 'keep'
+    retention: { days: 3650, action: 'anonymize' }, // optional; column defaults to created_at
+    basis: 'legal_obligation',
+    purpose: 'Order fulfilment, kept for tax and accounting',
+  },
+},
+attributes: {
+  deliveryAddress: { personal: true, validation: { rule: schema.string() } },
+},
+```
+
+- `subject` is derived when left out: `id` on `User`, the `belongsTo: ['User']`
+  foreign key elsewhere. A `via` parent must itself declare a subject.
+- Anonymization writes NULL to nullable columns and a typed placeholder to
+  `NOT NULL` ones (`erased-<id>` when unique). A `NOT NULL` enum or timestamp
+  needs `personal: { anonymize: <value> }`, or every request refuses to run.
+- A model that `belongsTo: ['User']` and declares nothing is **unclassified**:
+  erasure does not reach it and `buddy gdpr:register` lists it. Classify it, even
+  as `erasure: 'keep'`. `core/orm/tests/gdpr.test.ts` fails if a built-in one is.
+- Engine: `exportSubjectData`, `eraseSubject({ dryRun })`, `pruneRetainedData`,
+  `resolveGdprPlan`, `renderProcessingRegister`, all from `@stacksjs/orm`.
+  Commands: `buddy gdpr:export|erase|prune|register|register:check`. Every
+  request writes a `gdpr_requests` row (the `GdprRequest` model).
 
 ## Workflow
 
@@ -259,9 +392,27 @@ buddy seed --include-defaults    # framework built-ins too
 
 A model with no `useSeeder` trait is never seeded. Auth and OAuth models are
 skipped on a non-fresh database so re-seeding cannot invalidate live sessions -
-pass `--allow-protected` to override.
+pass `--allow-protected` to override. A `belongsTo` to `User`, `Team` or `Customer` is
+filled only from accounts the same run seeded (never a pre-existing, possibly real one);
+`--attach-accounts` lifts that on a scratch database. Composite `unique: true` indexes are
+honoured: fewer rows are seeded rather than a duplicate combination.
 
-## All 62 built-in models by category
+## Built-in models by category
+
+The ones below are worth knowing by name. They are a selection, not the set:
+`storage/framework/defaults/app/Models/` holds 107, and that directory is the
+authority. This section said "All 62 built-in models by category" while
+listing fewer than that against 102 on disk, so an agent reading to the end
+had no way to tell it was short.
+
+No count of what this section itself lists, deliberately - that number is
+maintained by hand, drifts the moment anyone adds a bullet, and is the same
+habit that produced the "All 62". The total above is pinned by
+`buddy docs:agent-counts`.
+
+Run `rg --files storage/framework/defaults/app/Models app/Models` for definitions
+and inspect the model registry for the runtime selection. `buddy list` lists
+commands, not a project's resolved models.
 
 ### Users & Auth
 - **User** — name, email, password | traits: useAuth(passkey), useUuid, useTimestamps, useSocials(github) | hasOne: Subscriber, Driver, Author | hasMany: PersonalAccessToken, Customer
@@ -279,7 +430,7 @@ pass `--allow-protected` to override.
 
 ### Commerce (20+ models)
 - **Product** — name(max100), description, price(min1), imageUrl, isAvailable, inventoryCount, preparationTime, allergens(JSON), nutritionalInfo(JSON) | belongsTo: Category, Manufacturer | hasMany: Review, ProductUnit, ProductVariant, LicenseKey, WaitlistProduct, Coupon | seeder: 10, dashboard: highlighted
-- **ProductVariant** — SKU, options, pricing
+- **ProductVariant** — variant, type, options, status, sku (unique per product), price / compareAtPrice (minor units, null price inherits the product's), inventoryCount (null = untracked) | belongsTo: Product | seeder: 50
 - **ProductUnit** — unit-specific pricing
 - **Cart** — status(active|abandoned|converted|expired), totalItems, subtotal, taxAmount, discountAmount, total, expiresAt, currency(USD), notes | hasMany: CartItem | belongsTo: Customer, Coupon
 - **CartItem** — quantity(min1), unitPrice, totalPrice, taxRate, taxAmount, discountPercentage, productName, productSku | belongsTo: Cart
@@ -338,12 +489,13 @@ pass `--allow-protected` to override.
   will be overwritten by the next diff.
 - **`commentable`, not `commentables`.** `define-model` only checks the singular
   key. The plural spelling used to type check while leaving the trait inert.
-- **Seeding is model-declared.** `useSeeder` sets the count and fixtures; the
-  per-attribute `factory` functions produce the values. There are no seeder
-  files to write or register.
+- **Seeding can be model-declared.** `useSeeder` sets the count and fixtures;
+  attribute factories produce values. Application `Seeder` classes under
+  `database/seeders` are also supported for ordered bootstrap work.
 - **`hidden` is serialization, `guarded` is mass assignment.** They are different
   protections; a password wants both `hidden` and no `fillable`.
-- **`validation.rule` is mandatory** on every attribute - it drives both request
-  validation and the inferred column type.
+- **Declared validation is enforced on ORM writes**, including quiet writes.
+  Type inference also accepts explicit types, factories, and defaults; absence
+  of a validator is not a promise that an arbitrary request body is safe.
 - Dashboard-highlighted models (`dashboard: { highlight: true }`) appear
   prominently in the admin UI.

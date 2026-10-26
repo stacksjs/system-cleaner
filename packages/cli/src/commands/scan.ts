@@ -33,7 +33,7 @@ export function registerScanCommand(app: CLI): void {
 
       // Phase 4: Startup items
       s.start('Scanning startup items...')
-      const startupItems = discoverStartupItems()
+      const startupItems = await discoverStartupItems()
       const enabledStartup = startupItems.filter(i => !i.disabled)
       const thirdPartyStartup = enabledStartup.filter(i => i.category !== 'system')
       s.stop(`${enabledStartup.length} startup items (${thirdPartyStartup.length} third-party)`)
