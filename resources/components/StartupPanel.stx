@@ -1,5 +1,16 @@
 <!-- Startup items management panel -->
 <div class='card-row'>
+  <!--
+    Leads the row, and is absent on a tidy Mac. An entry whose program is
+    gone is the only thing on this screen that can be removed without knowing
+    what it does, so it gets counted first - but a card reading 0 would put a
+    permanent empty slot on a machine that has nothing wrong with it.
+  -->
+  <div class='card' x-show='deadStartup().length > 0' x-cloak>
+    <div class='card-label'>Dead</div>
+    <div class='card-value' style='color: var(--red);' x-text='deadStartup().length'>0</div>
+    <div class='card-detail'>Program no longer installed</div>
+  </div>
   <div class='card'>
     <div class='card-label'>Active</div>
     <div class='card-value' style='color: var(--orange);'>{{ enabledStartup().length }}</div>
@@ -34,6 +45,7 @@
 <div class='tabs'>
   <button class='tab' :class="{ active: startupFilter === 'all' }" @click="setFilter('all')">All (<span>{{ startupItems.length }}</span>)</button>
   <button class='tab' :class="{ active: startupFilter === 'enabled' }" @click="setFilter('enabled')">Enabled (<span>{{ enabledStartup().length }}</span>)</button>
+  <button class='tab' x-show='deadStartup().length > 0' x-cloak :class="{ active: startupFilter === 'dead' }" @click="setFilter('dead')">Dead (<span x-text='deadStartup().length'>0</span>)</button>
   <button class='tab' :class="{ active: startupFilter === 'vendor' }" @click="setFilter('vendor')">Third-party</button>
   <button class='tab' :class="{ active: startupFilter === 'system' }" @click="setFilter('system')">Built-in</button>
 </div>
@@ -41,9 +53,18 @@
 <div class='tbl-wrap'>
   <div class='tbl-bar'>
     <span class='tbl-title'>Startup Items</span>
+    <!--
+      The one bulk action this screen can offer. "Disable Selected" sat here
+      permanently hidden because there is no safe way to sweep a list where
+      most rows might be load-bearing; a dead entry has no such problem, so
+      this sweeps exactly those and nothing else. The server re-derives the
+      set from a fresh scan, so this button cannot delete anything live even
+      if the list it was rendered from is stale.
+    -->
     <div style='display: flex; gap: var(--space-tight);'>
-      <button class='btn btn-sm' x-cloak x-show='false' aria-hidden='true'>
-        Disable Selected (<span x-text='selected.length'>0</span>)
+      <button class='btn btn-danger btn-sm' x-cloak x-show='deadStartup().length > 0'
+        @click="doRemoveDead(deadPaths(), deadIds(), deadStartup().map(function(i){ return i.name; }))">
+        Delete Dead (<span x-text='deadStartup().length'>0</span>)
       </button>
     </div>
   </div>
@@ -64,15 +85,23 @@
           <td><input type="checkbox" class="check" :checked="isOn(item.id)" @click="toggle(item.id)" /></td>
           <td>
             <div class='item-row'><span class='item-glyph' :class="item.icon" aria-hidden="true"></span><span class='item-name' x-text="item.name"></span></div>
-            <div class='item-sub' x-text="item.vendor"></div>
+            <!--
+              A dead row shows the path it cannot find instead of the vendor.
+              "Delete this, it is safe" is not a claim to make without showing
+              the evidence, and the vendor is the one thing already obvious
+              from the name beside it.
+            -->
+            <div class='item-sub' x-show='!item.targetMissing' x-text="item.vendor"></div>
+            <div class='item-sub item-sub-dead' x-show='item.targetMissing' x-cloak x-text="item.program"></div>
           </td>
           <td>
             <span class='badge badge-green' x-show="item.scope === 'user'">User</span>
             <span class='badge badge-orange' x-show="item.scope !== 'user'" x-cloak>System</span>
           </td>
           <td>
-            <span x-show="!isDisabled(item.id)" class="badge badge-green">Active</span>
-            <span x-show="isDisabled(item.id)" x-cloak class="badge badge-gray">Disabled</span>
+            <span x-show="!isDisabled(item.id) && !item.targetMissing" class="badge badge-green">Active</span>
+            <span x-show="isDisabled(item.id) && !item.targetMissing" x-cloak class="badge badge-gray">Disabled</span>
+            <span x-show="item.targetMissing" x-cloak class="badge badge-red" title="launchd cannot run this - the program it points at is gone">Dead</span>
           </td>
           <td>
             <span x-show='item.runAtLoad' class='i-f7-checkmark-alt run-at-load' aria-label='Runs at login'></span>

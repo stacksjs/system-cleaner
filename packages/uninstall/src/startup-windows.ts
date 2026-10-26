@@ -223,6 +223,9 @@ export async function discoverWindowsStartup(): Promise<StartupItem[]> {
         disabled: approvals.get(entry.name) ?? false,
         filepath: `${run.key}\\${entry.name}`,
         program: entry.value,
+        // `program` keeps the whole command line for display; the existence
+        // check needs the executable on its own, without the arguments.
+        targetMissing: program !== '' && path.win32.isAbsolute(program) && !fs.existsSync(program),
       })
     }
   }
@@ -258,6 +261,11 @@ export async function discoverWindowsStartup(): Promise<StartupItem[]> {
         disabled,
         filepath: full,
         program: full,
+        // The entry *is* the file, and it was just read out of the directory.
+        // A `.lnk` here could still point somewhere dead, but resolving a
+        // shortcut target is not something this reads, so the honest answer
+        // is no rather than a guess.
+        targetMissing: false,
       })
     }
   }

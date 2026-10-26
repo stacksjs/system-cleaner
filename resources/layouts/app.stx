@@ -555,6 +555,9 @@ const localAgent = isLocalAgent()
     .dim, .item-sub, .ring-label { color: var(--secondary); }
     .item-name { font-weight: 500; }
     .item-sub { font-size: 10px; }
+    /* The path a dead startup entry cannot find. Monospaced because it is a
+       path, and wrapped mid-token because it is long and the column is not. */
+    .item-sub-dead { font-family: 'SF Mono', Menlo, monospace; word-break: break-all; max-width: 42ch; }
     .item-row { display: flex; align-items: center; gap: var(--space-tight); }
     .item-glyph { width: 14px; height: 14px; flex-shrink: 0; color: var(--accent); }
     .run-at-load { display: inline-block; width: 13px; height: 13px; color: var(--green); }

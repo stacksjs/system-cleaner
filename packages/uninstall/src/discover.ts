@@ -156,6 +156,28 @@ function categorizeAgent(label: string): { vendor: string, category: StartupItem
  * one platform and not the other is the kind of difference that only shows up
  * as a frozen UI on the platform nobody is testing on.
  */
+/**
+ * Does this entry point at a binary that is no longer there?
+ *
+ * Only an absolute path can be answered. A relative one is resolved through
+ * launchd's `PATH` and a missing `Program` may still run via `BundleProgram`
+ * or on demand through `MachServices`, so both return `false` — the field
+ * means "known dead", and a maybe has to read as alive or a sweep that
+ * trusts it would remove working agents.
+ *
+ * `pathExists` is `access(F_OK)`, which also fails when a parent directory
+ * cannot be traversed. Every launchd target on a Mac lives somewhere
+ * world-readable (`/usr/libexec`, `/Library`, `/opt`, `/Applications`), and a
+ * run across all 33 agents and daemons on the development machine flagged
+ * four — three Homebrew PHP daemons for uninstalled formulae and a Google
+ * updater whose bundle was gone — and no Apple entry at all.
+ */
+export function isTargetMissing(program: string): boolean {
+  if (!program || !path.isAbsolute(program))
+    return false
+  return !pathExists(program)
+}
+
 export async function discoverStartupItems(): Promise<StartupItem[]> {
   if (isWindows)
     return discoverWindowsStartup()
@@ -182,11 +204,17 @@ export async function discoverStartupItems(): Promise<StartupItem[]> {
         disabled: info.disabled,
         filepath,
         program: info.program,
+        targetMissing: isTargetMissing(info.program),
       })
     }
   }
 
+  // Dead entries lead. They are the only rows on this screen that can be
+  // removed without knowing what they do, so burying them alphabetically
+  // among thirty live agents hides the one safe action the list offers.
   items.sort((a, b) => {
+    if (a.targetMissing !== b.targetMissing)
+      return a.targetMissing ? -1 : 1
     if (a.disabled !== b.disabled)
       return a.disabled ? 1 : -1
     return a.name.localeCompare(b.name)
@@ -280,6 +308,80 @@ export async function removeStartupItem(filepath: string): Promise<{ success: bo
   catch (e: any) {
     return formatOsaError(e)
   }
+}
+
+/**
+ * Remove several launch agents/daemons, with one password prompt for the lot.
+ *
+ * Calling `removeStartupItem` in a loop is correct but unusable: every
+ * system-scope entry spawns its own `with administrator privileges`, so
+ * clearing the three stale Homebrew PHP daemons on a machine means typing a
+ * password three times. The system entries are therefore unloaded and deleted
+ * by a single `osascript`, which either authorizes once or is cancelled once.
+ *
+ * The trade is granularity. A batch that is cancelled or fails reports the
+ * same error against every system path in it, because one shell invocation
+ * cannot say which of its statements was the one that broke. User agents are
+ * still handled individually — they need no prompt, so there is nothing to
+ * save by grouping them and a per-item result is strictly better.
+ */
+export async function removeStartupItems(
+  filepaths: string[],
+): Promise<{ succeeded: string[], failed: { filepath: string, error: string }[] }> {
+  const succeeded: string[] = []
+  const failed: { filepath: string, error: string }[] = []
+
+  const systemPaths: string[] = []
+
+  for (const filepath of filepaths) {
+    const resolved = validateLaunchAgentPath(filepath)
+    if (resolved === null) {
+      failed.push({ filepath, error: 'Invalid launch agent path' })
+      continue
+    }
+
+    if (resolved.startsWith(path.join(HOME, 'Library/LaunchAgents'))) {
+      const result = await removeStartupItem(resolved)
+      if (result.success)
+        succeeded.push(resolved)
+      else
+        failed.push({ filepath: resolved, error: result.error || 'Operation failed' })
+      continue
+    }
+
+    systemPaths.push(resolved)
+  }
+
+  if (systemPaths.length > 0) {
+    if (isWindows) {
+      // No launchd and no osascript. Nothing reaches here today, because
+      // Windows startup entries are registry keys and shortcuts rather than
+      // plists, and `validateLaunchAgentPath` rejects every one of them.
+      for (const filepath of systemPaths)
+        failed.push({ filepath, error: 'Not supported on Windows' })
+    }
+    else {
+      const cmd = systemPaths
+        .map((p) => {
+          const quoted = shellEscape(p)
+          return `launchctl unload -w ${quoted} 2>/dev/null; rm -f ${quoted}`
+        })
+        .join('; ')
+
+      try {
+        const innerForAS = appleScriptEscape(cmd)
+        await exec(`osascript -e 'do shell script "${innerForAS}" with administrator privileges'`, { timeout: 60000 })
+        succeeded.push(...systemPaths)
+      }
+      catch (e: any) {
+        const { error } = formatOsaError(e)
+        for (const filepath of systemPaths)
+          failed.push({ filepath, error })
+      }
+    }
+  }
+
+  return { succeeded, failed }
 }
 
 function formatOsaError(e: any): { success: false, error: string } {

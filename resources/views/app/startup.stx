@@ -48,6 +48,10 @@ function esc(str) { return escapeHtml(str || '') }
   enabledIds() { return this.enabledStartup().map(function(i) { return i.id; }); },
   startupSources(scope) { const seen = []; this.startupItems.forEach(function(i) { if (i.scope === scope && seen.indexOf(i.type) === -1) { seen.push(i.type); } }); const names = { agent: 'Launch agents', daemon: 'Launch daemons', registry: 'Registry', 'startup-folder': 'Startup folder' }; const labels = seen.map(function(t) { return names[t] || t; }); return labels.length ? labels.join(' + ') : 'None found'; },
 
+  deadStartup() { return this.startupItems.filter(function(i) { return i.targetMissing && !this.removedItems.includes(i.id); }.bind(this)); },
+  deadIds() { return this.deadStartup().map(function(i) { return i.id; }); },
+  deadPaths() { return this.deadStartup().map(function(i) { return i.filepath; }); },
+
   toggle(id) { this.selected = this.selected.indexOf(id) === -1 ? this.selected.concat([id]) : this.selected.filter(function(x) { return x !== id; }); },
   isOn(id) { return this.selected.includes(id); },
   isDisabled(id) { return this.disabledItems.includes(id); },
@@ -57,6 +61,7 @@ function esc(str) { return escapeHtml(str || '') }
   rowVisible(item) {
     if (this.startupFilter === 'all') return true;
     if (this.startupFilter === 'enabled') return !this.isDisabled(item.id);
+    if (this.startupFilter === 'dead') return !!item.targetMissing;
     if (this.startupFilter === 'vendor') return item.category === 'vendor' || item.category === 'other' || item.category === 'dev';
     if (this.startupFilter === 'system') return item.category === 'system';
     return true;
@@ -144,7 +149,49 @@ async function doRemove(fp, name, itemId) {
   }).catch(_toastErr('Remove failed'));
 }
 
+/**
+ * Delete every entry whose program is missing.
+ *
+ * The dialog names the count and says why it is safe, because "delete 4
+ * startup items" on a screen full of load-bearing daemons reads as the most
+ * dangerous button on the page rather than the only harmless one. The server
+ * re-checks each path against a fresh scan, so a stale list here cannot
+ * remove something that has since been reinstalled.
+ */
+async function doRemoveDead(paths, ids, names) {
+  if (!paths.length) return;
+
+  if (!await window.nativeConfirm({
+    title: 'Delete ' + paths.length + (paths.length === 1 ? ' dead startup item?' : ' dead startup items?'),
+    message: 'Each one points at a program that is no longer installed, so none of them can run: '
+      + names.join(', ') + '. '
+      + 'The entries are unloaded and their files deleted. This cannot be undone, but reinstalling the app restores them.',
+    confirmLabel: 'Delete',
+    destructive: true,
+  })) return;
+
+  _api('/api/remove-dead-startup', { filepaths: paths }).then(function(r) {
+    const gone = (r.succeeded || []).length;
+    const failed = (r.failed || []).length;
+
+    if (gone > 0) {
+      // Match the ids back from the paths the server confirmed, so a partly
+      // authorized batch greys out exactly the rows that went.
+      const removed = ids.filter(function(id, idx) { return (r.succeeded || []).indexOf(paths[idx]) !== -1; });
+      _exec('removedItems = [...removedItems, ...' + JSON.stringify(removed) + ']');
+      _exec('selected = []');
+    }
+
+    let msg = gone > 0
+      ? 'Removed ' + gone + (gone === 1 ? ' dead item' : ' dead items')
+      : 'Nothing was removed';
+    if (failed > 0) msg += ' - ' + failed + ' failed (' + ((r.failed || [])[0] || {}).error + ')';
+    _exec('toast(' + JSON.stringify(msg) + ', ' + (gone > 0 ? (failed > 0 ? "'info'" : "'success'") : "'error'") + ')');
+  }).catch(_toastErr('Remove failed'));
+}
+
 window.doToggle = doToggle;
 window.doRemove = doRemove;
+window.doRemoveDead = doRemoveDead;
 </script>
 @endsection

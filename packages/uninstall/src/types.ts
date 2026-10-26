@@ -50,4 +50,16 @@ export interface StartupItem {
   disabled: boolean
   filepath: string
   program: string
+  /**
+   * `program` is an absolute path that does not exist, so launchd cannot
+   * execute this entry — it is what an uninstall left registered.
+   *
+   * This is the one state on the startup list that is safe to act on without
+   * knowing what the item does: every other row might be load-bearing, but a
+   * missing binary cannot run whatever happens. It stays `false` whenever the
+   * answer is unknown rather than no — an empty `program` (launchd also
+   * accepts `BundleProgram`, or an on-demand entry with only `MachServices`)
+   * and a bare command resolved through `PATH` are both unknown, not dead.
+   */
+  targetMissing: boolean
 }

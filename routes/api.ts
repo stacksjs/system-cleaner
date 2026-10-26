@@ -55,6 +55,10 @@ import {
   launchWindowsUninstaller,
   toggleStartupItem,
   removeStartupItem,
+  removeStartupItems,
+  // Deliberately not the cached list: the cache is keyed on nothing but time,
+  // and this is the guard deciding what may be deleted. It has to look now.
+  discoverStartupItems,
 } from '@system-cleaner/uninstall';
 import { categoryPresentation, findProjectArtifacts, shredPaths } from '@system-cleaner/disk';
 import { getTopProcesses, sampleCpuUsage, summarizeProcesses } from '@system-cleaner/monitor';
@@ -542,6 +546,37 @@ export default async function (router: Router) {
     invalidateStartupCache();
     dashboardStatsCache.clear();
     return Response.json(result);
+  });
+
+  /**
+   * Remove the startup entries whose program is gone.
+   *
+   * Scoped to dead entries on the server rather than trusting the list the
+   * client sends, the same way `/clean-orphans` intersects with a fresh scan.
+   * The client's selection is honoured but cannot widen: an entry that is
+   * running fine is dropped from the batch even if it is named, so the one
+   * bulk delete on this screen cannot be talked into unloading a live daemon.
+   */
+  await router.post('/remove-dead-startup', async (req: Request) => {
+    const body = await readJsonBody<{ filepaths: unknown }>(req);
+    if (body === null) return badJson();
+
+    const requested = sanitizeStringArray(body.filepaths, MAX_BULK_PATHS);
+    if (requested === null) return badRequest('filepaths must be a non-empty string array');
+
+    const dead = new Set(
+      (await discoverStartupItems())
+        .filter(item => item.targetMissing)
+        .map(item => path.resolve(item.filepath)),
+    );
+    const targets = requested.map(p => path.resolve(p)).filter(p => dead.has(p));
+    if (targets.length === 0) return badRequest('None of those startup items point at a missing program', 403);
+
+    const outcome = await removeStartupItems(targets);
+    invalidateStartupCache();
+    dashboardStatsCache.clear();
+
+    return Response.json({ success: outcome.failed.length === 0, ...outcome });
   });
 
   /**
