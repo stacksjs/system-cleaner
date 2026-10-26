@@ -1,5 +1,42 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.8...v0.3.9)
+
+## ✨ Features
+
+- **tray**: show what is safe to clean in the menu bar, and clean it from there ([ad36c37](https://github.com/stacksjs/system-cleaner/commit/ad36c37)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **startup**: flag startup items whose program is gone ([8c68fd8](https://github.com/stacksjs/system-cleaner/commit/8c68fd8)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **orphans**: add the Leftover Data screen, and gate node_modules on a lockfile ([e6dd1ee](https://github.com/stacksjs/system-cleaner/commit/e6dd1ee)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **clean**: reclaim stale dependency trees ([2c2313d](https://github.com/stacksjs/system-cleaner/commit/2c2313d)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#28](https://github.com/stacksjs/system-cleaner/issues/28))
+- **clean**: scan project-local build caches ([5074829](https://github.com/stacksjs/system-cleaner/commit/5074829)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#27](https://github.com/stacksjs/system-cleaner/issues/27))
+- **orphans**: scan Application Support and Containers (#29) ([e2f9bc8](https://github.com/stacksjs/system-cleaner/commit/e2f9bc8)) _(by Glenn Michael Torregosa <gtorregosa@gmail.com>)_ ([#26](https://github.com/stacksjs/system-cleaner/issues/26), [#29](https://github.com/stacksjs/system-cleaner/issues/29))
+
+## 🐛 Bug Fixes
+
+- **tray**: open the window through Craft's native show action ([dda9fc2](https://github.com/stacksjs/system-cleaner/commit/dda9fc2)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **ci**: the craft watcher now watches for the fix leaving ([10bd71c](https://github.com/stacksjs/system-cleaner/commit/10bd71c)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#24](https://github.com/stacksjs/system-cleaner/issues/24), [#25](https://github.com/stacksjs/system-cleaner/issues/25))
+- **ci**: run the Windows desktop job under bash ([0da59be](https://github.com/stacksjs/system-cleaner/commit/0da59be)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+
+## 💚 Continuous Integration
+
+- run the published bundle, not just a built one ([a0a5468](https://github.com/stacksjs/system-cleaner/commit/a0a5468)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+
+## 🔧 Chores
+
+- **deps**: update all non-major dependencies (updated) (#21) ([dbb0824](https://github.com/stacksjs/system-cleaner/commit/dbb0824)) _(by [github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>](https://github.com/github-actions[bot]))_ ([#21](https://github.com/stacksjs/system-cleaner/issues/21))
+- **deps**: update dependency @vscode/vsce to 4.0.0 (#22) ([fc86bcc](https://github.com/stacksjs/system-cleaner/commit/fc86bcc)) _(by [github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>](https://github.com/github-actions[bot]))_ ([#22](https://github.com/stacksjs/system-cleaner/issues/22))
+- **deps**: upgrade stacks 0.75.82 -> 0.75.262 ([8d7368d](https://github.com/stacksjs/system-cleaner/commit/8d7368d)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- ignore the generated migrations ([6d1e1b9](https://github.com/stacksjs/system-cleaner/commit/6d1e1b9)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+
+## ⏪ Reverts
+
+- remove duplicate project-cache and stale-dependency scanners ([60e28db](https://github.com/stacksjs/system-cleaner/commit/60e28db)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#27](https://github.com/stacksjs/system-cleaner/issues/27), [#28](https://github.com/stacksjs/system-cleaner/issues/28))
+
+## Contributors
+
+- _Glenn Michael Torregosa <gtorregosa@gmail.com>_
+- _glennmichael123 <gtorregosa@gmail.com>_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.7...v0.3.8)
 
 The Windows desktop app opens its window, and ships.
