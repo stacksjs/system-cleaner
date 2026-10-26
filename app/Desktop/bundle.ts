@@ -161,6 +161,19 @@ export interface WindowOptions {
   width: number
   height: number
   devtools: boolean
+  /**
+   * Put a status item in the menu bar, and keep the process alive once the
+   * window closes so it stays there.
+   *
+   * The two travel together on purpose. `--system-tray` without
+   * `--keep-running` gives an icon that vanishes with the window, which is
+   * the one state a menu bar item must not have: you close the window, the
+   * number you were watching disappears, and the app is gone with no way back
+   * except the dock. Craft already defaults tray apps to keep-running; it is
+   * passed explicitly because that default is a property of the runtime and
+   * this is a decision of the app's.
+   */
+  tray?: boolean
 }
 
 /**
@@ -197,6 +210,12 @@ export function windowArgs(
   // shared between windows.
   if (supports('--persistent-storage'))
     args.push('--persistent-storage')
+
+  if (options.tray && supports('--system-tray')) {
+    args.push('--system-tray')
+    if (supports('--keep-running'))
+      args.push('--keep-running')
+  }
 
   args.push('--width', String(options.width), '--height', String(options.height))
 

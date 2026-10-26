@@ -851,5 +851,8 @@ useEventListener('mousedown', moveWindowFrom, { target: document })
      profile chip in the top strip, and the controls inside it. -->
 <script src="/settings-panel.js"></script>
 <script src="/vpn-panel.js"></script>
+<!-- The menu bar item: how much is safe to clean, and a Clean button. Owns a
+     native status item, so it keeps working after the window is closed. -->
+<script src="/tray.js"></script>
 </body>
 </html>

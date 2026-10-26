@@ -16,6 +16,27 @@ import * as path from 'node:path'
 const SOURCES = new Bun.Glob('resources/scripts/*.ts')
 const MARKUP = new Bun.Glob('resources/**/*.stx')
 
+/**
+ * Scripts allowed to call `window.craft` directly, and why.
+ *
+ * The rule below exists because hand-rolled bridge calls reimplement, badly,
+ * things `@stacksjs/desktop` already does. An exemption is only honest where
+ * that is not the situation — where the package cannot do the job at all.
+ *
+ * `tray`: the status item's *title* is the feature, and `createSystemTray`
+ * returns an instance with no way to set it. What it does expose is also
+ * wrong against this Craft runtime — it sends `setTitle({ title })` and
+ * `setMenu({ items })` where the bridge takes a bare string and a bare array,
+ * which renders `[object Object]` in the menu bar and drops the menu with
+ * `parseMenuJSON: root is not array`. Both reproduced against craft-runtime
+ * with `--log-level debug`. Craft's own `CraftTrayAPI` typing agrees with the
+ * bridge, not with the package.
+ *
+ * Remove this entry once the package is fixed upstream and `tray.ts` can go
+ * back through it.
+ */
+const BRIDGE_EXEMPT = new Set(['tray'])
+
 async function sourceNames(): Promise<string[]> {
   const names: string[] = []
   for await (const file of SOURCES.scan('.'))
@@ -66,6 +87,9 @@ describe('bundled client scripts', () => {
     // bugs, none shared with the other apps that hit the same problems.
     for (const name of await sourceNames()) {
       const source = await Bun.file(`resources/scripts/${name}.ts`).text()
+
+      if (BRIDGE_EXEMPT.has(name))
+        continue
 
       // Hand-rolling a bridge call is the fault; not needing the bridge is
       // not. A script that only talks to the agent over HTTP has nothing to

@@ -219,6 +219,11 @@ const craft = Bun.spawn([
     width: 1400,
     height: 900,
     devtools: process.env.SYSTEM_CLEANER_DEVTOOLS === '1',
+    // With this on, `craft.exited` below no longer fires when the window
+    // closes — only when the tray's Quit does. Which is what the shutdown
+    // sequence after it already wanted: the agent is stopped when the app is
+    // really going away, not when its window happens to be shut.
+    tray: true,
   }, flag => probeRuntime(craftBinary, flag)),
 ], {
   stdin: 'inherit',

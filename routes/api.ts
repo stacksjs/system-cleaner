@@ -11,6 +11,7 @@ import {
   refusesDeletion,
   PLATFORM,
   getDirSize,
+  getDirSizes,
   HOME,
   sanitizePackageName,
   sanitizePid,
@@ -23,6 +24,7 @@ import {
   getExtensionsCached,
   getSystemDiskInfoCached,
   getCleanupTargetsCached,
+  safeCleanTargets,
   getDashboardStatsCached,
   getExtensionSizesCached,
   invalidateExtensionsCache,
@@ -1349,6 +1351,93 @@ export default async function (router: Router) {
   await router.post('/cleanup-targets', async () => {
     const { targets, cached } = getCleanupTargetsCached();
     return Response.json({ success: true, targets, cached });
+  });
+
+  /**
+   * How much the safe sweep would free, in one call.
+   *
+   * The Quick Clean screen gets here in two round trips — the target list,
+   * then `/dir-sizes` for their paths — which is right for a screen that
+   * renders the rows as they resolve and wrong for a menu bar title that is
+   * either a number or nothing. This answers with the total.
+   *
+   * It is a measurement, so it does not go through `refuseIfTracked`: that
+   * gate belongs on the delete, and a path the sweep would skip still takes
+   * up the space this is reporting. `/clean-safe` applies it and reports what
+   * it actually removed, which is where the two numbers are allowed to differ.
+   */
+  await router.post('/safe-to-clean', async () => {
+    const targets = safeCleanTargets()
+      .map(t => path.resolve(t.path))
+      .filter(p => isWithinHome(p));
+
+    // `getDirSizes`, not a `Promise.all` over `getDirSize`. Each measure is a
+    // `du` with a 15-second timeout that returns 0 — not an error — when it
+    // runs out, so firing all of them at once makes them contend, time out,
+    // and silently read as empty. That is how this endpoint came to answer
+    // 28 MB, then 124 MB, for a machine that had not changed: the total was
+    // a function of how many walks happened to finish. The batching here is
+    // the same bound `/dir-sizes` applies for the same reason.
+    const sizes = await getDirSizes(targets);
+    const measured = targets.map(p => sizes[p] ?? 0);
+
+    return Response.json({
+      success: true,
+      bytes: measured.reduce((sum, n) => sum + n, 0),
+      count: measured.filter(n => n > 0).length,
+    });
+  });
+
+  /**
+   * Run the safe sweep.
+   *
+   * The same per-path guards as `/clean-dir` — under HOME, and refused if the
+   * path is tracked by git — applied to each target rather than trusting a
+   * list that came in over the wire. Nothing is read from the request at all:
+   * the set is derived here, so the endpoint cannot be pointed somewhere else.
+   */
+  await router.post('/clean-safe', async () => {
+    const targets = safeCleanTargets();
+
+    let freedBytes = 0;
+    const cleaned: string[] = [];
+    const skipped: string[] = [];
+
+    for (const target of targets) {
+      const resolved = path.resolve(target.path);
+      if (!pathInAllowedRoots(resolved, [HOME])) {
+        skipped.push(target.name);
+        continue;
+      }
+      if (await refuseIfTracked(resolved)) {
+        skipped.push(target.name);
+        continue;
+      }
+
+      try {
+        const result = await cleanDirectory(resolved);
+        freedBytes += result.freedBytes;
+        // `reclaimedBytes` is deliberately not summed. It is a free-space
+        // delta measured around one clean, so adding a dozen of them accrues
+        // every unrelated write the machine made in between, and it is null
+        // whenever the volume could not be read. `freedBytes` is what was
+        // deleted, which is the honest thing to report for a batch.
+        if (result.errors.length === 0) cleaned.push(target.name);
+        else skipped.push(target.name);
+      }
+      catch {
+        skipped.push(target.name);
+      }
+    }
+
+    invalidateSizeCaches();
+
+    return Response.json({
+      success: true,
+      freedBytes,
+      cleaned: cleaned.length,
+      skipped: skipped.length,
+    });
   });
 
   // Developer junk: the build output, vendored runtimes and dependency trees

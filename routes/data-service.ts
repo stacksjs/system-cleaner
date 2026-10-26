@@ -160,6 +160,22 @@ export function getCleanupTargetsCached() {
   return { targets, cached: false }
 }
 
+/**
+ * The set Quick Clean sweeps, as one list.
+ *
+ * `risk !== 'caution'` is the screen's own rule for what Select All takes
+ * (see `safeIds()` in the cleanup view), and the menu bar shows a number that
+ * has to mean the same thing as the button under it. Deriving it twice is how
+ * a tray comes to advertise 4 GB that the app then declines to remove, so
+ * both read this.
+ */
+export function safeCleanTargets(): Array<{ id: string, name: string, path: string }> {
+  return getCleanupTargetsCached()
+    .targets
+    .filter(t => t.risk !== 'caution')
+    .map(t => ({ id: t.id, name: t.name, path: t.path }))
+}
+
 export async function getDashboardStatsCached() {
   const { items: startupItems, cached: startupCached } = await getStartupItemsCached()
   const { extensions, cached: extCached } = getExtensionsCached()
