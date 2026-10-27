@@ -49,6 +49,13 @@ describe('cleanup screen refresh', () => {
         offenders.push(`${handler.name} calls ${endpoint} but never drops CACHE_KEY`)
       if (!handler.body.includes('scanCleanupSizes(true)'))
         offenders.push(`${handler.name} calls ${endpoint} but never forces a rescan`)
+      // Space Recoverable and the row sizes were being refreshed while Disk
+      // Free was not. It is read once in `init()`, so the card held its
+      // page-load figure no matter how much was removed — "freed 20 GB" over
+      // a number that had not moved, which reads as the app inventing the
+      // 20 GB rather than as a card that never looked again.
+      if (!handler.body.includes('refreshDiskInfo()'))
+        offenders.push(`${handler.name} calls ${endpoint} but never re-reads free space`)
     }
 
     // Guard against the matcher silently finding nothing to check.

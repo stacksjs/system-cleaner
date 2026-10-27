@@ -53,6 +53,19 @@ export function invalidateExtensionsCache(): void {
 }
 
 /**
+ * Forget how much free space the volume had.
+ *
+ * The 30-second TTL is right for a screen that polls and wrong for the moment
+ * immediately after a delete, which is the one time the number is guaranteed
+ * to have changed and the one time somebody is watching it. Without this, a
+ * clean that genuinely freed gigabytes is followed by a re-read of the figure
+ * from before the clean.
+ */
+export function invalidateDiskInfoCache(): void {
+  diskInfoCache.clear()
+}
+
+/**
  * Extension sizes, measured separately from the list.
  *
  * Walking every version directory of every extension across every profile is

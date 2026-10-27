@@ -29,6 +29,7 @@ import {
   getExtensionSizesCached,
   invalidateExtensionsCache,
   invalidateStartupCache,
+  invalidateDiskInfoCache,
 } from './data-service';
 import { lastScanResult, runDiskScan, runDuplicateScan, runLargeFileScan, scanProgress } from '../app/Workers/scan-pool';
 import { findAppBundle, findAppBundleForCask, getSystemInfoSync, ICON_SIZES, listApplicationEntries, readAppVersion, renderAppIcon } from '@system-cleaner/core';
@@ -193,6 +194,11 @@ async function refuseIfTracked(target: string): Promise<Response | null> {
 function invalidateSizeCaches(): void {
   dirSizesCache.clear();
   sizeCacheGeneration++;
+  // Free space is a measurement of the same thing these caches describe, and
+  // every caller here has just deleted something. Leaving it cached is how
+  // Quick Clean reported "freed 20 GB" over a Disk Free card still showing
+  // the figure from before the clean.
+  invalidateDiskInfoCache();
 }
 // A full orphan sweep reads every bundle id under ~/Library and sizes what it
 // finds, which is seconds of work for an answer that changes when an app is

@@ -37,6 +37,18 @@ function esc(str) { return escapeHtml(str || '') }
     }).catch(function() { self.targetsLoading = false; });
   },
 
+  refreshDiskInfo() {
+    var self = this;
+    return fetch('/api/system-disk-info', { method: 'POST' })
+      .then(function(r) { return r.json(); })
+      .then(function(disk) {
+        if (!disk || !disk.success) return;
+        self.diskAvail = disk.fDiskFree || '-';
+        self.diskPercent = disk.diskPct || 0;
+      })
+      .catch(function() {});
+  },
+
   toggle(id) { this.selected = this.selected.indexOf(id) === -1 ? this.selected.concat([id]) : this.selected.filter(function(x) { return x !== id; }); },
   isOn(id) { return this.selected.includes(id); },
   allOn(ids) { const keep = this.selected.filter(id => !ids.includes(id)); this.selected = ids.every(id => this.selected.includes(id)) ? keep : keep.concat(ids); },
@@ -157,6 +169,11 @@ async function doCleanDir(p, name, id, risk) {
       // Re-scan so the row's size cell reflects the cleaned-up state
       // instead of holding stale numbers until the user manually rescans.
       scanCleanupSizes(true);
+      // And re-read free space. It was fetched once when the screen loaded
+      // and never again, so the card sat on its page-load figure however much
+      // was removed - the other half of the "freed 20 GB, Disk Free did not
+      // move" report, alongside the held-open case the toast explains.
+      _exec('refreshDiskInfo()');
     }
 
     // An unmeasured clean really did happen; only its size is unknown.
@@ -203,6 +220,7 @@ async function doEmptyTrash() {
       _exec("toast(" + JSON.stringify('Trash emptied - freed ' + _fmtBytes(r.freedBytes || 0)) + ", "
         + (r.success ? "'success')" : "'info')"));
       scanCleanupSizes(true);
+      _exec('refreshDiskInfo()');
     }
     else _exec("toast('Failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");
   }).catch(_apiCatch('Empty Trash failed'));
@@ -292,6 +310,7 @@ async function doCleanSelected() {
     if (unknown.length > 0) msg += ' - ' + unknown.length + ' no longer listed';
     _exec("toast('" + msg.replace(/'/g, "\\'") + "', '" + (cleaned > 0 ? (failed > 0 ? 'info' : 'success') : 'error') + "'); selected = []; cleanProgress = null");
     scanCleanupSizes(true);
+    _exec('refreshDiskInfo()');
   }
 
   targets.forEach(function(t) {
