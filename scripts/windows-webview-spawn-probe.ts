@@ -82,7 +82,12 @@ interface Outcome {
   loaded: boolean
   elapsedMs: number
   exitCode: number | null
-  signalCode: string | null
+  // `Subprocess.signalCode` is `number | Signals | null`: a name when Bun
+  // recognizes the signal and the raw number when it does not. Declared as
+  // `string | null`, this typechecked against the @types/bun in the lockfile
+  // and failed on the newer one CI resolves. It is only ever interpolated
+  // into a message, so the wider type costs nothing.
+  signalCode: string | number | null
   comFailure: boolean
   /** Set when the case never ran, which must never read as a result. */
   skipped: string | null

@@ -26,10 +26,23 @@ import { isTargetMissing, removeStartupItems } from '../packages/uninstall/src/d
 
 let root: string
 
+/**
+ * This suite runs on Windows too, where two of these cases do not apply.
+ *
+ * Creating a symlink there needs a privilege the runner does not have, and
+ * `access()` on a dangling one answers for the reparse point rather than
+ * following it, so a broken link reads as present. Neither matters to the
+ * code: launchd is macOS-only, and the Windows scanner has its own existence
+ * check in `startup-windows.ts`. The case is skipped rather than weakened,
+ * because on macOS it is the behaviour the sweep depends on.
+ */
+const POSIX = process.platform !== 'win32'
+
 beforeAll(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'system-cleaner-dead-'))
   fs.writeFileSync(path.join(root, 'real-binary'), '#!/bin/sh\n')
-  fs.symlinkSync(path.join(root, 'no-such-target'), path.join(root, 'broken-link'))
+  if (POSIX)
+    fs.symlinkSync(path.join(root, 'no-such-target'), path.join(root, 'broken-link'))
 })
 
 afterAll(() => {
@@ -41,7 +54,7 @@ describe('detecting a startup entry whose program is gone', () => {
     expect(isTargetMissing(path.join(root, 'nope/php-fpm'))).toBe(true)
   })
 
-  it('flags a symlink with nothing on the other end', () => {
+  it.skipIf(!POSIX)('flags a symlink with nothing on the other end', () => {
     // launchd resolves the link and fails, so a dangling link is as dead as
     // a missing file. `access()` follows symlinks, which is what gets this.
     expect(isTargetMissing(path.join(root, 'broken-link'))).toBe(true)
@@ -77,13 +90,26 @@ describe('removing dead entries in bulk', () => {
   })
 
   it('refuses a traversal that lands outside them', async () => {
-    const result = await removeStartupItems([
-      `${path.join(os.homedir(), 'Library/LaunchAgents')}/../../../etc/hosts`,
-    ])
+    const agents = path.join(os.homedir(), 'Library/LaunchAgents')
+    const sentinel = path.join(root, 'sentinel.plist')
+    fs.writeFileSync(sentinel, 'x')
+
+    // A `..` chain starting inside the allowed directory and resolving onto a
+    // file this test owns, so the guard can actually be caught deleting it.
+    // `/etc/hosts` played that part and does not exist on Windows, where this
+    // suite also runs.
+    // On a Windows runner whose temp directory is on another drive,
+    // `path.relative` gives back an absolute path with no `..` in it. That is
+    // still a path outside the allowed roots, which is the thing being
+    // refused, so the case holds either way rather than failing on where the
+    // runner happens to put its temp files.
+    const traversal = `${agents}${path.sep}${path.relative(agents, sentinel)}`
+
+    const result = await removeStartupItems([traversal])
 
     expect(result.succeeded).toEqual([])
     expect(result.failed[0].error).toBe('Invalid launch agent path')
-    expect(fs.existsSync('/etc/hosts')).toBe(true)
+    expect(fs.existsSync(sentinel)).toBe(true)
   })
 
   it('reports every rejected path rather than stopping at the first', async () => {
