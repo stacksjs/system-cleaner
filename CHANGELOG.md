@@ -1,5 +1,17 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.9...v0.3.10)
+
+## 🐛 Bug Fixes
+
+- **tray**: ask for the menu bar on macOS only ([b8ad447](https://github.com/stacksjs/system-cleaner/commit/b8ad447)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **ci**: widen signalCode, and stop asserting POSIX paths on Windows ([dd9bf23](https://github.com/stacksjs/system-cleaner/commit/dd9bf23)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **cleanup**: re-read free space after a clean ([d4a96fa](https://github.com/stacksjs/system-cleaner/commit/d4a96fa)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+
+## Contributors
+
+- _glennmichael123 <gtorregosa@gmail.com>_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.8...v0.3.9)
 
 ## ✨ Features
