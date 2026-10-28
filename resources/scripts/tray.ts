@@ -253,7 +253,26 @@ if (!window.__systemCleanerTray) {
 
   if (craft?.tray) {
     window.__systemCleanerTray = true
-    install(craft.tray as TrayBridge, craft)
+
+    // `window.craft.tray` is injected whatever the runtime was started with,
+    // and its calls are no-ops unless `--system-tray` was passed — which the
+    // launcher only does on macOS, because on Windows it stops the app
+    // opening a window at all. Without this the script would install on every
+    // platform and re-measure 68 directories every five minutes to paint a
+    // status item that does not exist.
+    //
+    // Asked over the API rather than read from a `<script server>` block: the
+    // app views are prerendered, so anything a server block computed would
+    // describe the build machine forever.
+    // `'macos'`, not `'darwin'`. `/api/platform` reports the app's own
+    // `Platform` union from `@system-cleaner/core` — macos | windows | linux —
+    // and not `process.platform`. Checking for 'darwin' disables the tray on
+    // the one platform that has it, silently, because the status item keeps
+    // whatever title Craft gave it and simply never updates.
+    void post<{ platform?: string }>('/api/platform').then((info) => {
+      if (info?.platform === 'macos')
+        install(craft.tray as TrayBridge, craft)
+    })
   }
 }
 

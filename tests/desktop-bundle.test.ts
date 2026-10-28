@@ -134,6 +134,33 @@ describe('windowArgs', () => {
     expect(args).not.toContain('--web-sidebar-material')
   })
 
+  /**
+   * `--system-tray` is not additive on Windows.
+   *
+   * Craft reads it as "this is a tray application", logs
+   * `FailedToCreateWindow` and opens nothing — the app has no window at all,
+   * which is how v0.3.9 shipped a Windows build that could not start. The
+   * flag parses there, so the capability probe says yes and is not enough on
+   * its own, exactly as with the titlebar above.
+   */
+  it('never asks for the tray on Windows, even though the flag is in the binary', () => {
+    const args = windowArgs('win32', { ...base, tray: true }, all)
+    expect(args).not.toContain('--system-tray')
+    expect(args).not.toContain('--keep-running')
+  })
+
+  it('asks for the tray on macOS, and keeps the process alive for it', () => {
+    // The two travel together: a status item that disappears with the window
+    // is the one state a menu bar item must not have.
+    const args = windowArgs('darwin', { ...base, tray: true }, all)
+    expect(args).toContain('--system-tray')
+    expect(args).toContain('--keep-running')
+  })
+
+  it('leaves the tray alone when the caller did not ask for it', () => {
+    expect(windowArgs('darwin', base, all)).not.toContain('--system-tray')
+  })
+
   it('still keeps page storage on Windows', () => {
     // Everything the app remembers on the page's side is in localStorage, and
     // Craft's default store is emptied on quit.

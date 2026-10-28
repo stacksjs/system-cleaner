@@ -211,7 +211,15 @@ export function windowArgs(
   if (supports('--persistent-storage'))
     args.push('--persistent-storage')
 
-  if (options.tray && supports('--system-tray')) {
+  // macOS only, like the chrome above. `--system-tray` does not merely add an
+  // icon on Windows: Craft switches to building a tray application, logs
+  // `FailedToCreateWindow`, and the app opens nothing at all. Passing it
+  // everywhere shipped a Windows build with no window in v0.3.9.
+  //
+  // Nothing is lost by the gate. The menu bar item is a macOS idea, and the
+  // script that drives it reads `window.craft.tray`, which is absent without
+  // this flag, so the page simply stays window-only.
+  if (options.tray && platform === 'darwin' && supports('--system-tray')) {
     args.push('--system-tray')
     if (supports('--keep-running'))
       args.push('--keep-running')
