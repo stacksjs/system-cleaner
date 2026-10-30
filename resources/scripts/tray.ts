@@ -70,7 +70,12 @@ type TrayMenuItem =
 /** What this needs off the rest of the bridge, beyond the tray itself. */
 interface CraftShell {
   window?: { show: () => unknown, focus: () => unknown }
-  app?: { quit: () => unknown, notify: (opts: Record<string, unknown>) => unknown }
+  app?: {
+    quit: () => unknown
+    notify: (opts: Record<string, unknown>) => unknown
+    /** Optional: absent on a runtime built without the Dock-icon controls. */
+    showDockIcon?: () => unknown
+  }
 }
 
 /** Five minutes. The figure moves at the speed a cache directory fills. */
@@ -119,6 +124,24 @@ async function post<T>(endpoint: string): Promise<T | null> {
 
 function install(tray: TrayBridge, craft: CraftShell): void {
   let busy = false
+
+  /**
+   * Put the Dock icon back.
+   *
+   * `--system-tray` is documented as "Show system tray icon", beside a
+   * separate `--hide-dock-icon` and a separate `--menubar-only`. In the craft
+   * this app ships it also sets the accessory activation policy, so asking
+   * for a menu bar item silently takes the app out of the Dock: the window is
+   * on screen and there is no way to reach it by clicking or by Cmd-Tab. It
+   * is the same defect that stops `--system-tray` opening a window at all on
+   * Windows — the flag is not additive, it changes the app's mode.
+   *
+   * Fixed upstream, but not reachable: pantry publishes up to 0.0.234 and the
+   * fix is above that. 0.0.234 still has it; 0.0.395 does not. So this undoes
+   * it from the page instead, which is a no-op on a runtime that never took
+   * the icon away.
+   */
+  craft.app?.showDockIcon?.()
 
   /** What the menu says when there is nothing to do, so the row never vanishes. */
   function item(text: string, action: string, enabled = true): TrayMenuItem {
