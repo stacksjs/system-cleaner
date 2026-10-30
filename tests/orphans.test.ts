@@ -74,7 +74,11 @@ describe('findOrphanedAppData', () => {
    * above only fails on a machine whose index happens to be broken; this one
    * states the invariant directly, so a healthy machine asserts it too.
    */
-  it('never reports an app that is sitting in /Applications', async () => {
+  // macOS only: there is no /Applications to read anywhere else, and the
+  // scanner itself only has work to do on a Mac. The suite runs on Linux and
+  // Windows too, where `readdirSync` here is an ENOENT rather than an
+  // assertion about anything.
+  it.skipIf(process.platform !== 'darwin')('never reports an app that is sitting in /Applications', async () => {
     const installed = new Set<string>()
     for (const entry of fs.readdirSync('/Applications')) {
       if (!entry.endsWith('.app')) continue
