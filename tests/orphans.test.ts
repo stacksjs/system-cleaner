@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'bun:test'
+import * as fs from 'node:fs'
+import * as path from 'node:path'
+import { readAppInfoPlist } from '@system-cleaner/core'
 import { findOrphanedAppData, KNOWN_APP_DIRS, SYSTEM_DIR_NAMES } from '@system-cleaner/clean'
 
 /**
@@ -54,6 +57,42 @@ describe('findOrphanedAppData', () => {
     const items = await findOrphanedAppData()
     for (const item of items)
       expect(SYSTEM_DIR_NAMES.has(item.bundleId.toLowerCase())).toBe(false)
+  }, 120_000)
+
+  /**
+   * Nothing in /Applications is an orphan, whatever Spotlight thinks.
+   *
+   * `getInstalledApps` asked `mdfind` and nothing else. An index can be
+   * stale or partial, and here it was: the query returned 290 bundles of
+   * which one was in /Applications, while 44 were installed there. Firefox,
+   * Notion, Postman and TeamViewer were all running and all reported as
+   * uninstalled, so their Application Support directories appeared on the
+   * Leftover Data screen with a delete button.
+   *
+   * The `appNames.size === 0` guard did not catch it — that covers Spotlight
+   * being off, and a partial index still returns plenty of names. The test
+   * above only fails on a machine whose index happens to be broken; this one
+   * states the invariant directly, so a healthy machine asserts it too.
+   */
+  it('never reports an app that is sitting in /Applications', async () => {
+    const installed = new Set<string>()
+    for (const entry of fs.readdirSync('/Applications')) {
+      if (!entry.endsWith('.app')) continue
+      try {
+        const info = readAppInfoPlist(path.join('/Applications', entry))
+        const bundleId = info.CFBundleIdentifier
+        if (typeof bundleId === 'string' && bundleId)
+          installed.add(bundleId.toLowerCase())
+      }
+      catch { /* unreadable bundle; the name-based cases cover it */ }
+    }
+
+    // Guard against the loop above finding nothing and asserting nothing.
+    expect(installed.size).toBeGreaterThan(0)
+
+    const items = await findOrphanedAppData()
+    const wrong = items.filter(item => installed.has(item.bundleId.toLowerCase()))
+    expect(wrong.map(item => item.path)).toEqual([])
   }, 120_000)
 
   it('marks Application Support and Container hits as holding user data', async () => {

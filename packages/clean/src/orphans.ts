@@ -1,5 +1,17 @@
 import * as path from 'node:path'
-import { exec, macPaths, pathExists, safeReadDir, safeStat, shellEscape, readAppInfoPlist } from '@system-cleaner/core'
+import { exec, HOME, macPaths, pathExists, safeReadDir, safeStat, shellEscape, readAppInfoPlist } from '@system-cleaner/core'
+
+/**
+ * Where an installed `.app` lives, read directly rather than through
+ * Spotlight. Mirrors `APP_SEARCH_DIRS` in `@system-cleaner/uninstall`, kept
+ * local so the orphan scanner does not depend on the uninstaller to decide
+ * what counts as installed.
+ */
+const APP_SEARCH_DIRS = [
+  '/Applications',
+  '/Applications/Utilities',
+  `${HOME}/Applications`,
+]
 
 export interface OrphanedItem {
   path: string
@@ -271,6 +283,42 @@ async function getInstalledApps(): Promise<InstalledApps> {
         }
         catch { /* skip unreadable bundles */ }
       }
+    }
+  }
+
+  // Read the application directories directly, as well as asking Spotlight.
+  //
+  // `mdfind` answers from an index, and an index can be wrong in a way that
+  // is invisible here: on the machine this was written, the query returned
+  // 290 bundles of which exactly one was in /Applications, while 44 were
+  // installed there. Firefox, Notion, Postman and TeamViewer were all running
+  // and all classified as uninstalled, which put their Application Support
+  // directories on the Leftover Data screen with a delete button beside them.
+  //
+  // The existing `appNames.size === 0` guard does not catch that. It covers
+  // Spotlight being switched off entirely; a stale or partial index still
+  // returns plenty of names, just not the ones that matter. So the directory
+  // listing is not a fallback for when `mdfind` fails — it runs every time,
+  // because the filesystem is what actually decides whether an app is
+  // installed and the index only reports on it.
+  for (const dir of APP_SEARCH_DIRS) {
+    for (const entry of safeReadDir(dir)) {
+      if (!entry.endsWith('.app'))
+        continue
+
+      names.add(path.basename(entry, '.app').toLowerCase())
+      try {
+        const info = readAppInfoPlist(path.join(dir, entry))
+        const bid = info.CFBundleIdentifier as string
+        if (bid)
+          ids.add(bid)
+        for (const key of ['CFBundleName', 'CFBundleDisplayName'] as const) {
+          const value = info[key]
+          if (typeof value === 'string' && value)
+            names.add(value.toLowerCase())
+        }
+      }
+      catch { /* an unreadable bundle is still installed; the name is enough */ }
     }
   }
 
