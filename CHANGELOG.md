@@ -1,5 +1,18 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.10...v0.3.11)
+
+## 🐛 Bug Fixes
+
+- **tray**: restore the Dock icon from the page, and stay on a craft pantry has ([a5e56cc](https://github.com/stacksjs/system-cleaner/commit/a5e56cc)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **test**: the /Applications invariant is macOS-only ([9239cd0](https://github.com/stacksjs/system-cleaner/commit/9239cd0)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **desktop**: bump craft 0.0.90 -> 0.0.395, restoring the Dock icon ([f12db5c](https://github.com/stacksjs/system-cleaner/commit/f12db5c)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **orphans**: read the application folders, not just Spotlight's index ([a8f6866](https://github.com/stacksjs/system-cleaner/commit/a8f6866)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+
+## Contributors
+
+- _glennmichael123 <gtorregosa@gmail.com>_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.9...v0.3.10)
 
 ## 🐛 Bug Fixes
