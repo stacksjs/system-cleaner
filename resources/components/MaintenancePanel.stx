@@ -19,6 +19,12 @@
       x-text="tasks.filter(function(t) { return !t.requiresSudo; }).length + ' run from here, the rest need ' + elevationNeeded()"></div>
   </div>
   <div class='card'>
+    <div class='card-label'>Snapshots</div>
+    <div class='card-value' x-text="snapLoading ? '…' : (snapUnavailable ? '—' : snapshots.length)">…</div>
+    <div class='card-detail'
+      x-text="snapUnavailable ? 'Could not be read' : snapCardDetail()"></div>
+  </div>
+  <div class='card'>
     <div class='card-label'>Queued to Erase</div>
     <div class='card-value' :style="shredTargets.length ? 'color: var(--red);' : ''" x-text='shredTargets.length'>0</div>
     <div class='card-detail'>Secure erase, no Trash step</div>
@@ -66,6 +72,87 @@
       </tr>
     </tbody>
   </table>
+</div>
+
+<!--
+  Local snapshots. Highest on the page after Housekeeping because this is
+  usually the largest single answer to "I deleted 40 GB and nothing moved",
+  and the one no other screen in this app can see. See #33.
+-->
+<div class='tbl-wrap'>
+  <div class='tbl-bar'>
+    <div>
+      <span class='tbl-title'>Local Snapshots</span>
+      <span class='tbl-count' x-text="snapLoading ? 'reading…' : (snapUnavailable ? 'unavailable' : snapshots.length + ' on this Mac')">…</span>
+    </div>
+    <div class='mt-snap-bar'>
+      <button class='btn btn-sm' x-show='deletableSnaps().length > 0' x-cloak @click='toggleAllSnaps()'
+        x-text="snapSelected.length === deletableSnaps().length ? 'Select None' : 'Select All'">Select All</button>
+      <button class='btn btn-danger btn-sm' x-show='snapSelected.length > 0' x-cloak @click='deleteSnaps()' :disabled='snapBusy'
+        x-text="snapBusy ? 'Deleting…' : 'Delete ' + snapSelected.length"></button>
+      <button class='btn btn-sm' data-rescan @click='refreshSnapshots()' :disabled='snapLoading'>Rescan</button>
+    </div>
+  </div>
+
+  <!-- Three states, not two. An empty list is a fact about the Mac; an
+       unreadable one is a fact about this app, and on a screen about
+       reclaimable space they must not look the same. -->
+  <div class='mt-snap-note' x-show='snapLoading'>Asking APFS what it is holding&hellip;</div>
+  <div class='mt-snap-note' x-show='!snapLoading && snapUnavailable' x-cloak x-text='snapReason'></div>
+  <div class='mt-snap-note' x-show='!snapLoading && !snapUnavailable && snapshots.length === 0' x-cloak>
+    No local snapshots. Nothing is pinning blocks that deleting files would
+    otherwise return.
+  </div>
+
+  <table x-show='!snapLoading && !snapUnavailable && snapshots.length > 0' x-cloak>
+    <tbody>
+      <template x-for='snapshot in deletableSnaps()' :key='snapshot.uuid || snapshot.name'>
+        <tr>
+          <td style='width: 34px;'>
+            <input type='checkbox' :checked='snapChecked(snapshot.date)' @change='toggleSnap(snapshot.date)'>
+          </td>
+          <td>
+            <div class='item-row'>
+              <span class='item-glyph i-f7-clock-fill' aria-hidden='true'></span>
+              <span class='item-name' x-text='snapWhen(snapshot)'></span>
+              <span class='badge badge-green' x-show='snapshot.purgeable' x-cloak>purgeable</span>
+              <span class='badge badge-orange' x-show='snapshot.limitingContainerShrink' x-cloak>limits free space</span>
+            </div>
+            <div class='item-sub' x-text="snapLabel(snapshot) + ' · ' + snapshot.volume"></div>
+          </td>
+        </tr>
+      </template>
+
+      <template x-for='snapshot in pinnedSnaps()' :key='snapshot.uuid || snapshot.name'>
+        <tr>
+          <td style='width: 34px;'>
+            <span class='i-f7-lock-fill mt-snap-lock' aria-hidden='true'></span>
+          </td>
+          <td>
+            <div class='item-row'>
+              <span class='item-name dim' x-text='snapTitle(snapshot)'></span>
+              <span class='badge badge-orange' x-show='snapshot.limitingContainerShrink' x-cloak>limits free space</span>
+            </div>
+            <div class='item-sub' x-text='snapWhyPinned(snapshot)'></div>
+          </td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+
+  <!-- Said plainly for the same reason the shredder's caveat is: the
+       alternative is a total this app cannot stand behind. -->
+  <div class='mt-snap-caveat' x-show='!snapLoading && !snapUnavailable && snapshots.length > 0' x-cloak>
+    <strong>Why there is no size next to these.</strong>
+    A snapshot's cost is the blocks <em>only it</em> still references, which
+    changes the moment another one is deleted &mdash; two snapshots can each be
+    holding the same 10 GB. macOS does not report that figure per snapshot, so
+    rather than add them into a number that would be wrong, this lists what
+    APFS will say: how many there are, when each was taken, and which ones it
+    considers purgeable. Only the ones Time Machine still manages can be
+    removed here; an update snapshot is what lets you roll a bad macOS release
+    back, and the one this Mac boots from is not ours to touch.
+  </div>
 </div>
 
 <template x-for='category in categories()' :key='category'>
@@ -162,6 +249,11 @@
 
 <style>
 .mt-output { margin-top: var(--space-tight); max-height: 120px; overflow: auto; padding: var(--space-tight) var(--space-2); border-radius: 5px; background: var(--surface-soft); color: var(--secondary); font: 10px/1.5 'SF Mono', Menlo, monospace; white-space: pre-wrap; }
+.mt-snap-bar { display: flex; align-items: center; gap: var(--space-tight); }
+.mt-snap-note { padding: var(--space-3) var(--space-4); max-width: 70ch; color: var(--secondary); font-size: 11px; line-height: 1.6; }
+.mt-snap-lock { width: 13px; height: 13px; color: var(--secondary); opacity: .5; }
+.mt-snap-caveat { margin: 0 var(--space-4) var(--space-3); max-width: 74ch; padding: var(--space-3); border: .5px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--accent) 8%, var(--surface)); color: var(--secondary); font-size: 11px; line-height: 1.6; }
+.mt-snap-caveat strong { color: var(--ink); }
 .mt-shred { padding: var(--space-3) var(--space-4); }
 .mt-shred-list { display: flex; flex-direction: column; gap: var(--space-tight); }
 .mt-shred-row { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-tight) var(--space-2); border: .5px solid var(--line); border-radius: 6px; background: var(--surface-soft); }

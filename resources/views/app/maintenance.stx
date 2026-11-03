@@ -19,6 +19,13 @@
   - `results` keeps each task's output. Half of these tasks succeed silently —
     `killall Dock` prints nothing — so without the recorded result there is no
     difference on screen between "done" and "did nothing".
+  - `snapUnavailable` is a third state, distinct from an empty `snapshots`.
+    One means "this Mac has no local snapshots", the other means "nothing
+    here could tell us", and a screen about reclaimable space must not render
+    the second as the first.
+  - `snapSelected` is rebuilt with `concat`/`filter` on every change rather
+    than pushed into, per the `x-data` rule in AGENTS.md: STX tracks the
+    assignment, not the mutation.
 -->
 <div x-data="{
   tasks: [],
@@ -30,6 +37,13 @@
   incompleteBytes: 0,
   junkLoading: true,
   junkBusy: false,
+  snapshots: [],
+  snapVolumes: [],
+  snapLoading: true,
+  snapBusy: false,
+  snapUnavailable: false,
+  snapReason: '',
+  snapSelected: [],
   shredTargets: [],
   shredding: false,
   toasts: [],
@@ -42,6 +56,7 @@
       self.loading = false;
     }).catch(function() { self.loading = false; });
     this.refreshJunk();
+    this.refreshSnapshots();
   },
 
   post(endpoint, data) {
@@ -65,6 +80,96 @@
       self.incompleteDownloads = r.incompleteDownloads || [];
       self.incompleteBytes = r.incompleteBytes || 0;
     }).catch(function() { self.junkLoading = false; });
+  },
+
+  refreshSnapshots() {
+    var self = this;
+    this.snapLoading = true;
+    this.post('/api/snapshots').then(function(r) {
+      self.snapLoading = false;
+      self.snapUnavailable = r.unavailable === true;
+      self.snapReason = r.reason || '';
+      self.snapshots = r.snapshots || [];
+      self.snapVolumes = r.volumes || [];
+      var still = {};
+      self.snapshots.forEach(function(s) { if (s.timeMachineManaged) still[s.date] = true; });
+      self.snapSelected = self.snapSelected.filter(function(d) { return still[d] === true; });
+    }).catch(function() {
+      self.snapLoading = false;
+      self.snapUnavailable = true;
+      self.snapReason = 'Could not ask this Mac about its snapshots.';
+    });
+  },
+
+  deletableSnaps() { return this.snapshots.filter(function(s) { return s.timeMachineManaged; }); },
+  pinnedSnaps() { return this.snapshots.filter(function(s) { return !s.timeMachineManaged; }); },
+  snapChecked(date) { return this.snapSelected.indexOf(date) !== -1; },
+
+  toggleSnap(date) {
+    this.snapSelected = this.snapChecked(date)
+      ? this.snapSelected.filter(function(d) { return d !== date; })
+      : this.snapSelected.concat([date]);
+  },
+
+  toggleAllSnaps() {
+    var all = this.deletableSnaps().map(function(s) { return s.date; });
+    this.snapSelected = this.snapSelected.length === all.length ? [] : all;
+  },
+
+  snapWhen(snapshot) {
+    if (!snapshot.createdAt) return 'no date in its name';
+    var d = new Date(snapshot.createdAt);
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  },
+
+  snapCardDetail() {
+    var n = this.deletableSnaps().length;
+    if (this.snapshots.length === 0) return 'Nothing is pinning disk space';
+    if (n === 0) return 'None of them can be removed here';
+    return n + ' of them can be removed here';
+  },
+
+  snapTitle(snapshot) {
+    if (snapshot.createdAt) return this.snapWhen(snapshot);
+    return this.snapLabel(snapshot);
+  },
+
+  snapLabel(snapshot) {
+    if (snapshot.kind === 'time-machine') return 'Time Machine, hourly';
+    if (snapshot.kind === 'os-update') return 'Taken before a macOS update';
+    return 'Made by something else on this Mac';
+  },
+
+  snapWhyPinned(snapshot) {
+    if (snapshot.rootTo || snapshot.revertTo) return 'This Mac boots from it';
+    if (snapshot.kind === 'os-update') return 'Removing it would end your ability to roll back that update';
+    if (snapshot.kind === 'time-machine') return 'macOS no longer lists it, so it cannot be deleted by date';
+    return 'Not managed by Time Machine';
+  },
+
+  async deleteSnaps() {
+    if (this.snapBusy || this.snapSelected.length === 0) return;
+    var count = this.snapSelected.length;
+    if (!await window.nativeConfirm({
+      title: 'Delete ' + count + ' snapshot(s)?',
+      message: 'The space they hold is returned to the disk. You lose the ability to restore files from those points in time, and macOS may ask for your password.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    })) return;
+
+    var self = this;
+    this.snapBusy = true;
+    this.post('/api/delete-snapshots', { dates: this.snapSelected }).then(function(r) {
+      self.snapBusy = false;
+      var done = (r.succeeded || []).length;
+      if (done > 0) self.toast('Deleted ' + done + ' snapshot(s)', 'success');
+      (r.failed || []).slice(0, 2).forEach(function(entry) { self.toast(entry.error, 'error'); });
+      if (done === 0 && (r.failed || []).length === 0) self.toast(r.error || 'Nothing was deleted', 'info');
+      self.refreshSnapshots();
+    }).catch(function(err) {
+      self.snapBusy = false;
+      self.toast('Delete failed: ' + (err && err.message ? err.message : 'network'), 'error');
+    });
   },
 
   categories() {

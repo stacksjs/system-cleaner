@@ -43,6 +43,8 @@ import {
   findDsStoreFiles,
   findIncompleteDownloads,
   findOrphanedAppData,
+  deleteLocalSnapshots,
+  listLocalSnapshots,
   extensionsPage,
   isWebStoreId,
   MAINTENANCE_TASKS,
@@ -1969,6 +1971,79 @@ export default async function (router: Router) {
     return Response.json({ success: true, ...result });
   });
 
+  // ── Local APFS snapshots ────────────────────────────────────
+
+  /**
+   * The snapshots holding blocks that deleting files does not return.
+   *
+   * No total, on purpose. A snapshot's cost is the set of blocks only it
+   * still references, which changes as soon as another is removed, and
+   * neither `tmutil` nor `diskutil` reports it on current macOS — so the
+   * response carries counts and APFS's own `purgeable` verdict and leaves
+   * the number of bytes unstated. See the header of
+   * `packages/clean/src/snapshots.ts`, and #33.
+   */
+  await router.post('/snapshots', async () => {
+    const scan = await listLocalSnapshots();
+
+    return Response.json({
+      success: !scan.unavailable,
+      unavailable: scan.unavailable,
+      reason: scan.reason,
+      volumes: scan.volumes,
+      snapshots: scan.snapshots.map(snapshot => ({
+        name: snapshot.name,
+        uuid: snapshot.uuid,
+        volume: snapshot.volume,
+        kind: snapshot.kind,
+        date: snapshot.date,
+        createdAt: snapshot.createdAt ? snapshot.createdAt.toISOString() : null,
+        purgeable: snapshot.purgeable,
+        limitingContainerShrink: snapshot.limitingContainerShrink,
+        rootTo: snapshot.rootTo,
+        revertTo: snapshot.revertTo,
+        timeMachineManaged: snapshot.timeMachineManaged,
+      })),
+      deletable: scan.snapshots.filter(snapshot => snapshot.timeMachineManaged).length,
+    });
+  });
+
+  /**
+   * Delete Time Machine local snapshots by date.
+   *
+   * The requested dates are intersected with a *fresh* scan's
+   * `timeMachineManaged` set rather than trusted, which is the same shape as
+   * `/remove-dead-startup` above: the page's list can be minutes old, macOS
+   * expires snapshots on its own, and the one thing that must never happen
+   * here is this app reaching for a snapshot the page did not actually offer.
+   */
+  await router.post('/delete-snapshots', async (req: Request) => {
+    const body = await readJsonBody<{ dates: unknown }>(req);
+    if (body === null) return badJson();
+
+    const requested = sanitizeStringArray(body.dates, 256);
+    if (requested === null) return badRequest('dates must be a non-empty string array');
+
+    const scan = await listLocalSnapshots();
+    if (scan.unavailable) return badRequest(scan.reason || 'Local snapshots are unavailable here', 403);
+
+    const managed = new Set(
+      scan.snapshots.filter(snapshot => snapshot.timeMachineManaged).map(snapshot => snapshot.date),
+    );
+    const targets = requested.filter(date => managed.has(date));
+    if (targets.length === 0)
+      return badRequest('None of those are Time Machine snapshots this Mac still has', 403);
+
+    const outcome = await deleteLocalSnapshots(targets);
+
+    // Snapshots pin blocks, so removing them is exactly the case where every
+    // cached size and the Disk Free figure are now wrong.
+    invalidateSizeCaches();
+    dashboardStatsCache.clear();
+
+    return Response.json({ success: outcome.failed.length === 0, ...outcome });
+  });
+
   // ── Duplicate finder ────────────────────────────────────────
 
   let duplicateScanInFlight = false;
@@ -2043,6 +2118,11 @@ export default async function (router: Router) {
         category: task.category,
         icon: task.icon,
         requiresSudo: task.requiresSudo,
+        // Where the person has to run it themselves. Omitting it rendered
+        // "the rest need undefined" on the Maintenance card, because the page
+        // is prerendered and has no other way to learn whether the answer is
+        // Terminal or an elevated PowerShell.
+        elevationLabel: task.elevationLabel,
         // Sent so the UI can offer to copy it. These are the tasks the app
         // cannot run itself — see the note in packages/clean/src/maintenance.ts.
         command: task.requiresSudo ? task.command : undefined,
