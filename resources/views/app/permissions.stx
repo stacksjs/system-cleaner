@@ -1,0 +1,175 @@
+@extends('layouts/app')
+@section('nav', 'permissions')
+@section('body')
+
+<!--
+  App Permissions — what every app on this Mac has been allowed to reach.
+
+  macOS splits this by capability, so System Settings answers "who has the
+  microphone" and never "what has this app been given". Grants also outlive
+  the apps that asked for them, which is the one thing System Settings cannot
+  show at all and the reason this screen leads with it. See #35.
+
+  No `//` comments and no double quotes inside this `x-data`: STX flattens the
+  attribute onto one line, and either kills the whole object silently.
+  `tests/xdata-parses.test.ts` guards both.
+
+  Commentary that belongs to this state:
+
+  - `unavailable` is a third state, not an empty list. Reading the TCC stores
+    needs Full Disk Access, and "no apps hold any permissions" is never true
+    on a Mac in use — rendering the refusal as an empty table would be the
+    worst answer this screen could give.
+  - `expanded` and `filter` are rebuilt by assignment rather than mutated, per
+    the `x-data` rule in AGENTS.md.
+  - Reset is offered only where `resettable` is true. `tccutil` resolves a
+    bundle identifier before it resets anything, so for an app that is gone it
+    exits 64 — and that is exactly the row this screen highlights. Those get
+    the Privacy pane, where the minus button does work.
+-->
+<div x-data="{
+  apps: [],
+  loading: true,
+  unavailable: false,
+  reason: '',
+  systemStoreUnreadable: false,
+  missing: 0,
+  filter: 'all',
+  expanded: {},
+  busy: '',
+  toasts: [],
+  toastId: 0,
+
+  init() { this.refresh(); },
+
+  post(endpoint, data) {
+    return fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data || {}),
+    }).then(function(r) {
+      if (!r.ok && r.status !== 400 && r.status !== 403) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  },
+
+  refresh() {
+    var self = this;
+    this.loading = true;
+    this.post('/api/permissions').then(function(r) {
+      self.loading = false;
+      self.unavailable = r.unavailable === true;
+      self.reason = r.reason || '';
+      self.systemStoreUnreadable = r.systemStoreUnreadable === true;
+      self.apps = r.apps || [];
+      self.missing = r.missing || 0;
+    }).catch(function() {
+      self.loading = false;
+      self.unavailable = true;
+      self.reason = 'Could not read what this Mac has granted.';
+    });
+  },
+
+  setFilter(name) { this.filter = name; },
+
+  visibleApps() {
+    var f = this.filter;
+    return this.apps.filter(function(app) {
+      if (f === 'missing') return app.installed === 'no';
+      if (f === 'third-party') return !app.apple;
+      return true;
+    });
+  },
+
+  fullDiskHolders() {
+    return this.apps.filter(function(app) {
+      return app.grants.some(function(g) {
+        return g.service === 'kTCCServiceSystemPolicyAllFiles' && g.decision === 'allowed';
+      });
+    }).length;
+  },
+
+  grantCount() {
+    return this.apps.reduce(function(sum, app) { return sum + app.grants.length; }, 0);
+  },
+
+  isOpen(client) { return this.expanded[client] === true; },
+
+  toggle(client) {
+    var next = Object.assign({}, this.expanded);
+    if (next[client]) delete next[client]; else next[client] = true;
+    this.expanded = next;
+  },
+
+  summary(app) {
+    var labels = app.grants.slice(0, 4).map(function(g) { return g.label; });
+    if (app.grants.length > 4) labels.push('+' + (app.grants.length - 4) + ' more');
+    return labels.join(' · ');
+  },
+
+  statusLabel(app) {
+    if (app.installed === 'no') return 'app is gone';
+    if (app.clientType === 'path') return 'command-line tool';
+    return '';
+  },
+
+  decisionTone(grant) {
+    if (grant.decision === 'allowed') return 'badge-green';
+    if (grant.decision === 'denied') return 'badge-red';
+    return 'badge-orange';
+  },
+
+  async reset(app, grant) {
+    if (this.busy) return;
+    if (!await window.nativeConfirm({
+      title: 'Forget ' + app.name + ' · ' + grant.label + '?',
+      message: 'This does not deny the permission. macOS forgets the decision, so ' + app.name + ' asks again the next time it needs ' + grant.label + '.',
+      confirmLabel: 'Forget',
+    })) return;
+
+    var self = this;
+    this.busy = app.client + '|' + grant.service;
+    this.post('/api/reset-permission', { service: grant.service, client: app.client }).then(function(r) {
+      self.busy = '';
+      if (r.success) { self.toast(grant.label + ' reset for ' + app.name, 'success'); self.refresh(); }
+      else self.toast(r.error || 'Could not reset it', 'error');
+    }).catch(function(err) {
+      self.busy = '';
+      self.toast('Reset failed: ' + (err && err.message ? err.message : 'network'), 'error');
+    });
+  },
+
+  openPane(grant) {
+    var self = this;
+    this.post('/api/open-permission-pane', { service: grant ? grant.service : '' }).then(function(r) {
+      if (!r.success) self.toast('Could not open System Settings', 'error');
+      else if (grant && !r.anchored) self.toast('Opened Privacy and Security - scroll to ' + grant.label, 'info');
+    }).catch(function() { self.toast('Could not open System Settings', 'error'); });
+  },
+
+  toast(msg, type) {
+    var id = ++this.toastId;
+    this.toasts = [...this.toasts, { id: id, msg: msg, type: type || 'info' }];
+    var self = this;
+    setTimeout(function() { self.toasts = self.toasts.filter(function(t) { return t.id !== id; }); }, 6000);
+  },
+}">
+
+<div class='toast-area'>
+  <template x-for='note in toasts' :key='note.id'>
+    <div class='toast'>
+      <span class='toast-glyph' :class="note.type === 'success' ? 'i-f7-checkmark-alt-circle-fill' : note.type === 'error' ? 'i-f7-xmark-circle-fill' : 'i-f7-exclamationmark-triangle-fill'" aria-hidden='true'></span>
+      <span x-text='note.msg'></span>
+    </div>
+  </template>
+</div>
+
+<div class='main-header'>
+  <div class='main-title'>App Permissions</div>
+  <div class='main-subtitle'>Every grant on this Mac, grouped by the app that holds it &mdash; including the ones whose app is gone</div>
+</div>
+<div class='main-content'>
+  <PermissionsPanel />
+</div>
+</div>
+@endsection

@@ -1,0 +1,156 @@
+<!--
+  App Permissions.
+
+  Apps whose bundle is gone sort first and are the reason the screen exists:
+  System Settings lists grants by capability, so a leftover entry is only
+  visible if you already know which of two dozen panes to look in. Everything
+  else is sorted third-party before Apple, because Apple's own clients are
+  mostly XPC services nobody chose to grant anything.
+-->
+<div class='card-row'>
+  <div class='card'>
+    <div class='card-label'>Apps With Grants</div>
+    <div class='card-value' x-text="loading ? '…' : (unavailable ? '—' : apps.length)">…</div>
+    <div class='card-detail' x-text="unavailable ? 'Could not be read' : (grantCount() + ' permissions in total')"></div>
+  </div>
+  <div class='card'>
+    <div class='card-label'>App Is Gone</div>
+    <div class='card-value' :style="missing ? 'color: var(--orange);' : ''" x-text="loading ? '…' : (unavailable ? '—' : missing)">…</div>
+    <div class='card-detail'>Grants outliving the app that asked</div>
+  </div>
+  <div class='card'>
+    <div class='card-label'>Full Disk Access</div>
+    <div class='card-value' x-text="loading ? '…' : (unavailable ? '—' : fullDiskHolders())">…</div>
+    <div class='card-detail'>Apps that can read every file you own</div>
+  </div>
+</div>
+
+<!--
+  The refusal, rendered as a refusal. Reading the TCC stores needs Full Disk
+  Access, and an empty table would read as "nothing has been granted
+  anything", which is never true on a Mac in use.
+-->
+<div class='tbl-wrap' x-show='!loading && unavailable' x-cloak>
+  <div class='tbl-bar'>
+    <span class='tbl-title'>Permissions cannot be read</span>
+  </div>
+  <div class='pm-gate'>
+    <p x-text='reason'></p>
+    <div class='pm-gate-actions'>
+      <button class='btn btn-icon' @click='openPane(null)'>
+        <span class='i-f7-gear-alt-fill' aria-hidden='true'></span>
+        Open System Settings
+      </button>
+      <button class='btn' @click='refresh()'>Scan Again</button>
+    </div>
+  </div>
+</div>
+
+<div class='tbl-wrap' x-show='!unavailable' x-cloak>
+  <div class='tbl-bar'>
+    <div>
+      <span class='tbl-title'>Permissions by App</span>
+      <span class='tbl-count' x-text="loading ? 'reading…' : visibleApps().length + ' shown'">…</span>
+    </div>
+    <div class='pm-bar'>
+      <button class='btn btn-sm' :class="filter === 'all' ? 'btn-active' : ''" @click="setFilter('all')">All</button>
+      <button class='btn btn-sm' :class="filter === 'missing' ? 'btn-active' : ''" @click="setFilter('missing')"
+        x-text="'App Is Gone (' + missing + ')'">Missing</button>
+      <button class='btn btn-sm' :class="filter === 'third-party' ? 'btn-active' : ''" @click="setFilter('third-party')">Not Apple</button>
+      <button class='btn btn-sm' data-rescan @click='refresh()' :disabled='loading'>Rescan</button>
+    </div>
+  </div>
+
+  <div class='pm-note' x-show='loading'>Reading what this Mac has granted&hellip;</div>
+  <div class='pm-note' x-show='!loading && visibleApps().length === 0' x-cloak>
+    Nothing matches this filter.
+  </div>
+
+  <!-- Said once, at the top, because it governs every row below. -->
+  <div class='pm-sysnote' x-show='!loading && systemStoreUnreadable' x-cloak>
+    <strong>This is the per-user list only.</strong>
+    macOS keeps a second, machine-wide store that needs root to read, so grants
+    made for every account on this Mac are not shown here.
+  </div>
+
+  <table x-show='!loading' x-cloak>
+    <tbody>
+      <template x-for='app in visibleApps()' :key='app.client'>
+        <tr>
+          <td>
+            <div class='item-row'>
+              <span class='item-glyph' :class="app.installed === 'no' ? 'i-f7-question-circle-fill pm-gone' : 'i-f7-app-fill'" aria-hidden='true'></span>
+              <span class='item-name' x-text='app.name'></span>
+              <span class='badge badge-orange' x-show="app.installed === 'no'" x-cloak>app is gone</span>
+              <span class='badge' x-show='app.apple' x-cloak>Apple</span>
+            </div>
+            <div class='item-sub' x-text='summary(app)'></div>
+
+            <!-- Grants, one row each, with the action that actually works
+                 for this app. -->
+            <div class='pm-grants' x-show='isOpen(app.client)' x-cloak>
+              <template x-for='grant in app.grants' :key='grant.service'>
+                <div class='pm-grant'>
+                  <span class='badge' :class='decisionTone(grant)' x-text='grant.decision'></span>
+                  <span class='pm-grant-label' x-text='grant.label'></span>
+                  <span class='pm-grant-scope' x-show="grant.scope === 'system'" x-cloak>machine-wide</span>
+                  <span class='pm-grant-id' :title='grant.service' x-text='app.client'></span>
+                  <button class='btn btn-sm' x-show='app.resettable' @click='reset(app, grant)'
+                    :disabled="busy === app.client + '|' + grant.service"
+                    x-text="busy === app.client + '|' + grant.service ? 'Resetting…' : 'Forget'">Forget</button>
+                  <button class='btn btn-sm' x-show='!app.resettable' x-cloak @click='openPane(grant)'>Open Settings</button>
+                </div>
+              </template>
+
+              <!-- The honest version of a disabled button. `tccutil`
+                   resolves a bundle identifier before it resets anything, so
+                   for these rows it exits 64 rather than doing nothing. -->
+              <p class='pm-grant-why' x-show='!app.resettable' x-cloak>
+                macOS will not reset a permission for an app it cannot find, so
+                there is no button here that would work. Remove the entry with
+                the <strong>&minus;</strong> button in the Privacy pane instead.
+              </p>
+            </div>
+          </td>
+          <td style='width: 130px; font-variant-numeric: tabular-nums;'
+              x-text="app.grants.length + (app.grants.length === 1 ? ' permission' : ' permissions')"></td>
+          <td class='action-cell' style='width: 112px;'>
+            <button class='btn btn-sm' @click='toggle(app.client)'
+              x-text="isOpen(app.client) ? 'Hide' : 'Show'">Show</button>
+          </td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+
+  <!-- Last, because it is the limit of the whole screen rather than of any
+       one row. -->
+  <div class='pm-caveat' x-show='!loading' x-cloak>
+    <strong>This screen reads; it does not grant.</strong>
+    There is no supported way for any app to give itself or anything else a
+    permission &mdash; SIP blocks writing to the permission database even as
+    root, and Automation entries cannot be added by hand at all.
+    <strong>Forget</strong> runs <code>tccutil reset</code>, which deletes the
+    stored decision rather than writing a denial: an app that still needs the
+    capability simply asks you again the next time it wants it.
+  </div>
+</div>
+
+<style>
+.pm-bar { display: flex; align-items: center; gap: var(--space-tight); }
+.pm-note { padding: var(--space-3) var(--space-4); color: var(--secondary); font-size: 11px; }
+.pm-gate { padding: var(--space-3) var(--space-4) var(--space-4); max-width: 68ch; color: var(--secondary); font-size: 11px; line-height: 1.6; }
+.pm-gate-actions { display: flex; gap: var(--space-2); margin-top: var(--space-3); }
+.pm-gone { color: var(--orange); }
+.pm-sysnote { margin: var(--space-3) var(--space-4) 0; max-width: 74ch; padding: var(--space-2) var(--space-3); border-radius: 6px; background: var(--surface-soft); color: var(--secondary); font-size: 11px; line-height: 1.6; }
+.pm-sysnote strong { color: var(--ink); }
+.pm-grants { display: flex; flex-direction: column; gap: var(--space-tight); margin-top: var(--space-2); }
+.pm-grant { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-tight) var(--space-2); border: .5px solid var(--line); border-radius: 6px; background: var(--surface-soft); }
+.pm-grant-label { flex: 0 0 auto; min-width: 150px; font-size: 11px; font-weight: 500; }
+.pm-grant-scope { flex: 0 0 auto; color: var(--orange); font-size: 10px; }
+.pm-grant-id { flex: 1; overflow: hidden; color: var(--secondary); font: 10px 'SF Mono', Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.pm-grant-why { max-width: 66ch; margin: var(--space-tight) 0 0; color: var(--secondary); font-size: 11px; line-height: 1.6; }
+.pm-caveat { margin: var(--space-3) var(--space-4); max-width: 74ch; padding: var(--space-3); border: .5px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--accent) 8%, var(--surface)); color: var(--secondary); font-size: 11px; line-height: 1.6; }
+.pm-caveat strong { color: var(--ink); }
+.pm-caveat code { padding: 1px 4px; border-radius: 3px; background: var(--surface-soft); font: 10px 'SF Mono', Menlo, monospace; }
+</style>

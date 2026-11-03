@@ -45,6 +45,9 @@ import {
   findOrphanedAppData,
   deleteLocalSnapshots,
   listLocalSnapshots,
+  listAppPermissions,
+  resetPermission,
+  settingsAnchorFor,
   extensionsPage,
   isWebStoreId,
   MAINTENANCE_TASKS,
@@ -1592,6 +1595,108 @@ export default async function (router: Router) {
       );
       const exitCode = await proc.exited;
       return Response.json({ success: exitCode === 0 });
+    }
+    catch (err: any) {
+      return Response.json({ success: false, error: err.message || 'Could not open System Settings' });
+    }
+  });
+
+  // ── App permissions ─────────────────────────────────────────
+
+  /**
+   * What every app on this Mac has been granted.
+   *
+   * macOS splits this by capability, so System Settings can answer "who has
+   * the microphone" and never "what has this app been given" — and grants
+   * outlive their apps. See #35 and the header of
+   * `packages/clean/src/permissions.ts`.
+   */
+  await router.post('/permissions', async () => {
+    const scan = await listAppPermissions();
+
+    return Response.json({
+      success: !scan.unavailable,
+      unavailable: scan.unavailable,
+      reason: scan.reason,
+      systemStoreUnreadable: scan.systemStoreUnreadable,
+      apps: scan.apps.map(app => ({
+        client: app.client,
+        clientType: app.clientType,
+        name: app.name,
+        installed: app.installed,
+        appPath: app.appPath,
+        apple: app.apple,
+        resettable: app.resettable,
+        grants: app.grants.map(grant => ({
+          service: grant.service,
+          label: grant.label,
+          decision: grant.decision,
+          scope: grant.scope,
+          settingsAnchor: grant.settingsAnchor,
+          lastModified: grant.lastModified ? grant.lastModified.toISOString() : null,
+        })),
+      })),
+      missing: scan.apps.filter(app => app.installed === 'no').length,
+    });
+  });
+
+  /**
+   * Forget one decision, so the app is asked again next time.
+   *
+   * Not a revoke — `tccutil reset` deletes the row rather than writing a
+   * denial. The pair is checked against a fresh scan before anything runs,
+   * as `/remove-dead-startup` and `/delete-snapshots` do: the page's list can
+   * be minutes old, and this app must never reach for a grant the page did
+   * not actually show.
+   */
+  await router.post('/reset-permission', async (req: Request) => {
+    const body = await readJsonBody<{ service: unknown; client: unknown }>(req);
+    if (body === null) return badJson();
+
+    const service = typeof body.service === 'string' ? body.service : '';
+    const client = typeof body.client === 'string' ? body.client : '';
+    if (!service || !client) return badRequest('service and client are required');
+
+    const scan = await listAppPermissions();
+    if (scan.unavailable) return badRequest(scan.reason || 'Permissions are unavailable here', 403);
+
+    const app = scan.apps.find(entry => entry.client === client);
+    if (!app || !app.grants.some(grant => grant.service === service))
+      return badRequest('That app does not hold that permission', 403);
+
+    // `tccutil` resolves the bundle identifier before it resets anything, so
+    // this would exit 64 rather than do nothing. Refusing here means the
+    // error names the Privacy pane instead of quoting a shell failure.
+    if (!app.resettable) {
+      return badRequest(
+        'macOS will not reset a permission for an app it cannot find. Remove the entry with the − button in System Settings › Privacy & Security.',
+        403,
+      );
+    }
+
+    const result = await resetPermission(service, client);
+    return Response.json(result, { status: result.success ? 200 : 400 });
+  });
+
+  /**
+   * System Settings, at the pane that lists one permission.
+   *
+   * The anchor is looked up from the service rather than taken from the
+   * request: `settingsAnchorFor` only answers for services with an anchor
+   * read out of the Settings extension, so nothing a caller sends is
+   * interpolated into the URL. An unknown service opens Privacy & Security
+   * at the top, which is the right window.
+   */
+  await router.post('/open-permission-pane', async (req: Request) => {
+    const body = await readJsonBody<{ service: unknown }>(req);
+    if (body === null) return badJson();
+
+    const anchor = typeof body.service === 'string' ? settingsAnchorFor(body.service) : '';
+    const url = `x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension${anchor ? `?${anchor}` : ''}`;
+
+    try {
+      const proc = Bun.spawn(['open', url], { stdout: 'ignore', stderr: 'ignore' });
+      return Response.json({ success: (await proc.exited) === 0, anchored: anchor !== '' });
     }
     catch (err: any) {
       return Response.json({ success: false, error: err.message || 'Could not open System Settings' });

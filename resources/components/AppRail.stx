@@ -43,6 +43,11 @@ export const groups = [
     // uninstall left behind. Disk Usage above answers "what is big"; this
     // answers "what has no owner any more".
     { id: 'orphans', label: 'Leftover Data', icon: 'i-f7-tray-fill', href: '/app/orphans' },
+    // Also about apps rather than storage. Applications asks what is
+    // installed and Leftover Data what has no owner; this asks what the
+    // installed ones were allowed to reach — including grants whose app is
+    // long gone, which no pane in System Settings will show you.
+    { id: 'permissions', label: 'App Permissions', icon: 'i-f7-hand-raised-fill', href: '/app/permissions' },
   ],
   // VPN sits in its own group because it is the one row that is not about
   // what is on this Mac. Everything above scans local storage or local
