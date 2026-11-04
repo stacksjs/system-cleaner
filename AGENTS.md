@@ -107,6 +107,12 @@ Four conventions carry the rest, all read by buddy:
 | `app/Desktop/Resources/` | copied into `Contents/Resources` (generated; gitignored) |
 | `app/Desktop/Info.plist.json` | the `NS*UsageDescription` strings macOS shows in permission prompts |
 
+One convention is this app's own rather than the framework's:
+`app/Desktop/dmg-window.DS_Store` is the Finder window a mounted DMG opens
+with, authored by `bun scripts/author-dmg-window.ts` and validated by
+`scripts/dmg-window.ts`. Only Finder can write one, so it is committed rather
+than generated during a build.
+
 Requires Stacks >= 0.72.100. See `docs/guide/desktop-app.md`.
 
 The bundle serves prerendered HTML, so **nothing machine-specific may come from

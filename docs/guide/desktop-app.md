@@ -51,6 +51,7 @@ things only this app can know.
 | Compile the launcher, bundle Craft, write the manifest | `buddy build:desktop` |
 | Compile the agent and scanner into `desktop-dist` | this app |
 | Assemble the bundle, build the icon, sign, image the DMG | `buddy build:dmg` |
+| Arrange the installer window and re-image the DMG | this app |
 
 Four framework conventions make that possible, all added in Stacks 0.72.99 and
 0.72.100:
@@ -70,6 +71,43 @@ Four framework conventions make that possible, all added in Stacks 0.72.99 and
 `build:dmg` also narrows App Transport Security for an app-owned launcher: an
 exception for `127.0.0.1` rather than `NSAllowsArbitraryLoads`, which would
 additionally permit every unencrypted host on the internet.
+
+## The installer window
+
+Mounting the DMG opens a 660×400 Finder window with the app on the left and the
+`/Applications` symlink on the right, 128pt icons, no toolbar and no sidebar —
+so the gesture the image exists for is the obvious thing to do. Without it
+Finder falls back to whatever the person's last window looked like and drops
+both items wherever its default grid puts them, which reads as "here are two
+files".
+
+That geometry lives in a `.DS_Store` at the volume root, and only Finder writes
+one — while a window is open, on a writable volume. Two consequences:
+
+- **The layout is a committed fixture**, `app/Desktop/dmg-window.DS_Store`,
+  authored once by `bun scripts/author-dmg-window.ts`. Scripting Finder during
+  the build instead would make every release depend on a GUI session and an
+  Automation grant on a GitHub runner, where a refusal is silent and the only
+  symptom is a badly arranged window nobody sees until someone downloads it.
+- **Position only, no background image.** A background needs a `BKGD` record
+  holding an alias to a file on the volume that authored it, which means
+  nothing anywhere else. The records this layout uses — `Iloc` per icon, `bwsp`
+  for the window, `icvp` for the icon view — name nothing outside themselves,
+  which is what lets one fixture serve every build.
+
+The file cannot simply be staged next to the app: `hdiutil create -srcfolder`
+drops a root `.DS_Store` without a word. So `sealBundle` images a *read-write*
+volume, writes the layout onto it, converts that to the compressed image that
+ships, and then mounts the result to read the layout back. Everything about
+this is cosmetic and therefore silent, so the check is the only thing standing
+between an arranged window and a default list view.
+
+To change it, edit `DMG_WINDOW` in `scripts/dmg-window.ts`, re-run
+`bun scripts/author-dmg-window.ts`, and commit the regenerated fixture. The
+authoring script validates what Finder actually recorded through the same
+reader the build and `tests/dmg-window.test.ts` use — the first run of it asked
+for 660×400 and Finder stored 920×464, because hiding the toolbar rebuilds the
+window and discards a size set before it.
 
 ## Signing and notarizing
 

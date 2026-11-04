@@ -40,6 +40,7 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import process from 'node:process'
 import { createGitHubUpdateManifest, UPDATE_MANIFEST_ASSET } from '@stacksjs/desktop'
+import { DMG_WINDOW, readDmgWindowLayout, requireDmgWindowLayout } from './dmg-window'
 
 const ROOT = process.cwd()
 const APP_NAME = process.env.DESKTOP_APP_NAME || 'SystemCleaner'
@@ -60,6 +61,15 @@ if (process.platform !== 'darwin') {
 }
 
 const version = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version || '0.0.0'
+
+/**
+ * The window a mounted DMG opens with, checked before anything is compiled.
+ *
+ * Read here rather than where it is used, five minutes further on: a fixture
+ * that went missing, or one re-authored against a renamed app, should cost a
+ * second rather than a whole build. See `scripts/dmg-window.ts`.
+ */
+const dmgWindow = requireDmgWindowLayout()
 
 /**
  * The macOS SDK a Mach-O was linked against, as [major, minor].
@@ -358,7 +368,9 @@ function sealBundle(imagePath: string): void {
   const imageRoot = path.join(workDir, 'image')
   const appBundle = path.join(imageRoot, `${APP_NAME}.app`)
   const rebuiltImage = path.join(workDir, path.basename(imagePath))
+  const layoutMount = path.join(workDir, 'layout')
   let mounted = false
+  let layoutMounted = false
 
   fs.mkdirSync(mountDir)
   fs.mkdirSync(imageRoot)
@@ -418,26 +430,75 @@ function sealBundle(imagePath: string): void {
     run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', appBundle])
 
     fs.symlinkSync('/Applications', path.join(imageRoot, 'Applications'))
+
     // Versioned, for the reason `imageStagedBundle` is: on a Mac with the app
     // installed, TCC refuses to let anything create
     // `/Volumes/SystemCleaner/SystemCleaner.app` over the copy it manages, and
     // `hdiutil` fails with "Operation not permitted".
+    const volume = `${APP_NAME} ${APP_VERSION}`
+
+    // Two steps rather than one, because the window layout cannot be staged.
+    // `hdiutil create -srcfolder` drops a root `.DS_Store` without a word, so
+    // a layout placed in `imageRoot` produces an image with no layout at all —
+    // measured, not assumed. Writing it onto a mounted read-write volume and
+    // compressing afterwards is the only order that keeps it. The slack is
+    // free space in the writable image and does not survive the conversion.
+    const writable = path.join(workDir, 'writable.dmg')
+    const used = spawnSync('du', ['-sk', imageRoot], { encoding: 'utf8' })
+    const usedKb = Number(used.stdout?.trim().split(/\s+/)[0])
+    if (used.status !== 0 || !Number.isFinite(usedKb) || usedKb <= 0)
+      throw new Error(`could not size ${imageRoot} to build a writable image`)
+
     run('hdiutil', [
       'create',
-      '-volname', `${APP_NAME} ${APP_VERSION}`,
+      '-volname', volume,
       '-srcfolder', imageRoot,
       '-ov',
-      '-format', 'UDZO',
-      rebuiltImage,
+      '-format', 'UDRW',
+      '-size', `${usedKb + 20480}k`,
+      writable,
     ])
+
+    // `-nobrowse` with a private mountpoint: nothing appears in Finder and
+    // nothing is mounted under /Volumes, so a build cannot collide with the
+    // installed copy the way `build:dmg` does.
+    fs.mkdirSync(layoutMount)
+    run('hdiutil', ['attach', writable, '-nobrowse', '-mountpoint', layoutMount])
+    layoutMounted = true
+    fs.writeFileSync(path.join(layoutMount, '.DS_Store'), dmgWindow.bytes)
+    run('hdiutil', ['detach', layoutMount])
+    layoutMounted = false
+
+    run('hdiutil', ['convert', writable, '-format', 'UDZO', '-ov', '-o', rebuiltImage])
     fs.renameSync(rebuiltImage, imagePath)
+
+    // Read it back off the image that ships. The layout is cosmetic, so every
+    // way of losing it is silent: the only thing that distinguishes a DMG that
+    // opens arranged from one that opens as a default list view is this check.
+    run('hdiutil', ['attach', imagePath, '-nobrowse', '-readonly', '-mountpoint', mountDir])
+    mounted = true
+    const shipped = path.join(mountDir, '.DS_Store')
+    if (!fs.existsSync(shipped))
+      throw new Error(`${path.basename(imagePath)} carries no window layout: Finder would open it unarranged`)
+    const landed = readDmgWindowLayout(new Uint8Array(fs.readFileSync(shipped)))
+    for (const name of Object.keys(DMG_WINDOW.items)) {
+      if (!landed.items[name])
+        throw new Error(`the shipped layout has no position for ${name}`)
+    }
+    run('hdiutil', ['detach', mountDir])
+    mounted = false
+    console.log(`[desktop] window: ${landed.width}x${landed.height}, ${landed.iconSize}pt icons, ${Object.keys(landed.items).length} placed`)
   }
   finally {
-    if (mounted) {
-      spawnSync('hdiutil', ['detach', mountDir], {
-        stdio: 'inherit',
-        cwd: ROOT,
-      })
+    // Either mount can be left attached by a throw, and a leaked one holds the
+    // temp directory open so the cleanup below silently does nothing.
+    for (const [attached, target] of [[mounted, mountDir], [layoutMounted, layoutMount]] as const) {
+      if (attached) {
+        spawnSync('hdiutil', ['detach', target], {
+          stdio: 'inherit',
+          cwd: ROOT,
+        })
+      }
     }
     fs.rmSync(workDir, { recursive: true, force: true })
   }
