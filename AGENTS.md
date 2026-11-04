@@ -107,11 +107,12 @@ Four conventions carry the rest, all read by buddy:
 | `app/Desktop/Resources/` | copied into `Contents/Resources` (generated; gitignored) |
 | `app/Desktop/Info.plist.json` | the `NS*UsageDescription` strings macOS shows in permission prompts |
 
-One convention is this app's own rather than the framework's:
-`app/Desktop/dmg-window.DS_Store` is the Finder window a mounted DMG opens
-with, authored by `bun scripts/author-dmg-window.ts` and validated by
-`scripts/dmg-window.ts`. Only Finder can write one, so it is committed rather
-than generated during a build.
+Two conventions are this app's own rather than the framework's, both for the
+installer window a mounted DMG opens with. `resources/dmg/installer-background.svg`
+is the artwork, rendered to a committed PNG by `bun scripts/render-dmg-background.ts`.
+`app/Desktop/dmg-window.DS_Store` is a position-only layout used only when the
+build cannot drive Finder. Geometry lives in `DMG_WINDOW` in
+`scripts/dmg-window.ts`; regenerate the fixture with `bun scripts/author-dmg-window.ts`.
 
 Requires Stacks >= 0.72.100. See `docs/guide/desktop-app.md`.
 

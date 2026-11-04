@@ -82,6 +82,23 @@ describe('the DMG window layout', () => {
     expect(layout.showItemInfo).toBe(false)
   })
 
+  it('ships a background no taller than the content area', () => {
+    // Finder draws the picture at one pixel per point from the top of the
+    // *content* area, which is the window minus its title and status bars. A
+    // picture as tall as the window loses its bottom line off the end — which
+    // is how the footer vanished the first time this shipped.
+    const png = fs.readFileSync(new URL('../resources/dmg/installer-background.png', import.meta.url))
+    // PNG IHDR: 8-byte signature, 4-byte length, 'IHDR', width, height.
+    expect(png.subarray(1, 4).toString()).toBe('PNG')
+    const width = png.readUInt32BE(16)
+    const height = png.readUInt32BE(20)
+    expect(width).toBe(DMG_WINDOW.width)
+    expect(height).toBe(DMG_WINDOW.backgroundHeight)
+    expect(height).toBeLessThan(DMG_WINDOW.height)
+    // Tall enough that the icons at their recorded y sit on the artwork.
+    expect(height).toBeGreaterThan(DMG_WINDOW.items['SystemCleaner.app'].y + DMG_WINDOW.iconSize / 2)
+  })
+
   it('refuses a file that is not a .DS_Store', () => {
     expect(() => readRecords(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])))
       .toThrow(/not a \.DS_Store/)

@@ -74,40 +74,48 @@ additionally permit every unencrypted host on the internet.
 
 ## The installer window
 
-Mounting the DMG opens a 660×400 Finder window with the app on the left and the
-`/Applications` symlink on the right, 128pt icons, no toolbar and no sidebar —
-so the gesture the image exists for is the obvious thing to do. Without it
-Finder falls back to whatever the person's last window looked like and drops
-both items wherever its default grid puts them, which reads as "here are two
-files".
+Mounting the DMG opens a 660x460 window with artwork behind it — "Install in
+one step", an arrow, and the app on the left with the `/Applications` symlink
+on the right at 128pt — so the gesture the image exists for is the obvious
+thing to do. Without a layout Finder falls back to whatever the person's last
+window looked like and sorts the two items alphabetically, which is how
+v0.3.14 shipped: `Applications` on the left, the app on the right, in a window
+the size of someone's last Downloads folder.
 
-That geometry lives in a `.DS_Store` at the volume root, and only Finder writes
-one — while a window is open, on a writable volume. Two consequences:
+Three facts decide how this is built, each one measured:
 
-- **The layout is a committed fixture**, `app/Desktop/dmg-window.DS_Store`,
-  authored once by `bun scripts/author-dmg-window.ts`. Scripting Finder during
-  the build instead would make every release depend on a GUI session and an
-  Automation grant on a GitHub runner, where a refusal is silent and the only
-  symptom is a badly arranged window nobody sees until someone downloads it.
-- **Position only, no background image.** A background needs a `BKGD` record
-  holding an alias to a file on the volume that authored it, which means
-  nothing anywhere else. The records this layout uses — `Iloc` per icon, `bwsp`
-  for the window, `icvp` for the icon view — name nothing outside themselves,
-  which is what lets one fixture serve every build.
+- **`hdiutil create -srcfolder` drops a root `.DS_Store` without a word.** So
+  the layout cannot be staged next to the app. `sealBundle` images a
+  *read-write* volume, arranges that, and converts it to the compressed image
+  that ships.
+- **Finder is the only thing that writes a `.DS_Store`**, and only while a
+  window is open on a writable volume mounted under `/Volumes` — `disk "name"`
+  fails with -1728 against a private mountpoint.
+- **A background picture is stored as an alias to a file on the volume**, not
+  as pixels in the `.DS_Store`, so the image lives at `.background/installer.png`
+  inside the DMG. Its folder is parked below the window's bottom edge, as
+  Launchpad's DMG does, because anyone who has turned on hidden files
+  otherwise gets a blue folder sitting on the headline.
 
-The file cannot simply be staged next to the app: `hdiutil create -srcfolder`
-drops a root `.DS_Store` without a word. So `sealBundle` images a *read-write*
-volume, writes the layout onto it, converts that to the compressed image that
-ships, and then mounts the result to read the layout back. Everything about
-this is cosmetic and therefore silent, so the check is the only thing standing
-between an arranged window and a default list view.
+`app/Desktop/dmg-window.DS_Store` is a committed, position-only layout used as
+a fallback when Finder will not cooperate — a release built on a runner with no
+Automation grant still gets a correctly sized window with both icons placed,
+just without the artwork, and says so in the build log. Whether a background
+could travel in that fixture too is untested; the obvious check, asking Finder
+for `background picture`, reports `NONE` for images that demonstrably render.
 
-To change it, edit `DMG_WINDOW` in `scripts/dmg-window.ts`, re-run
-`bun scripts/author-dmg-window.ts`, and commit the regenerated fixture. The
-authoring script validates what Finder actually recorded through the same
-reader the build and `tests/dmg-window.test.ts` use — the first run of it asked
-for 660×400 and Finder stored 920×464, because hiding the toolbar rebuilds the
-window and discards a size set before it.
+The artwork is `resources/dmg/installer-background.svg`, rendered to a
+committed PNG by `bun scripts/render-dmg-background.ts`. It is 660x400 in a
+660x460 window on purpose: Finder draws it from the top of the *content* area
+at one pixel per point, and a picture as tall as the whole window loses its
+last line off the bottom.
+
+To change the window, edit `DMG_WINDOW` in `scripts/dmg-window.ts`, re-run
+`bun scripts/render-dmg-background.ts` and `bun scripts/author-dmg-window.ts`,
+and commit both regenerated files. Bounds are set last in the shared
+AppleScript, and that ordering is load-bearing: hiding the toolbar rebuilds the
+window, so the first version of this asked for 660x400 and Finder recorded
+920x464, its own default, with every other property correct.
 
 ## Signing and notarizing
 

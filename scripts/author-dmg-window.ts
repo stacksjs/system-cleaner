@@ -27,7 +27,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import process from 'node:process'
-import { DMG_WINDOW, DMG_WINDOW_FIXTURE, requireDmgWindowLayout } from './dmg-window'
+import { DMG_WINDOW_FIXTURE, finderLayoutScript, requireDmgWindowLayout } from './dmg-window'
 
 if (process.platform !== 'darwin') {
   console.error('[dmg-window] only Finder can author this, so only macOS can run it')
@@ -41,9 +41,6 @@ if (process.platform !== 'darwin') {
  * `hdiutil` fails with "Operation not permitted".
  */
 const VOLUME = 'SystemCleaner Layout'
-
-/** Where the window opens. Only the size is asserted; macOS clamps the origin. */
-const SCREEN_ORIGIN = { x: 200, y: 120 }
 
 function run(command: string, args: string[]): void {
   const done = spawnSync(command, args, { stdio: 'inherit' })
@@ -106,47 +103,18 @@ try {
   if (!visible)
     throw new Error(`Finder never saw ${mount}; nothing to arrange`)
 
+  // macOS creates `.fseventsd` on any writable volume it mounts, and Finder
+  // records a position for it like any other item — which lands a junk `Iloc`
+  // in the committed fixture that varies from run to run. Hidden, harmless,
+  // and not something a layout should carry.
+  fs.rmSync(path.join(mount, '.fseventsd'), { recursive: true, force: true })
+
   console.log(`[dmg-window] arranging ${mount}`)
 
-  const { x, y } = SCREEN_ORIGIN
-  const right = x + DMG_WINDOW.width
-  const bottom = y + DMG_WINDOW.height
-  const app = DMG_WINDOW.items['SystemCleaner.app']
-  const applications = DMG_WINDOW.items.Applications
-
-  /**
-   * Bounds are set *last*, and that ordering is load-bearing. Hiding the
-   * toolbar rebuilds the window, so a size set before it is discarded: the
-   * first run of this asked for 660x400 and Finder recorded 920x464, its own
-   * default, with every other property correct.
-   */
-  const script = `
-on run argv
-  set vol to item 1 of argv
-  tell application "Finder"
-    tell disk vol
-      open
-      set current view of container window to icon view
-      set toolbar visible of container window to false
-      set statusbar visible of container window to false
-      set opts to the icon view options of container window
-      set arrangement of opts to not arranged
-      set icon size of opts to ${DMG_WINDOW.iconSize}
-      set text size of opts to 12
-      set label position of opts to bottom
-      set shows item info of opts to false
-      set position of item "SystemCleaner.app" of container window to {${app.x}, ${app.y}}
-      set position of item "Applications" of container window to {${applications.x}, ${applications.y}}
-      delay 1
-      set the bounds of container window to {${x}, ${y}, ${right}, ${bottom}}
-      delay 1
-      update without registering applications
-      delay 2
-      close
-    end tell
-  end tell
-end run
-`
+  // The no-background version: a background cannot be baked into a fixture,
+  // so the committed layout is position-only and the build sets the picture
+  // on the volume it actually ships. See `scripts/dmg-window.ts`.
+  const script = finderLayoutScript({ background: false })
 
   const arranged = spawnSync('osascript', ['-', name], {
     input: script,

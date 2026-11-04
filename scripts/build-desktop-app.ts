@@ -40,7 +40,7 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import process from 'node:process'
 import { createGitHubUpdateManifest, UPDATE_MANIFEST_ASSET } from '@stacksjs/desktop'
-import { DMG_WINDOW, readDmgWindowLayout, requireDmgWindowLayout } from './dmg-window'
+import { DMG_BACKGROUND_IN_VOLUME, DMG_WINDOW, finderLayoutScript, readDmgWindowLayout, requireDmgWindowLayout } from './dmg-window'
 
 const ROOT = process.cwd()
 const APP_NAME = process.env.DESKTOP_APP_NAME || 'SystemCleaner'
@@ -359,6 +359,69 @@ const dmgPath = path.join(dmgDir, dmg)
  * pass and are skipped: `--options runtime` is what makes the entitlements
  * load-bearing, and an ad-hoc signature cannot be notarized regardless.
  */
+/**
+ * Ask Finder to arrange the mounted volume's window, background and all.
+ *
+ * Returns false rather than throwing when Finder will not play, which is the
+ * case this exists to handle: the release DMG is built on a GitHub macOS
+ * runner, and driving Finder there needs a GUI session and an Automation
+ * grant that a headless job may simply not have. A refusal there must not
+ * fail a release — the caller falls back to the committed layout.
+ *
+ * Everything else is a real failure and is reported as one. Success means
+ * Finder claimed to do it; whether the layout actually landed on the shipped
+ * image is checked separately, off the converted image, because that is the
+ * only artifact anyone downloads.
+ */
+function arrangeWithFinder(mount: string): boolean {
+  const name = path.basename(mount)
+
+  // Wait for Finder, not the filesystem. The mountpoint exists the moment
+  // `hdiutil attach` returns, but Finder keeps its own list of disks and
+  // arranging too early fails with "Can't get disk" (-1728) against a volume
+  // that is demonstrably mounted.
+  let visible = false
+  for (let attempt = 0; attempt < 40 && !visible; attempt++) {
+    const asked = spawnSync('osascript', ['-e', `tell application "Finder" to exists disk ${JSON.stringify(name)}`], { encoding: 'utf8' })
+    if (asked.stdout?.trim() === 'true')
+      visible = true
+    else
+      spawnSync('sleep', ['0.25'], { stdio: 'ignore' })
+  }
+  if (!visible) {
+    console.warn(`[desktop] Finder never saw ${mount}`)
+    return false
+  }
+
+  const arranged = spawnSync('osascript', ['-', name], {
+    input: finderLayoutScript({ background: true }),
+    encoding: 'utf8',
+  })
+  if (arranged.status !== 0) {
+    console.warn(`[desktop] osascript: ${arranged.stderr?.trim()}`)
+    return false
+  }
+
+  // Finder writes the .DS_Store when the window closes, and buffers it.
+  spawnSync('sync', [], { stdio: 'ignore' })
+
+  const written = path.join(mount, '.DS_Store')
+  if (!fs.existsSync(written)) {
+    console.warn('[desktop] Finder closed the window without writing a layout')
+    return false
+  }
+
+  // Finder reported success; confirm it actually set the picture, because a
+  // background that silently failed to attach is the whole point of this.
+  const layout = readDmgWindowLayout(new Uint8Array(fs.readFileSync(written)))
+  if (layout.backgroundType !== 2) {
+    console.warn(`[desktop] Finder arranged the window but set no background (backgroundType ${layout.backgroundType})`)
+    return false
+  }
+
+  return true
+}
+
 function sealBundle(imagePath: string): void {
   const identity = process.env.DESKTOP_SIGNING_IDENTITY
   const adhoc = !identity
@@ -368,7 +431,7 @@ function sealBundle(imagePath: string): void {
   const imageRoot = path.join(workDir, 'image')
   const appBundle = path.join(imageRoot, `${APP_NAME}.app`)
   const rebuiltImage = path.join(workDir, path.basename(imagePath))
-  const layoutMount = path.join(workDir, 'layout')
+  let layoutMount: string | null = null
   let mounted = false
   let layoutMounted = false
 
@@ -431,6 +494,12 @@ function sealBundle(imagePath: string): void {
 
     fs.symlinkSync('/Applications', path.join(imageRoot, 'Applications'))
 
+    // The picture has to be inside the volume: Finder stores the background as
+    // an alias to a file on that volume, not as pixels in the `.DS_Store`.
+    const background = path.join(imageRoot, DMG_BACKGROUND_IN_VOLUME)
+    fs.mkdirSync(path.dirname(background), { recursive: true })
+    fs.copyFileSync(path.join(ROOT, 'resources/dmg/installer-background.png'), background)
+
     // Versioned, for the reason `imageStagedBundle` is: on a Mac with the app
     // installed, TCC refuses to let anything create
     // `/Volumes/SystemCleaner/SystemCleaner.app` over the copy it manages, and
@@ -459,13 +528,47 @@ function sealBundle(imagePath: string): void {
       writable,
     ])
 
-    // `-nobrowse` with a private mountpoint: nothing appears in Finder and
-    // nothing is mounted under /Volumes, so a build cannot collide with the
-    // installed copy the way `build:dmg` does.
-    fs.mkdirSync(layoutMount)
-    run('hdiutil', ['attach', writable, '-nobrowse', '-mountpoint', layoutMount])
+    // Mounted where Finder can see it, rather than on a private mountpoint:
+    // `disk "name"` resolves against /Volumes and fails with -1728 anywhere
+    // else. Safe here because the volume carries the version, so it cannot
+    // land on `/Volumes/SystemCleaner` and collide with an installed copy.
+    const attached = spawnSync('hdiutil', ['attach', writable], { encoding: 'utf8' })
+    if (attached.status !== 0)
+      throw new Error(`could not mount the writable image: ${attached.stderr}`)
+    layoutMount = attached.stdout.split('\n')
+      .map(line => line.split('\t').pop()?.trim() ?? '')
+      .filter(entry => entry.startsWith('/Volumes/'))
+      .pop() ?? null
+    if (!layoutMount)
+      throw new Error(`hdiutil mounted nothing under /Volumes:\n${attached.stdout}`)
     layoutMounted = true
-    fs.writeFileSync(path.join(layoutMount, '.DS_Store'), dmgWindow.bytes)
+
+    // macOS puts this on every writable volume it mounts and Finder would
+    // record a position for it like any other item.
+    fs.rmSync(path.join(layoutMount, '.fseventsd'), { recursive: true, force: true })
+
+    if (arrangeWithFinder(layoutMount))
+      console.log('[desktop] window arranged by Finder, with the background picture')
+    else {
+      // Not fatal. The committed layout still opens the window at the right
+      // size with both icons placed — it just has no artwork behind them,
+      // which is a worse installer than intended and a far better one than
+      // Finder's default list view. The warning is how the next release
+      // learns that this runner cannot drive Finder.
+      console.warn('[desktop] Finder would not arrange the window; falling back to the committed position-only layout')
+      fs.writeFileSync(path.join(layoutMount, '.DS_Store'), dmgWindow.bytes)
+    }
+
+    // Again, and this time it matters: macOS recreates `.fseventsd` while the
+    // volume is mounted, so removing it before arranging is not enough — the
+    // copy made after that gets baked into the image and shows up as a blue
+    // folder over the headline for anyone with hidden files turned on. The
+    // shipped image is read-only, so once it is gone here it stays gone.
+    fs.rmSync(path.join(layoutMount, '.fseventsd'), { recursive: true, force: true })
+    // Belt and braces alongside parking it off-window: the hidden flag keeps
+    // `.background` out of an ordinary Finder window regardless of layout.
+    spawnSync('chflags', ['-h', 'hidden', path.join(layoutMount, '.background')], { stdio: 'ignore' })
+
     run('hdiutil', ['detach', layoutMount])
     layoutMounted = false
 
@@ -487,13 +590,14 @@ function sealBundle(imagePath: string): void {
     }
     run('hdiutil', ['detach', mountDir])
     mounted = false
-    console.log(`[desktop] window: ${landed.width}x${landed.height}, ${landed.iconSize}pt icons, ${Object.keys(landed.items).length} placed`)
+    const artwork = landed.backgroundType === 2 ? 'with artwork' : 'no artwork'
+    console.log(`[desktop] window: ${landed.width}x${landed.height}, ${landed.iconSize}pt icons, ${Object.keys(landed.items).length} placed, ${artwork}`)
   }
   finally {
     // Either mount can be left attached by a throw, and a leaked one holds the
     // temp directory open so the cleanup below silently does nothing.
     for (const [attached, target] of [[mounted, mountDir], [layoutMounted, layoutMount]] as const) {
-      if (attached) {
+      if (attached && target) {
         spawnSync('hdiutil', ['detach', target], {
           stdio: 'inherit',
           cwd: ROOT,

@@ -48,16 +48,103 @@ export const DMG_WINDOW_FIXTURE: string = path.join(import.meta.dir, '../app/Des
  */
 export const DMG_WINDOW = {
   width: 660,
-  height: 400,
+  height: 460,
+  /**
+   * The background picture is shorter than the window, and has to be.
+   *
+   * Finder draws it at the top-left of the *content* area, one pixel per
+   * point, and the content area is the window minus its title and status
+   * bars — about 400pt of a 460pt window. A 460-tall image loses its bottom
+   * line off the end, which is how the footer went missing. Launchpad's DMG
+   * ships 660x400 in a 660x460 window for exactly this reason.
+   */
+  backgroundHeight: 400,
   iconSize: 128,
   arrangeBy: 'none',
-  /** 0 is "no background". Anything else means an unportable `BKGD` alias. */
+  /**
+   * 0 is "no background", which is what the committed fallback carries.
+   *
+   * The shipped image gets 2 — an actual picture — but that cannot be baked
+   * into a fixture: Finder stores it as a `backgroundImageAlias` bound to the
+   * volume it was authored on, and the alias does not resolve on any other
+   * volume. Measured both ways, including against a second volume with an
+   * identical name, which still came back with no background. So the build
+   * sets the background on the real volume and only falls back to this.
+   */
   backgroundType: 0,
   items: {
-    'SystemCleaner.app': { x: 165, y: 180 },
-    'Applications': { x: 495, y: 180 },
+    'SystemCleaner.app': { x: 165, y: 200 },
+    'Applications': { x: 495, y: 200 },
   },
 } as const
+
+/** Where the background lives inside the volume, if the build manages to set one. */
+export const DMG_BACKGROUND_IN_VOLUME = '.background/installer.png'
+
+/** Where the window opens on screen. Only its size is asserted; macOS clamps the origin. */
+const SCREEN_ORIGIN = { x: 200, y: 120 }
+
+/**
+ * The AppleScript that arranges a mounted volume's window.
+ *
+ * Shared, because there are two callers and they must agree: the authoring
+ * script bakes the no-background version into the committed fixture, and the
+ * build runs the background version against the volume it is about to ship. A
+ * drift between them would mean the fallback layout is not the layout.
+ *
+ * Takes the volume name as `argv`, so a caller never has to quote it into the
+ * source. Bounds are set *last*, and that ordering is load-bearing: hiding the
+ * toolbar rebuilds the window, so a size set before it is silently discarded —
+ * the first run of this asked for 660x400 and Finder recorded 920x464, its own
+ * default, with every other property correct.
+ */
+export function finderLayoutScript(options: { background?: boolean } = {}): string {
+  const { x, y } = SCREEN_ORIGIN
+  const app = DMG_WINDOW.items['SystemCleaner.app']
+  const applications = DMG_WINDOW.items.Applications
+  // `.background:installer.png` is a colon path relative to the disk, which is
+  // how AppleScript addresses a file inside the volume being told to open.
+  //
+  // The folder holding it is parked below the window's bottom edge, which is
+  // what Launchpad's DMG does too. Dot-directories are invisible to most
+  // people, but anyone who has turned on hidden files -- and plenty of
+  // developers have -- otherwise gets two blue folders sitting on top of the
+  // headline. Giving it a position outside the visible area costs nothing and
+  // puts it out of view either way.
+  const background = options.background
+    ? `      set background picture of opts to file "${DMG_BACKGROUND_IN_VOLUME.replace('/', ':')}"\n`
+    : ''
+
+  return `on run argv
+  set vol to item 1 of argv
+  tell application "Finder"
+    tell disk vol
+      open
+      set current view of container window to icon view
+      set toolbar visible of container window to false
+      set statusbar visible of container window to false
+      set opts to the icon view options of container window
+      set arrangement of opts to not arranged
+      set icon size of opts to ${DMG_WINDOW.iconSize}
+      set text size of opts to 12
+      set label position of opts to bottom
+      set shows item info of opts to false
+${background}      try
+        set position of item ".background" of container window to {${DMG_WINDOW.width - 160}, ${DMG_WINDOW.height + 140}}
+      end try
+${background ? '' : ''}      set position of item "SystemCleaner.app" of container window to {${app.x}, ${app.y}}
+      set position of item "Applications" of container window to {${applications.x}, ${applications.y}}
+      delay 1
+      set the bounds of container window to {${x}, ${y}, ${x + DMG_WINDOW.width}, ${y + DMG_WINDOW.height}}
+      delay 1
+      update without registering applications
+      delay 2
+      close
+    end tell
+  end tell
+end run
+`
+}
 
 export interface DmgWindowLayout {
   /** Window size in points. */
