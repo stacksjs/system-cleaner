@@ -1,0 +1,104 @@
+# Build, sign and notarize the macOS DMG on whichever runner the caller names.
+#
+# A workflow of its own only so the release can call it twice. v0.3.15 was
+# published without an installer: GitHub never allocated a `macos-26` runner,
+# cancelled the job after fifteen minutes without running a single step, and
+# the release went out with the binaries and the Windows bundle but no .dmg
+# and no `update.json` — so every installed copy polling for an update found
+# nothing. The retry is a second call to this file on a different image.
+#
+# Duplicating the job would have been the smaller diff and the worse answer:
+# two copies of a signing and notarization sequence drift, and the copy that
+# only runs when the first one failed is the copy nobody notices has rotted.
+name: Desktop DMG
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: The runner image to build on.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  dmg:
+    name: ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner }}
+    # Generous on purpose. A clean build is a few minutes, but it waits on
+    # Apple's notary service, which has no stated upper bound and has taken
+    # the better part of ten minutes before now. This is here to stop a hung
+    # notarization holding a runner for six hours, not to police a slow one.
+    timeout-minutes: 45
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # Brings in the Craft runtime this project declares in deps.yaml, and
+      # imports the Developer ID identity into an ephemeral keychain that its
+      # post step deletes even if the job is cancelled.
+      # Passed as inputs, not env. The action falls back to
+      # `APPLE_APPLICATION_CERTIFICATE` / `APPLE_CERTIFICATE_PASSWORD`, and the
+      # env block here named the certificate `APPLE_APP_CERTIFICATE_BASE64` —
+      # the repository *secret's* name, not the one the action reads. It saw no
+      # certificate at all and stopped with "Apple code signing requires an
+      # application certificate" before a single build step ran.
+      - name: Setup Pantry
+        uses: pantry-pm/pantry/packages/action@v0.11.74
+        with:
+          apple-signing: 'true'
+          apple-signing-application-certificate: ${{ secrets.DEVELOPER_ID_CERTIFICATE_BASE64 }}
+          apple-signing-certificate-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+      - name: Install Dependencies
+        run: bun install
+
+      - name: Store notary credentials
+        run: |
+          xcrun notarytool store-credentials systemcleaner \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD"
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+
+      - name: Build, sign, and notarize
+        run: bun run build:app
+        env:
+          DESKTOP_SIGNING_IDENTITY: ${{ vars.DESKTOP_SIGNING_IDENTITY_NAME }}
+          NOTARY_PROFILE: systemcleaner
+
+      # `build:app` images into `desktop-dmg`; `desktop-dist` holds the compiled
+      # binaries that go *inside* the bundle. Globbing the latter matched no
+      # file, and the pantry action treats an empty match as nothing to upload,
+      # so the job went green having attached no installer at all.
+      #
+      # `update.json` rides along because installed copies fetch it from
+      # `releases/latest/download/update.json` to learn they are behind. A
+      # release with the DMG and without the manifest ships an update nobody
+      # already running the app will ever be offered.
+      - name: Attach the DMG and update manifest to the release
+        uses: pantry-pm/pantry/packages/action@v0.11.74
+        with:
+          install: 'false'
+          release: 'true'
+          release-files: |
+            storage/framework/desktop-dmg/*.dmg
+            storage/framework/desktop-dmg/update.json
+          release-checksums: sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
