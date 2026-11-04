@@ -1,5 +1,35 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.11...v0.3.13)
+
+## ✨ Features
+
+- **permissions**: show what every app has been granted ([bfc65e3](https://github.com/stacksjs/system-cleaner/commit/bfc65e3)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#35](https://github.com/stacksjs/system-cleaner/issues/35), [#26](https://github.com/stacksjs/system-cleaner/issues/26))
+- **maintenance**: list and delete local APFS snapshots ([6917e4a](https://github.com/stacksjs/system-cleaner/commit/6917e4a)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#33](https://github.com/stacksjs/system-cleaner/issues/33), [#26](https://github.com/stacksjs/system-cleaner/issues/26))
+
+## 🐛 Bug Fixes
+
+- **maintenance**: rebuild every volume's Spotlight index, not just the sealed one ([0781423](https://github.com/stacksjs/system-cleaner/commit/0781423)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#26](https://github.com/stacksjs/system-cleaner/issues/26))
+
+## Contributors
+
+- _glennmichael123 <gtorregosa@gmail.com>_
+
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.11...v0.3.12)
+
+## ✨ Features
+
+- **permissions**: show what every app has been granted ([bfc65e3](https://github.com/stacksjs/system-cleaner/commit/bfc65e3)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#35](https://github.com/stacksjs/system-cleaner/issues/35), [#26](https://github.com/stacksjs/system-cleaner/issues/26))
+- **maintenance**: list and delete local APFS snapshots ([6917e4a](https://github.com/stacksjs/system-cleaner/commit/6917e4a)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#33](https://github.com/stacksjs/system-cleaner/issues/33), [#26](https://github.com/stacksjs/system-cleaner/issues/26))
+
+## 🐛 Bug Fixes
+
+- **maintenance**: rebuild every volume's Spotlight index, not just the sealed one ([0781423](https://github.com/stacksjs/system-cleaner/commit/0781423)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#26](https://github.com/stacksjs/system-cleaner/issues/26))
+
+## Contributors
+
+- _glennmichael123 <gtorregosa@gmail.com>_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.10...v0.3.11)
 
 ## 🐛 Bug Fixes
