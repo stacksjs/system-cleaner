@@ -1,5 +1,16 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.14...v0.3.15)
+
+## ✨ Features
+
+- **dmg**: put artwork behind the installer window ([b041783](https://github.com/stacksjs/system-cleaner/commit/b041783)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+- **dmg**: arrange the installer window instead of letting Finder guess ([bd4b987](https://github.com/stacksjs/system-cleaner/commit/bd4b987)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+
+## Contributors
+
+- _glennmichael123 <gtorregosa@gmail.com>_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.13...v0.3.14)
 
 ## ✨ Features
