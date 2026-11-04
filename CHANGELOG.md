@@ -1,5 +1,19 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.13...v0.3.14)
+
+## ✨ Features
+
+- **similar**: find photos that look the same without being the same file ([e41d48b](https://github.com/stacksjs/system-cleaner/commit/e41d48b)) _(by glennmichael123 <gtorregosa@gmail.com>)_ ([#34](https://github.com/stacksjs/system-cleaner/issues/34))
+
+## 🐛 Bug Fixes
+
+- **ci**: verify a release once it has assets, not when it is created ([9e0b29f](https://github.com/stacksjs/system-cleaner/commit/9e0b29f)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+
+## Contributors
+
+- _glennmichael123 <gtorregosa@gmail.com>_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.11...v0.3.13)
 
 ## ✨ Features
