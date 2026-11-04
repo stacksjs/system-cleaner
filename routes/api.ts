@@ -68,7 +68,7 @@ import {
   // and this is the guard deciding what may be deleted. It has to look now.
   discoverStartupItems,
 } from '@system-cleaner/uninstall';
-import { categoryPresentation, findProjectArtifacts, shredPaths } from '@system-cleaner/disk';
+import { categoryPresentation, findProjectArtifacts, findSimilarImages, renderImageThumbnail, shredPaths, THUMBNAIL_SIZES } from '@system-cleaner/disk';
 import { getTopProcesses, sampleCpuUsage, summarizeProcesses } from '@system-cleaner/monitor';
 import { recordSystemActivity } from '../app/Support/System/activity-chart';
 import { isLocalAgent } from '../app/Support/Runtime/local-agent';
@@ -1599,6 +1599,165 @@ export default async function (router: Router) {
     catch (err: any) {
       return Response.json({ success: false, error: err.message || 'Could not open System Settings' });
     }
+  });
+
+  // ── Similar images ──────────────────────────────────────────
+
+  /**
+   * The last scan, and the paths it is therefore willing to talk about.
+   *
+   * Thumbnails and deletes are both checked against this, following the rule
+   * `/app-icon` already sets: a caller cannot steer the agent at an
+   * arbitrary file, because every path it acts on came from an enumeration
+   * the agent performed itself.
+   */
+  let similarScan: {
+    paths: Set<string>;
+    keepers: Set<string>;
+  } | null = null;
+
+  let similarScanInFlight = false;
+
+  await router.post('/similar-images-scan', async (req: Request) => {
+    if (similarScanInFlight)
+      return Response.json({ success: false, error: 'A scan is already in progress' }, { status: 409 });
+
+    const body = await readJsonBody<{ path?: unknown; threshold?: unknown }>(req);
+    if (body === null) return badJson();
+
+    let root = HOME;
+    if (typeof body.path === 'string' && body.path) {
+      const resolved = path.isAbsolute(body.path) ? path.resolve(body.path) : path.resolve(HOME, body.path);
+      if (resolved === HOME || resolved.startsWith(`${HOME}/`) || resolved.startsWith('/Volumes/'))
+        root = resolved;
+      else
+        return badRequest('Scan root must be your home directory or an external volume', 403);
+    }
+
+    // 0 means byte-identical pixels and 20 is well past where unrelated
+    // photographs begin to match; outside that the number is not a
+    // judgement this UI should be able to express.
+    const threshold = typeof body.threshold === 'number' && body.threshold >= 0 && body.threshold <= 20
+      ? Math.round(body.threshold)
+      : undefined;
+
+    similarScanInFlight = true;
+    try {
+      const result = await findSimilarImages({ roots: [root], threshold });
+      similarScan = {
+        paths: new Set(result.groups.flatMap(g => g.files.map(f => f.path))),
+        keepers: new Set(result.groups.map(g => g.keeperPath)),
+      };
+
+      return Response.json({
+        success: true,
+        supported: result.supported,
+        root,
+        candidates: result.candidates,
+        hashed: result.hashed,
+        grouped: result.grouped,
+        truncated: result.truncated,
+        scanTimeMs: result.scanTimeMs,
+        totalWastedBytes: result.totalWastedBytes,
+        totalWastedFormatted: result.totalWastedFormatted,
+        groups: result.groups.map(g => ({
+          id: g.id,
+          count: g.count,
+          keeperPath: g.keeperPath,
+          spread: g.spread,
+          wastedBytes: g.wastedBytes,
+          wastedFormatted: g.wastedFormatted,
+          files: g.files.map(f => ({
+            path: f.path,
+            name: f.name,
+            sizeBytes: f.sizeBytes,
+            sizeFormatted: f.sizeFormatted,
+            width: f.width,
+            height: f.height,
+            distance: f.distance,
+          })),
+        })),
+      });
+    }
+    finally {
+      similarScanInFlight = false;
+    }
+  });
+
+  /**
+   * A thumbnail of one image from the last scan.
+   *
+   * Near-duplicates cannot be judged from filenames, so this is the one
+   * screen in the app that has to show the user their own photographs. The
+   * path must be one the last scan returned, or this would be an endpoint
+   * that renders any file on the disk on request.
+   */
+  await router.get('/similar-thumb', async (req: Request) => {
+    const url = new URL(req.url);
+    const target = url.searchParams.get('path');
+    if (!target) return badRequest('path is required');
+
+    if (!similarScan || !similarScan.paths.has(target))
+      return new Response('Not part of the last scan', { status: 403 });
+
+    const requested = Number.parseInt(url.searchParams.get('size') || '160', 10);
+    const size = (THUMBNAIL_SIZES as readonly number[]).includes(requested)
+      ? requested as typeof THUMBNAIL_SIZES[number]
+      : 160;
+
+    const jpeg = renderImageThumbnail(target, size);
+    if (!jpeg) return new Response('Could not render', { status: 404 });
+
+    return new Response(Bun.file(jpeg), {
+      headers: {
+        'Content-Type': 'image/jpeg',
+        // Keyed on path, mtime and size, so it cannot go stale.
+        'Cache-Control': 'private, max-age=3600',
+      },
+    });
+  });
+
+  /**
+   * Move chosen near-duplicates to the Trash.
+   *
+   * Two refusals rather than one. A path has to belong to the last scan, and
+   * it must not be a keeper — the keeper is the copy the screen presents as
+   * the one being kept, and an interface that deletes the file it just said
+   * it was keeping is the sort of thing nobody notices until the photograph
+   * is gone.
+   *
+   * `bulkDelete` in trash mode, never a permanent delete: everything here is
+   * inferred from a 64-bit hash, and #34 is explicit that nothing may be
+   * removed beyond recovery on that basis. It also brings the protected-path
+   * and git-tracked gates, and records the run in the history.
+   */
+  await router.post('/delete-similar', async (req: Request) => {
+    const body = await readJsonBody<{ paths: unknown }>(req);
+    if (body === null) return badJson();
+
+    const requested = sanitizeStringArray(body.paths, MAX_BULK_PATHS);
+    if (requested === null) return badRequest('paths must be a non-empty string array');
+
+    if (!similarScan)
+      return badRequest('Scan for similar images before deleting any', 403);
+
+    if (requested.some(p => similarScan!.keepers.has(p)))
+      return badRequest('That set includes a copy this scan marked as the one to keep', 403);
+
+    const targets = requested.filter(p => similarScan!.paths.has(p));
+    if (targets.length === 0)
+      return badRequest('None of those images were in the last scan', 403);
+
+    const result = await bulkDelete(targets, 'trash', 'similar-images');
+    invalidateSizeCaches();
+    dashboardStatsCache.clear();
+
+    // The scan now describes files that are gone, and a thumbnail request
+    // for one would 404 rather than explain itself.
+    for (const gone of result.succeeded)
+      similarScan.paths.delete(gone);
+
+    return Response.json({ success: result.failed.length === 0, ...result });
   });
 
   // ── App permissions ─────────────────────────────────────────

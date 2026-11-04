@@ -1,0 +1,162 @@
+<!--
+  Similar Images.
+
+  A gallery rather than a table, because that is the difference between this
+  screen and Duplicates. Exact duplicates can be confirmed from a list: every
+  copy is byte-identical and the only question is which path to keep. These
+  cannot. "Similar" is a judgement the app is making from 64 bits, and the
+  only honest way to present it is the photographs themselves, side by side,
+  at a size where someone can see what they are about to throw away.
+-->
+<div class='card-row'>
+  <div class='card'>
+    <div class='card-label'>Groups</div>
+    <div class='card-value' x-text="scanning ? '…' : (scanned ? groups.length : '—')">—</div>
+    <div class='card-detail' x-text="scanned ? grouped + ' images across them' : 'Not scanned yet'"></div>
+  </div>
+  <div class='card'>
+    <div class='card-label'>Recoverable</div>
+    <div class='card-value' x-text="scanning ? '…' : (scanned ? wasted : '—')">—</div>
+    <div class='card-detail'>Keeping the best copy of each</div>
+  </div>
+  <div class='card'>
+    <div class='card-label'>Selected</div>
+    <div class='card-value' :style="selected.length ? 'color: var(--orange);' : ''" x-text='selected.length'>0</div>
+    <div class='card-detail'>Nothing is ever pre-selected</div>
+  </div>
+</div>
+
+<div class='tbl-wrap'>
+  <div class='tbl-bar'>
+    <div>
+      <span class='tbl-title'>Similar Images</span>
+      <span class='tbl-count'
+        x-text="scanning ? 'scanning…' : (scanned ? candidates + ' images examined in ' + (scanMs / 1000).toFixed(1) + 's' : 'photos, screenshots and exports in your home folder')"></span>
+    </div>
+    <div class='si-bar'>
+      <span class='si-root' :title='root' x-text="'in ' + scanLabel()"></span>
+      <button class='btn btn-sm btn-icon' @click='pickRoot()' :disabled='scanning'>
+        <span class='i-f7-folder' aria-hidden='true'></span>
+        Choose Folder&hellip;
+      </button>
+      <button class='btn btn-danger btn-sm' x-show='selected.length > 0' x-cloak @click='deletePicked()' :disabled='busy'
+        x-text="busy ? 'Moving…' : 'Move ' + selected.length + ' to Trash'"></button>
+      <button class='btn btn-sm' data-rescan @click='scan()' :disabled='scanning'
+        x-text="scanning ? 'Scanning…' : (scanned ? 'Rescan' : 'Scan')">Scan</button>
+    </div>
+  </div>
+
+  <div class='si-note' x-show='scanning'>
+    Resampling every image to a 9&times;8 grid and comparing them. A large
+    photo library takes a few minutes.
+  </div>
+
+  <!-- `sips` is Apple's, and the decode has no other implementation here.
+       Reporting zero groups off macOS would read as "no similar images". -->
+  <div class='si-note' x-show='scanned && !supported' x-cloak>
+    Finding similar images relies on macOS&rsquo;s own image decoder, so this
+    screen only works on a Mac.
+  </div>
+
+  <div class='si-note' x-show='!scanning && !scanned' x-cloak>
+    Nothing scanned yet. This looks for photographs that are visually the same
+    without being the same file &mdash; a burst where you wanted one frame, a
+    HEIC and its JPEG export, an image re-saved at a different size or quality.
+    Byte-identical copies belong on the <strong>Duplicates</strong> screen; this
+    one finds what that scan cannot see.
+  </div>
+
+  <div class='si-note' x-show='scanned && supported && groups.length === 0' x-cloak>
+    No similar images found among the <span x-text='candidates'></span> examined.
+  </div>
+
+  <div class='si-note' x-show='truncated' x-cloak>
+    The scan stopped early, so there may be more. Use
+    <strong>Choose Folder</strong> to narrow it for a complete answer.
+  </div>
+
+  <div class='si-groups' x-show='groups.length > 0' x-cloak>
+    <template x-for='group in groups' :key='group.id'>
+      <div class='si-group'>
+        <div class='si-group-head'>
+          <div>
+            <span class='si-group-title' x-text="group.count + ' copies'"></span>
+            <!-- The reason, in words. A distance of 0-64 means nothing to
+                 anyone who has not read the hashing code. -->
+            <span class='si-group-why' x-text='matchWord(group)'></span>
+          </div>
+          <div class='si-group-actions'>
+            <span class='si-group-waste' x-text="'frees ' + group.wastedFormatted"></span>
+            <button class='btn btn-sm' @click='selectOthers(group)'
+              x-text="groupPicked(group) === group.count - 1 ? 'Deselect' : 'Select the other ' + (group.count - 1)"></button>
+          </div>
+        </div>
+
+        <div class='si-shots'>
+          <template x-for='file in group.files' :key='file.path'>
+            <figure class='si-shot'
+              :class="isKeeper(group, file) ? 'is-keeper' : (isPicked(file.path) ? 'is-picked' : '')"
+              @click='toggle(group, file)'
+              :title='file.path'>
+              <div class='si-frame'>
+                <img class='si-img' loading='lazy' :src='thumb(file, 160)' :alt='file.name'>
+                <span class='si-badge si-keep' x-show='isKeeper(group, file)' x-cloak>keeping</span>
+                <span class='si-badge si-pick' x-show='isPicked(file.path)' x-cloak>
+                  <span class='i-f7-checkmark-alt' aria-hidden='true'></span>
+                </span>
+              </div>
+              <figcaption>
+                <span class='si-name' x-text='file.name'></span>
+                <span class='si-meta' x-text="dimensions(file) + ' · ' + file.sizeFormatted"></span>
+                <span class='si-meta si-dim' x-text='shortPath(file.path)'></span>
+              </figcaption>
+            </figure>
+          </template>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <!-- Last, because it governs every group above it. -->
+  <div class='si-caveat' x-show='groups.length > 0' x-cloak>
+    <strong>These are a judgement, not a fact.</strong>
+    Exact duplicates can be matched with certainty; visual similarity cannot.
+    Each group is images whose 64-bit visual fingerprints are close, which
+    catches re-encodes and resizes almost perfectly and is less sure about
+    crops and bursts. Nothing is selected for you, the copy marked
+    <strong>keeping</strong> can never be selected, and anything you do choose
+    goes to the Trash rather than being erased &mdash; so the last look is
+    always yours.
+  </div>
+</div>
+
+<style>
+.si-bar { display: flex; align-items: center; gap: var(--space-tight); }
+.si-root { max-width: 26ch; overflow: hidden; color: var(--secondary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.si-note { padding: var(--space-3) var(--space-4); max-width: 74ch; color: var(--secondary); font-size: 11px; line-height: 1.7; }
+.si-note strong { color: var(--ink); }
+.si-groups { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3) var(--space-4); }
+.si-group { border: .5px solid var(--line); border-radius: 8px; background: var(--surface-soft); }
+.si-group-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-bottom: .5px solid var(--line); }
+.si-group-title { font-size: 12px; font-weight: 600; }
+.si-group-why { margin-left: var(--space-2); color: var(--secondary); font-size: 11px; }
+.si-group-actions { display: flex; align-items: center; gap: var(--space-2); }
+.si-group-waste { color: var(--secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
+.si-shots { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-3); }
+.si-shot { width: 168px; margin: 0; cursor: pointer; }
+.si-frame { position: relative; overflow: hidden; height: 126px; border: 1.5px solid transparent; border-radius: 7px; background: var(--surface); }
+.si-img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.si-shot.is-keeper { cursor: default; }
+.si-shot.is-keeper .si-frame { border-color: color-mix(in srgb, var(--green) 65%, transparent); }
+.si-shot.is-picked .si-frame { border-color: var(--orange); }
+.si-badge { position: absolute; top: 5px; left: 5px; padding: 1px 6px; border-radius: 4px; font-size: 9px; font-weight: 600; letter-spacing: .02em; }
+.si-keep { background: var(--green); color: #fff; }
+.si-pick { right: 5px; left: auto; display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; padding: 0; border-radius: 50%; background: var(--orange); color: #fff; }
+.si-pick span { width: 11px; height: 11px; }
+.si-shot figcaption { display: flex; flex-direction: column; gap: 1px; padding-top: var(--space-1); }
+.si-name { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.si-meta { color: var(--secondary); font-size: 10px; font-variant-numeric: tabular-nums; }
+.si-dim { overflow: hidden; font-family: 'SF Mono', Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; opacity: .75; }
+.si-caveat { margin: 0 var(--space-4) var(--space-3); max-width: 74ch; padding: var(--space-3); border: .5px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--accent) 8%, var(--surface)); color: var(--secondary); font-size: 11px; line-height: 1.6; }
+.si-caveat strong { color: var(--ink); }
+</style>

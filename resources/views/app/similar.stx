@@ -1,0 +1,188 @@
+@extends('layouts/app')
+@section('nav', 'similar')
+@section('body')
+
+<!--
+  Similar Images — photos that look the same without being the same file.
+
+  Duplicates is exact-match by construction: it buckets by byte size first,
+  so two JPEGs of one scene never reach its hashing passes. This screen is
+  the other half. See #34.
+
+  No `//` comments and no double quotes inside this `x-data`: STX flattens
+  the attribute onto one line, and either kills the whole object silently.
+  `tests/xdata-parses.test.ts` guards both.
+
+  Commentary that belongs to this state:
+
+  - Nothing is ever pre-selected. Every group here is a judgement the app
+    inferred from a 64-bit hash, and a photograph has no undo. The user
+    picks, with the pictures in front of them; `selectOthers` is a
+    convenience that still requires a click per group.
+  - The keeper is never selectable. The server refuses it too, so this is
+    the visible half of a rule enforced in both places.
+  - `selected` is rebuilt by assignment rather than mutated, per the x-data
+    rule in AGENTS.md.
+-->
+<div x-data="{
+  groups: [],
+  selected: [],
+  scanning: false,
+  scanned: false,
+  supported: true,
+  root: '',
+  candidates: 0,
+  grouped: 0,
+  wasted: '0 B',
+  truncated: false,
+  scanMs: 0,
+  busy: false,
+  toasts: [],
+  toastId: 0,
+
+  post(endpoint, data) {
+    return fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data || {}),
+    }).then(function(r) {
+      if (!r.ok && r.status !== 400 && r.status !== 403 && r.status !== 409) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  },
+
+  async pickRoot() {
+    var picked = await window.nativeChooseFolder('Choose a folder to scan for similar images');
+    if (picked) { this.root = picked; this.scan(); }
+  },
+
+  scanLabel() {
+    if (!this.root) return 'your home folder';
+    return this.shortPath(this.root);
+  },
+
+  scan() {
+    if (this.scanning) return;
+    var self = this;
+    this.scanning = true;
+    this.selected = [];
+    this.post('/api/similar-images-scan', this.root ? { path: this.root } : {}).then(function(r) {
+      self.scanning = false;
+      self.scanned = true;
+      if (!r.success) { self.toast(r.error || 'Scan failed', 'error'); return; }
+      self.supported = r.supported !== false;
+      self.groups = r.groups || [];
+      self.root = r.root || '';
+      self.candidates = r.candidates || 0;
+      self.grouped = r.grouped || 0;
+      self.wasted = r.totalWastedFormatted || '0 B';
+      self.truncated = r.truncated === true;
+      self.scanMs = r.scanTimeMs || 0;
+    }).catch(function(err) {
+      self.scanning = false;
+      self.toast('Scan failed: ' + (err && err.message ? err.message : 'network'), 'error');
+    });
+  },
+
+  thumb(file, size) {
+    return '/api/similar-thumb?size=' + (size || 160) + '&path=' + encodeURIComponent(file.path);
+  },
+
+  isKeeper(group, file) { return file.path === group.keeperPath; },
+  isPicked(p) { return this.selected.indexOf(p) !== -1; },
+
+  toggle(group, file) {
+    if (this.isKeeper(group, file)) return;
+    this.selected = this.isPicked(file.path)
+      ? this.selected.filter(function(x) { return x !== file.path; })
+      : this.selected.concat([file.path]);
+  },
+
+  selectOthers(group) {
+    var others = group.files.filter(function(f) { return f.path !== group.keeperPath; }).map(function(f) { return f.path; });
+    var picked = this.selected;
+    var allOn = others.every(function(p) { return picked.indexOf(p) !== -1; });
+    this.selected = allOn
+      ? picked.filter(function(p) { return others.indexOf(p) === -1; })
+      : picked.concat(others.filter(function(p) { return picked.indexOf(p) === -1; }));
+  },
+
+  groupPicked(group) {
+    var picked = this.selected;
+    return group.files.filter(function(f) { return picked.indexOf(f.path) !== -1; }).length;
+  },
+
+  matchWord(group) {
+    if (group.spread === 0) return 'pixel-identical once resized';
+    if (group.spread <= 3) return 'near-identical, likely a re-encode or resize';
+    if (group.spread <= 7) return 'very similar';
+    return 'loosely similar, look closely';
+  },
+
+  dimensions(file) { return file.width + ' x ' + file.height; },
+
+  shortPath(p) {
+    if (!p || p.indexOf('/Users/') !== 0) return p;
+    var rest = p.slice(7);
+    var slash = rest.indexOf('/');
+    return '~' + (slash >= 0 ? rest.slice(slash) : '');
+  },
+
+  async deletePicked() {
+    if (this.busy || this.selected.length === 0) return;
+    var n = this.selected.length;
+    if (!await window.nativeConfirm({
+      title: 'Move ' + n + ' image(s) to the Trash?',
+      message: 'These are copies this scan judged similar to one it is keeping. They go to the Trash, so you can look before emptying it.',
+      confirmLabel: 'Move to Trash',
+      destructive: true,
+    })) return;
+
+    var self = this;
+    this.busy = true;
+    this.post('/api/delete-similar', { paths: this.selected }).then(function(r) {
+      self.busy = false;
+      var gone = {};
+      (r.succeeded || []).forEach(function(p) { gone[p] = true; });
+      if ((r.succeeded || []).length > 0) {
+        self.groups = self.groups.map(function(g) {
+          return Object.assign({}, g, { files: g.files.filter(function(f) { return !gone[f.path]; }) });
+        }).filter(function(g) { return g.files.length > 1; });
+        self.selected = self.selected.filter(function(p) { return !gone[p]; });
+        self.toast('Moved ' + r.succeeded.length + ' image(s) to the Trash - freed ' + (r.freedFormatted || ''), 'success');
+      }
+      (r.skipped || []).slice(0, 2).forEach(function(s) { self.toast(s.reason, 'info'); });
+      (r.failed || []).slice(0, 2).forEach(function(f) { self.toast(f.error, 'error'); });
+      if (!r.success && !(r.failed || []).length && !(r.succeeded || []).length) self.toast(r.error || 'Nothing was moved', 'error');
+    }).catch(function(err) {
+      self.busy = false;
+      self.toast('Delete failed: ' + (err && err.message ? err.message : 'network'), 'error');
+    });
+  },
+
+  toast(msg, type) {
+    var id = ++this.toastId;
+    this.toasts = [...this.toasts, { id: id, msg: msg, type: type || 'info' }];
+    var self = this;
+    setTimeout(function() { self.toasts = self.toasts.filter(function(t) { return t.id !== id; }); }, 6000);
+  },
+}">
+
+<div class='toast-area'>
+  <template x-for='note in toasts' :key='note.id'>
+    <div class='toast'>
+      <span class='toast-glyph' :class="note.type === 'success' ? 'i-f7-checkmark-alt-circle-fill' : note.type === 'error' ? 'i-f7-xmark-circle-fill' : 'i-f7-exclamationmark-triangle-fill'" aria-hidden='true'></span>
+      <span x-text='note.msg'></span>
+    </div>
+  </template>
+</div>
+
+<div class='main-header'>
+  <div class='main-title'>Similar Images</div>
+  <div class='main-subtitle'>Photos that look the same without being the same file &mdash; bursts, re-exports and resized copies</div>
+</div>
+<div class='main-content'>
+  <SimilarImagesPanel />
+</div>
+</div>
+@endsection
