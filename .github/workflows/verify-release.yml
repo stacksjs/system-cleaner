@@ -27,8 +27,28 @@ on:
         type: string
   # Every published release verifies itself, so the question is never left to
   # whoever remembers to ask.
-  release:
-    types: [published]
+  #
+  # On `Releaser` finishing, *not* on `release: published`. The release is
+  # created before anything is built — `bumpx` publishes it and the tag push
+  # then starts `Releaser`, which attaches the binaries, the DMG, the Windows
+  # bundle and the manifests over the following several minutes. A
+  # `release: published` trigger therefore fires against a release with no
+  # assets on it, and this job failed on every release it ever ran for:
+  #
+  #     verifying v0.3.13
+  #     no assets to download
+  #     could not download v0.3.13
+  #
+  # v0.3.11 and v0.3.13 both failed this way, which is a verification job that
+  # has never once verified a release — worse than not having one, because the
+  # red X stops meaning anything.
+  #
+  # `workflow_run` only fires for the copy of this file on the default branch,
+  # and only after `Releaser` has reached a conclusion, which is exactly when
+  # the assets exist.
+  workflow_run:
+    workflows: [Releaser]
+    types: [completed]
 
 permissions:
   contents: read
@@ -36,6 +56,12 @@ permissions:
 jobs:
   windows:
     name: The published Windows bundle opens a window
+    # A failed `Releaser` has nothing to verify, and reporting that as a
+    # verification failure would blame the wrong job. `workflow_dispatch`
+    # carries no `workflow_run`, so it is allowed through explicitly.
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || github.event.workflow_run.conclusion == 'success'
     runs-on: windows-latest
     timeout-minutes: 15
 
@@ -47,7 +73,9 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $tag = '${{ inputs.tag }}'
-          if (-not $tag) { $tag = '${{ github.event.release.tag_name }}' }
+          # `Releaser` runs off a `v*` tag push, so the run's head_branch is
+          # that tag. There is no `github.event.release` on a workflow_run.
+          if (-not $tag) { $tag = '${{ github.event.workflow_run.head_branch }}' }
           if (-not $tag) { $tag = (gh release view --repo $env:GITHUB_REPOSITORY --json tagName -q .tagName) }
           Write-Host "verifying $tag"
           "TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
