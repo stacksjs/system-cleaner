@@ -165,9 +165,22 @@ const MACOS_TASKS: Omit<MaintenanceTask, 'elevationLabel'>[] = [
   {
     id: 'spotlight',
     name: 'Rebuild Spotlight Index',
-    description: 'Erase and rebuild the Spotlight index for the boot volume',
+    description: 'Erase and rebuild the Spotlight index on every volume',
     effect: 'Fixes search that misses files you know are there. Reindexing runs for hours afterwards',
-    command: 'sudo mdutil -E /',
+    // `-a`, not `/`. Since Catalina the boot disk is a volume *group*: a
+    // sealed read-only system volume mounted at `/` and a data volume at
+    // `/System/Volumes/Data` holding `/Applications`, every home folder and
+    // everything else a person searches for. `mdutil -a -s` lists them
+    // separately and `man mdutil` says `-E` erases the store "for the
+    // volumes indicated", so `mdutil -E /` rebuilds the one index that was
+    // almost certainly fine and leaves the one that matters untouched.
+    //
+    // Found on a Mac whose data volume had no index at all: every one of
+    // the 290 bundles Spotlight knew about was under `/System`, 42 of the
+    // 43 apps in `/Applications` were unfindable, and this task could not
+    // have repaired any of it. The same broken index is what made the
+    // orphan scanner offer live apps for deletion in #26.
+    command: 'sudo mdutil -E -a',
     requiresSudo: true,
     category: 'storage',
     icon: 'i-f7-search',
