@@ -17,7 +17,7 @@
   </div>
   <div class='card'>
     <div class='card-label'>Total Size</div>
-    <div class='card-value' x-text="sizesPending ? '—' : fmtBytes(totalAppBytes())">—</div>
+    <div class='card-value' x-text="fmtBytes(totalAppBytes()) + (sizesPending ? ' so far' : '')">—</div>
     <div class='card-detail' x-text="sizesPending ? 'Measuring…' : 'Across every app bundle'">Measuring…</div>
   </div>
   <div class='card'>

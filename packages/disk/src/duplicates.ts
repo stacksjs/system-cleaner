@@ -62,6 +62,7 @@ export interface DuplicateScanOptions {
   hashBudgetBytes?: number
   includeDependencies?: boolean
   onProgress?: (scanned: number, currentPath: string) => void
+  onSnapshot?: (result: DuplicateScanResult) => void
 }
 
 export interface DuplicateScanResult {
@@ -210,6 +211,7 @@ export function findDuplicates(options: DuplicateScanOptions = {}): DuplicateSca
   let hashBudget = options.hashBudgetBytes ?? DEFAULT_HASH_BUDGET
 
   const started = Date.now()
+  let nextSnapshotAt = started
   const deadline = started + timeoutMs
   const onProgress = options.onProgress
   let nextProgressAt = onProgress ? started + PROGRESS_INTERVAL_MS : Number.POSITIVE_INFINITY
@@ -373,6 +375,12 @@ export function findDuplicates(options: DuplicateScanOptions = {}): DuplicateSca
               keep: file.path === keeper,
             })),
         })
+        if (Date.now() >= nextSnapshotAt) {
+          nextSnapshotAt = Date.now() + PROGRESS_INTERVAL_MS
+          options.onSnapshot?.({ groups: groups.slice().sort((a, b) => b.wastedBytes - a.wastedBytes).slice(0, limit), scanned,
+          groupCount: groups.length, duplicateCount, wastedBytes, wastedFormatted: formatBytes(wastedBytes),
+          truncated: truncated || groups.length > limit, scanTimeMs: Date.now() - started })
+        }
       }
     }
   }

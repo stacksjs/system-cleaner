@@ -532,6 +532,9 @@ const localAgent = isLocalAgent()
     .disk-sidebar-section { padding: var(--space-3); }
     .disk-sidebar-section + .disk-sidebar-section { border-top: .5px solid var(--line); }
     .disk-chart { position: relative; display: flex; flex: 1; align-items: center; justify-content: center; overflow: hidden; }
+    .disk-live-status { position: absolute; z-index: 2; inset: 12px 16px auto; padding: 10px 12px; border-radius: 8px; background: var(--surface); color: var(--secondary); font-size: 11px; pointer-events: none; }
+    .disk-live-status strong { color: var(--ink); }
+    .disk-live-status .scan-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .disk-chart::before { position: absolute; inset: 0; content: ''; pointer-events: none; background: radial-gradient(ellipse at center, var(--surface), var(--app-bg)); }
     .sunburst-svg { position: relative; z-index: 1; width: 100%; height: 100%; max-width: 640px; max-height: 640px; }
     .segment { stroke: var(--app-bg); stroke-width: .8; cursor: pointer; transition: opacity .18s, filter .18s; }
@@ -781,6 +784,7 @@ useEventListener('mousedown', moveWindowFrom, { target: document })
      web dialogs on the destructive actions, and every screen has one. -->
 <script src="/platform-gate.js"></script>
 <script src="/native-dialog.js"></script>
+<script src="/scan-updates.js"></script>
 <!-- Replaces AppKit's default menubar with one that knows this app: every
      screen on Cmd+1..9, Rescan on Cmd+R, and Edit's roles wired so Copy and
      Paste work in the filter fields. -->

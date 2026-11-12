@@ -69,7 +69,7 @@ export async function listInstalledApps(): Promise<{ apps: InstalledApp[], cache
 }
 
 /** Bundle sizes, keyed by path. Ten at a time, so the disk is busy but not thrashed. */
-export async function appSizes(): Promise<Record<string, number>> {
+export async function appSizes(onUpdate?: (sizes: Record<string, number>) => void): Promise<Record<string, number>> {
   const hit = appSizeCache.get('sizes')
   if (hit)
     return hit
@@ -82,9 +82,12 @@ export async function appSizes(): Promise<Record<string, number>> {
     const batch = apps.slice(i, i + BATCH)
     const measured = await Promise.all(batch.map(async (app) => {
       try {
-        return [app.path, await getDirSize(app.path)] as const
+        const size = await getDirSize(app.path)
+        onUpdate?.({ [app.path]: size })
+        return [app.path, size] as const
       }
       catch {
+        onUpdate?.({ [app.path]: 0 })
         return [app.path, 0] as const
       }
     }))

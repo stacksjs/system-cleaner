@@ -162,7 +162,7 @@ export async function scanDirectory(rootPath: string, options: ScanOptions = {})
   const deadline = scanStart + timeoutMs
   const onProgress = options.onProgress
 
-  let nextProgressAt = onProgress ? scanStart + PROGRESS_INTERVAL_MS : Number.POSITIVE_INFINITY
+  let nextProgressAt = (onProgress || options.onSnapshot) ? scanStart + PROGRESS_INTERVAL_MS : Number.POSITIVE_INFINITY
   let aborted = false
   let totalFiles = 0
   let totalFolders = 0
@@ -175,6 +175,7 @@ export async function scanDirectory(rootPath: string, options: ScanOptions = {})
     nextProgressAt = now + PROGRESS_INTERVAL_MS
     currentPath = dirPath
     onProgress?.(totalFiles + totalFolders, dirPath, measuredBytes)
+    publishSnapshot()
   }
 
   const rootEntry: DiskEntry = {
@@ -183,6 +184,41 @@ export async function scanDirectory(rootPath: string, options: ScanOptions = {})
     sizeBytes: 0,
     isDirectory: true,
     children: [],
+  }
+
+  function publishSnapshot(): void {
+    if (!options.onSnapshot) return
+    // Project without mutating the in-flight tree. Bound the wire payload and
+    // preserve omitted bytes in the parent, just as the final chart does.
+    const sizes = new WeakMap<DiskEntry, number>()
+    function knownSize(entry: DiskEntry): number {
+      const bytes = Math.max(entry.sizeBytes, (entry.children ?? []).reduce((sum, child) => sum + knownSize(child), 0))
+      sizes.set(entry, bytes)
+      return bytes
+    }
+    knownSize(rootEntry)
+    function copy(entry: DiskEntry): DiskEntry {
+      return { name: entry.name, path: entry.path, isDirectory: entry.isDirectory,
+        sizeBytes: sizes.get(entry)!, aggregate: entry.aggregate, children: [] }
+    }
+    const snapshot = copy(rootEntry)
+    const pending = [{ source: rootEntry, target: snapshot, depth: 0 }]
+    let remaining = 1999
+    for (let i = 0; i < pending.length && remaining > 0; i++) {
+      const { source, target, depth } = pending[i]
+      if (depth >= 3) continue
+      const candidates = (source.children ?? []).filter(child => sizes.get(child)! > 0)
+        .sort((a, b) => sizes.get(b)! - sizes.get(a)! || a.path.localeCompare(b.path))
+        .slice(0, depth === 0 ? 80 : 12)
+      for (const child of candidates) {
+        if (remaining-- <= 0) break
+        const node = copy(child)
+        target.children!.push(node)
+        pending.push({ source: child, target: node, depth: depth + 1 })
+      }
+    }
+    tidy(snapshot, Math.min(PRUNE_CEILING_BYTES, snapshot.sizeBytes * PRUNE_FRACTION), 0)
+    options.onSnapshot(snapshot)
   }
 
   /**
@@ -291,12 +327,14 @@ export async function scanDirectory(rootPath: string, options: ScanOptions = {})
   for (let i = head; i < queue.length; i++)
     toMeasure.push(queue[i])
 
+  const graftIndexes = new WeakMap<DiskEntry, Map<string, DiskEntry>>()
   const measured = await measureAll(toMeasure)
   totalFolders += measured.folders
   unreadableFolders += measured.unreadable
   if (measured.aborted) aborted = true
 
   rollUp(rootEntry)
+  publishSnapshot()
   tidy(rootEntry, Math.min(PRUNE_CEILING_BYTES, rootEntry.sizeBytes * PRUNE_FRACTION), 0)
 
   return {
@@ -329,8 +367,12 @@ export async function scanDirectory(rootPath: string, options: ScanOptions = {})
     // without any of the counters below moving. The UI reads a count that has
     // stopped as a scan that has stopped, so progress ticks on its own clock
     // and counts the directory lines `du` is streaming back.
-    const ticker = onProgress
-      ? setInterval(() => onProgress(totalFiles + totalFolders + folders, currentPath, measuredBytes), PROGRESS_INTERVAL_MS)
+    publishSnapshot()
+    const ticker = (onProgress || options.onSnapshot)
+      ? setInterval(() => {
+          onProgress?.(totalFiles + totalFolders + folders, currentPath, measuredBytes)
+          publishSnapshot()
+        }, PROGRESS_INTERVAL_MS)
       : undefined
 
     async function worker(): Promise<void> {
@@ -424,12 +466,19 @@ export async function scanDirectory(rootPath: string, options: ScanOptions = {})
         stdio: ['ignore', 'pipe', 'pipe'],
       })
 
-      let out = ''
+      let pending = ''
+      let folders = 0
       let unreadable = 0
       let timedOut = false
 
       child.stdout.setEncoding('utf8')
-      child.stdout.on('data', (chunk: string) => { out += chunk })
+      child.stdout.on('data', (chunk: string) => {
+        pending += chunk
+        const end = pending.lastIndexOf('\n')
+        if (end < 0) return
+        folders += graft(entry, parseDuRecords(pending.slice(0, end)))
+        pending = pending.slice(end + 1)
+      })
       child.stderr.setEncoding('utf8')
       // Every line here is a directory macOS would not let us read. In bulk it
       // means one thing — Full Disk Access has not been granted — and the UI
@@ -447,7 +496,7 @@ export async function scanDirectory(rootPath: string, options: ScanOptions = {})
         // Killed mid-run still leaves usable output: `du` reports a directory
         // only once everything under it is counted, so every line that did
         // arrive is a complete subtree.
-        const folders = graft(entry, parseDuRecords(out))
+        rollUp(entry)
         if (entry.sizeBytes === 0 && folders === 0)
           entry.unmeasured = true
         resolve({ folders, unreadable, timedOut })
@@ -474,7 +523,8 @@ export async function scanDirectory(rootPath: string, options: ScanOptions = {})
    * ever grafted and the tree stayed one node deep.
    */
   function graft(root: DiskEntry, records: SizeRecord[]): number {
-    const byPath = new Map<string, DiskEntry>([[root.path, root]])
+    const byPath = graftIndexes.get(root) ?? new Map<string, DiskEntry>([[root.path, root]])
+    graftIndexes.set(root, byPath)
     const prefix = root.path.endsWith(path.sep) ? root.path : root.path + path.sep
     let created = 0
 
@@ -482,7 +532,7 @@ export async function scanDirectory(rootPath: string, options: ScanOptions = {})
       const existing = byPath.get(target)
       if (existing) return existing
       if (!target.startsWith(prefix)) return null
-      if (created >= MAX_NODES_PER_MEASURE) return null
+      if (byPath.size >= MAX_NODES_PER_MEASURE) return null
 
       const parent = ensure(path.dirname(target))
       if (!parent) return null

@@ -105,6 +105,7 @@ export interface ScanProgress {
   path: string
   /** Bytes the scan has measured exactly so far. Climbs as `du` reports in. */
   measuredBytes: number
+  snapshot?: ScanResult
   startedAt: number
   kind: ScanRequest['kind']
 }
@@ -150,17 +151,19 @@ export function scanProgress(): ScanProgress | null {
   let scanned = 0
   let path = ''
   let measuredBytes = 0
+  let snapshot: ScanResult | undefined
   try {
-    const parsed = JSON.parse(fs.readFileSync(running.file, 'utf8')) as { scanned?: number, path?: string, measuredBytes?: number }
+    const parsed = JSON.parse(fs.readFileSync(running.file, 'utf8')) as { scanned?: number, path?: string, measuredBytes?: number, snapshot?: ScanResult }
     scanned = parsed.scanned ?? 0
     path = parsed.path ?? ''
     measuredBytes = parsed.measuredBytes ?? 0
+    snapshot = parsed.snapshot
   }
   catch {
     // Not written yet, or caught mid-write. Zero is the honest answer.
   }
 
-  return { scanned, path, measuredBytes, startedAt: running.startedAt, kind: running.kind }
+  return { scanned, path, measuredBytes, snapshot, startedAt: running.startedAt, kind: running.kind }
 }
 
 let scannerCommand: string[] | null = null

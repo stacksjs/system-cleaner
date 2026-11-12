@@ -148,22 +148,27 @@ function formatDuration(ms: number): string {
  * once the stream closes, which is to say once the scan is already over. A file
  * the parent reads when asked is both simpler and actually live.
  */
-function progressReporter(file: string | undefined): ((scanned: number, path: string, measuredBytes?: number) => void) | undefined {
-  if (!file) return undefined
-
-  return (scanned, currentPath, measuredBytes) => {
+function progressReporter(file: string | undefined) {
+  let latest: Record<string, unknown> = { scanned: 0, path: '', measuredBytes: 0 }
+  function write(update: Record<string, unknown>): void {
+    latest = { ...latest, ...update }
+    if (!file) return
     try {
-      fs.writeFileSync(file, JSON.stringify({ scanned, path: currentPath, measuredBytes: measuredBytes ?? 0 }))
+      fs.writeFileSync(`${file}.next`, JSON.stringify(latest))
+      fs.renameSync(`${file}.next`, file)
     }
     catch {
-      // Progress is decoration. A scan must never fail because it could not
-      // report how far it had got.
+      // A failed progress write must not abort the scan.
     }
+  }
+  return {
+    onProgress: (scanned: number, currentPath: string, measuredBytes = 0) => write({ scanned, path: currentPath, measuredBytes }),
+    onSnapshot: (snapshot: object) => write({ snapshot: { success: true, ...snapshot } }),
   }
 }
 
 export async function runScan(request: ScanRequest): Promise<Record<string, unknown>> {
-  const onProgress = progressReporter(request.progressFile)
+  const { onProgress, onSnapshot } = progressReporter(request.progressFile)
 
   if (request.kind === 'duplicates') {
     const result = findDuplicates({
@@ -173,6 +178,7 @@ export async function runScan(request: ScanRequest): Promise<Record<string, unkn
       timeoutMs: request.timeoutMs,
       includeDependencies: request.includeDependencies,
       onProgress,
+      onSnapshot,
     })
 
     return {
@@ -196,6 +202,7 @@ export async function runScan(request: ScanRequest): Promise<Record<string, unkn
       timeoutMs: request.timeoutMs,
       categories: request.categories as FileCategory[] | undefined,
       onProgress,
+      onSnapshot,
     })
 
     return {
@@ -213,6 +220,7 @@ export async function runScan(request: ScanRequest): Promise<Record<string, unkn
     maxDepth: request.maxDepth,
     timeoutMs: request.timeoutMs,
     onProgress,
+    onSnapshot: tree => onSnapshot({ success: true, tree, totalBytes: tree.sizeBytes }),
   })
 
   return {

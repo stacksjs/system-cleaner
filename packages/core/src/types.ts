@@ -162,6 +162,8 @@ export interface ScanOptions {
   /** How many `du` processes may run at once. */
   concurrency?: number
   onProgress?: (scanned: number, currentPath: string, measuredBytes?: number) => void
+  /** Immutable, size-sorted partial tree containing only bytes measured so far. */
+  onSnapshot?: (tree: DiskEntry) => void
 }
 
 export interface ScanResult {

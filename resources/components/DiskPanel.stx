@@ -35,8 +35,7 @@
         self.volumeUsed = d.fDiskUsed;
         self.volumeFree = d.fDiskFree;
         self.volumePct = d.diskPct;
-        self.scanTotalLabel = self.defaultSize = d.fDiskUsed;
-        self.rootName = self.defaultName = d.homeName || '';
+        if (!self.hasResults && self.scanState === 'idle') self.rootName = self.defaultName = d.homeName || '';
       })
       .catch(function() {});
     queueMicrotask(function() { typeof diskPanelMount === 'function' && diskPanelMount(); });
@@ -44,6 +43,7 @@
   topItems: [],
   hovered: null,
   scanState: 'idle',
+  hasResults: false,
   scanError: '',
   scanProgress: '',
   scanProgressPath: '',
@@ -131,7 +131,14 @@
 
   <!-- Sunburst chart -->
   <div class='disk-chart'>
-    <div id='disk-loading' x-show="scanState !== 'done'" style='position: relative; z-index: 1; text-align: center; color: var(--tertiary); font-size: 13px;'>
+  <div class='disk-live-status' role='status' x-show="scanState === 'scanning' && hasResults" x-cloak>
+    <strong>Updating disk usage as folders are measured.</strong>
+    <span x-text='scanProgress'></span>
+    <div class='scan-path' x-text='scanProgressPath'></div>
+    <div>Sizes and proportions show measured items so far.</div>
+  </div>
+
+    <div id='disk-loading' x-show="!hasResults || scanState === 'error'" style='position: relative; z-index: 1; text-align: center; color: var(--tertiary); font-size: 13px;'>
       <div class='disk-empty-glyph' :class="scanState === 'scanning' ? 'is-scanning' : ''">
         <span class='i-f7-chart-pie-fill' aria-hidden='true'></span>
       </div>
@@ -148,12 +155,9 @@
              x-show='scanProgress' x-text='scanProgress'></div>
         <div class='scan-path' x-show='scanProgressPath' x-text='scanProgressPath'></div>
         <div style='margin-top: var(--space-2); font-size: 10px; color: var(--tertiary);' x-show='!scanStalled'>Measuring every folder on a large home directory takes a minute or two. The total on the left climbs as it goes.</div>
-        <!-- Counted nothing for eight seconds: macOS is holding the read until
-             someone answers, and no amount of waiting changes that. -->
+        <!-- A quiet counter alone cannot identify a permission failure. -->
         <div class='scan-blocked' x-show='scanStalled' x-cloak>
-          <strong>Waiting for permission to read your files.</strong>
-          If macOS asked, answer the prompt. Otherwise grant SystemCleaner
-          Full Disk Access in System Settings &rsaquo; Privacy &amp; Security.
+          <strong>Still measuring this folder.</strong> Large folders can take longer. If macOS shows a permission prompt, answer it to continue.
         </div>
       </div>
       <!-- A failed scan used to drop straight back to the idle state, so the
@@ -164,7 +168,7 @@
         <button class='btn' onclick='startDiskScan()' style='padding: var(--space-2) var(--space-5); font-size: 13px;'>Try Again</button>
       </div>
     </div>
-    <svg class='sunburst-svg' id='sunburst' viewBox='-320 -320 640 640' x-show="scanState === 'done'" x-cloak>
+    <svg class='sunburst-svg' id='sunburst' viewBox='-320 -320 640 640' x-show="hasResults && scanState !== 'error'" x-cloak>
       <circle cx='0' cy='0' r='115' fill='none' stroke='var(--line-soft)' stroke-width='0.5' />
       <circle cx='0' cy='0' r='170' fill='none' stroke='var(--line-soft)' stroke-width='0.5' />
       <circle cx='0' cy='0' r='225' fill='none' stroke='var(--line-soft)' stroke-width='0.5' />
@@ -208,9 +212,10 @@
           <template x-if="hovered.isDir && hovered.childCount > 0">
             <div class="info-drill">Click segment to drill down</div>
           </template>
-          <div class="info-actions" x-show="hovered.fullPath">
+          <div class="info-actions" x-show="hovered.fullPath && !hovered.aggregate">
             <button class="btn btn-sm" @click="diskRevealInFinder(hovered.fullPath)">Reveal in Finder</button>
             <button class="btn btn-danger btn-sm"
+                    :disabled="scanState === 'scanning'"
                     x-show="hovered.isDir && hovered.depth >= 1"
                     @click="diskDeletePath(hovered.fullPath, hovered.name, hovered.size)"
                     x-text="'Delete ' + hovered.formattedSize">Delete</button>

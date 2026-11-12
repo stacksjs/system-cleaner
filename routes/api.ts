@@ -31,6 +31,7 @@ import {
   invalidateStartupCache,
   invalidateDiskInfoCache,
 } from './data-service';
+import { measurementStream } from '../app/Support/measurement-stream';
 import { lastScanResult, runDiskScan, runDuplicateScan, runLargeFileScan, scanProgress } from '../app/Workers/scan-pool';
 import { findAppBundle, findAppBundleForCask, getSystemInfoSync, ICON_SIZES, listApplicationEntries, readAppVersion, renderAppIcon } from '@system-cleaner/core';
 import * as nodeOs from 'node:os';
@@ -379,6 +380,12 @@ export default async function (router: Router) {
    * without this a scan that completed while the user was elsewhere was simply
    * lost and the screen sat on a spinner forever.
    */
+  async function presentScanResult(result: { success: boolean, files?: import('@system-cleaner/disk').LargeFile[] }) {
+    if (!result.files) return result;
+    const protectedPaths = await protectedPathSet();
+    return { ...result, files: result.files.map(file => ({ ...file, ...categoryPresentation(file.category), protected: protectedPaths.has(file.path) })) };
+  }
+
   await router.post('/last-scan', async (req: Request) => {
     const body = await readJsonBody<{ kind?: string }>(req);
     const kind = body?.kind === 'large-files' || body?.kind === 'duplicates'
@@ -392,13 +399,13 @@ export default async function (router: Router) {
       success: true,
       kind,
       ageMs: Date.now() - held.at,
-      result: held.result,
+      result: await presentScanResult(held.result),
     });
   });
 
   await router.post('/scan-progress', async () => {
     const progress = scanProgress();
-    if (!progress) return Response.json({ success: true, scanning: false });
+    if (!progress) return Response.json({ success: true, scanning: false }, { headers: { 'Cache-Control': 'private, no-store' } });
 
     return Response.json({
       success: true,
@@ -406,9 +413,10 @@ export default async function (router: Router) {
       scanned: progress.scanned,
       path: progress.path,
       measuredBytes: progress.measuredBytes,
+      snapshot: progress.snapshot ? await presentScanResult(progress.snapshot) : undefined,
       kind: progress.kind,
       elapsedMs: Date.now() - progress.startedAt,
-    });
+    }, { headers: { 'Cache-Control': 'private, no-store' } });
   });
 
   await router.post('/delete-path', async (req: Request) => {
@@ -461,11 +469,20 @@ export default async function (router: Router) {
       return badRequest('Outside allowed scope', 403);
     }
 
+    const resolved = path.resolve(target);
+    if (!fs.existsSync(resolved)) return badRequest('This item no longer exists. Rescan to refresh the list.', 404);
     try {
-      Bun.spawn(['open', '-R', path.resolve(target)], { stdout: 'ignore', stderr: 'ignore' });
+      const command = process.platform === 'win32'
+        ? ['explorer.exe', `/select,${resolved}`]
+        : ['/usr/bin/open', '-R', resolved];
+      const child = Bun.spawn(command, { stdout: 'ignore', stderr: 'pipe' });
+      const [exitCode, error] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+      if (exitCode !== 0) return badRequest(error.trim() || 'Could not reveal this item in Finder', 500);
+      return Response.json({ success: true });
     }
-    catch {}
-    return Response.json({ success: true });
+    catch (error) {
+      return badRequest(error instanceof Error ? error.message : 'Could not open Finder', 500);
+    }
   });
 
   await router.post('/clean-dir', async (req: Request) => {
@@ -607,43 +624,48 @@ export default async function (router: Router) {
   });
 
   await router.post('/dir-sizes', async (req: Request) => {
-    const body = await readJsonBody<{ paths: unknown }>(req);
+    const body = await readJsonBody<{ paths: unknown; stream?: boolean }>(req);
     if (body === null) return badJson();
     const paths = sanitizeStringArray(body.paths, 1024);
     if (paths === null) return badRequest('paths must be a non-empty string array (≤1024)');
 
-    const cacheKey = paths.slice().sort().join('\0');
-    const cached = dirSizesCache.get(cacheKey);
-    if (cached) return Response.json({ success: true, sizes: cached, cached: true });
+    const measure = async (publish?: (sizes: Record<string, number>) => void) => {
+      const cacheKey = paths.slice().sort().join('\0');
+      const cached = dirSizesCache.get(cacheKey);
+      if (cached) return { success: true, sizes: cached, cached: true };
 
-    const generation = sizeCacheGeneration;
-    const results: Record<string, number> = {};
-    // Bound parallelism so we don't fire 1024 simultaneous `du` walks.
-    const CONCURRENCY = 8;
-    for (let i = 0; i < paths.length; i += CONCURRENCY) {
-      const slice = paths.slice(i, i + CONCURRENCY);
-      await Promise.all(
-        slice.map(async (p) => {
-          const resolved = path.resolve(p);
-          // Containment, not a prefix: `/Users/glenn2` is not inside
-          // `/Users/glenn`, and measuring another account's home is a smaller
-          // version of the same mistake as deleting it. `isWithinHome` rather
-          // than `isWithin(resolved, HOME)` so Windows' alias spellings - an
-          // 8.3 short name reaching the same directory - are resolved before
-          // the comparison instead of reading as a different account.
-          if (!isWithinHome(resolved)) return;
-          try { results[p] = await getDirSize(resolved); }
-          catch { results[p] = 0; }
-        }),
-      );
-    }
-    // Only store this if nothing was deleted while we walked. Caching a
-    // measurement taken before a delete is the stale number all over again,
-    // and it would outlive the invalidation meant to kill it. `stale` lets the
-    // caller drop a payload it can already tell is out of date.
-    const current = sizeCacheGeneration === generation;
-    if (current) dirSizesCache.set(cacheKey, results);
-    return Response.json({ success: true, sizes: results, cached: false, stale: !current });
+      const generation = sizeCacheGeneration;
+      const results: Record<string, number> = {};
+      // Bound parallelism so we don't fire 1024 simultaneous `du` walks.
+      const CONCURRENCY = 8;
+      for (let i = 0; i < paths.length; i += CONCURRENCY) {
+        const slice = paths.slice(i, i + CONCURRENCY);
+        await Promise.all(
+          slice.map(async (p) => {
+            const resolved = path.resolve(p);
+            // Containment, not a prefix: `/Users/glenn2` is not inside
+            // `/Users/glenn`, and measuring another account's home is a smaller
+            // version of the same mistake as deleting it. `isWithinHome` rather
+            // than `isWithin(resolved, HOME)` so Windows' alias spellings - an
+            // 8.3 short name reaching the same directory - are resolved before
+            // the comparison instead of reading as a different account.
+            if (!isWithinHome(resolved)) return;
+            try { results[p] = await getDirSize(resolved); }
+            catch { results[p] = 0; }
+            publish?.({ [p]: results[p] });
+          }),
+        );
+      }
+      // Only store this if nothing was deleted while we walked. Caching a
+      // measurement taken before a delete is the stale number all over again,
+      // and it would outlive the invalidation meant to kill it. `stale` lets the
+      // caller drop a payload it can already tell is out of date.
+      const current = sizeCacheGeneration === generation;
+      if (current) dirSizesCache.set(cacheKey, results);
+      return { success: true, sizes: results, cached: false, stale: !current };
+    };
+    if (body.stream === true) return measurementStream(measure);
+    return Response.json(await measure());
   });
 
   await router.post('/empty-trash', async () => {
@@ -1141,7 +1163,7 @@ export default async function (router: Router) {
   });
 
   await router.post('/extensions-list', async (req: Request) => {
-    const body = await readJsonBody<{ sizes?: unknown; refresh?: unknown }>(req);
+    const body = await readJsonBody<{ sizes?: unknown; refresh?: unknown; stream?: boolean }>(req);
 
     // Rescan means rescan. The list and size caches hold for a minute and five
     // minutes respectively, which is right for navigating between screens and
@@ -1149,12 +1171,14 @@ export default async function (router: Router) {
     if (body?.refresh === true)
       invalidateExtensionsCache();
 
+    if (body?.stream === true) return measurementStream(async publish => ({ success: true, sizes: (await getExtensionSizesCached(publish)).sizes, running: await runningBrowsers() }));
+
     const { extensions, cached } = getExtensionsCached();
 
     // Sizes are a second request for the same reason as `/installed-apps`:
     // walking every version directory of every extension takes seconds, and
     // the list is worth reading before the numbers land.
-    const sizes = body?.sizes === true ? getExtensionSizesCached().sizes : null;
+    const sizes = body?.sizes === true ? (await getExtensionSizesCached()).sizes : null;
     const running = body?.sizes === true ? await runningBrowsers() : [];
 
     return Response.json({
@@ -1949,8 +1973,10 @@ export default async function (router: Router) {
    * of work before anything appears on screen.
    */
   await router.post('/installed-apps', async (req: Request) => {
-    const body = await readJsonBody<{ sizes?: unknown }>(req);
+    const body = await readJsonBody<{ sizes?: unknown; stream?: boolean }>(req);
     if (body === null) return badJson();
+
+    if (body.stream === true) return measurementStream(async publish => ({ success: true, sizes: await appSizes(publish) }));
 
     if (body.sizes === true) {
       const sizes = await appSizes();

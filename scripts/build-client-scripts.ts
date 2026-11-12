@@ -39,6 +39,7 @@ if (entrypoints.length === 0) {
 const result = await Bun.build({
   entrypoints,
   outdir: OUT,
+  root: SOURCE,
   target: 'browser',
   format: 'iife',
   minify: process.env.NODE_ENV === 'production',

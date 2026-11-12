@@ -51,10 +51,10 @@
     this.post('/api/extensions-list', { refresh: !initial }).then(function(d) {
       if (d.success) self.browserExtensions = d.extensions || [];
       self.loading = false;
-      return self.post('/api/extensions-list', { sizes: true });
+      return streamMeasurements('/api/extensions-list', {}, function(sizes) {
+        self.browserExtensions = self.browserExtensions.map(function(extension) { return Object.assign({}, extension, { sizeBytes: sizes[extension.id] === undefined ? extension.sizeBytes : sizes[extension.id] }); });
+      });
     }).then(function(d) {
-      if (!d || !d.success) return;
-      self.browserExtensions = d.extensions || [];
       self.running = d.running || [];
       self.sizesPending = false;
       var present = {};
@@ -168,7 +168,7 @@
     }).catch(function() { self.toast('Could not open ' + browser, 'error'); });
   },
 
-  reveal(p) { this.post('/api/reveal-in-finder', { path: p }).catch(function() {}); },
+  reveal(p) { revealPath(p); },
 
   fmtBytes(b) {
     if (!b) return '0 B';

@@ -1,7 +1,7 @@
-import { execSync, HOME, isPermissionGated, TtlCache } from '@system-cleaner/core'
+import { execSync, getDirSizes, HOME, isPermissionGated, TtlCache } from '@system-cleaner/core'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { CLEAN_TARGETS, getAllExtensions, sizeExtensions } from '@system-cleaner/clean'
+import { CLEAN_TARGETS, getAllExtensions } from '@system-cleaner/clean'
 import { discoverStartupItems } from '@system-cleaner/uninstall'
 
 const startupCache = new TtlCache<Awaited<ReturnType<typeof discoverStartupItems>>>(60_000)
@@ -72,12 +72,17 @@ export function invalidateDiskInfoCache(): void {
  * seconds of work, and the list is useful before the numbers arrive — same
  * two-phase shape as `/installed-apps`.
  */
-export function getExtensionSizesCached() {
+export async function getExtensionSizesCached(onUpdate?: (sizes: Record<string, number>) => void) {
   const hit = extensionSizesCache.get('sizes')
   if (hit) return { sizes: hit, cached: true }
 
   const { extensions } = getExtensionsCached()
-  const sizes = sizeExtensions(extensions)
+  const sizes: Record<string, number> = {}
+  for (const extension of extensions) {
+    const measured = await getDirSizes([extension.path])
+    sizes[extension.id] = measured[extension.path] ?? 0
+    onUpdate?.({ [extension.id]: sizes[extension.id] })
+  }
   extensionSizesCache.set('sizes', sizes)
   return { sizes, cached: false }
 }

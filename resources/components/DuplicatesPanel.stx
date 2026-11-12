@@ -38,7 +38,7 @@
 <div class='dp-controls'>
   <label class='dp-field'>
     <span class='dp-field-label'>Search in</span>
-    <select class='dp-input' x-model='scanRoot'>
+    <select class='dp-input' :disabled='scanning' x-model='scanRoot'>
       <option value=''>Home folder</option>
       <option value='Downloads'>Downloads</option>
       <option value='Desktop'>Desktop</option>
@@ -52,7 +52,7 @@
 
   <label class='dp-field'>
     <span class='dp-field-label'>&nbsp;</span>
-    <button class='btn btn-icon' @click='chooseFolder()'>
+    <button class='btn btn-icon' @click='chooseFolder()' :disabled='scanning'>
       <span class='i-f7-folder' aria-hidden='true'></span>
       Choose&hellip;
     </button>
@@ -60,7 +60,7 @@
 
   <label class='dp-field'>
     <span class='dp-field-label'>Minimum size</span>
-    <select class='dp-input' x-model.number='minSizeMB'>
+    <select class='dp-input' :disabled='scanning' x-model.number='minSizeMB'>
       <option value='1'>1 MB</option>
       <option value='10'>10 MB</option>
       <option value='50'>50 MB</option>
@@ -83,11 +83,11 @@
     <strong x-text='fmtBytes(selectedBytes())'>0 B</strong>
   </div>
   <button class='btn btn-sm' @click='selected = []'>Clear</button>
-  <button class='btn btn-danger btn-sm btn-icon' @click="remove('trash')" :disabled='deleting'>
+  <button class='btn btn-danger btn-sm btn-icon' @click="remove('trash')" :disabled='deleting || scanning'>
     <span class='i-f7-trash-fill' aria-hidden='true'></span>
     <span x-text="deleting ? 'Working…' : 'Move to Trash'">Move to Trash</span>
   </button>
-  <button class='btn btn-danger btn-sm' @click="remove('permanent')" :disabled='deleting'>
+  <button class='btn btn-danger btn-sm' @click="remove('permanent')" :disabled='deleting || scanning'>
     Delete Permanently
   </button>
 </div>
@@ -100,7 +100,7 @@
 </div>
 
 <div class='tbl-wrap' x-show='scanning' x-cloak>
-  <div class='empty-state'>
+  <div :class="groups.length ? 'dp-hint' : 'empty-state'" role='status'>
     <div>Comparing files&hellip;</div>
     <div style='margin-top: var(--space-2); font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink);'
          x-show='scanProgress' x-text='scanProgress'></div>
@@ -113,7 +113,7 @@
   </div>
 </div>
 
-<div x-show='scanned && !scanning' x-cloak>
+<div x-show='scanned' x-cloak>
   <div class='dp-groupbar' x-show='groups.length > 0'>
     <span class='tbl-count' x-text="groups.length + ' group(s)' + (scanTime ? ' · ' + scanTime : '')"></span>
     <button class='btn btn-sm' @click='selectAllDuplicates()'

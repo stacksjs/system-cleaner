@@ -24,7 +24,7 @@
     <div class='card-label'>Found</div>
     <div class='card-value' x-text="scanned ? fmtBytes(totalBytes) : '—'">—</div>
     <div class='card-detail'>
-      <span x-show='!scanned'>No scan yet</span>
+      <span x-show='!scanned' x-text="scanning ? 'Looking for large files…' : 'No scan yet'">No scan yet</span>
       <span x-show='scanned' x-cloak>
         <span x-text='matched'>0</span> items over <span x-text='minSizeMB'>100</span> MB
       </span>
@@ -42,7 +42,7 @@
 <div class='lf-controls'>
   <label class='lf-field'>
     <span class='lf-field-label'>Search in</span>
-    <select class='lf-input' x-model='scanRoot' @change='rescanIfScanned()'>
+    <select class='lf-input' :disabled='scanning' x-model='scanRoot' @change='rescanIfScanned()'>
       <option value=''>Home folder</option>
       <option value='Downloads'>Downloads</option>
       <option value='Desktop'>Desktop</option>
@@ -62,7 +62,7 @@
        which is not a thing a Mac app does. -->
   <label class='lf-field'>
     <span class='lf-field-label'>&nbsp;</span>
-    <button class='btn btn-icon' @click='chooseFolder()'>
+    <button class='btn btn-icon' @click='chooseFolder()' :disabled='scanning'>
       <span class='i-f7-folder' aria-hidden='true'></span>
       Choose&hellip;
     </button>
@@ -111,15 +111,15 @@
     <strong x-text='fmtBytes(selectedBytes())'>0 B</strong>
   </div>
   <button class='btn btn-sm' @click='clearSelection()'>Clear</button>
-  <button class='btn btn-sm btn-icon' @click='protectSelected()' :disabled='deleting'>
+  <button class='btn btn-sm btn-icon' @click='protectSelected()' :disabled='deleting || scanning'>
     <span class='i-f7-lock-fill' aria-hidden='true'></span>
     Protect
   </button>
-  <button class='btn btn-danger btn-sm btn-icon' @click="remove('trash')" :disabled='deleting'>
+  <button class='btn btn-danger btn-sm btn-icon' @click="remove('trash')" :disabled='deleting || scanning'>
     <span class='i-f7-trash-fill' aria-hidden='true'></span>
     <span x-text="deleting ? 'Working…' : 'Move to Trash'">Move to Trash</span>
   </button>
-  <button class='btn btn-danger btn-sm' @click="remove('permanent')" :disabled='deleting'>
+  <button class='btn btn-danger btn-sm' @click="remove('permanent')" :disabled='deleting || scanning'>
     Delete Permanently
   </button>
 </div>
@@ -130,6 +130,11 @@
   folder covers it completely and finishes much faster.
 </div>
 
+<div class='lf-live-status' role='status' x-show='scanning && files.length > 0' x-cloak>
+  <strong>Updating largest items as they are found.</strong><span aria-hidden='true'> · </span>
+  <span x-text='scanProgress'></span>
+  <div class='lf-scan-path' x-text='scanProgressPath'></div>
+</div>
 <div class='tbl-wrap' x-show='scanned || scanning' x-cloak>
   <div class='tbl-bar'>
     <div>
@@ -181,17 +186,14 @@
     </tbody>
   </table>
 
-  <div class='empty-state' x-show='scanning'>
+  <div class='empty-state' x-show='scanning && files.length === 0'>
     <div>Walking the disk&hellip;</div>
     <div style='margin-top: var(--space-2); font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink);'
          x-show='scanProgress' x-text='scanProgress'></div>
     <div class='lf-scan-path' x-show='scanProgressPath' x-text='scanProgressPath'></div>
-    <!-- Counted nothing for eight seconds: macOS is holding the read until
-         someone answers, and waiting longer will not change that. -->
+    <!-- A quiet counter alone cannot identify a permission failure. -->
     <div class='lf-blocked' x-show='scanStalled' x-cloak>
-      <strong>Waiting for permission to read your files.</strong>
-      If macOS asked, answer the prompt. Otherwise grant SystemCleaner Full Disk
-      Access in System Settings &rsaquo; Privacy &amp; Security.
+      <strong>Still measuring this folder.</strong> Large folders can take longer. If macOS shows a permission prompt, answer it to continue.
     </div>
   </div>
   <div class='empty-state' x-show='scanned && !scanning && visible().length === 0'>
@@ -240,5 +242,8 @@
 .lf-blocked strong { display: block; margin-bottom: var(--space-half); color: var(--ink); }
 .lf-scan-path { margin: var(--space-1) auto 0; max-width: 52ch; overflow: hidden; color: var(--tertiary); font: 10px/1.5 'SF Mono', Menlo, monospace; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
 .lf-partial { margin-bottom: var(--space-3); padding: var(--space-3) var(--space-4); border: .5px solid color-mix(in srgb, var(--orange) 32%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--orange) 10%, var(--surface)); color: var(--secondary); font-size: 11px; line-height: 1.5; }
+.lf-live-status { margin-block: var(--space-3); color: var(--secondary); font-size: 11px; line-height: 1.5; }
+.lf-live-status strong { color: var(--ink); font-weight: 500; }
+.lf-live-status .lf-scan-path { margin: 2px 0 0; max-width: 100%; text-align: left; }
 .lf-note { margin-top: var(--space-3); padding: var(--space-3) var(--space-4); border: .5px solid var(--line); border-radius: 8px; background: var(--surface-soft); color: var(--tertiary); font-size: 11px; line-height: 1.5; }
 </style>

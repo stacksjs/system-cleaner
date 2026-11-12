@@ -96,6 +96,7 @@ export interface LargeFileScanOptions {
    * indistinguishable from a hang.
    */
   onProgress?: (scanned: number, currentPath: string) => void
+  onSnapshot?: (result: LargeFileScanResult) => void
 }
 
 export interface LargeFileScanResult {
@@ -197,7 +198,7 @@ export function scanLargeFiles(options: LargeFileScanOptions = {}): LargeFileSca
   // wildly different rates depending on the directory, so every-Nth-entry
   // reporting stalls exactly where the user most wants to see movement.
   const onProgress = options.onProgress
-  let nextProgressAt = onProgress ? started + PROGRESS_INTERVAL_MS : Number.POSITIVE_INFINITY
+  let nextProgressAt = (onProgress || options.onSnapshot) ? started + PROGRESS_INTERVAL_MS : Number.POSITIVE_INFINITY
   let scanned = 0
   let matched = 0
   let totalBytes = 0
@@ -245,6 +246,10 @@ export function scanLargeFiles(options: LargeFileScanOptions = {}): LargeFileSca
     }
   }
 
+  function snapshot(): LargeFileScanResult {
+    return { files: heap.slice().sort((a, b) => b.sizeBytes - a.sizeBytes || a.path.localeCompare(b.path)), scanned, matched, totalBytes, truncated, scanTimeMs: Date.now() - started }
+  }
+
   function consider(
     fullPath: string,
     name: string,
@@ -270,6 +275,7 @@ export function scanLargeFiles(options: LargeFileScanOptions = {}): LargeFileSca
       category,
       isBundle: isBundleEntry,
     })
+    if (matched === 1) options.onSnapshot?.(snapshot())
   }
 
   // Checked on every entry, not every Nth. `Date.now()` costs a fraction of
@@ -285,6 +291,7 @@ export function scanLargeFiles(options: LargeFileScanOptions = {}): LargeFileSca
     if (now >= nextProgressAt) {
       nextProgressAt = now + PROGRESS_INTERVAL_MS
       onProgress?.(scanned, currentPath ?? '')
+      options.onSnapshot?.(snapshot())
     }
     return false
   }
@@ -367,12 +374,7 @@ export function scanLargeFiles(options: LargeFileScanOptions = {}): LargeFileSca
   if (budget.entries <= 0)
     truncated = true
 
-  return {
-    files: heap.sort((a, b) => b.sizeBytes - a.sizeBytes),
-    scanned,
-    totalBytes,
-    matched,
-    truncated,
-    scanTimeMs: Date.now() - started,
-  }
+  const result = snapshot()
+  options.onSnapshot?.(result)
+  return result
 }

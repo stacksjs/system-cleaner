@@ -67,6 +67,7 @@
   post(endpoint, data) {
     return fetch(endpoint, {
       method: 'POST',
+      cache: 'no-store',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data || {}),
     }).then(function(r) {
@@ -88,6 +89,9 @@
     if (this.scanning) return;
     var self = this;
     this.scanning = true;
+    this.files = [];
+    this.selected = [];
+    this.scanned = false;
     this.scanProgress = '';
     this.scanProgressPath = '';
     this.scanStalled = false;
@@ -143,7 +147,7 @@
     if (this.rejoinTimer) clearInterval(this.rejoinTimer);
     this.rejoinTimer = setInterval(function() {
       self.post('/api/scan-progress').then(function(d) {
-        if (d && d.scanning) return;
+        if (d && d.scanning && d.kind === 'large-files') return;
         clearInterval(self.rejoinTimer);
         self.rejoinTimer = null;
         self.scanning = false;
@@ -180,7 +184,8 @@
     this.stopProgress();
     this.progressTimer = setInterval(function() {
       self.post('/api/scan-progress').then(function(d) {
-        if (!d || !d.scanning) return;
+        if (!d || !d.scanning || d.kind !== 'large-files' || !self.scanning) return;
+        if (d.snapshot) self.applyResult(d.snapshot);
         var n = d.scanned;
         var count = n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n);
         self.scanProgress = count + ' items · ' + Math.round(d.elapsedMs / 1000) + 's';
@@ -262,7 +267,7 @@
   },
 
   tableCaption() {
-    if (this.scanning) return 'scanning…';
+    if (this.scanning) return this.visible().length + ' largest so far · scanning…';
     var shown = this.visible().length;
     var suffix = this.scanTime ? ' · ' + this.scanTime : '';
     if (shown !== this.files.length) return shown + ' of ' + this.files.length + ' shown' + suffix;
@@ -270,7 +275,7 @@
   },
 
   async remove(mode) {
-    if (this.deleting || this.selected.length === 0) return;
+    if (this.scanning || this.deleting || this.selected.length === 0) return;
     var count = this.selected.length;
     var size = this.fmtBytes(this.selectedBytes());
     var permanent = mode === 'permanent';
@@ -344,7 +349,7 @@
   },
 
   reveal(p) {
-    this.post('/api/reveal-in-finder', { path: p }).catch(function() {});
+    revealPath(p);
   },
 
   shortPath(p) {

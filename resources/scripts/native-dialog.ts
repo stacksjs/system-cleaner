@@ -323,8 +323,22 @@ async function notifyIfAway(options: AwayNotice): Promise<void> {
   }
 }
 
+async function revealPath(path: string): Promise<void> {
+  try {
+    const response = await fetch('/api/reveal-in-finder', {
+      method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }),
+    })
+    const result = await response.json()
+    if (!response.ok || !result.success) throw new Error(result.error || 'Could not reveal this item')
+  }
+  catch (error) {
+    await nativeAlert('Could not reveal this item', error instanceof Error ? error.message : 'Could not open Finder')
+  }
+}
+
 declare global {
   interface Window {
+    revealPath: typeof revealPath
     nativeConfirm: typeof nativeConfirm
     nativeAlert: typeof nativeAlert
     nativeCopy: typeof nativeCopy
@@ -334,6 +348,7 @@ declare global {
   }
 }
 
+window.revealPath = revealPath
 window.nativeConfirm = nativeConfirm
 window.nativeAlert = nativeAlert
 window.nativeCopy = nativeCopy

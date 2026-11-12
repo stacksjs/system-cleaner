@@ -80,9 +80,11 @@
     this.post('/api/installed-apps').then(function(r) {
       if (r.success) self.apps = r.apps || [];
       self.loading = false;
-      return self.post('/api/installed-apps', { sizes: true });
-    }).then(function(r) {
-      if (r && r.success) { self.apps = r.apps || []; self.sizesPending = false; }
+      return streamMeasurements('/api/installed-apps', {}, function(sizes) {
+        self.apps = self.apps.map(function(app) { return Object.assign({}, app, { sizeBytes: sizes[app.path] === undefined ? app.sizeBytes : sizes[app.path] }); });
+      });
+    }).then(function() {
+      self.sizesPending = false;
     }).catch(function() { self.loading = false; self.sizesPending = false; });
     this.loadOrphans();
     this.loadUpdates();
@@ -374,7 +376,7 @@
       });
   },
 
-  reveal(p) { this.post('/api/reveal-in-finder', { path: p }).catch(function() {}); },
+  reveal(p) { revealPath(p); },
 
   fmtBytes(b) {
     if (!b) return '0 B';

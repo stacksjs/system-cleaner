@@ -406,10 +406,12 @@ function applyCleanupFilter(cat) {
   recomputeCleanupTotal();
 }
 
-function applySizes(sizes) {
+function applySizes(sizes, pending) {
   _cleanupSizes = sizes;
   var rows = document.querySelectorAll('[data-clean-path]');
   rows.forEach(function(row) {
+    var measured = Object.prototype.hasOwnProperty.call(sizes, row.getAttribute('data-clean-path'));
+    if (pending && !measured) return;
     var bytes = sizes[row.getAttribute('data-clean-path')] || 0;
     var cell = row.querySelector('.clean-size');
     if (cell) {
@@ -427,6 +429,10 @@ function applySizes(sizes) {
     rowArr.forEach(function(r) { tbody.appendChild(r); });
   }
   recomputeCleanupTotal();
+  if (pending) {
+    var totalEl = document.getElementById('total-cleanable');
+    if (totalEl) totalEl.textContent += ' so far';
+  }
 }
 
 function scanCleanupSizes(force) {
@@ -474,7 +480,9 @@ function scanCleanupSizes(force) {
 
   // Run scan detached so navigation doesn't kill it
   var pending = null;
-  pending = _api('/api/dir-sizes', { paths: paths }).then(function(r) {
+  pending = window.streamMeasurements('/api/dir-sizes', { paths: paths }, function(sizes) {
+    if (gen === (window._cleanupScanGen || 0) && document.getElementById('total-cleanable')) applySizes(sizes, true);
+  }).then(function(r) {
     if (window._cleanupScanPromise === pending) window._cleanupScanPromise = null;
     // Superseded: a clean happened after this walk was asked for, so what it
     // measured describes a disk that no longer exists.

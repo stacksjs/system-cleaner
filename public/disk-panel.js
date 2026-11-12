@@ -37,13 +37,18 @@
     if(node._ea-node._sa<CFG.minAngle)return;
     var col=lighten(PAL[ci%PAL.length],Math.max(0,(node._d-1)*0.15));
     var d=arcPath(node._sa,node._ea,node._ir,node._or);if(!d)return;
-    arr.push({idx:arr.length,d:d,color:col,name:node.n,fullPath:node.p||'',size:node.s,formattedSize:fmtBytes(node.s),depth:node._d,isDir:node.d!==false,childCount:node.c?node.c.length:0,percent:'0',colorIdx:ci,_node:node});
+    arr.push({idx:arr.length,d:d,color:col,name:node.n,fullPath:node.p||'',size:node.s,formattedSize:fmtBytes(node.s),depth:node._d,aggregate:!!node.aggregate,isDir:node.d!==false,childCount:node.c?node.c.length:0,percent:'0',colorIdx:ci,_node:node});
     if(node.c)for(var j=0;j<node.c.length;j++)flatten(node.c[j],arr,ci);
   }
   function normalize(node) {
-    var result = { n: node.name || node.n, s: node.sizeBytes || node.s || 0, p: node.path || node.p || '', d: node.isDirectory !== undefined ? node.isDirectory : (node.d !== false) };
+    var result = { aggregate: !!node.aggregate, n: node.name || node.n, s: node.sizeBytes || node.s || 0, p: node.path || node.p || '', d: node.isDirectory !== undefined ? node.isDirectory : (node.d !== false) };
     result.c = (node.children || node.c || []).map(normalize);
     return result;
+  }
+  function findTreePath(node, path) {
+    if (node.p === path) return node;
+    for (var i = 0; i < node.c.length; i++) { var hit = findTreePath(node.c[i], path); if (hit) return hit; }
+    return null;
   }
   function pruneFromTree(node, targetPath) {
     if (!node || !node.c) return 0;
@@ -101,6 +106,7 @@
   }
 
   function patchDiskScope(fields) {
+    if (Object.prototype.hasOwnProperty.call(fields, 'scanState')) window.__diskLiveScanning = fields.scanState === 'scanning';
     // Any state change that is not an error clears the last one, so a retry
     // does not run underneath a stale message.
     if (Object.prototype.hasOwnProperty.call(fields, 'scanState') && fields.scanState !== 'error')
@@ -254,8 +260,9 @@
 
   function applyScanResult(data, cached) {
     stopDiskPoll();
-    viewStack = [];
+    var focusedPath = currentRoot && currentRoot.p;
     tree = data.tree.n ? data.tree : normalize(data.tree);
+    viewStack = viewStack.map(function(node) { return findTreePath(tree, node.p); }).filter(Boolean);
     window.__diskTree = tree;
     window.__diskScanInfo = {
       folderCount: data.folderCount,
@@ -272,9 +279,10 @@
     patchDiskScope({
       scanInfo: window.__diskScanInfo,
       scanState: 'done',
+      hasResults: true,
     });
     bindSvgEvents();
-    renderSegments(tree);
+    renderSegments(findTreePath(tree, focusedPath) || tree);
     flushDiskExecQueue();
 
     // A fresh scan that took a while and finished while the user was elsewhere.
@@ -370,7 +378,7 @@
   // back the server is the only thing that knows what happened — ask it, rather
   // than trusting a localStorage flag that outlived the request it described.
   function rejoinServerScan() {
-    return fetch('/api/scan-progress', { method: 'POST' })
+    return fetch('/api/scan-progress', { method: 'POST', cache: 'no-store' })
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (!d || !d.scanning || d.kind !== 'tree') return false;
@@ -387,10 +395,10 @@
   function watchForServerResult() {
     if (window._diskRejoinTimer) clearInterval(window._diskRejoinTimer);
     window._diskRejoinTimer = setInterval(function() {
-      fetch('/api/scan-progress', { method: 'POST' })
+      fetch('/api/scan-progress', { method: 'POST', cache: 'no-store' })
         .then(function(r) { return r.json(); })
         .then(function(d) {
-          if (d && d.scanning) return;
+          if (d && d.scanning && d.kind === 'tree') return;
           clearInterval(window._diskRejoinTimer);
           window._diskRejoinTimer = null;
           stopProgressPoll();
@@ -506,7 +514,7 @@
   // one to decide whether a scan was running at all — can show it immediately
   // instead of discarding it and waiting for the next tick.
   function applyProgress(d) {
-    if (!d || !d.scanning) return;
+    if (!d || !d.scanning || d.kind !== 'tree') return;
     var fields = {
       scanProgress: fmtCount(d.scanned) + ' items · ' + Math.round(d.elapsedMs / 1000) + 's',
       scanProgressPath: shortenPath(d.path),
@@ -521,11 +529,21 @@
     // and watching it pass the number the old scanner used to stop at is the
     // clearest possible statement that the scan is still doing something.
     if (d.measuredBytes > 0) fields.scanTotalLabel = fmtBytes(d.measuredBytes) + ' so far';
+    if (d.snapshot && d.snapshot.tree && d.snapshot.tree.sizeBytes > 0) {
+      var focusedPath = currentRoot && currentRoot.p;
+      tree = normalize(d.snapshot.tree);
+      window.__diskTree = tree;
+      viewStack = viewStack.map(function(node) { return findTreePath(tree, node.p); }).filter(Boolean);
+      fields.hasResults = true;
+      fields.scanTotalLabel = fmtBytes(tree.s) + ' so far';
+      bindSvgEvents();
+      renderSegments(findTreePath(tree, focusedPath) || tree);
+    }
     patchDiskScope(fields);
   }
 
   function pollProgressOnce() {
-    return fetch('/api/scan-progress', { method: 'POST' })
+    return fetch('/api/scan-progress', { method: 'POST', cache: 'no-store' })
       .then(function(r) { return r.json(); })
       .then(function(d) { applyProgress(d); return d; })
       .catch(function() { return null; });
@@ -544,7 +562,7 @@
   }
 
   window.startDiskScan = function() {
-    patchDiskScope({ scanState: 'scanning', scanProgress: '', scanProgressPath: '', scanStalled: false });
+    patchDiskScope({ scanState: 'scanning', hasResults: false, topItems: [], scanTotalLabel: '0 B so far', scanProgress: '', scanProgressPath: '', scanStalled: false });
     startProgressPoll();
     window._diskScan.run();
   };
@@ -556,21 +574,20 @@
   var menuEl = null;
   var pendingMenuTarget = null;
 
-  // Picks come back on the same channel the menubar uses, so ids are prefixed.
-  if (!window._diskMenuBound) {
-    window._diskMenuBound = true;
-    window.addEventListener('craft:menu:action', function(e) {
-      var id = e && e.detail && e.detail.id;
-      var s = pendingMenuTarget;
-      if (!id || id.indexOf('sc.') !== 0 || !s) return;
-      pendingMenuTarget = null;
-
-      if (id === 'sc.reveal') window.diskRevealInFinder(s.fullPath);
-      else if (id === 'sc.copy') window.nativeCopy(s.fullPath);
-      else if (id === 'sc.drill') drillInto(s);
-      else if (id === 'sc.trash') window.diskDeletePath(s.fullPath, s.name, s.size);
-    });
-  }
+  // Craft context menus use their own action channel, separate from menubars.
+  // Replace the listener on SPA remount so it never holds a previous page's target.
+  if (window._diskMenuAction) window.removeEventListener('craft:contextmenu:action', window._diskMenuAction);
+  window._diskMenuAction = function(e) {
+    var id = e && e.detail && e.detail.id;
+    var s = pendingMenuTarget;
+    if (!id || !s || e.detail.targetId !== s.fullPath) return;
+    pendingMenuTarget = null;
+    if (id === 'sc.reveal') window.diskRevealInFinder(s.fullPath);
+    else if (id === 'sc.copy') window.nativeCopy(s.fullPath);
+    else if (id === 'sc.drill') drillInto(s);
+    else if (id === 'sc.trash' && !window.__diskLiveScanning) window.diskDeletePath(s.fullPath, s.name, s.size);
+  };
+  window.addEventListener('craft:contextmenu:action', window._diskMenuAction);
 
   function drillInto(s) {
     if (!s || !s.isDir || !s._node || !s._node.c || !s._node.c.length) return;
@@ -611,6 +628,7 @@
   // never has to guess — and a browser tab still gets a working right-click.
   function openSegmentMenu(s, x, y) {
     closeSegmentMenu();
+    if (s.aggregate) return;
 
     var native = window.craft && window.craft.nativeUI;
     if (native && typeof native.showContextMenu === 'function') {
@@ -624,7 +642,7 @@
       ];
       if (s.isDir && s.childCount)
         items.push({ id: 'sc.sep1', title: '', type: 'separator' }, { id: 'sc.drill', title: 'Open in Chart', icon: 'chart.pie' });
-      items.push({ id: 'sc.sep2', title: '', type: 'separator' }, { id: 'sc.trash', title: 'Move to Trash', icon: 'trash' });
+      items.push({ id: 'sc.sep2', title: '', type: 'separator' }, { id: 'sc.trash', title: 'Delete…', icon: 'trash', enabled: !window.__diskLiveScanning });
 
       try {
         native.showContextMenu({ targetId: s.fullPath, targetType: 'general', x: Math.round(x), y: Math.round(y), items: items });
@@ -673,7 +691,8 @@
     }
 
     addSeparator();
-    addItem('Move to Trash…', true, function() {
+    addItem('Delete…', true, function() {
+      if (window.__diskLiveScanning) return;
       window.diskDeletePath(s.fullPath, s.name, s.size);
     });
 
@@ -697,10 +716,11 @@
   }
 
   window.diskRevealInFinder = function(path) {
-    fetch('/api/reveal-in-finder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: path }) }).catch(function(){});
+    window.revealPath(path);
   };
 
   window.diskDeletePath = async function(path, name, sizeBytes) {
+    if (window.__diskLiveScanning) return;
     var sizeStr = fmtBytes(sizeBytes || 0);
     var ok = await window.nativeConfirm({
       title: 'Delete “' + name + '”?',

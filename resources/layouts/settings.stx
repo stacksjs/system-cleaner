@@ -270,8 +270,9 @@ const localAgent = isLocalAgent()
       );
       display: flex; align-items: center; gap: var(--space-4);
       flex: none; padding: 0 var(--space-5);
-      height: max(52px, var(--chrome-band));
-      padding-bottom: max(0px, min(calc(52px - var(--chrome-band)), var(--chrome-band)));
+      min-height: max(64px, calc(var(--chrome-band) + 16px));
+      box-sizing: border-box;
+      padding-block: 12px;
     }
     .set-history {
       display: flex; align-items: center; flex: none;
