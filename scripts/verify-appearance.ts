@@ -83,11 +83,11 @@ try {
       await main.goto(`${base}${route}`, { waitUntil: 'domcontentloaded' })
       await main.waitForFunction(value => document.documentElement.dataset.colorMode === value, {}, mode)
       const panes = route.endsWith('/settings')
-        ? await main.$$eval('[data-pane-link]', elements => elements.map(el => el.getAttribute('data-pane-link')!))
+        ? await main.$$eval('.set-row[data-pane-link]', elements => elements.map(el => el.getAttribute('data-pane-link')!))
         : ['']
       for (const pane of [...new Set(panes)]) {
         if (pane)
-          await main.click(`[data-pane-link="${pane}"]`)
+          await main.click(`.set-row[data-pane-link="${pane}"]`)
         const failures = await main.evaluate(() => {
           const canvas = document.createElement('canvas')
           canvas.width = canvas.height = 1
