@@ -1,5 +1,16 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.17...v0.3.18)
+
+## 🐛 Bug Fixes
+
+- use Pantry provider resolution for installer tooling ([83df273](https://github.com/stacksjs/system-cleaner/commit/83df273)) _(by Chris)_
+- **ci**: cancel superseded branch runs ([e62e01c](https://github.com/stacksjs/system-cleaner/commit/e62e01c)) _(by Chris)_
+
+## Contributors
+
+- _Chris_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.16...v0.3.17)
 
 ## 🐛 Bug Fixes
