@@ -1,5 +1,15 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.18...v0.3.19)
+
+## 🐛 Bug Fixes
+
+- show scan results progressively and repair Finder actions ([22b94c7](https://github.com/stacksjs/system-cleaner/commit/22b94c7)) _(by Chris)_
+
+## Contributors
+
+- _Chris_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.17...v0.3.18)
 
 ## 🐛 Bug Fixes
