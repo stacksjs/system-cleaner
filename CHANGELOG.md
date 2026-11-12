@@ -1,5 +1,18 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.15...v0.3.16)
+
+## 🐛 Bug Fixes
+
+- declare the SQLite dependency required by release builds ([20af6e6](https://github.com/stacksjs/system-cleaner/commit/20af6e6)) _(by Chris <chrisbreuer93@gmail.com>)_
+- publish optimized native installers and synchronize app appearance ([40ec0fa](https://github.com/stacksjs/system-cleaner/commit/40ec0fa)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **ci**: retry the macOS build on another runner, and bound how long it can hang ([f0caf20](https://github.com/stacksjs/system-cleaner/commit/f0caf20)) _(by glennmichael123 <gtorregosa@gmail.com>)_
+
+## Contributors
+
+- _Chris <chrisbreuer93@gmail.com>_
+- _glennmichael123 <gtorregosa@gmail.com>_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.14...v0.3.15)
 
 ## ✨ Features
