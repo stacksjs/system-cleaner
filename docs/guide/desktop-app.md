@@ -4,6 +4,7 @@ title: Desktop App
 
 # Building the macOS app
 
+The desktop app requires macOS 15 or newer, matching the pinned Craft runtime.
 SystemCleaner ships as a self-contained `.app`. Nothing it shows comes over the
 network: the bundle carries its own HTTP server, and the window points at
 `127.0.0.1`.
@@ -18,104 +19,70 @@ That writes `storage/framework/desktop-dmg/SystemCleaner-<version>.dmg`.
 
 ```
 SystemCleaner.app/Contents/
-  MacOS/stacks-desktop           launcher      (app/Desktop/launcher.ts)
-  MacOS/system-cleaner-agent     HTTP server   (app/Desktop/server.ts)
-  MacOS/system-cleaner-scan      disk scanner  (app/Workers/disk-scan.ts)
-  MacOS/craft-runtime            native window (pantry: craft-native.org)
-  Resources/web/                 UI            (buddy build:views)
-  Resources/migrations/          schema        (buddy migrate:regenerate)
+  MacOS/SystemCleaner           launcher, agent and scanner subcommands
+  MacOS/craft-runtime            native window
+  Resources/web/                 application pages and assets
+  Resources/migrations/          database schema
 ```
 
-Launching runs four steps in order: the launcher starts the agent on a loopback
-port the OS picks, waits for `/__health`, opens the Craft window on
-`http://127.0.0.1:<port>/app`, and kills the agent when the window closes.
+The launcher starts `SystemCleaner agent` on loopback, waits for `/__health`,
+opens Craft on `/app`, and stops the agent when the window closes. Disk scans
+run in another process as `SystemCleaner scan <json>`, so a blocked scan can be
+stopped independently. All three share one executable and one embedded Bun
+runtime.
 
-The scanner is a separate binary rather than a `Worker` because
-`bun build --compile` does not embed worker entrypoints. It is also the more
-robust arrangement: a scan that wedges inside a blocking `readdir` can be
-killed, which a worker cannot.
-
-Application data lives in `~/Library/Application Support/SystemCleaner/`. The
-bundle in `/Applications` is read-only and is replaced wholesale on update, so
-cleanup history cannot live inside it.
+Application data lives in `~/Library/Application Support/SystemCleaner/`.
+The installed bundle is read-only and replaced wholesale on update.
 
 ## How the build is split
 
-`buddy` does the framework work; `scripts/build-desktop-app.ts` does the three
-things only this app can know.
-
 | Step | Owner |
 |---|---|
-| Render the UI as the local agent | `buddy build:views`, with `SYSTEM_CLEANER_AGENT=1` |
-| Stage the payload into `app/Desktop/Resources/` | this app |
-| Compile the launcher, bundle Craft, write the manifest | `buddy build:desktop` |
-| Compile the agent and scanner into `desktop-dist` | this app |
-| Assemble the bundle, build the icon, sign, image the DMG | `buddy build:dmg` |
-| Arrange the installer window and re-image the DMG | this app |
+| Render the local-agent UI | `buddy build:views`, with `SYSTEM_CLEANER_AGENT=1` |
+| Stage application pages, assets and migrations | `scripts/build-desktop-app.ts` |
+| Compile the launcher and bundle Craft | `buddy build:desktop` |
+| Assemble and sign the application | `buddy build:dmg` |
+| Author, compress, sign and notarize the installer | Pantry's `create-dmg` |
+| Verify the finished image and generate `update.json` | `scripts/build-desktop-app.ts` |
 
-Four framework conventions make that possible, all added in Stacks 0.72.99 and
-0.72.100:
+Stacks reads `app/Desktop/launcher.ts`, `app/Desktop/Resources/`,
+`app/Desktop/Info.plist.json` and `app/Desktop/Entitlements.plist` directly.
+It owns executable placement and inside-out signing. A failed packaging command
+fails the build; the app does not recover arbitrary staging directories or
+repair a failed signature.
 
-- **`app/Desktop/launcher.ts`** overrides the framework launcher, which would
-  otherwise open a Craft window on a remote `DESKTOP_URL`. SystemCleaner has no
-  such URL — it starts a server locally and opens a window on that, on a port
-  not known until launch.
-- **`DESKTOP_URL` is optional** once an app owns its launcher.
-- **Every file `build:desktop` emits is bundled** into `Contents/MacOS`, so the
-  sibling binaries the launcher spawns travel with it, and
-  **`app/Desktop/Resources/`** is copied into `Contents/Resources`.
-- **`app/Desktop/Info.plist.json`** supplies the `NS*UsageDescription` strings —
-  the sentences macOS shows when it asks to read your Downloads folder or drive
-  Finder.
+`stageDesktopWeb` keeps application HTML, runtime chunks, styles, fonts and
+referenced assets. Marketing pages and showcase screenshots stay on the website.
+Production browser scripts and the compiled launcher are minified.
 
-`build:dmg` also narrows App Transport Security for an app-owned launcher: an
-exception for `127.0.0.1` rather than `NSAllowsArbitraryLoads`, which would
-additionally permit every unencrypted host on the internet.
+## The drag-and-drop installer
 
-## The installer window
+`deps.yaml` pins `github.com/create-dmg/create-dmg`, installed by Pantry locally
+and by the Pantry Action in CI. It builds a 660×460 Finder window with the app
+on the left, an Applications drop target on the right, and instruction artwork.
+It also sets the volume icon, hides the app extension and uses HFS+ with LZMA
+(`ULMO`) compression. The signed app is supplied by Stacks unchanged.
 
-Mounting the DMG opens a 660x460 window with artwork behind it — "Install in
-one step", an arrow, and the app on the left with the `/Applications` symlink
-on the right at 128pt — so the gesture the image exists for is the obvious
-thing to do. Without a layout Finder falls back to whatever the person's last
-window looked like and sorts the two items alphabetically, which is how
-v0.3.14 shipped: `Applications` on the left, the app on the right, in a window
-the size of someone's last Downloads folder.
+Geometry lives in `DMG_WINDOW` in `scripts/dmg-window.ts`. Edit the artwork in
+`resources/dmg/installer-background.svg`, then regenerate its committed PNG:
 
-Three facts decide how this is built, each one measured:
+```bash
+bun scripts/render-dmg-background.ts
+```
 
-- **`hdiutil create -srcfolder` drops a root `.DS_Store` without a word.** So
-  the layout cannot be staged next to the app. `sealBundle` images a
-  *read-write* volume, arranges that, and converts it to the compressed image
-  that ships.
-- **Finder is the only thing that writes a `.DS_Store`**, and only while a
-  window is open on a writable volume mounted under `/Volumes` — `disk "name"`
-  fails with -1728 against a private mountpoint.
-- **A background picture is stored as an alias to a file on the volume**, not
-  as pixels in the `.DS_Store`, so the image lives at `.background/installer.png`
-  inside the DMG. Its folder is parked below the window's bottom edge, as
-  Launchpad's DMG does, because anyone who has turned on hidden files
-  otherwise gets a blue folder sitting on the headline.
+The final mounted image must contain the background, the intended window and
+icon geometry, and a symlink to `/Applications`. Signature, image integrity,
+notarization ticket and Gatekeeper checks must pass. A cosmetic failure stops
+the release; there is no position-only installer fallback.
 
-`app/Desktop/dmg-window.DS_Store` is a committed, position-only layout used as
-a fallback when Finder will not cooperate — a release built on a runner with no
-Automation grant still gets a correctly sized window with both icons placed,
-just without the artwork, and says so in the build log. Whether a background
-could travel in that fixture too is untested; the obvious check, asking Finder
-for `background picture`, reports `NONE` for images that demonstrably render.
+The build emits `size-report.json` with payload and image sizes and requires
+exactly one Bun executable. Set `DMG_BENCHMARK=1` to compare maximum zlib and
+LZFSE compression against the shipped LZMA image. On the same signed payload,
+LZMA measured 33.16 MiB, LZFSE 44.95 MiB, and maximum zlib 46.77 MiB. Alternative
+images are temporary and never published.
 
-The artwork is `resources/dmg/installer-background.svg`, rendered to a
-committed PNG by `bun scripts/render-dmg-background.ts`. It is 660x400 in a
-660x460 window on purpose: Finder draws it from the top of the *content* area
-at one pixel per point, and a picture as tall as the whole window loses its
-last line off the bottom.
-
-To change the window, edit `DMG_WINDOW` in `scripts/dmg-window.ts`, re-run
-`bun scripts/render-dmg-background.ts` and `bun scripts/author-dmg-window.ts`,
-and commit both regenerated files. Bounds are set last in the shared
-AppleScript, and that ordering is load-bearing: hiding the toolbar rebuilds the
-window, so the first version of this asked for 660x400 and Finder recorded
-920x464, its own default, with every other property correct.
+The exact `.app` from the finished image is also copied to
+`storage/framework/desktop-dist/SystemCleaner.app` for local launch and QA.
 
 ## Signing and notarizing
 
@@ -135,11 +102,12 @@ xcrun notarytool store-credentials systemcleaner \
   --apple-id you@example.com --team-id TEAMID --password app-specific-password
 ```
 
-With the identity set, `buddy build:dmg` signs inside-out — every nested
-executable, then the launcher, then the bundle — because signing the parent
-first invalidates its seal. With the notary profile set, the build script
-submits the DMG, waits, and staples the ticket; a signed but un-notarized DMG is
-still refused on a Mac that has never seen it.
+With the identity set, Stacks signs the executable leaves and then seals the
+bundle, using `app/Desktop/Entitlements.plist`. Use the identity's SHA-1
+fingerprint if multiple certificates share its name. Pantry's `create-dmg`
+signs the final installer, submits it to Apple and staples its accepted ticket.
+The build then validates the ticket and asks Gatekeeper to assess the shipped
+image and application.
 
 **Developer ID rather than the Mac App Store, deliberately.** The App Store
 requires `com.apple.security.app-sandbox`, and a sandboxed process cannot read
@@ -241,25 +209,35 @@ on every start, along with every switch in the Settings window.
 
 ## Releasing
 
-The **Releaser** workflow builds the DMG on a tag push and attaches it to the
-GitHub release. The job is skipped entirely until
-`DESKTOP_SIGNING_IDENTITY_NAME` is set, so the CLI release is never blocked by a
-half-configured signing setup.
+```bash
+bun run release:patch
+```
+
+Buddy updates the version and changelog and pushes the release tag. The
+**Releaser** builds the CLI archives, Windows bundle, and signed macOS installer
+before publishing anything. The macOS build uses `macos-15`; the Craft binary
+supplies its own SDK-linked window chrome.
+
+One Pantry Action receives all five artifacts, attaches them to the GitHub
+release, and generates complete `checksums.txt` and `release-manifest.json`
+files. Publication requires the DMG and its matching `update.json`; a missing
+installer fails the release. There are no independent upload jobs overwriting
+one another's checksums.
 
 | Repository variable | Example |
 |---|---|
 | `DESKTOP_SIGNING_IDENTITY_NAME` | `Developer ID Application: Your Name (TEAMID)` |
 
-| Repository secret | |
+| Repository secret | Purpose |
 |---|---|
 | `DEVELOPER_ID_CERTIFICATE_BASE64` | Developer ID Application `.p12`, base64 |
-| `APPLE_CERTIFICATE_PASSWORD` | password the `.p12` was exported with |
-| `APPLE_ID` | Apple ID used for notarization |
+| `APPLE_CERTIFICATE_PASSWORD` | Certificate password |
+| `APPLE_ID` | Apple ID for notarization |
 | `APPLE_TEAM_ID` | 10-character team ID |
-| `APPLE_APP_SPECIFIC_PASSWORD` | app-specific password for that Apple ID |
+| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password |
 
-These are a different certificate from the Mac App Store pipeline: Developer ID
-Application, not Mac App Distribution.
+Pantry imports the certificate into an ephemeral keychain and removes it in its
+post step. These credentials are separate from Mac App Store distribution.
 
 ## Updating itself
 
@@ -269,7 +247,7 @@ check, download, install — because each one costs something different: a check
 is free, a download is 40 MB of the user's bandwidth, and an install quits the
 app.
 
-`build:app` writes `update.json` beside the DMG, and the Releaser attaches
+`build:app` writes `update.json` beside the DMG, and the Pantry release step attaches
 both. The manifest is generated **after** notarization: stapling the ticket
 rewrites the DMG, so a manifest built earlier carries a hash no download can
 match.
@@ -298,3 +276,20 @@ an interrupted update never leaves the user without an app.
 An unsigned local build still produces a manifest, and `build:app` says so: an
 installed copy will refuse that update, which is the correct outcome and a
 confusing one to debug without the warning.
+
+## Checking appearance
+
+The main, Settings and VPN windows share `public/app-theme.css` and
+`resources/lib/appearance.ts`. The pre-paint STX appearance bootstrap uses the
+same storage key. Each window updates its page and native appearance on theme
+changes, storage clearing, focus and system appearance changes. The Settings
+segmented control follows the stored preference as well.
+
+With the bundled agent running, verify synchronization, persistence and visible
+text contrast across every application route and Settings pane:
+
+```bash
+BASE_URL=http://127.0.0.1:<port> bun scripts/verify-appearance.ts
+```
+
+The check writes screenshots and its report under `.shots/appearance/`.

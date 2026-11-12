@@ -145,7 +145,7 @@ jobs:
         run: bun run build:scripts
 
       - name: Render the views
-        run: ./buddy build:views
+        run: SYSTEM_CLEANER_AGENT=1 ./buddy build:views
 
       # Asserted here rather than only where it is consumed, so a renderer
       # that stops producing pages fails in the job that owns it.

@@ -7,10 +7,10 @@
   </defs>
   <rect width="660" height="400" fill="url(#sheet)"/>
   <text x="330" y="78" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="32" font-weight="600" fill="#1d1d1f">Install in one step</text>
-  <text x="330" y="112" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="17" fill="#6e6e73">Drag SystemCleaner to Applications</text>
+  <text x="330" y="112" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="17" fill="#55555b">Drag SystemCleaner to Applications</text>
   <g stroke="#c7c7cc" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round">
     <line x1="296" y1="200" x2="358" y2="200"/>
     <polyline points="342,184 358,200 342,216"/>
   </g>
-  <text x="330" y="366" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" fill="#86868b">Then open it from your Applications folder.</text>
+  <text x="330" y="366" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" fill="#606067">Then open it from your Applications folder.</text>
 </svg>

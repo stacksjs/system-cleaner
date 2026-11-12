@@ -107,12 +107,12 @@ Four conventions carry the rest, all read by buddy:
 | `app/Desktop/Resources/` | copied into `Contents/Resources` (generated; gitignored) |
 | `app/Desktop/Info.plist.json` | the `NS*UsageDescription` strings macOS shows in permission prompts |
 
-Two conventions are this app's own rather than the framework's, both for the
-installer window a mounted DMG opens with. `resources/dmg/installer-background.svg`
-is the artwork, rendered to a committed PNG by `bun scripts/render-dmg-background.ts`.
-`app/Desktop/dmg-window.DS_Store` is a position-only layout used only when the
-build cannot drive Finder. Geometry lives in `DMG_WINDOW` in
-`scripts/dmg-window.ts`; regenerate the fixture with `bun scripts/author-dmg-window.ts`.
+Pantry installs `github.com/create-dmg/create-dmg`, which authors the installer
+window, background, Applications drop target, compressed image, signature and
+notarization. Geometry lives in `DMG_WINDOW` in `scripts/dmg-window.ts` and
+artwork in `resources/dmg/installer-background.svg`. Regenerate the committed
+PNG with `bun scripts/render-dmg-background.ts` after editing the artwork.
+The build validates the layout and drop target from the finished image.
 
 Requires Stacks >= 0.72.100. See `docs/guide/desktop-app.md`.
 

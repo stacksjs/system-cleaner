@@ -41,6 +41,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import process from 'node:process'
+import { stageDesktopWeb } from './desktop-resources'
 
 const ROOT = process.cwd()
 const APP_NAME = process.env.DESKTOP_APP_NAME || 'SystemCleaner'
@@ -255,7 +256,7 @@ fs.rmSync(STAGE, { recursive: true, force: true })
 fs.mkdirSync(STAGE, { recursive: true })
 
 const resources = path.join(STAGE, 'resources')
-fs.cpSync(web, path.join(resources, 'web'), { recursive: true })
+await stageDesktopWeb(web, path.join(resources, 'web'))
 fs.cpSync(migrations, path.join(resources, 'migrations'), { recursive: true })
 
 // ── 3. The launcher ─────────────────────────────────────────────

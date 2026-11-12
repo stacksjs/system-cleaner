@@ -41,9 +41,7 @@ const result = await Bun.build({
   outdir: OUT,
   target: 'browser',
   format: 'iife',
-  // Readable in the Web Inspector, which is the only debugger these get. They
-  // are a few kB; minifying them saves nothing worth the opacity.
-  minify: false,
+  minify: process.env.NODE_ENV === 'production',
 })
 
 if (!result.success) {

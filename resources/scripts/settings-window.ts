@@ -18,25 +18,14 @@
  */
 import { nativeAutoLaunch, nativeWindow } from '@stacksjs/desktop/browser'
 
-/**
- * Where the appearance bootstrap keeps its state.
- *
- * `@appearanceBootstrap` in both layouts reads this key before first paint.
- * The two windows share it deliberately: the theme control is in this window,
- * and a second key would leave the window the user was actually looking at on
- * the old theme.
- */
-const APPEARANCE_KEY = 'systemcleaner-appearance'
+import { COLOR_MODES, currentColorMode, setColorMode, watchAppearance } from '../lib/appearance'
+import type { ColorMode } from '../lib/appearance'
 
 /** Keys this window owns that are the app's own preference, not appearance. */
 const PREFS_KEY = 'systemcleaner-preferences'
 
 /** Which pane was open when Settings was last closed. */
 const LAST_PANE_KEY = 'systemcleaner-settings-pane'
-
-type ColorMode = 'system' | 'light' | 'dark'
-
-const COLOR_MODES: ColorMode[] = ['system', 'light', 'dark']
 
 /**
  * Every switch this window owns that is nothing but a stored boolean, with the
@@ -91,65 +80,6 @@ function writePref(key: string, value: boolean): void {
   const prefs = readJson(PREFS_KEY)
   prefs[key] = value
   writeJson(PREFS_KEY, prefs)
-}
-
-// ---------------------------------------------------------------------------
-// Appearance
-// ---------------------------------------------------------------------------
-
-function currentColorMode(): ColorMode {
-  const stored = readJson(APPEARANCE_KEY).colorMode
-  return COLOR_MODES.includes(stored as ColorMode) ? stored as ColorMode : 'system'
-}
-
-/**
- * Tell this window which mode it is in.
- *
- * Craft resolves an NSVisualEffectView's material — and AppKit draws the
- * window buttons — against the *window's* appearance, not the page's. Since
- * Craft routes window actions to the window that asked, this sets the Settings
- * window only; the main window applies the same stored mode for itself when it
- * next hears about the change. Each window owning its own appearance is the
- * correct shape: they can be told separately, so they must each be told.
- */
-function applyNativeAppearance(mode: ColorMode): void {
-  void nativeWindow.setAppearance(mode)
-}
-
-/**
- * Apply a colour mode now, the way the bootstrap applies it at load.
- *
- * Everything the bootstrap writes has to move together: the stylesheet keys
- * its palette off `:root.dark`, `data-color-mode` is what the bootstrap reads
- * back, and `data-theme` is the resolved answer for anything that wants it
- * without computing `prefers-color-scheme` itself.
- */
-function applyColorMode(mode: ColorMode): void {
-  const root = document.documentElement
-  root.setAttribute('data-color-mode', mode)
-
-  const dark = mode === 'dark'
-    || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-
-  root.classList.toggle('dark', dark)
-  root.dataset.theme = dark ? 'dark' : 'light'
-  applyNativeAppearance(mode)
-}
-
-function setColorMode(mode: ColorMode): void {
-  const appearance = readJson(APPEARANCE_KEY)
-  appearance.colorMode = mode
-  writeJson(APPEARANCE_KEY, appearance)
-  applyColorMode(mode)
-  syncSegmented('colorMode', mode)
-}
-
-/** Follow the system while — and only while — the mode is `system`. */
-function watchSystemAppearance(): void {
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-    if (currentColorMode() === 'system')
-      applyColorMode('system')
-  })
 }
 
 // ---------------------------------------------------------------------------
@@ -736,14 +666,7 @@ function wire(): void {
     }
   })
 
-  // Another window changed the theme. Same origin, so the write reaches here.
-  window.addEventListener('storage', (event) => {
-    if (event.key === APPEARANCE_KEY)
-      applyColorMode(currentColorMode())
-  })
-
-  applyColorMode(currentColorMode())
-  watchSystemAppearance()
+  watchAppearance(mode => syncSegmented('colorMode', mode))
   paintAll()
   goTo(firstPane())
 

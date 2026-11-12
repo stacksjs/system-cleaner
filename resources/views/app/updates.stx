@@ -366,7 +366,7 @@
     </thead>
     <tbody>
       <template x-for='app in filteredDesktopApps()' :key='app.name'>
-        <tr x-show="!isUpdated('app:' + app.name)" :style="app.updateAvailable ? '' : 'opacity: 0.7;'">
+        <tr x-show="!isUpdated('app:' + app.name)">
           <td>
             <div class='item-row'>
               <img class='app-icon' loading='lazy' alt=''
@@ -409,7 +409,7 @@
               <span class='dim' style='font-size: 10px;'>Manual update</span>
             </template>
             <template x-if="!app.updateAvailable && app.latestVersion && app.source !== 'mas'">
-              <span class='dim' style='font-size: 10px; color: var(--green);'>Up to date</span>
+              <span style='font-size: 10px; color: var(--green);'>Up to date</span>
             </template>
           </td>
         </tr>

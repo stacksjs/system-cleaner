@@ -1,37 +1,11 @@
 #!/usr/bin/env bun
 /* eslint-disable ts/no-top-level-await, no-console */
 /**
- * Package SystemCleaner as a macOS `.app` inside a `.dmg`.
- *
- * This drives `buddy` rather than replacing it. Everything that is framework
- * work — compiling the launcher, bundling the Craft runtime, writing the
- * manifest and provenance, building the icon, assembling the bundle, signing,
- * and imaging the DMG — belongs to `buddy build:desktop` and `buddy build:dmg`.
- * What is left here is the three things only this app can know:
- *
- *   1. the UI has to be rendered as the local agent, not as the marketing site
- *   2. the launcher spawns two sibling binaries, which need compiling into the
- *      same directory `build:desktop` writes to
- *   3. the bundle carries a payload — the rendered UI and the migrations
- *
- * The framework learned the rest in 0.72.99 and 0.72.100:
- * `app/Desktop/launcher.ts` overrides the framework launcher, `DESKTOP_URL`
- * becomes optional for such an app, every file in `desktop-dist` is bundled,
- * `app/Desktop/Resources/` is copied into `Contents/Resources`, and
- * `app/Desktop/Info.plist.json` supplies the permission-prompt strings.
- *
- * Signing
- * -------
- * `DESKTOP_SIGNING_IDENTITY` (a Developer ID Application identity) makes
- * `build:dmg` sign the bundle; `NOTARY_PROFILE` then notarizes and staples the
- * DMG here, which `build:dmg` does not do and which Gatekeeper requires on a
- * Mac that has never seen the app. Unsigned still builds — useful locally, not
- * distributable.
- *
- * Developer ID rather than Mac App Store, deliberately: the Store requires
- * `com.apple.security.app-sandbox`, and a sandboxed process cannot read
- * `~/Library`, enumerate `/Applications`, signal other processes, or exec
- * `brew` — which is most of this app. See docs/guide/mac-app-store.md.
+ * Build the local-agent UI and package it for macOS.
+ * Stacks compiles the single executable and assembles/signs the application.
+ * Pantry's create-dmg owns the drag-and-drop installer and notarization.
+ * NOTARY_PROFILE names the keychain credentials; DESKTOP_SIGNING_IDENTITY
+ * accepts a Developer ID name or fingerprint (use the latter for duplicates).
  */
 
 import { spawnSync } from 'node:child_process'
@@ -40,7 +14,9 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import process from 'node:process'
 import { createGitHubUpdateManifest, UPDATE_MANIFEST_ASSET } from '@stacksjs/desktop'
-import { DMG_BACKGROUND_IN_VOLUME, DMG_WINDOW, finderLayoutScript, readDmgWindowLayout, requireDmgWindowLayout } from './dmg-window'
+import { looksLikeBunExecutable, resolveCraftExecutable } from '@stacksjs/desktop-build'
+import { stageDesktopWeb } from './desktop-resources'
+import { DMG_WINDOW, readDmgWindowLayout } from './dmg-window'
 
 const ROOT = process.cwd()
 const APP_NAME = process.env.DESKTOP_APP_NAME || 'SystemCleaner'
@@ -62,110 +38,15 @@ if (process.platform !== 'darwin') {
 
 const version = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version || '0.0.0'
 
-/**
- * The window a mounted DMG opens with, checked before anything is compiled.
- *
- * Read here rather than where it is used, five minutes further on: a fixture
- * that went missing, or one re-authored against a renamed app, should cost a
- * second rather than a whole build. See `scripts/dmg-window.ts`.
- */
-const dmgWindow = requireDmgWindowLayout()
-
-/**
- * The macOS SDK a Mach-O was linked against, as [major, minor].
- *
- * This is not trivia. AppKit keys its appearance off the SDK recorded in
- * `LC_BUILD_VERSION`: a binary built against an older one keeps the older
- * look, so the system can change how controls are drawn without redrawing
- * every app that was shipped before the change. On macOS 26 and up that
- * includes the window buttons, which are the glassy ones for a binary built
- * against the 26 SDK and the flat ones for anything older.
- *
- * The runtime draws this app's window, so its SDK decides whether the traffic
- * lights in the corner look like the rest of the system. Returns null when the
- * load command cannot be read.
- */
-function linkedSdk(binary: string): [number, number] | null {
-  const printed = spawnSync('otool', ['-l', binary], { encoding: 'utf8' })
-  if (printed.status !== 0 || !printed.stdout) return null
-
-  const match = printed.stdout.match(/LC_BUILD_VERSION[\s\S]*?sdk (\d+)\.(\d+)/)
-  return match ? [Number(match[1]), Number(match[2])] : null
-}
-
-/**
- * Point the framework at the Craft runtime to bundle.
- *
- * `buddy build:desktop` resolves `CRAFT_BIN`, then `craft` on PATH. Pantry
- * installs into the project rather than onto PATH, so without this the build
- * fails on a machine that has done nothing wrong.
- *
- * Among the candidates the newest *SDK* wins rather than the newest version,
- * because that is the axis the window chrome depends on — a 0.0.83 built
- * against the 15 SDK gives this app last year's window buttons, and a 0.0.81
- * built against the 26 one gives it the system's. Version breaks the tie.
- */
-function resolveCraftBin(): string | undefined {
-  if (process.env.CRAFT_BIN) return process.env.CRAFT_BIN
-
-  const pantryDir = path.join(ROOT, 'pantry/craft-native.org')
-  if (!fs.existsSync(pantryDir)) return undefined
-
-  const candidates = fs.readdirSync(pantryDir)
-    .filter(name => name.startsWith('v'))
-    .sort()
-    .reverse()
-    .map(dir => path.join(pantryDir, dir, 'bin/craft'))
-    .filter(candidate => fs.existsSync(candidate))
-
-  if (candidates.length === 0) return undefined
-
-  let best = candidates[0]
-  let bestSdk = linkedSdk(best)?.[0] ?? 0
-  for (const candidate of candidates.slice(1)) {
-    const sdk = linkedSdk(candidate)?.[0] ?? 0
-    if (sdk > bestSdk) {
-      best = candidate
-      bestSdk = sdk
-    }
-  }
-
-  return best
-}
-
-const craftBin = resolveCraftBin()
-
-/**
- * The macOS SDK generation the current window chrome requires.
- *
- * 26 is where AppKit restyled the window buttons, so 26 and anything after it
- * draw the current ones. This is deliberately not "the version this machine
- * runs": comparing against the host would fire on every macOS release whether
- * or not it changed how a control is drawn, and a warning that is always on is
- * one nobody reads. Raise it when a future release restyles them again.
- */
-const CHROME_SDK_FLOOR = 26
-
-/**
- * Say so when the runtime will draw the wrong window buttons.
- *
- * Nothing in this repo can correct it: the SDK is baked into the runtime when
- * Craft itself is built, so the fix is a Craft release built against a current
- * SDK — 0.0.84 and up — or `CRAFT_BIN` pointed at a local build of one.
- * Silence here means shipping a window that looks a major version out of date
- * with no clue why.
- */
-if (craftBin) {
-  const sdk = linkedSdk(craftBin)
-  if (sdk && sdk[0] < CHROME_SDK_FLOOR) {
-    console.warn(
-      `\n[desktop] WARNING: the Craft runtime at ${craftBin} is linked against the macOS ${sdk[0]}.${sdk[1]} SDK.`
-      + `\n           AppKit draws pre-${CHROME_SDK_FLOOR} window buttons for a binary built that far back, so the`
-      + `\n           traffic lights will not match the rest of the system. Upgrade craft-native.org to`
-      + `\n           0.0.84 or newer, or set CRAFT_BIN to a build made against the ${CHROME_SDK_FLOOR} SDK.\n`,
-    )
-  }
-}
+// The build and CI use the exact runtime declared for Pantry, not whichever
+// SDK or version happens to be newest in a developer's package cache.
+const dependencies = Bun.YAML.parse(fs.readFileSync(path.join(ROOT, 'deps.yaml'), 'utf8')) as { dependencies: Record<string, string> }
+const craftVersion = dependencies.dependencies['craft-native.org']
+if (!/^\d+\.\d+\.\d+$/.test(craftVersion))
+  throw new Error('deps.yaml must pin an exact Craft runtime version')
+const craftBin = resolveCraftExecutable(process.env.CRAFT_BIN || path.join(ROOT, 'pantry/craft-native.org', `v${craftVersion}`, 'bin/craft'))
+if (!fs.existsSync(craftBin))
+  throw new Error(`Craft is missing at ${craftBin}; run pantry install first`)
 
 /** Environment every step shares: this is a production build of the local agent. */
 const buildEnv: Record<string, string> = {
@@ -177,7 +58,7 @@ const buildEnv: Record<string, string> = {
   DESKTOP_APP_NAME: APP_NAME,
   DESKTOP_APP_VERSION: version,
   DESKTOP_BUNDLE_ID: process.env.DESKTOP_BUNDLE_ID || 'org.stacksjs.system-cleaner',
-  ...(craftBin ? { CRAFT_BIN: craftBin } : {}),
+  CRAFT_BIN: craftBin,
 }
 
 function run(cmd: string, args: string[], envOverrides: Record<string, string> = {}): void {
@@ -219,7 +100,8 @@ if (!fs.existsSync(path.join(web, 'app/large-files.html')))
 console.log('[desktop] staging bundle resources')
 fs.rmSync(RESOURCES, { recursive: true, force: true })
 fs.mkdirSync(RESOURCES, { recursive: true })
-fs.cpSync(web, path.join(RESOURCES, 'web'), { recursive: true })
+const payload = await stageDesktopWeb(web, path.join(RESOURCES, 'web'))
+console.log(`[desktop] web payload: ${payload.files} files, ${(payload.bytes / 1024 / 1024).toFixed(2)} MiB`)
 
 // The comment above is only half true until this runs. Nothing under
 // `database/` is tracked, so the migrations are build output in principle but
@@ -237,7 +119,7 @@ fs.cpSync(path.join(ROOT, 'database/migrations'), path.join(RESOURCES, 'migratio
 console.log('[desktop] building the desktop bundle')
 run('./buddy', ['build:desktop'])
 
-// ── 4. (nothing to compile here) ────────────────────────────────
+// ── 4. Shared executable ────────────────────────────────
 // The agent and the scanner used to be two more compiled binaries alongside the
 // launcher. They are subcommands of it now — `SystemCleaner agent`,
 // `SystemCleaner scan <json>` — because `bun build --compile` embeds the whole
@@ -250,378 +132,111 @@ run('./buddy', ['build:desktop'])
 
 // ── 5. Bundle and image ─────────────────────────────────────────
 console.log('[desktop] packaging')
-/** Staging directories `build:dmg` leaves in the temp dir, by name. */
-function stagingDirs(): Set<string> {
-  try {
-    return new Set(fs.readdirSync(os.tmpdir()).filter(d => d.startsWith('stacks-dmg-')))
-  }
-  catch {
-    return new Set()
-  }
-}
-
-/**
- * Image the bundle `build:dmg` staged but could not write.
- *
- * `buddy build:dmg` always names the volume after the app, so the staged
- * bundle lands at `/Volumes/SystemCleaner/SystemCleaner.app`. On a Mac where
- * SystemCleaner is already installed, macOS refuses that path outright:
- *
- *     could not access /Volumes/SystemCleaner/SystemCleaner.app
- *     hdiutil: create failed - Operation not permitted
- *
- * The installed copy carries `com.apple.macl` and `com.apple.provenance`, so
- * TCC is managing that bundle and will not let a process without App
- * Management rights create one that shadows it. Nothing is wrong with the
- * build: the `.app` is complete by this point and only the final imaging
- * fails, which is why this re-images rather than reporting a failure.
- *
- * Naming the volume `SystemCleaner <version>` sidesteps it and is the usual
- * macOS convention anyway. Developers without the app installed never hit the
- * collision and never reach here.
- */
-function imageStagedBundle(before: Set<string>): void {
-  const tmp = os.tmpdir()
-  const staged = fs.readdirSync(tmp)
-    .filter(d => d.startsWith('stacks-dmg-') && !before.has(d))
-    .map(d => path.join(tmp, d))
-    .filter(d => fs.existsSync(path.join(d, `${APP_NAME}.app`)))
-
-  if (staged.length === 0)
-    throw new Error('build:dmg failed before it staged a bundle - nothing to image')
-
-  // Newest wins: a run stages more than one directory, only one holds the app.
-  staged.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)
-
-  const outDir = path.join(ROOT, 'storage/framework/desktop-dmg')
-  fs.mkdirSync(outDir, { recursive: true })
-  const out = path.join(outDir, `${APP_NAME}-${APP_VERSION}.dmg`)
-  fs.rmSync(out, { force: true })
-
-  const volume = `${APP_NAME} ${APP_VERSION}`
-  console.log(`[desktop] re-imaging as "${volume}" (the app name collides with the installed copy)`)
-  const imaged = spawnSync('hdiutil', [
-    'create', '-volname', volume, '-srcfolder', staged[0], '-ov', '-format', 'UDZO', out,
-  ], { stdio: 'inherit' })
-  if (imaged.status !== 0)
-    throw new Error(`hdiutil failed to image ${out}`)
-
-  // build:dmg removes its staging only after a successful create, so a failed
-  // run leaves ~90 MB behind each time. Clear what this run made.
-  for (const d of fs.readdirSync(tmp)) {
-    if (d.startsWith('stacks-dmg-') && !before.has(d))
-      fs.rmSync(path.join(tmp, d), { recursive: true, force: true })
-  }
-}
-
-// The framework cannot yet distinguish executable payloads from its JSON
-// metadata when signing an app with a userland launcher. Build the image
-// unsigned here; `sealBundle` below performs the authoritative,
-// verified inside-out signing pass.
-const stagedBefore = stagingDirs()
-try {
-  run('./buddy', ['build:dmg'], { DESKTOP_SIGNING_IDENTITY: '' })
-}
-catch {
-  imageStagedBundle(stagedBefore)
-}
+// Stacks owns executable placement and inside-out signing. Packaging failures
+// are fatal; do not recover an unknown staged bundle from a failed command.
+run('./buddy', ['build:dmg'], {
+  DESKTOP_SIGNING_IDENTITY: process.env.DESKTOP_SIGNING_IDENTITY || '-',
+  DESKTOP_NOTARY_PROFILE: '',
+})
 
 const dmgDir = path.join(ROOT, 'storage/framework/desktop-dmg')
-const dmg = (fs.existsSync(dmgDir) ? fs.readdirSync(dmgDir) : []).find(file => file.endsWith('.dmg'))
-if (!dmg)
-  throw new Error(`build:dmg produced no disk image in ${dmgDir}`)
+const dmgPath = path.join(dmgDir, `${APP_NAME}-${APP_VERSION}.dmg`)
+if (!fs.existsSync(dmgPath))
+  throw new Error(`build:dmg produced no disk image at ${dmgPath}`)
 
-const dmgPath = path.join(dmgDir, dmg)
-
-/**
- * `build:dmg` copies every desktop-dist file into `Contents/MacOS`. That is
- * harmless for unsigned development images, but Apple treats every item in
- * that directory as nested code when it seals the outer bundle. The manifest,
- * provenance, and checksum files therefore make an otherwise valid Developer
- * ID signature fail with "code object is not signed at all".
- *
- * The userland launcher does not consume those files. Preserve them as build
- * metadata under Resources, then sign the executable leaves before sealing the
- * app itself. Rebuilding the image here also makes a failed framework signing
- * attempt impossible to mistake for a distributable artifact.
- *
- * This runs whether or not there is an identity to sign with, because an
- * unsealed bundle does not launch *anywhere* — not just on someone else's
- * Mac. `bun build --compile` leaves the launcher linker-signed ad hoc while
- * the bundle around it has no `_CodeSignature` at all, and macOS kills that
- * combination on exec with SIGTRAP and no message: the app bounces once in the
- * Dock and is gone. `codesign --verify` is the only thing that says why —
- * "code has no resources but signature indicates they must be present".
- *
- * So with no identity the bundle is sealed ad hoc, which is enough to run it
- * on the machine that built it and is what a local `bun run build:app` is for.
- * Hardened runtime, entitlements and a timestamp belong to the Developer ID
- * pass and are skipped: `--options runtime` is what makes the entitlements
- * load-bearing, and an ad-hoc signature cannot be notarized regardless.
- */
-/**
- * Ask Finder to arrange the mounted volume's window, background and all.
- *
- * Returns false rather than throwing when Finder will not play, which is the
- * case this exists to handle: the release DMG is built on a GitHub macOS
- * runner, and driving Finder there needs a GUI session and an Automation
- * grant that a headless job may simply not have. A refusal there must not
- * fail a release — the caller falls back to the committed layout.
- *
- * Everything else is a real failure and is reported as one. Success means
- * Finder claimed to do it; whether the layout actually landed on the shipped
- * image is checked separately, off the converted image, because that is the
- * only artifact anyone downloads.
- */
-function arrangeWithFinder(mount: string): boolean {
-  const name = path.basename(mount)
-
-  // Wait for Finder, not the filesystem. The mountpoint exists the moment
-  // `hdiutil attach` returns, but Finder keeps its own list of disks and
-  // arranging too early fails with "Can't get disk" (-1728) against a volume
-  // that is demonstrably mounted.
-  let visible = false
-  for (let attempt = 0; attempt < 40 && !visible; attempt++) {
-    const asked = spawnSync('osascript', ['-e', `tell application "Finder" to exists disk ${JSON.stringify(name)}`], { encoding: 'utf8' })
-    if (asked.stdout?.trim() === 'true')
-      visible = true
-    else
-      spawnSync('sleep', ['0.25'], { stdio: 'ignore' })
-  }
-  if (!visible) {
-    console.warn(`[desktop] Finder never saw ${mount}`)
-    return false
-  }
-
-  const arranged = spawnSync('osascript', ['-', name], {
-    input: finderLayoutScript({ background: true }),
-    encoding: 'utf8',
-  })
-  if (arranged.status !== 0) {
-    console.warn(`[desktop] osascript: ${arranged.stderr?.trim()}`)
-    return false
-  }
-
-  // Finder writes the .DS_Store when the window closes, and buffers it.
-  spawnSync('sync', [], { stdio: 'ignore' })
-
-  const written = path.join(mount, '.DS_Store')
-  if (!fs.existsSync(written)) {
-    console.warn('[desktop] Finder closed the window without writing a layout')
-    return false
-  }
-
-  // Finder reported success; confirm it actually set the picture, because a
-  // background that silently failed to attach is the whole point of this.
-  const layout = readDmgWindowLayout(new Uint8Array(fs.readFileSync(written)))
-  if (layout.backgroundType !== 2) {
-    console.warn(`[desktop] Finder arranged the window but set no background (backgroundType ${layout.backgroundType})`)
-    return false
-  }
-
-  return true
-}
-
-function sealBundle(imagePath: string): void {
-  const identity = process.env.DESKTOP_SIGNING_IDENTITY
-  const adhoc = !identity
-
-  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'system-cleaner-sign-'))
-  const mountDir = path.join(workDir, 'mounted')
-  const imageRoot = path.join(workDir, 'image')
-  const appBundle = path.join(imageRoot, `${APP_NAME}.app`)
-  const rebuiltImage = path.join(workDir, path.basename(imagePath))
-  let layoutMount: string | null = null
+/** Pantry supplies create-dmg; it owns the background, icon placement and drop link. */
+function finishInstaller(imagePath: string): void {
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'system-cleaner-installer-'))
+  const mount = path.join(work, 'mounted')
+  const source = path.join(work, 'source')
+  const output = path.join(work, `${APP_NAME}-${APP_VERSION}.dmg`)
+  const bundle = path.join(source, `${APP_NAME}.app`)
+  fs.mkdirSync(mount)
+  fs.mkdirSync(source)
   let mounted = false
-  let layoutMounted = false
-
-  fs.mkdirSync(mountDir)
-  fs.mkdirSync(imageRoot)
-
   try {
-    run('hdiutil', ['attach', imagePath, '-nobrowse', '-readonly', '-mountpoint', mountDir])
+    run('hdiutil', ['attach', imagePath, '-nobrowse', '-readonly', '-mountpoint', mount])
     mounted = true
-    run('ditto', [path.join(mountDir, `${APP_NAME}.app`), appBundle])
-    run('hdiutil', ['detach', mountDir])
+    run('ditto', [path.join(mount, `${APP_NAME}.app`), bundle])
+    run('hdiutil', ['detach', mount])
     mounted = false
 
-    const macosDir = path.join(appBundle, 'Contents/MacOS')
-    const metadataDir = path.join(appBundle, 'Contents/Resources/BuildMetadata')
-    fs.mkdirSync(metadataDir, { recursive: true })
+    const macos = path.join(bundle, 'Contents/MacOS')
+    const runtimes = fs.readdirSync(macos).filter(name => looksLikeBunExecutable(path.join(macos, name)))
+    if (runtimes.length !== 1)
+      throw new Error(`Expected one Bun runtime, found ${runtimes.length}: ${runtimes.join(', ')}`)
+    run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', bundle])
 
-    for (const name of ['desktop.json', 'provenance.json', 'checksums.sha256']) {
-      const source = path.join(macosDir, name)
-      if (fs.existsSync(source))
-        fs.renameSync(source, path.join(metadataDir, name))
-    }
-
-    // Hardened runtime with no entitlements produces a window that opens,
-    // reports valid bounds, and draws nothing: WebKit cannot allocate
-    // executable memory for JavaScriptCore, the content process is killed, and
-    // the webview never composites. The app looked like it had vanished.
-    //
-    // `app/Desktop/Entitlements.plist` carries the minimum that a Craft window
-    // and three compiled Bun binaries need under `--options runtime`:
-    //
-    //   allow-jit                        JavaScriptCore, in the webview and in Bun
-    //   allow-unsigned-executable-memory  Bun maps pages it writes to
-    //   disable-library-validation        the launcher spawns sibling binaries
-    //   allow-dyld-environment-variables  the launcher passes SYSTEM_CLEANER_* through
-    //   automation.apple-events           "Move to Trash" drives Finder
-    //
-    // The file carries no XML comments: AMFI's unserializer is stricter than
-    // `plutil -lint` and rejects them outright — "syntax error near line 12",
-    // pointing at a comment plutil had just called valid.
-    const entitlements = path.join(ROOT, 'app/Desktop/Entitlements.plist')
-    if (!adhoc && !fs.existsSync(entitlements))
-      throw new Error(`Signing needs ${entitlements}`)
-
-    const signArgs = adhoc
-      ? ['--force', '--sign', '-']
-      : [
-          '--force',
-          '--options', 'runtime',
-          '--entitlements', entitlements,
-          '--timestamp',
-          '--sign', identity as string,
-        ]
-
-    for (const name of ['craft-runtime', APP_NAME])
-      run('codesign', [...signArgs, path.join(macosDir, name)])
-
-    run('codesign', [...signArgs, appBundle])
-    run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', appBundle])
-
-    fs.symlinkSync('/Applications', path.join(imageRoot, 'Applications'))
-
-    // The picture has to be inside the volume: Finder stores the background as
-    // an alias to a file on that volume, not as pixels in the `.DS_Store`.
-    const background = path.join(imageRoot, DMG_BACKGROUND_IN_VOLUME)
-    fs.mkdirSync(path.dirname(background), { recursive: true })
-    fs.copyFileSync(path.join(ROOT, 'resources/dmg/installer-background.png'), background)
-
-    // Versioned, for the reason `imageStagedBundle` is: on a Mac with the app
-    // installed, TCC refuses to let anything create
-    // `/Volumes/SystemCleaner/SystemCleaner.app` over the copy it manages, and
-    // `hdiutil` fails with "Operation not permitted".
-    const volume = `${APP_NAME} ${APP_VERSION}`
-
-    // Two steps rather than one, because the window layout cannot be staged.
-    // `hdiutil create -srcfolder` drops a root `.DS_Store` without a word, so
-    // a layout placed in `imageRoot` produces an image with no layout at all —
-    // measured, not assumed. Writing it onto a mounted read-write volume and
-    // compressing afterwards is the only order that keeps it. The slack is
-    // free space in the writable image and does not survive the conversion.
-    const writable = path.join(workDir, 'writable.dmg')
-    const used = spawnSync('du', ['-sk', imageRoot], { encoding: 'utf8' })
-    const usedKb = Number(used.stdout?.trim().split(/\s+/)[0])
-    if (used.status !== 0 || !Number.isFinite(usedKb) || usedKb <= 0)
-      throw new Error(`could not size ${imageRoot} to build a writable image`)
-
-    run('hdiutil', [
-      'create',
-      '-volname', volume,
-      '-srcfolder', imageRoot,
-      '-ov',
-      '-format', 'UDRW',
-      '-size', `${usedKb + 20480}k`,
-      writable,
+    const app = DMG_WINDOW.items['SystemCleaner.app']
+    const applications = DMG_WINDOW.items.Applications
+    run(path.join(ROOT, 'pantry/.bin/create-dmg'), [
+      '--volname', `${APP_NAME} ${APP_VERSION}`,
+      '--volicon', path.join(bundle, 'Contents/Resources/AppIcon.icns'),
+      '--background', path.join(ROOT, 'resources/dmg/installer-background.png'),
+      '--window-pos', '200', '120',
+      '--window-size', String(DMG_WINDOW.width), String(DMG_WINDOW.height),
+      '--icon-size', String(DMG_WINDOW.iconSize),
+      '--text-size', '13',
+      '--icon', `${APP_NAME}.app`, String(app.x), String(app.y),
+      '--hide-extension', `${APP_NAME}.app`,
+      '--app-drop-link', String(applications.x), String(applications.y),
+      '--format', 'ULMO',
+      '--filesystem', 'HFS+',
+      ...(process.env.DESKTOP_SIGNING_IDENTITY ? ['--codesign', process.env.DESKTOP_SIGNING_IDENTITY] : []),
+      ...(process.env.NOTARY_PROFILE ? ['--notarize', process.env.NOTARY_PROFILE] : []),
+      output, source,
     ])
 
-    // Mounted where Finder can see it, rather than on a private mountpoint:
-    // `disk "name"` resolves against /Volumes and fails with -1728 anywhere
-    // else. Safe here because the volume carries the version, so it cannot
-    // land on `/Volumes/SystemCleaner` and collide with an installed copy.
-    const attached = spawnSync('hdiutil', ['attach', writable], { encoding: 'utf8' })
-    if (attached.status !== 0)
-      throw new Error(`could not mount the writable image: ${attached.stderr}`)
-    layoutMount = attached.stdout.split('\n')
-      .map(line => line.split('\t').pop()?.trim() ?? '')
-      .filter(entry => entry.startsWith('/Volumes/'))
-      .pop() ?? null
-    if (!layoutMount)
-      throw new Error(`hdiutil mounted nothing under /Volumes:\n${attached.stdout}`)
-    layoutMounted = true
-
-    // macOS puts this on every writable volume it mounts and Finder would
-    // record a position for it like any other item.
-    fs.rmSync(path.join(layoutMount, '.fseventsd'), { recursive: true, force: true })
-
-    if (arrangeWithFinder(layoutMount))
-      console.log('[desktop] window arranged by Finder, with the background picture')
-    else {
-      // Not fatal. The committed layout still opens the window at the right
-      // size with both icons placed — it just has no artwork behind them,
-      // which is a worse installer than intended and a far better one than
-      // Finder's default list view. The warning is how the next release
-      // learns that this runner cannot drive Finder.
-      console.warn('[desktop] Finder would not arrange the window; falling back to the committed position-only layout')
-      fs.writeFileSync(path.join(layoutMount, '.DS_Store'), dmgWindow.bytes)
-    }
-
-    // Again, and this time it matters: macOS recreates `.fseventsd` while the
-    // volume is mounted, so removing it before arranging is not enough — the
-    // copy made after that gets baked into the image and shows up as a blue
-    // folder over the headline for anyone with hidden files turned on. The
-    // shipped image is read-only, so once it is gone here it stays gone.
-    fs.rmSync(path.join(layoutMount, '.fseventsd'), { recursive: true, force: true })
-    // Belt and braces alongside parking it off-window: the hidden flag keeps
-    // `.background` out of an ordinary Finder window regardless of layout.
-    spawnSync('chflags', ['-h', 'hidden', path.join(layoutMount, '.background')], { stdio: 'ignore' })
-
-    run('hdiutil', ['detach', layoutMount])
-    layoutMounted = false
-
-    run('hdiutil', ['convert', writable, '-format', 'UDZO', '-ov', '-o', rebuiltImage])
-    fs.renameSync(rebuiltImage, imagePath)
-
-    // Read it back off the image that ships. The layout is cosmetic, so every
-    // way of losing it is silent: the only thing that distinguishes a DMG that
-    // opens arranged from one that opens as a default list view is this check.
-    run('hdiutil', ['attach', imagePath, '-nobrowse', '-readonly', '-mountpoint', mountDir])
+    // Validate the shipped image, not an intermediate directory. A release
+    // without artwork or a usable drop target is a failed installer build.
+    run('hdiutil', ['verify', output])
+    run('hdiutil', ['attach', output, '-nobrowse', '-readonly', '-mountpoint', mount])
     mounted = true
-    const shipped = path.join(mountDir, '.DS_Store')
-    if (!fs.existsSync(shipped))
-      throw new Error(`${path.basename(imagePath)} carries no window layout: Finder would open it unarranged`)
-    const landed = readDmgWindowLayout(new Uint8Array(fs.readFileSync(shipped)))
-    for (const name of Object.keys(DMG_WINDOW.items)) {
-      if (!landed.items[name])
-        throw new Error(`the shipped layout has no position for ${name}`)
+    const layout = readDmgWindowLayout(new Uint8Array(fs.readFileSync(path.join(mount, '.DS_Store'))))
+    if (layout.backgroundType !== 2 || layout.width !== DMG_WINDOW.width || layout.height !== DMG_WINDOW.height || layout.iconSize !== DMG_WINDOW.iconSize)
+      throw new Error(`Installer layout does not match the design: ${JSON.stringify(layout)}`)
+    for (const [name, position] of Object.entries(DMG_WINDOW.items)) {
+      if (layout.items[name]?.x !== position.x || layout.items[name]?.y !== position.y)
+        throw new Error(`Installer icon ${name} is misplaced`)
     }
-    run('hdiutil', ['detach', mountDir])
+    if (fs.readlinkSync(path.join(mount, 'Applications')) !== '/Applications')
+      throw new Error('Installer has no Applications drop target')
+    const shippedBundle = path.join(mount, `${APP_NAME}.app`)
+    run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', shippedBundle])
+    if (process.env.NOTARY_PROFILE) {
+      run('xcrun', ['stapler', 'validate', output])
+      run('spctl', ['--assess', '--type', 'open', '--context', 'context:primary-signature', '--verbose=2', output])
+      run('spctl', ['--assess', '--type', 'execute', '--verbose=2', shippedBundle])
+    }
+    // Preserve the exact bundled app for local launch and UI verification.
+    run('ditto', [shippedBundle, path.join(ROOT, 'storage/framework/desktop-dist', `${APP_NAME}.app`)])
+    run('hdiutil', ['detach', mount])
     mounted = false
-    const artwork = landed.backgroundType === 2 ? 'with artwork' : 'no artwork'
-    console.log(`[desktop] window: ${landed.width}x${landed.height}, ${landed.iconSize}pt icons, ${Object.keys(landed.items).length} placed, ${artwork}`)
-  }
-  finally {
-    // Either mount can be left attached by a throw, and a leaked one holds the
-    // temp directory open so the cleanup below silently does nothing.
-    for (const [attached, target] of [[mounted, mountDir], [layoutMounted, layoutMount]] as const) {
-      if (attached && target) {
-        spawnSync('hdiutil', ['detach', target], {
-          stdio: 'inherit',
-          cwd: ROOT,
-        })
+
+    const compression: { format: string, bytes: number }[] = [{ format: 'ULMO', bytes: fs.statSync(output).size }]
+    if (process.env.DMG_BENCHMARK === '1') {
+      for (const format of ['UDZO', 'ULFO']) {
+        const alternative = path.join(work, `${format}.dmg`)
+        run('hdiutil', ['convert', output, '-format', format,
+          ...(format === 'UDZO' ? ['-imagekey', 'zlib-level=9'] : []), '-ov', '-o', alternative])
+        compression.push({ format, bytes: fs.statSync(alternative).size })
       }
     }
-    fs.rmSync(workDir, { recursive: true, force: true })
+    for (const result of compression)
+      console.log(`[desktop] ${result.format}: ${(result.bytes / 1024 / 1024).toFixed(2)} MiB`)
+    fs.writeFileSync(path.join(dmgDir, 'size-report.json'), `${JSON.stringify({ web: payload, runtimes, compression }, null, 2)}\n`)
+    fs.renameSync(output, imagePath)
+  }
+  finally {
+    if (mounted)
+      spawnSync('hdiutil', ['detach', mount], { stdio: 'inherit' })
+    fs.rmSync(work, { recursive: true, force: true })
   }
 }
 
-sealBundle(dmgPath)
+finishInstaller(dmgPath)
 
-// ── 6. Notarize ─────────────────────────────────────────────────
-// Signing is `build:dmg`'s job; notarization is not, and a signed but
-// un-notarized DMG is still refused by Gatekeeper on a Mac that has never seen
-// it. `NOTARY_PROFILE` names a keychain profile created once with
-// `xcrun notarytool store-credentials`.
-if (process.env.NOTARY_PROFILE) {
-  console.log('[desktop] submitting to the notary service')
-  run('xcrun', ['notarytool', 'submit', dmgPath, '--keychain-profile', process.env.NOTARY_PROFILE, '--wait'])
-  run('xcrun', ['stapler', 'staple', dmgPath])
-}
-
-// ── 7. Update manifest ──────────────────────────────────────────
+// ── 6. Update manifest ──────────────────────────────────────────
 /**
  * `update.json`, next to the DMG.
  *

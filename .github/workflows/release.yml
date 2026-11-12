@@ -39,63 +39,17 @@ jobs:
       - name: Build binaries
         run: bun run build:binaries
 
-      # The Action owns the whole release: it creates the GitHub release,
-      # extracts this tag's section from CHANGELOG.md (written by
-      # `buddy release`), attaches the binaries, and generates checksums.
-      - name: Publish release
-        uses: pantry-pm/pantry/packages/action@v0.11.74
+      - name: Stage CLI release artifacts
+        uses: actions/upload-artifact@v4
         with:
-          install: 'false'
-          release: 'true'
-          release-files: |
-            packages/cli/bin/system-cleaner-darwin-arm64.zip
-            packages/cli/bin/system-cleaner-windows-x64.zip
-          release-checksums: sha256
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: release-cli
+          path: packages/cli/bin/*.zip
+          if-no-files-found: error
+          retention-days: 1
 
-  # The signed, notarized .dmg — the app people actually install. Needs a real
-  # Mac: the bundle carries the Craft runtime, `codesign`, and `notarytool`.
-  #
-  # Skipped entirely until `DESKTOP_SIGNING_IDENTITY_NAME` is set, so the CLI
-  # release above is never blocked by a half-configured signing setup. An
-  # unsigned .dmg is not worth attaching — Gatekeeper refuses it everywhere but
-  # the machine that built it.
-  #
-  # The steps live in `desktop-dmg.yml` so the retry below runs exactly the
-  # same ones.
   desktop:
     name: Desktop app
-    needs: release
-    if: ${{ vars.DESKTOP_SIGNING_IDENTITY_NAME != '' }}
     uses: ./.github/workflows/desktop-dmg.yml
-    with:
-      runner: macos-26
-    secrets: inherit
-
-  # One more go, on a different image.
-  #
-  # `macos-26` is the newest label and therefore the scarcest; when GitHub has
-  # none free it does not queue indefinitely, it cancels the job without
-  # running a step. That is what happened to v0.3.15, which published with no
-  # installer. A second attempt on `macos-15` is a different pool, and the
-  # build does not care which it gets: the window chrome comes from the Craft
-  # runtime that pantry downloads, not from the runner's SDK, and `codesign`
-  # and `notarytool` are the same everywhere.
-  #
-  # `always()` because a cancelled dependency would otherwise skip this too,
-  # and a cancellation is precisely the case it exists for.
-  desktop-retry:
-    name: Desktop app (retry)
-    needs: [release, desktop]
-    if: >-
-      ${{ always()
-      && needs.release.result == 'success'
-      && needs.desktop.result != 'success'
-      && vars.DESKTOP_SIGNING_IDENTITY_NAME != '' }}
-    uses: ./.github/workflows/desktop-dmg.yml
-    with:
-      runner: macos-15
     secrets: inherit
 
   # The Windows desktop bundle, which until now existed only as a CI artifact.
@@ -112,7 +66,7 @@ jobs:
   # their integrity signal.
   desktop-windows:
     name: Windows desktop app
-    needs: [release, views]
+    needs: views
     runs-on: windows-latest
 
     permissions:
@@ -164,16 +118,13 @@ jobs:
       - name: Build the Windows desktop bundle
         run: bun scripts/build-desktop-windows.ts --skip-prepare
 
-      - name: Publish release
-        uses: pantry-pm/pantry/packages/action@v0.11.74
+      - name: Stage Windows release artifact
+        uses: actions/upload-artifact@v4
         with:
-          install: 'false'
-          release: 'true'
-          release-files: |
-            storage/framework/desktop-windows/*.zip
-          release-checksums: sha256
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: release-windows
+          path: storage/framework/desktop-windows/*.zip
+          if-no-files-found: error
+          retention-days: 1
 
   # The views the Windows bundle serves, rendered where the renderer works.
   views:
@@ -195,7 +146,7 @@ jobs:
         run: bun run build:scripts
 
       - name: Render the views
-        run: ./buddy build:views
+        run: SYSTEM_CLEANER_AGENT=1 ./buddy build:views
 
       - name: Check the app pages were written
         run: |
@@ -209,45 +160,44 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # Both jobs above attach their own files and ask the action for checksums,
-  # and the action checksums the files *it* uploaded. The desktop job runs
-  # second, so its two-asset `checksums.txt` replaced the one covering the CLI
-  # archives — v0.3.5 and v0.3.6 both published with no hash for the CLI zips
-  # at all, which matters most for the unsigned Windows .exe, where a checksum
-  # is the only integrity signal a user has:
-  #
-  #     Release      Generated checksums.txt (sha256) for 2 asset(s)
-  #     Desktop app  Generated checksums.txt (sha256) for 2 asset(s)   <- won
-  #
-  # So checksums are rebuilt once, last, over whatever actually ended up on the
-  # release. `release-manifest.json` had the same hole and is rebuilt with it.
-  checksums:
-    name: Checksums
-    needs: [release, desktop, desktop-retry, desktop-windows]
-    # `always()`, because `desktop` is skipped whenever signing is not
-    # configured and a skipped dependency would skip this too. Gated on
-    # `release` instead: if that failed there is nothing to checksum, and if
-    # `desktop` failed the assets that did land should still be covered.
-    if: ${{ always() && needs.release.result == 'success' }}
+  # Publish once, after every platform has built successfully. Pantry owns
+  # release attachment and computes checksums over the complete asset set.
+  publish:
+    name: Publish release
+    needs: [release, desktop, desktop-windows]
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: write
-
     steps:
       - uses: actions/checkout@v7
-
-      - name: Install Bun
-        uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          fetch-depth: 0
 
-      # Runs after every asset is attached, so a failure here leaves the
-      # release intact with the previous, incomplete checksums rather than
-      # breaking the release itself.
-      - name: Rebuild checksums over every attached asset
-        run: bun run scripts/release-checksums.ts "${{ github.ref_name }}"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Require the complete release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_SHA: ${{ github.sha }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          test -s "release-assets/SystemCleaner-${version}.dmg"
+          test -s release-assets/update.json
+          test -s release-assets/system-cleaner-darwin-arm64.zip
+          test -s release-assets/system-cleaner-windows-x64.zip
+          test -s "release-assets/SystemCleaner-${version}-windows-x64.zip"
+
+      - name: Publish all assets through Pantry
+        uses: pantry-pm/pantry/packages/action@v0.11.74
+        with:
+          install: 'false'
+          release: 'true'
+          release-tag: ${{ github.ref_name }}
+          release-files: |
+            release-assets/*.zip
+            release-assets/*.dmg
+            release-assets/update.json
+          release-checksums: sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

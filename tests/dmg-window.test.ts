@@ -2,11 +2,9 @@ import { describe, expect, it } from 'bun:test'
 import * as fs from 'node:fs'
 import {
   DMG_WINDOW,
-  DMG_WINDOW_FIXTURE,
   readBinaryPlist,
   readDmgWindowLayout,
   readRecords,
-  requireDmgWindowLayout,
 } from '../scripts/dmg-window'
 
 /**
@@ -20,18 +18,18 @@ import {
  * platform-skipping this would be how a broken layout travels.
  */
 describe('the DMG window layout', () => {
-  const bytes = new Uint8Array(fs.readFileSync(DMG_WINDOW_FIXTURE))
+  const bytes = new Uint8Array(fs.readFileSync(new URL('./fixtures/dmg-window.DS_Store', import.meta.url)))
 
-  it('is the window the build claims to ship', () => {
+  it('reads the reference window geometry', () => {
     // Throws with the specific discrepancy if anything moved.
-    const { layout } = requireDmgWindowLayout()
+    const layout = readDmgWindowLayout(bytes)
     expect(layout.width).toBe(DMG_WINDOW.width)
     expect(layout.height).toBe(DMG_WINDOW.height)
     expect(layout.iconSize).toBe(DMG_WINDOW.iconSize)
   })
 
   it('places both icons rather than letting Finder arrange them', () => {
-    const { layout } = requireDmgWindowLayout()
+    const layout = readDmgWindowLayout(bytes)
     // `arrangeBy` anything but none makes Finder snap icons to its own grid
     // and ignore every position in the file.
     expect(layout.arrangeBy).toBe('none')
@@ -108,11 +106,6 @@ describe('the DMG window layout', () => {
     const corrupted = new Uint8Array(bytes)
     corrupted[7] = 0x32
     expect(() => readRecords(corrupted)).toThrow(/not a \.DS_Store/)
-  })
-
-  it('says which file is missing rather than throwing ENOENT', () => {
-    expect(() => requireDmgWindowLayout('/nonexistent/dmg-window.DS_Store'))
-      .toThrow(/missing.*author-dmg-window/s)
   })
 
   it('reads a binary property list without plutil', () => {

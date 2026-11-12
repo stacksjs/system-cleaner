@@ -1,43 +1,6 @@
 #!/usr/bin/env bun
 /* eslint-disable no-console */
-/**
- * The Finder window that opens when someone mounts SystemCleaner.dmg.
- *
- * A disk image carries its own window geometry in a `.DS_Store` at the volume
- * root: where the window opens, how big it is, whether it has a toolbar, and
- * the exact pixel each icon sits on. Without one, Finder falls back to whatever
- * the person's last window looked like, and the app and the `/Applications`
- * symlink land wherever the default grid puts them — which reads as "here are
- * two files" rather than "drag this onto that".
- *
- * Only Finder writes that file, and only while a window is open on a
- * *writable* volume. So the layout is authored once by Finder
- * (`scripts/author-dmg-window.ts`) and committed, and the build copies it in.
- * Scripting Finder during the build instead would make every release depend on
- * a GUI session and an Automation grant on a GitHub runner — where a refusal
- * is silent and the only symptom is a badly laid out window that nobody sees
- * until someone downloads it.
- *
- * Position only, no background image, and that is what makes one authored
- * fixture reusable. A background needs a `BKGD` record holding an alias to a
- * file on the volume that authored it, which means nothing on any other
- * volume. The three records this layout does use — `Iloc` for each icon,
- * `bwsp` for the window, `icvp` for the icon view — name nothing outside
- * themselves.
- *
- * Reading it back matters because the failure mode is cosmetic and silent.
- * `hdiutil create -srcfolder` drops a root `.DS_Store` on the floor without a
- * word: staging the file next to the app produces an image with no layout at
- * all, which is exactly how this would have shipped. `build-desktop-app.ts`
- * therefore images a read-write volume, writes the file onto it, converts, and
- * then checks the result still has it.
- */
-
-import * as fs from 'node:fs'
-import * as path from 'node:path'
-
-/** The committed layout, authored by Finder. Regenerate with `author-dmg-window.ts`. */
-export const DMG_WINDOW_FIXTURE: string = path.join(import.meta.dir, '../app/Desktop/dmg-window.DS_Store')
+/** Shared installer geometry and a reader for validating create-dmg's output. */
 
 /**
  * What the window is supposed to look like.
@@ -61,90 +24,11 @@ export const DMG_WINDOW = {
   backgroundHeight: 400,
   iconSize: 128,
   arrangeBy: 'none',
-  /**
-   * 0 is "no background", which is what the committed fallback carries.
-   *
-   * The shipped image gets 2 — an actual picture — but that cannot be baked
-   * into a fixture: Finder stores it as a `backgroundImageAlias` bound to the
-   * volume it was authored on, and the alias does not resolve on any other
-   * volume. Measured both ways, including against a second volume with an
-   * identical name, which still came back with no background. So the build
-   * sets the background on the real volume and only falls back to this.
-   */
-  backgroundType: 0,
   items: {
     'SystemCleaner.app': { x: 165, y: 200 },
     'Applications': { x: 495, y: 200 },
   },
 } as const
-
-/** Where the background lives inside the volume, if the build manages to set one. */
-export const DMG_BACKGROUND_IN_VOLUME = '.background/installer.png'
-
-/** Where the window opens on screen. Only its size is asserted; macOS clamps the origin. */
-const SCREEN_ORIGIN = { x: 200, y: 120 }
-
-/**
- * The AppleScript that arranges a mounted volume's window.
- *
- * Shared, because there are two callers and they must agree: the authoring
- * script bakes the no-background version into the committed fixture, and the
- * build runs the background version against the volume it is about to ship. A
- * drift between them would mean the fallback layout is not the layout.
- *
- * Takes the volume name as `argv`, so a caller never has to quote it into the
- * source. Bounds are set *last*, and that ordering is load-bearing: hiding the
- * toolbar rebuilds the window, so a size set before it is silently discarded —
- * the first run of this asked for 660x400 and Finder recorded 920x464, its own
- * default, with every other property correct.
- */
-export function finderLayoutScript(options: { background?: boolean } = {}): string {
-  const { x, y } = SCREEN_ORIGIN
-  const app = DMG_WINDOW.items['SystemCleaner.app']
-  const applications = DMG_WINDOW.items.Applications
-  // `.background:installer.png` is a colon path relative to the disk, which is
-  // how AppleScript addresses a file inside the volume being told to open.
-  //
-  // The folder holding it is parked below the window's bottom edge, which is
-  // what Launchpad's DMG does too. Dot-directories are invisible to most
-  // people, but anyone who has turned on hidden files -- and plenty of
-  // developers have -- otherwise gets two blue folders sitting on top of the
-  // headline. Giving it a position outside the visible area costs nothing and
-  // puts it out of view either way.
-  const background = options.background
-    ? `      set background picture of opts to file "${DMG_BACKGROUND_IN_VOLUME.replace('/', ':')}"\n`
-    : ''
-
-  return `on run argv
-  set vol to item 1 of argv
-  tell application "Finder"
-    tell disk vol
-      open
-      set current view of container window to icon view
-      set toolbar visible of container window to false
-      set statusbar visible of container window to false
-      set opts to the icon view options of container window
-      set arrangement of opts to not arranged
-      set icon size of opts to ${DMG_WINDOW.iconSize}
-      set text size of opts to 12
-      set label position of opts to bottom
-      set shows item info of opts to false
-${background}      try
-        set position of item ".background" of container window to {${DMG_WINDOW.width - 160}, ${DMG_WINDOW.height + 140}}
-      end try
-${background ? '' : ''}      set position of item "SystemCleaner.app" of container window to {${app.x}, ${app.y}}
-      set position of item "Applications" of container window to {${applications.x}, ${applications.y}}
-      delay 1
-      set the bounds of container window to {${x}, ${y}, ${x + DMG_WINDOW.width}, ${y + DMG_WINDOW.height}}
-      delay 1
-      update without registering applications
-      delay 2
-      close
-    end tell
-  end tell
-end run
-`
-}
 
 export interface DmgWindowLayout {
   /** Window size in points. */
@@ -406,51 +290,4 @@ export function readDmgWindowLayout(bytes: Uint8Array): DmgWindowLayout {
     items,
     records: [...new Set(records.map(record => record.id))].sort(),
   }
-}
-
-/**
- * The fixture, checked against {@link DMG_WINDOW}, or a thrown explanation.
- *
- * The build calls this before it spends five minutes compiling, so a fixture
- * that went missing or was re-authored against a renamed app says so up front
- * rather than producing an image whose window is quietly wrong.
- */
-export function requireDmgWindowLayout(file: string = DMG_WINDOW_FIXTURE): { bytes: Uint8Array, layout: DmgWindowLayout } {
-  if (!fs.existsSync(file))
-    throw new Error(`the DMG window layout is missing: ${file}\nRegenerate it with \`bun scripts/author-dmg-window.ts\`.`)
-
-  const bytes = new Uint8Array(fs.readFileSync(file))
-  const layout = readDmgWindowLayout(bytes)
-
-  const wrong: string[] = []
-  if (layout.width !== DMG_WINDOW.width || layout.height !== DMG_WINDOW.height)
-    wrong.push(`window is ${layout.width}x${layout.height}, expected ${DMG_WINDOW.width}x${DMG_WINDOW.height}`)
-  if (layout.iconSize !== DMG_WINDOW.iconSize)
-    wrong.push(`icon size is ${layout.iconSize}, expected ${DMG_WINDOW.iconSize}`)
-  if (layout.arrangeBy !== DMG_WINDOW.arrangeBy)
-    wrong.push(`icons are arranged by ${layout.arrangeBy}, which overrides their positions`)
-  if (layout.backgroundType !== DMG_WINDOW.backgroundType)
-    wrong.push(`backgroundType is ${layout.backgroundType}, expected ${DMG_WINDOW.backgroundType} — a background image makes the layout volume-specific`)
-
-  for (const [name, expected] of Object.entries(DMG_WINDOW.items)) {
-    const actual = layout.items[name]
-    if (!actual) {
-      wrong.push(`no icon position for ${name} — the layout was authored against different filenames`)
-      continue
-    }
-    if (actual.x !== expected.x || actual.y !== expected.y)
-      wrong.push(`${name} sits at ${actual.x},${actual.y}, expected ${expected.x},${expected.y}`)
-  }
-
-  if (wrong.length > 0)
-    throw new Error(`${file} does not describe the intended window:\n  ${wrong.join('\n  ')}`)
-
-  return { bytes, layout }
-}
-
-// Only when run, never when imported: `bun scripts/dmg-window.ts` prints what
-// the committed fixture says, which is the quickest way to see it.
-if (import.meta.main) {
-  const { layout } = requireDmgWindowLayout()
-  console.log(JSON.stringify(layout, null, 2))
 }

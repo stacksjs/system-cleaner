@@ -11,36 +11,7 @@
  */
 import { nativeWindow } from '@stacksjs/desktop/browser'
 
-const APPEARANCE_KEY = 'systemcleaner-appearance'
-
-type ColorMode = 'system' | 'light' | 'dark'
-
-const COLOR_MODES: ColorMode[] = ['system', 'light', 'dark']
-
-function currentColorMode(): ColorMode {
-  try {
-    const raw = localStorage.getItem(APPEARANCE_KEY)
-    const parsed = raw ? JSON.parse(raw) : null
-    const stored = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>).colorMode : null
-    return COLOR_MODES.includes(stored as ColorMode) ? stored as ColorMode : 'system'
-  }
-  catch {
-    // A private window, a cleared store, or someone else's JSON under our key.
-    // The default is a correct answer to all three.
-    return 'system'
-  }
-}
-
-/**
- * Craft puts an NSVisualEffectView behind the whole web view, and AppKit
- * resolves that material against the *window's* appearance rather than the
- * page's. A dark page over a light material leaves the window buttons light
- * beside it, so the window has to be told which mode it is in — and told
- * again on every occasion it might have missed a change made elsewhere.
- */
-function syncAppearance(): void {
-  void nativeWindow.setAppearance(currentColorMode())
-}
+import { watchAppearance } from '../lib/appearance'
 
 /**
  * Moving a window that has no titlebar.
@@ -76,18 +47,8 @@ function wire(): void {
       void nativeWindow.maximize()
   })
 
-  // The theme is changed in the Settings window, so this one has to notice.
-  // Three occasions, because none alone is enough: `storage` is the immediate
-  // one, `focus` covers a change made while this window was behind, and the
-  // call below covers a window opened after the change.
-  window.addEventListener('storage', (event) => {
-    if (event.key === APPEARANCE_KEY)
-      syncAppearance()
-  })
-  window.addEventListener('focus', syncAppearance)
-  window.addEventListener('craft:window:focus', syncAppearance)
+  watchAppearance()
 
-  syncAppearance()
 }
 
 if (document.readyState === 'loading')
