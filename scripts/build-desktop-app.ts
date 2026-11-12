@@ -176,7 +176,9 @@ function finishInstaller(imagePath: string): void {
 
     const app = DMG_WINDOW.items['SystemCleaner.app']
     const applications = DMG_WINDOW.items.Applications
-    run(path.join(ROOT, 'pantry/.bin/create-dmg'), [
+    // Script packages locate support files relative to their executable.
+    // Canonicalize Pantry's entrypoint before executing it.
+    run(fs.realpathSync(path.join(ROOT, 'pantry/.bin/create-dmg')), [
       '--volname', `${APP_NAME} ${APP_VERSION}`,
       '--volicon', path.join(bundle, 'Contents/Resources/AppIcon.icns'),
       '--background', path.join(ROOT, 'resources/dmg/installer-background.png'),

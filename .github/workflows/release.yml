@@ -189,7 +189,7 @@ jobs:
           test -s "release-assets/SystemCleaner-${version}-windows-x64.zip"
 
       - name: Publish all assets through Pantry
-        uses: pantry-pm/pantry/packages/action@v0.11.74
+        uses: pantry-pm/pantry/packages/action@v0.11.199
         with:
           install: 'false'
           release: 'true'

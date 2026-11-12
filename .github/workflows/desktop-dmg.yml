@@ -31,8 +31,9 @@ jobs:
 
       # Pantry installs Craft and owns the temporary signing keychain.
       - name: Setup Pantry
-        uses: pantry-pm/pantry/packages/action@v0.11.74
+        uses: pantry-pm/pantry/packages/action@v0.11.199
         with:
+          version: '0.11.199'
           apple-signing: 'true'
           apple-signing-application-certificate: ${{ secrets.DEVELOPER_ID_CERTIFICATE_BASE64 }}
           apple-signing-certificate-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
