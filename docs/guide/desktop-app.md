@@ -57,8 +57,9 @@ Production browser scripts and the compiled launcher are minified.
 
 ## The drag-and-drop installer
 
-`deps.yaml` pins `github.com/create-dmg/create-dmg`, installed by Pantry locally
-and by the Pantry Action in CI. It builds a 660×460 Finder window with the app
+`resources/dmg/deps.yaml` pins `github.com/create-dmg/create-dmg`. The macOS
+build installs it through Pantry with `--no-save`, keeping platform build tools
+out of the root runtime dependencies used on Linux and Windows. It builds a 660×460 Finder window with the app
 on the left, an Applications drop target on the right, and instruction artwork.
 It also sets the volume icon, hides the app extension and uses HFS+ with LZMA
 (`ULMO`) compression. The signed app is supplied by Stacks unchanged.

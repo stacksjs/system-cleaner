@@ -600,6 +600,8 @@ jobs:
 
       - name: Setup Pantry
         uses: pantry-pm/pantry/packages/action@v0.11.74
+        with:
+          install: 'false'
 
       - name: Install Dependencies
         run: bun install

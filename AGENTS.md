@@ -107,7 +107,8 @@ Four conventions carry the rest, all read by buddy:
 | `app/Desktop/Resources/` | copied into `Contents/Resources` (generated; gitignored) |
 | `app/Desktop/Info.plist.json` | the `NS*UsageDescription` strings macOS shows in permission prompts |
 
-Pantry installs `github.com/create-dmg/create-dmg`, which authors the installer
+The macOS build installs `github.com/create-dmg/create-dmg` through Pantry,
+pinned in `resources/dmg/deps.yaml`. It authors the installer
 window, background, Applications drop target, compressed image, signature and
 notarization. Geometry lives in `DMG_WINDOW` in `scripts/dmg-window.ts` and
 artwork in `resources/dmg/installer-background.svg`. Regenerate the committed

@@ -71,6 +71,13 @@ function run(cmd: string, args: string[], envOverrides: Record<string, string> =
     throw new Error(`${cmd} ${args.join(' ')} exited with ${result.status}`)
 }
 
+// Installer tools are macOS build dependencies, not runtime dependencies of
+// the cross-platform project. Pantry installs the pinned tool without adding
+// it to the root manifest that Linux and Windows environments also consume.
+const installerDependencies = Bun.YAML.parse(fs.readFileSync(path.join(ROOT, 'resources/dmg/deps.yaml'), 'utf8')) as { dependencies: Record<string, string> }
+for (const [name, declaredVersion] of Object.entries(installerDependencies.dependencies))
+  run('pantry', ['install', `${name}@${declaredVersion}`, '--no-save'])
+
 // ── 1. Render the UI ────────────────────────────────────────────
 // The STX page cache is keyed on the template, not on the environment that
 // rendered it, so a cached page from a marketing build would ship the download
