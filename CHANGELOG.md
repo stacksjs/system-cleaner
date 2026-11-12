@@ -1,5 +1,20 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.16...v0.3.17)
+
+## 🐛 Bug Fixes
+
+- resolve the native installer executable before running it ([bfc7d9f](https://github.com/stacksjs/system-cleaner/commit/bfc7d9f)) _(by Chris)_
+- scope installer tooling to macOS builds ([1b1a8ce](https://github.com/stacksjs/system-cleaner/commit/1b1a8ce)) _(by Chris)_
+
+## ✅ Tests
+
+- audit visible Settings navigation at native window sizes ([5b6b6e4](https://github.com/stacksjs/system-cleaner/commit/5b6b6e4)) _(by Chris)_
+
+## Contributors
+
+- _Chris_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.15...v0.3.16)
 
 ## 🐛 Bug Fixes
