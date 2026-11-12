@@ -78,6 +78,11 @@ const installerDependencies = Bun.YAML.parse(fs.readFileSync(path.join(ROOT, 're
 for (const [name, declaredVersion] of Object.entries(installerDependencies.dependencies))
   run('pantry', ['install', `${name}@${declaredVersion}`, '--no-save'])
 
+const installerProvider = spawnSync('pantry', ['which', '--resolve', path.join(ROOT, 'pantry/.bin/create-dmg')], { encoding: 'utf8' })
+if (installerProvider.status !== 0 || !installerProvider.stdout.trim())
+  throw new Error(`Pantry could not resolve create-dmg: ${installerProvider.stderr}`)
+const installerBinary = installerProvider.stdout.trim()
+
 // ── 1. Render the UI ────────────────────────────────────────────
 // The STX page cache is keyed on the template, not on the environment that
 // rendered it, so a cached page from a marketing build would ship the download
@@ -176,9 +181,9 @@ function finishInstaller(imagePath: string): void {
 
     const app = DMG_WINDOW.items['SystemCleaner.app']
     const applications = DMG_WINDOW.items.Applications
-    // Script packages locate support files relative to their executable.
-    // Canonicalize Pantry's entrypoint before executing it.
-    run(fs.realpathSync(path.join(ROOT, 'pantry/.bin/create-dmg')), [
+    // Pantry resolves script packages to their provider so relative support
+    // resources are found regardless of how the activation entrypoint is made.
+    run(installerBinary, [
       '--volname', `${APP_NAME} ${APP_VERSION}`,
       '--volicon', path.join(bundle, 'Contents/Resources/AppIcon.icns'),
       '--background', path.join(ROOT, 'resources/dmg/installer-background.png'),

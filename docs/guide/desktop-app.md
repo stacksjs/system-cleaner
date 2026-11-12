@@ -59,7 +59,9 @@ Production browser scripts and the compiled launcher are minified.
 
 `resources/dmg/deps.yaml` pins `github.com/create-dmg/create-dmg`. The macOS
 build installs it through Pantry with `--no-save`, keeping platform build tools
-out of the root runtime dependencies used on Linux and Windows. It builds a 660×460 Finder window with the app
+out of the root runtime dependencies used on Linux and Windows.
+`pantry which --resolve` locates its provider executable, so its bundled support
+files resolve correctly through either symlinks or activation scripts. It builds a 660×460 Finder window with the app
 on the left, an Applications drop target on the right, and instruction artwork.
 It also sets the volume icon, hides the app extension and uses HFS+ with LZMA
 (`ULMO`) compression. The signed app is supplied by Stacks unchanged.
