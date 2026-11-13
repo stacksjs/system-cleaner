@@ -1,5 +1,15 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.19...v0.3.20)
+
+## ✨ Features
+
+- preserve cancellable scans and repair update controls ([db086b8](https://github.com/stacksjs/system-cleaner/commit/db086b8)) _(by Chris)_
+
+## Contributors
+
+- _Chris_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.18...v0.3.19)
 
 ## 🐛 Bug Fixes
