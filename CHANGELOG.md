@@ -1,5 +1,15 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.22...v0.3.23)
+
+## 🐛 Bug Fixes
+
+- refine scan status and animate disk chart updates ([816939c](https://github.com/stacksjs/system-cleaner/commit/816939c)) _(by Chris)_
+
+## Contributors
+
+- _Chris_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.21...v0.3.22)
 
 ## 🐛 Bug Fixes
