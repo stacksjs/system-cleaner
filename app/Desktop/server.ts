@@ -21,6 +21,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import process from 'node:process'
 import registerApiRoutes from '../../routes/api'
+import { cancelAllScans } from '../Workers/scan-pool'
 
 type RouteHandler = (req: Request) => Response | Promise<Response>
 
@@ -271,6 +272,17 @@ export async function runAgent(): Promise<void> {
     webRoot,
     port: Number(process.env.SYSTEM_CLEANER_PORT ?? 0),
   })
+
+  let stopping = false
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
+    process.on(signal, () => {
+      if (stopping) return
+      stopping = true
+      // Release the remembered address before the replacement launcher starts.
+      void server.stop(true)
+      void cancelAllScans().finally(() => process.exit(0))
+    })
+  }
 
   // The launcher reads this line to learn which port the OS handed out.
   // Written to stdout explicitly rather than through `console.warn`, which

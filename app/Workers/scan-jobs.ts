@@ -70,6 +70,11 @@ export class ScanJobs<Request> {
     return structuredClone(job.session)
   }
 
+  async cancelAll(): Promise<void> {
+    const active = [...this.jobs.values()].filter(job => isScanActive(job.session.status))
+    await Promise.all(active.map(job => this.cancel(job.session.id)))
+  }
+
   private partial(job: Job<Request>): ScanResult {
     return { ...job.session.progress.snapshot, success: true, cancelled: true, truncated: true,
       scanned: job.session.progress.scanned, scanTime: `${(((job.session.finishedAt ?? Date.now()) - (job.session.startedAt ?? Date.now())) / 1000).toFixed(1)}s` }

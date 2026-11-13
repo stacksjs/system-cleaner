@@ -24,6 +24,7 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import process from 'node:process'
 import { bundleLayout, dataDir as dataDirFor, runtimeSupports as probeRuntime, windowArgs } from './bundle'
+import { createProcessShutdown } from '../Support/Runtime/process-shutdown'
 import { readRememberedPort, rememberPort } from '../Support/Runtime/agent-port'
 
 /**
@@ -143,25 +144,13 @@ const agent = Bun.spawn([process.execPath, 'agent'], {
   },
 })
 
-let shuttingDown = false
+let craft: Bun.Subprocess | null = null
+const shutdown = createProcessShutdown(() => craft ? [agent, craft] : [agent])
 
-function stopAgent(): void {
-  if (shuttingDown)
-    return
-  shuttingDown = true
-  try {
-    agent.kill()
-  }
-  catch {
-    // Already gone.
-  }
-}
-
-process.on('exit', stopAgent)
+process.on('exit', shutdown.force)
 for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
   process.on(signal, () => {
-    stopAgent()
-    process.exit(0)
+    void shutdown.stop().finally(() => process.exit(0))
   })
 }
 
@@ -211,7 +200,7 @@ const port = await readPort()
 rememberPort(portFile, port)
 await waitForHealth(port)
 
-const craft = Bun.spawn([
+craft = Bun.spawn([
   craftBinary,
   ...windowArgs(platform, {
     url: `http://127.0.0.1:${port}/app`,
@@ -237,5 +226,5 @@ const craft = Bun.spawn([
 })
 
 const code = await craft.exited
-stopAgent()
+await shutdown.stop()
 process.exit(code)

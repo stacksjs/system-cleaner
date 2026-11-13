@@ -100,6 +100,7 @@ async function runWorker({ request, hardTimeoutMs }: WorkerRequest, signal: Abor
 }
 
 export const scanJobs = new ScanJobs<WorkerRequest>(runWorker)
+export const cancelAllScans = () => scanJobs.cancelAll()
 export function lastScanResult(kind: ScanRequest['kind']) {
   const session = scanJobs.sessions().find(item => item.kind === kind)
   return session?.result ? { at: session.finishedAt!, result: session.result } : null

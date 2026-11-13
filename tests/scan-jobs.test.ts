@@ -67,6 +67,22 @@ it('cancels queued work immediately without launching it or stopping another sca
   expect(jobs.sessions()[1].status).toBe('completed')
 })
 
+it('agent shutdown cancels active and queued scans before resolving', async () => {
+  const launched: string[] = []
+  const jobs = new ScanJobs<string>(async (request, signal) => {
+    launched.push(request)
+    await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve()))
+    throw new DOMException('Cancelled', 'AbortError')
+  })
+  const first = jobs.start('tree', 'active')
+  const second = jobs.start('similar', 'queued')
+  await waitFor(() => launched.length === 1)
+  await jobs.cancelAll()
+  await Promise.all([first, second])
+  expect(launched).toEqual(['active'])
+  expect(jobs.sessions().map(scan => scan.status)).toEqual(['cancelled', 'cancelled'])
+})
+
 it('retains completed results without a navigation TTL and joins duplicate starts', async () => {
   let release!: () => void
   const jobs = new ScanJobs<string>(async () => {
