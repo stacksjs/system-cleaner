@@ -239,27 +239,7 @@
     });
   }
 
-  var DISK_CACHE_KEY = 'systemcleaner:disk-scan';
-  var DISK_SCANNING_KEY = 'systemcleaner:disk-scanning';
-  var DISK_CACHE_TTL = 10 * 60 * 1000;
-  var diskPollTimer = null;
-
-  function stopDiskPoll() {
-    if (diskPollTimer) { clearInterval(diskPollTimer); diskPollTimer = null; }
-  }
-
-  function readCachedScan() {
-    try {
-      var raw = localStorage.getItem(DISK_CACHE_KEY);
-      if (!raw) return null;
-      var cached = JSON.parse(raw);
-      if (Date.now() - cached.ts < DISK_CACHE_TTL) return cached.data;
-    } catch (_) {}
-    return null;
-  }
-
   function applyScanResult(data, cached) {
-    stopDiskPoll();
     var focusedPath = currentRoot && currentRoot.p;
     tree = data.tree.n ? data.tree : normalize(data.tree);
     viewStack = viewStack.map(function(node) { return findTreePath(tree, node.p); }).filter(Boolean);
@@ -275,11 +255,10 @@
       unreadable: data.unreadable || 0,
       cached: !!cached,
     };
-    stopProgressPoll();
     patchDiskScope({
       scanInfo: window.__diskScanInfo,
-      scanState: 'done',
-      hasResults: true,
+      scanState: data.cancelled ? 'cancelled' : 'done',
+      hasResults: tree.s > 0,
     });
     bindSvgEvents();
     renderSegments(findTreePath(tree, focusedPath) || tree);
@@ -295,202 +274,6 @@
         body: fmtBytes(tree.s) + ' across ' + data.folderCount + ' folders.',
       });
     }
-  }
-
-  function pollForScanComplete() {
-    stopDiskPoll();
-    var attempts = 0;
-    diskPollTimer = setInterval(function() {
-      attempts++;
-      if (!window._diskScan.scanning) {
-        var hit = readCachedScan();
-        if (hit) {
-          applyScanResult(hit, true);
-          return;
-        }
-      }
-      if (attempts >= 120) {
-        stopDiskPoll();
-        localStorage.removeItem(DISK_SCANNING_KEY);
-        patchDiskScope({
-          scanState: 'error',
-          scanError: 'Gave up waiting for a scan started elsewhere to finish',
-        });
-      }
-    }, 500);
-  }
-
-  if (!window._diskScan) {
-    window._diskScan = {
-      scanning: false,
-      run: function() {
-        if (this.scanning) {
-          patchDiskScope({ scanState: 'scanning' });
-          pollForScanComplete();
-          return;
-        }
-        this.scanning = true;
-        localStorage.setItem(DISK_SCANNING_KEY, 'true');
-        patchDiskScope({ scanState: 'scanning' });
-        fetch('/api/disk-scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
-          .then(function(r) {
-            if (r.status === 409) {
-              pollForScanComplete();
-              return null;
-            }
-            return r.json();
-          })
-          .then(function(data) {
-            if (!data) return;
-            window._diskScan.scanning = false;
-            localStorage.removeItem(DISK_SCANNING_KEY);
-            if (!data.success) {
-              // Reverting to idle told the user nothing: the button simply
-              // came back, indistinguishable from never having clicked it.
-              // A scan that times out has a reason, and the reason is the
-              // only thing that lets someone act on it.
-              stopDiskPoll();
-              stopProgressPoll();
-              patchDiskScope({ scanState: 'error', scanError: data.error || 'Scan failed' });
-              return;
-            }
-            data.tree = normalize(data.tree);
-            try { localStorage.setItem(DISK_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data })); } catch (_) {}
-            if (typeof window._diskScan.onComplete === 'function') window._diskScan.onComplete(data);
-          })
-          .catch(function(err) {
-            window._diskScan.scanning = false;
-            localStorage.removeItem(DISK_SCANNING_KEY);
-            stopDiskPoll();
-            stopProgressPoll();
-            patchDiskScope({
-              scanState: 'error',
-              scanError: (err && err.message) ? err.message : 'Could not reach the scanner',
-            });
-          });
-      },
-      onComplete: null,
-    };
-  }
-
-  // Navigating away tears down this module, taking the in-flight request's
-  // callback with it. The scan itself keeps running in the agent, so on the way
-  // back the server is the only thing that knows what happened — ask it, rather
-  // than trusting a localStorage flag that outlived the request it described.
-  function rejoinServerScan() {
-    return fetch('/api/scan-progress', { method: 'POST', cache: 'no-store' })
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        if (!d || !d.scanning || d.kind !== 'tree') return false;
-
-        patchDiskScope({ scanState: 'scanning' });
-        startProgressPoll(d);
-        watchForServerResult();
-        return true;
-      })
-      .catch(function() { return false; });
-  }
-
-  // Poll until the scan is no longer running, then collect what it produced.
-  function watchForServerResult() {
-    if (window._diskRejoinTimer) clearInterval(window._diskRejoinTimer);
-    window._diskRejoinTimer = setInterval(function() {
-      fetch('/api/scan-progress', { method: 'POST', cache: 'no-store' })
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-          if (d && d.scanning && d.kind === 'tree') return;
-          clearInterval(window._diskRejoinTimer);
-          window._diskRejoinTimer = null;
-          stopProgressPoll();
-          localStorage.removeItem(DISK_SCANNING_KEY);
-          fetchLastScan().then(function(data) {
-            if (data && data.success) applyScanResult(data, false);
-            else if (data) patchDiskScope({ scanState: 'error', scanError: data.error || 'Scan failed' });
-            else patchDiskScope({ scanState: 'idle' });
-          });
-        })
-        .catch(function() {});
-    }, 700);
-  }
-
-  function fetchLastScan() {
-    return fetch('/api/last-scan', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind: 'tree' }),
-    })
-      .then(function(r) { return r.json(); })
-      .then(function(d) { return (d && d.result) ? d.result : null; })
-      .catch(function() { return null; });
-  }
-
-  function doDiskPanelMount() {
-    if (!document.querySelector('.disk-layout')) return;
-    flushDiskExecQueue();
-    window._diskScan.onComplete = function(data) { applyScanResult(data, false); };
-    bindSvgEvents();
-
-    // A scan started in this page's own lifetime still reports through its own
-    // promise; nothing to rejoin.
-    if (window._diskScan.scanning) {
-      patchDiskScope({ scanState: 'scanning' });
-      startProgressPoll();
-      return;
-    }
-
-    var cached = readCachedScan();
-    if (cached) applyScanResult(cached, true);
-    else patchDiskScope({ scanState: 'idle' });
-
-    rejoinServerScan().then(function(rejoined) {
-      if (rejoined || cached) return;
-      // Nothing running, nothing cached locally — but a scan may have finished
-      // while this screen was closed.
-      fetchLastScan().then(function(data) {
-        if (data && data.success) applyScanResult(data, false);
-      });
-    });
-  }
-
-  function diskPanelMount() {
-    queueMicrotask(doDiskPanelMount);
-  }
-  window.diskPanelMount = diskPanelMount;
-
-  if (!window._diskMountBound) {
-    window._diskMountBound = true;
-    window.addEventListener('stx:load', function() {
-      flushDiskExecQueue();
-      diskPanelMount();
-    });
-  }
-
-  var progressTimer = null;
-
-  // A scan is stuck when its count stops moving, not only when it never
-  // started: a walk parked on a permission gate after 56 entries reports 56
-  // forever, and a zero-only check called that healthy.
-  var lastCount = -1;
-  var lastCountAt = 0;
-
-  function isStalled(d) {
-    var now = Date.now();
-    if (d.scanned !== lastCount) {
-      lastCount = d.scanned;
-      lastCountAt = now;
-      return false;
-    }
-    if (!lastCountAt) { lastCountAt = now; return false; }
-    return now - lastCountAt > 8000;
-  }
-
-  function resetStallTracking() {
-    lastCount = -1;
-    lastCountAt = 0;
-  }
-
-  function stopProgressPoll() {
-    if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
   }
 
   function fmtCount(n) {
@@ -522,7 +305,7 @@
       // is stopped — parked in a syscall macOS will not return from until
       // someone answers a permission prompt. Saying so beats counting seconds
       // up to a timeout the user cannot interpret.
-      scanStalled: isStalled(d),
+      scanStalled: false,
     };
     // The headline climbs while the scan runs. Every byte in it has been
     // measured exactly, so it is the answer so far rather than an estimate —
@@ -542,29 +325,55 @@
     patchDiskScope(fields);
   }
 
-  function pollProgressOnce() {
-    return fetch('/api/scan-progress', { method: 'POST', cache: 'no-store' })
-      .then(function(r) { return r.json(); })
-      .then(function(d) { applyProgress(d); return d; })
-      .catch(function() { return null; });
+  var attachedScan = null;
+  var renderedScanId = null;
+  var renderedResult = null;
+  function renderSession(session) {
+    if (!document.querySelector('.disk-layout')) return;
+    var active = ['queued', 'running', 'cancelling'].indexOf(session.status) !== -1;
+    var result = session.result;
+    if (session.id !== renderedScanId) {
+      renderedScanId = session.id;
+      renderedResult = null;
+      viewStack = [];
+      currentRoot = null;
+      patchDiskScope({ hasResults: false, topItems: [], scanInfo: null, scanTotalLabel: '0 B so far' });
+    }
+    var elapsed = Math.max(0, (session.finishedAt || Date.now()) - (session.startedAt || Date.now()));
+    patchDiskScope({ scanId: session.id, scanStatus: session.status, cancelling: session.status === 'cancelling',
+      scanState: active ? 'scanning' : session.status === 'cancelled' ? 'cancelled' : session.status === 'failed' ? 'error' : 'done',
+      scanError: result && result.error || '',
+    });
+    if (active) {
+      applyProgress(Object.assign({}, session.progress, { kind: 'tree', scanning: true, elapsedMs: elapsed }));
+      if (session.status === 'queued') patchDiskScope({ scanProgress: 'Queued — waiting for another scan' });
+      if (session.status === 'cancelling') patchDiskScope({ scanProgress: 'Cancelling…' });
+    }
+    else if (result && result.tree) {
+      if (renderedResult !== result) { applyScanResult(result, true); renderedResult = result; }
+    }
+    if (!active) patchDiskScope({ scanProgress: fmtCount(session.progress.scanned) + ' items · ' + Math.round(elapsed / 1000) + 's',
+      scanProgressPath: shortenPath(session.progress.path) });
   }
+  function diskPanelMount() {
+    if (!document.querySelector('.disk-layout')) return;
+    flushDiskExecQueue();
+    bindSvgEvents();
+    if (attachedScan) attachedScan();
+    renderedResult = null;
+    attachedScan = window.scanSessions.subscribe('tree', renderSession);
 
-  function startProgressPoll(seed) {
-    stopProgressPoll();
-    resetStallTracking();
-    // Paint before waiting. `setInterval` alone left the first 400ms — and on
-    // the rejoin path a whole round trip more — showing "scanning" with no
-    // count under it. Coming back to a running scan therefore looked like the
-    // progress had been lost and then found again, when it had never stopped.
-    if (seed) applyProgress(seed);
-    else pollProgressOnce();
-    progressTimer = setInterval(pollProgressOnce, 400);
   }
-
+  window.addEventListener('stx:navigate', function() {
+    if (attachedScan) attachedScan();
+    attachedScan = null;
+  });
+  window.diskPanelMount = diskPanelMount;
   window.startDiskScan = function() {
-    patchDiskScope({ scanState: 'scanning', hasResults: false, topItems: [], scanTotalLabel: '0 B so far', scanProgress: '', scanProgressPath: '', scanStalled: false });
-    startProgressPoll();
-    window._diskScan.run();
+    window.scanSessions.start('tree', {}).catch(function(error) { window.nativeAlert('Could not start scan', error.message); });
+  };
+  window.cancelDiskScan = function() {
+    window.scanSessions.cancel('tree').catch(function(error) { window.nativeAlert('Could not cancel scan', error.message); });
   };
 
   // ── Context menu ────────────────────────────────────────────────

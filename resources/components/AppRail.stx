@@ -101,12 +101,13 @@ function syncActive(): void {
  * rail outlives navigation, so it is the one place that can carry this.
  */
 function syncScanning(): void {
-  fetch('/api/scan-progress', { method: 'POST' })
+  fetch('/api/scan-state', { method: 'POST', cache: 'no-store' })
     .then(r => r.json())
-    .then((d: { scanning?: boolean, kind?: string }) => {
-      const busy = d?.scanning ? (d.kind === 'large-files' ? 'large-files' : 'disk') : ''
+    .then((d: { scans?: { kind: string, status: string }[] }) => {
+      const busy = new Set((d.scans || []).filter(scan => ['queued', 'running', 'cancelling'].includes(scan.status))
+        .map(scan => scan.kind === 'tree' ? 'disk' : scan.kind))
       for (const item of Array.from(document.querySelectorAll<HTMLElement>('[data-rail-item]')))
-        item.toggleAttribute('data-scanning', item.getAttribute('data-rail-item') === busy)
+        item.toggleAttribute('data-scanning', busy.has(item.getAttribute('data-rail-item') || ''))
     })
     .catch(() => {})
 }

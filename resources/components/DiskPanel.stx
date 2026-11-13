@@ -43,6 +43,9 @@
   topItems: [],
   hovered: null,
   scanState: 'idle',
+  scanId: '',
+  scanStatus: '',
+  cancelling: false,
   hasResults: false,
   scanError: '',
   scanProgress: '',
@@ -52,12 +55,14 @@
   centerName() { return this.hovered ? this.hovered.name : this.defaultName; },
   metaText() {
     if (this.scanState === 'scanning') return this.scanProgress || 'Scanning disk…';
+    if (this.scanState === 'cancelled') return 'Scan cancelled · ' + this.scanProgress;
     if (this.scanState === 'error') return this.scanError || 'Scan failed';
     if (this.scanInfo) return this.scanInfo.folderCount + ' folders · ' + this.scanInfo.scanTime + (this.scanInfo.truncated ? ' · partial' : '') + (this.scanInfo.cached ? ' (cached)' : '');
     return 'Click Scan Disk to analyze';
   },
   unmeasuredNote() {
     var n = this.scanInfo ? (this.scanInfo.unmeasured || 0) : 0;
+    if (this.scanState === 'cancelled') return 'Scan cancelled. The chart keeps everything measured before cancellation.';
     if (!n) return 'This scan ran out of time before it finished. Everything shown here was measured exactly.';
     return 'This scan ran out of time with ' + n + (n === 1 ? ' folder' : ' folders') + ' still unmeasured, so the total is lower than the real one. Everything shown here was measured exactly.';
   },
@@ -94,6 +99,8 @@
       <div style='font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--tertiary); margin-bottom: var(--space-2);' x-text="(drilled ? 'Folder: ' : 'Home: ') + rootName">Home</div>
       <div style='font-size: 18px; font-weight: 700; margin-bottom: var(--space-half);' x-text="scanTotalLabel">-</div>
       <div style='font-size: 10px; color: var(--tertiary);' x-text="metaText()">Click 'Scan Disk' to analyze</div>
+      <button class='mt-3 btn btn-sm' data-cancel-scan x-show="scanState === 'scanning'" x-cloak
+        @click='cancelDiskScan()' :disabled='cancelling || !scanId' x-text="cancelling ? 'Cancelling…' : 'Cancel Scan'">Cancel Scan</button>
     </div>
 
     <!-- A scan that ran out of time is a real answer, but only if it says so:
@@ -141,6 +148,10 @@
     <div id='disk-loading' x-show="!hasResults || scanState === 'error'" style='position: relative; z-index: 1; text-align: center; color: var(--tertiary); font-size: 13px;'>
       <div class='disk-empty-glyph' :class="scanState === 'scanning' ? 'is-scanning' : ''">
         <span class='i-f7-chart-pie-fill' aria-hidden='true'></span>
+      </div>
+      <div x-show="scanState === 'cancelled'" role='status' x-cloak>
+        <div>Scan cancelled. No folders had finished measuring yet.</div>
+        <button class='mt-3 btn' @click='startDiskScan()'>Scan Again</button>
       </div>
       <div x-show="scanState === 'idle'">
         <div style='margin-bottom: var(--space-3);'>Analyze disk usage with an interactive sunburst chart</div>

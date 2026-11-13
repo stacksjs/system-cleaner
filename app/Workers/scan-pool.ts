@@ -1,328 +1,122 @@
-/**
- * Runs disk scans in a child process, one at a time.
- *
- * Off-process rather than off-thread — see the note at the top of
- * `./disk-scan.ts`. The two properties that matter are unchanged: the HTTP
- * server never blocks on a walk, and a scan that wedges can be stopped, which
- * a `Worker` stuck inside a blocking `readdir` cannot be.
- */
-
-import type { DuplicateGroup, LargeFile } from '@system-cleaner/disk'
+/** The agent owns scan sessions and each worker's complete process tree. */
+import type { LargeFile, SimilarImageScanResult } from '@system-cleaner/disk'
+import { spawn } from 'node:child_process'
+import type { ChildProcess } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import process from 'node:process'
+import { text as readText } from 'node:stream/consumers'
+import type { ScanRequest } from './disk-scan'
+import type { ScanProgress, ScanResult } from './scan-jobs'
+import { ScanJobs } from './scan-jobs'
 
-type TreeScanRequest = {
-  kind: 'tree'
-  home: string
-  maxDepth?: number
-  timeoutMs?: number
-  progressFile?: string
-}
+interface WorkerRequest { request: ScanRequest, hardTimeoutMs: number }
 
-type LargeFilesRequest = {
-  kind: 'large-files'
-  roots: string[]
-  minSizeBytes?: number
-  limit?: number
-  timeoutMs?: number
-  categories?: string[]
-  progressFile?: string
-}
-
-type DuplicatesRequest = {
-  kind: 'duplicates'
-  roots: string[]
-  minSizeBytes?: number
-  limit?: number
-  timeoutMs?: number
-  includeDependencies?: boolean
-  progressFile?: string
-}
-
-type ScanRequest = TreeScanRequest | LargeFilesRequest | DuplicatesRequest
-
-export type TreeScanResult = {
-  success: boolean
-  tree?: unknown
-  folderCount?: number
-  fileCount?: number
-  totalBytes?: number
-  /** Folders the scan ran out of time before measuring. */
-  unmeasured?: number
-  /** Folders macOS refused to read — a Full Disk Access gap. */
-  unreadable?: number
-  scanTime?: string
-  /** True when the walk ran out of time or entries before finishing. */
-  truncated?: boolean
-  error?: string
-}
-
-export type LargeFilesResult = {
-  success: boolean
-  files?: LargeFile[]
-  scanned?: number
-  matched?: number
-  totalBytes?: number
-  truncated?: boolean
-  scanTime?: string
-  error?: string
-}
-
-export type DuplicatesResult = {
-  success: boolean
-  groups?: DuplicateGroup[]
-  scanned?: number
-  groupCount?: number
-  duplicateCount?: number
-  wastedBytes?: number
-  wastedFormatted?: string
-  truncated?: boolean
-  scanTime?: string
-  error?: string
-}
-
-type ScanResult = TreeScanResult | LargeFilesResult | DuplicatesResult
-
-/**
- * How to invoke the scanner.
- *
- * Packaged, it is a sibling binary in `Contents/MacOS`, and the launcher points
- * `SYSTEM_CLEANER_SCANNER` at it. In development the source runs under `bun`.
- * Resolved once, because the answer cannot change within a process.
- */
-/**
- * How far the running scan has got.
- *
- * Read by `/api/scan-progress`, which the Disk Usage screen polls while it
- * waits. A full-home walk runs for tens of seconds; without this the UI can
- * only show a spinner, and a spinner that never moves is indistinguishable
- * from a hang.
- */
-export interface ScanProgress {
-  scanned: number
-  path: string
-  /** Bytes the scan has measured exactly so far. Climbs as `du` reports in. */
-  measuredBytes: number
-  snapshot?: ScanResult
-  startedAt: number
-  kind: ScanRequest['kind']
-}
-
-let running: { file: string, startedAt: number, kind: ScanRequest['kind'] } | null = null
-
-/**
- * The last result of each kind of scan, kept so a page that walked away can
- * still collect it.
- *
- * Navigation between screens tears down the page's JavaScript, and with it the
- * pending request that was going to receive the result. The scan carried on and
- * finished correctly; there was simply nobody left holding the promise, so
- * coming back showed a spinner that would never resolve. Holding the result
- * here means returning to the screen picks up where it left off.
- */
-const lastResults = new Map<ScanRequest['kind'], { at: number, result: ScanResult }>()
-
-/** How long a finished scan stays collectable. Matches the UI's cache note. */
-const RESULT_TTL_MS = 10 * 60_000
-
-export function lastScanResult(kind: ScanRequest['kind']): { at: number, result: ScanResult } | null {
-  const held = lastResults.get(kind)
-  if (!held) return null
-  if (Date.now() - held.at > RESULT_TTL_MS) {
-    lastResults.delete(kind)
-    return null
-  }
-  return held
-}
-
-/**
- * Progress of the scan running now, or null when nothing is running.
- *
- * Read off the scanner's progress file at the moment it is asked for. The
- * scanner cannot push updates through stdout — Bun buffers the pipe, so a few
- * dozen short lines arrive only once the stream closes, by which time the scan
- * is over and the progress is worthless.
- */
-export function scanProgress(): ScanProgress | null {
-  if (!running) return null
-
-  let scanned = 0
-  let path = ''
-  let measuredBytes = 0
-  let snapshot: ScanResult | undefined
-  try {
-    const parsed = JSON.parse(fs.readFileSync(running.file, 'utf8')) as { scanned?: number, path?: string, measuredBytes?: number, snapshot?: ScanResult }
-    scanned = parsed.scanned ?? 0
-    path = parsed.path ?? ''
-    measuredBytes = parsed.measuredBytes ?? 0
-    snapshot = parsed.snapshot
-  }
-  catch {
-    // Not written yet, or caught mid-write. Zero is the honest answer.
-  }
-
-  return { scanned, path, measuredBytes, snapshot, startedAt: running.startedAt, kind: running.kind }
-}
-
-let scannerCommand: string[] | null = null
-
-function resolveScanner(): string[] {
-  if (scannerCommand)
-    return scannerCommand
-
+function scannerCommand(): string[] {
   const configured = process.env.SYSTEM_CLEANER_SCANNER
-  if (configured && fs.existsSync(configured)) {
-    scannerCommand = [configured]
-    return scannerCommand
-  }
-
+  if (configured && fs.existsSync(configured)) return [configured]
   const sibling = path.join(path.dirname(process.execPath), 'system-cleaner-scan')
-  if (fs.existsSync(sibling)) {
-    scannerCommand = [sibling]
-    return scannerCommand
-  }
-
-  // In the shipped app the scanner is a subcommand of the executable already
-  // running this code — the bundle compiles one binary, not three, because each
-  // one costs a 60 MB copy of the Bun runtime. `bun` as execPath means we are
-  // in development, where the entry file is on disk to be handed to it.
-  if (path.basename(process.execPath) !== 'bun') {
-    scannerCommand = [process.execPath, 'scan']
-    return scannerCommand
-  }
-
-  scannerCommand = [process.execPath, new URL('./disk-scan.ts', import.meta.url).pathname]
-  return scannerCommand
+  if (fs.existsSync(sibling)) return [sibling]
+  return path.basename(process.execPath).replace(/\.exe$/, '') === 'bun'
+    ? [process.execPath, new URL('./disk-scan.ts', import.meta.url).pathname]
+    : [process.execPath, 'scan']
 }
 
-/**
- * Serialise scans. A single walk already saturates the disk, and two at once
- * make both slower without finishing sooner.
- */
-let inFlight: Promise<unknown> = Promise.resolve()
-
-async function runScanner(request: ScanRequest, hardTimeoutMs: number): Promise<ScanResult> {
-  const progressDir = fs.mkdtempSync(path.join(os.tmpdir(), 'system-cleaner-progress-'))
-  const progressFile = path.join(progressDir, 'progress.json')
-  running = { file: progressFile, startedAt: Date.now(), kind: request.kind }
-
-  // The request goes in argv, and stdin is closed outright: a scanner blocked
-  // on a pipe cannot notice that its parent has gone, and orphans accumulated
-  // one per app restart. `cwd` is the filesystem root so the compiled binary
-  // never picks up a `bunfig.toml` from wherever the app happened to start.
-  const proc = Bun.spawn([...resolveScanner(), JSON.stringify({ ...request, progressFile })], {
-    stdin: 'ignore',
-    stdout: 'pipe',
-    stderr: 'ignore',
-    cwd: '/',
-  })
-
-  let timedOut = false
-  let escalation: ReturnType<typeof setTimeout> | undefined
-
-  const timer = setTimeout(() => {
-    timedOut = true
-    try {
-      proc.kill()
-    }
-    catch {
-      // Already exited.
-    }
-
-    // SIGTERM is a request, and a scan wedged in a syscall macOS will not
-    // return from cannot act on it — a walk given 180s was measured still
-    // running 87 minutes later, having visited 49 directories. Escalate, so a
-    // blocked scan does not leak a process per attempt.
-    escalation = setTimeout(() => {
-      try {
-        proc.kill(9)
-      }
-      catch {
-        // Already exited.
-      }
-    }, 2000)
-  }, hardTimeoutMs)
-
-  let resultFile = ''
-  try {
-    // Stdout carries progress lines while the scan runs and, last, the path of
-    // the result file — see the note at the top of ./disk-scan.ts for why the
-    // payload itself does not come through here.
-    // Stdout carries only the path of the result file — see the note at the top
-    // of ./disk-scan.ts for why the payload does not come through here.
-    resultFile = (await new Response(proc.stdout).text()).trim()
-    await proc.exited
-
-    if (timedOut)
-      throw new Error(`Scan exceeded ${Math.round(hardTimeoutMs / 1000)}s`)
-
-    if (!resultFile)
-      throw new Error('Scan produced no result')
-
-    const result = JSON.parse(fs.readFileSync(resultFile, 'utf8')) as ScanResult
-    lastResults.set(request.kind, { at: Date.now(), result })
-    return result
-  }
-  catch (err) {
-    const failure = timedOut
-      ? new Error(`Scan exceeded ${Math.round(hardTimeoutMs / 1000)}s`)
-      : (err instanceof Error ? err : new Error('Scan failed'))
-
-    // Failures are held too. A screen that was closed when the scan died has no
-    // other way to learn why, and silently dropping back to "ready to scan"
-    // reads as though nothing ever happened.
-    lastResults.set(request.kind, {
-      at: Date.now(),
-      result: { success: false, error: failure.message },
+/** POSIX process groups and Windows taskkill /T stop du/sips descendants too. */
+export async function terminateScanProcess(proc: ChildProcess): Promise<void> {
+  if (!proc.pid) return
+  if (process.platform === 'win32') {
+    const killer = spawn('taskkill.exe', ['/PID', String(proc.pid), '/T', '/F'], { stdio: 'ignore' })
+    await new Promise<void>((resolve, reject) => {
+      killer.once('error', reject)
+      killer.once('close', () => resolve())
     })
-    throw failure
+    return
+  }
+  const signal = (name: NodeJS.Signals) => {
+    try { process.kill(-proc.pid!, name) }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
+    }
+  }
+  signal('SIGTERM')
+  // A worker can exit before a descendant does. Complete the group shutdown
+  // even if the parent has already closed its own pipes.
+  await new Promise(resolve => setTimeout(resolve, 250))
+  signal('SIGKILL')
+}
+
+async function runWorker({ request, hardTimeoutMs }: WorkerRequest, signal: AbortSignal, publish: (progress: ScanProgress) => void): Promise<ScanResult> {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'system-cleaner-progress-'))
+  const progressFile = path.join(directory, 'progress.json')
+  const outputDirectory = path.join(directory, 'result')
+  const [command, ...args] = scannerCommand()
+  let resultFile = ''
+  let timedOut = false
+  let stopped: Promise<void> | undefined
+  const proc = spawn(command, [...args, JSON.stringify({ ...request, progressFile, outputDirectory })], {
+    detached: process.platform !== 'win32', cwd: '/', stdio: ['ignore', 'pipe', 'ignore'],
+    env: { ...process.env, TMPDIR: directory, TEMP: directory, TMP: directory },
+  })
+  const closed = new Promise<void>((resolve, reject) => {
+    proc.once('error', reject)
+    proc.once('close', () => resolve())
+  })
+  function progress(): void {
+    try { publish(JSON.parse(fs.readFileSync(progressFile, 'utf8'))) }
+    catch { /* The worker has not published its first snapshot yet. */ }
+  }
+  function stop(): void {
+    progress()
+    stopped ??= terminateScanProcess(proc)
+    // Attach a handler immediately; the owning finally still awaits shutdown.
+    void stopped.catch(() => {})
+  }
+  signal.addEventListener('abort', stop, { once: true })
+  if (signal.aborted) stop()
+  const ticker = setInterval(progress, 200)
+  const deadline = setTimeout(() => {
+    timedOut = true
+    stop()
+  }, hardTimeoutMs)
+  try {
+    const [, output] = await Promise.all([closed, readText(proc.stdout!)])
+    resultFile = output.trim()
+    if (stopped) await stopped
+    progress()
+    if (signal.aborted) throw new DOMException('Scan cancelled', 'AbortError')
+    if (timedOut) throw new Error(`Scan exceeded ${Math.round(hardTimeoutMs / 1000)}s`)
+    if (!resultFile) throw new Error('Scan produced no result')
+    return JSON.parse(fs.readFileSync(resultFile, 'utf8')) as ScanResult
   }
   finally {
-    clearTimeout(timer)
-    if (escalation) clearTimeout(escalation)
-    running = null
-    try { fs.rmSync(progressDir, { recursive: true, force: true }) }
-    catch {}
-    // The scanner cannot clean up after itself: it has exited by the time the
-    // file has been read. Its parent directory goes too, so a killed scan
-    // leaves at most one stray under the OS temp dir.
-    if (resultFile) {
-      try { fs.rmSync(path.dirname(resultFile), { recursive: true, force: true }) }
-      catch {}
-    }
+    clearInterval(ticker)
+    clearTimeout(deadline)
+    signal.removeEventListener('abort', stop)
+    if (stopped) await stopped
+    fs.rmSync(directory, { recursive: true, force: true })
   }
 }
 
-function enqueue(request: ScanRequest, hardTimeoutMs: number): Promise<ScanResult> {
-  // Chain onto the previous scan whether it resolved or rejected, so one
-  // failure does not wedge the queue.
-  const next = inFlight
-    .catch(() => {})
-    .then(() => runScanner(request, hardTimeoutMs))
-
-  inFlight = next.catch(() => {})
-  return next
+export const scanJobs = new ScanJobs<WorkerRequest>(runWorker)
+export function lastScanResult(kind: ScanRequest['kind']) {
+  const session = scanJobs.sessions().find(item => item.kind === kind)
+  return session?.result ? { at: session.finishedAt!, result: session.result } : null
 }
-
-export function runDiskScan(
-  request: Omit<TreeScanRequest, 'kind'>,
-  hardTimeoutMs: number,
-): Promise<TreeScanResult> {
-  return enqueue({ kind: 'tree', ...request }, hardTimeoutMs) as Promise<TreeScanResult>
+export function scanProgress() {
+  const session = scanJobs.sessions().find(item => item.status === 'running' || item.status === 'cancelling')
+  return session ? { ...session.progress, id: session.id, startedAt: session.startedAt!, kind: session.kind } : null
 }
-
-export function runLargeFileScan(
-  request: Omit<LargeFilesRequest, 'kind'>,
-  hardTimeoutMs: number,
-): Promise<LargeFilesResult> {
-  return enqueue({ kind: 'large-files', ...request }, hardTimeoutMs) as Promise<LargeFilesResult>
+export function runDiskScan(request: Omit<Extract<ScanRequest, { kind: 'tree' }>, 'kind'>, hardTimeoutMs: number, parameters: Record<string, unknown> = {}) {
+  return scanJobs.start('tree', { request: { kind: 'tree', ...request }, hardTimeoutMs }, parameters)
 }
-
-export function runDuplicateScan(
-  request: Omit<DuplicatesRequest, 'kind'>,
-  hardTimeoutMs: number,
-): Promise<DuplicatesResult> {
-  return enqueue({ kind: 'duplicates', ...request }, hardTimeoutMs) as Promise<DuplicatesResult>
+export function runLargeFileScan(request: Omit<Extract<ScanRequest, { kind: 'large-files' }>, 'kind'>, hardTimeoutMs: number, parameters: Record<string, unknown> = {}) {
+  return scanJobs.start('large-files', { request: { kind: 'large-files', ...request }, hardTimeoutMs }, parameters) as Promise<ScanResult & { files?: LargeFile[] }>
+}
+export function runDuplicateScan(request: Omit<Extract<ScanRequest, { kind: 'duplicates' }>, 'kind'>, hardTimeoutMs: number, parameters: Record<string, unknown> = {}) {
+  return scanJobs.start('duplicates', { request: { kind: 'duplicates', ...request }, hardTimeoutMs }, parameters)
+}
+export function runSimilarScan(request: Omit<Extract<ScanRequest, { kind: 'similar' }>, 'kind'>, hardTimeoutMs: number, parameters: Record<string, unknown> = {}) {
+  return scanJobs.start('similar', { request: { kind: 'similar', ...request }, hardTimeoutMs }, parameters) as Promise<ScanResult & Partial<SimilarImageScanResult>>
 }

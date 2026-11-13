@@ -219,6 +219,7 @@ export async function checkForUpdate(): Promise<UpdateStatus> {
   if (reason)
     return { ...status, stage: 'unsupported', unsupportedReason: reason }
 
+  if (['checking', 'downloading', 'ready', 'installing'].includes(status.stage)) return status
   await ensureTeamId()
   status = { ...status, stage: 'checking', error: null }
 
@@ -297,6 +298,7 @@ export async function installUpdate(): Promise<UpdateStatus> {
   if (reason)
     return { ...status, stage: 'unsupported', unsupportedReason: reason }
 
+  if (status.stage === 'installing') return status
   if (status.stage !== 'ready')
     return { ...status, stage: 'error', error: 'No update has been downloaded yet.' }
 

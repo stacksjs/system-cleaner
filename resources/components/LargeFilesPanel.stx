@@ -70,7 +70,7 @@
 
   <label class='lf-field'>
     <span class='lf-field-label'>Minimum size</span>
-    <select class='lf-input' x-model.number='minSizeMB' @change='rescanIfScanned()'>
+    <select class='lf-input' :disabled='scanning' x-model.number='minSizeMB' @change='rescanIfScanned()'>
       <option value='10'>10 MB</option>
       <option value='50'>50 MB</option>
       <option value='100'>100 MB</option>
@@ -89,7 +89,11 @@
     <span class='i-f7-search' aria-hidden='true'></span>
     <span x-text="scanning ? 'Scanning…' : (scanned ? 'Rescan' : 'Find Large Files')">Find Large Files</span>
   </button>
+  <button class='btn' type='button' data-cancel-scan x-show='scanning' x-cloak
+    @click='cancelScan()' :disabled='cancelling || !scanId' x-text="cancelling ? 'Cancelling…' : 'Cancel Scan'">Cancel Scan</button>
 </div>
+
+<div class='lf-live-status' role='status' x-show='cancelled' x-cloak>Scan cancelled. Results found so far are kept. <span x-text='scanProgress'></span></div>
 
 <!-- Category chips -->
 <div class='lf-chips' x-show='files.length > 0' x-cloak>
@@ -124,7 +128,7 @@
   </button>
 </div>
 
-<div class='lf-partial' x-show='truncated && !scanning' x-cloak>
+<div class='lf-partial' x-show='truncated && !scanning && !cancelled' x-cloak>
   This scan hit its time limit before reaching every folder, so the list is the
   largest items found so far. Narrowing <strong>Search in</strong> to a single
   folder covers it completely and finishes much faster.

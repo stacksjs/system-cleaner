@@ -30,6 +30,7 @@ window.updatesXData = function () {
       teamId: null,
     },
     selfPollTimer: null,
+    selfActionBusy: false,
 
     // On a beta the marketing version never moves — 27.0 upgrades to 27.0 —
     // so the build is the only thing that says which beta is installed and
@@ -67,16 +68,25 @@ window.updatesXData = function () {
       var self = this
       return fetch('/api/self-update/' + endpoint, {
         method: 'POST',
+        cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
       })
-        .then(function (r) { return r.json() })
+        .then(async function (response) {
+          var result = await response.json()
+          if (!response.ok || result.success === false) throw new Error(result.error || 'Update request failed')
+          return result
+        })
         .then(function (r) {
           // Assigned wholesale rather than field by field: STX tracks
           // assignment to `self`, not writes into the object it points at.
           self.self = Object.assign({}, self.self, r)
           self.syncSelfPolling()
           return r
+        }).catch(function (error) {
+          self.self = Object.assign({}, self.self, { stage: 'error', error: error.message || 'Could not contact the updater' })
+          self.syncSelfPolling()
+          return self.self
         })
     },
 
@@ -116,12 +126,21 @@ window.updatesXData = function () {
     },
 
     async installSelfUpdate() {
-      if (!await window.nativeConfirm({
-        title: 'Install SystemCleaner ' + this.self.latestVersion + '?',
-        message: 'SystemCleaner will quit and reopen on the new version.',
-        confirmLabel: 'Install and Restart',
-      })) return
-      this.selfPost('install')
+      if (this.selfActionBusy || this.self.stage !== 'ready') return
+      this.selfActionBusy = true
+      try {
+        if (!await window.nativeConfirm({
+          title: 'Install SystemCleaner ' + this.self.latestVersion + '?',
+          message: 'SystemCleaner will quit and reopen on the new version.',
+          confirmLabel: 'Install and Restart',
+        })) return
+        this.self = Object.assign({}, this.self, { stage: 'installing', error: null })
+        await this.selfPost('install')
+      } catch (error) {
+        this.self = Object.assign({}, this.self, { stage: 'error', error: error.message || 'Could not start the update' })
+      } finally {
+        this.selfActionBusy = false
+      }
     },
 
     selfStatusLine() {

@@ -301,6 +301,18 @@ const localAgent = isLocalAgent()
       margin: var(--space-6) 0 var(--space-2); font-size: 13px; font-weight: 600; color: var(--secondary);
     }
     .set-section-title:first-child { margin-top: var(--space-2); }
+    .set-update-card { padding: 20px; }
+    .set-update-summary { display: flex; align-items: flex-start; gap: 14px; }
+    .set-update-icon { flex: none; width: 44px; height: 44px; border-radius: 11px; }
+    .set-update-icon span { width: 25px; height: 25px; }
+    .set-update-title { margin: 0 0 4px; font-size: 17px; font-weight: 600; letter-spacing: -.02em; }
+    .set-update-status { margin-top: 8px; font-size: 12px; line-height: 1.45; color: var(--ink); }
+    .set-update-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+    .set-update-error { margin-top: 14px; padding: 10px 12px; border-radius: 8px; background: var(--set-card); color: var(--red); font-size: 12px; line-height: 1.45; }
+    .set-update-download { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+    .set-update-progress { width: 100%; height: 6px; accent-color: var(--accent); }
+    .set-update-notes { margin-top: 16px; padding-top: 12px; border-top: .5px solid var(--set-card-line); font-size: 12px; }
+    .set-update-notes summary { cursor: pointer; }
     .set-card-row {
       display: flex; align-items: center; gap: var(--space-3);
       min-height: 42px; padding: var(--space-2) var(--space-4);
@@ -431,6 +443,7 @@ const localAgent = isLocalAgent()
   </div>
 @endif
 
+<script src="/native-dialog.js"></script>
 <script src="/settings-window.js"></script>
 </body>
 </html>

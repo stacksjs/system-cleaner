@@ -2,14 +2,7 @@
 @section('nav', 'disk')
 @section('body')
 
-<!--
-  `/disk-panel.js` owns the sunburst: the arc maths, the scan request, drill-down,
-  and the reveal/delete actions. Without this tag `startDiskScan` is not defined
-  and the Scan Disk button does nothing at all — which is exactly how this screen
-  shipped. `tests/view-scripts.test.ts` now fails if a view calls into a global
-  it never loads.
--->
-<script src='/disk-panel.js'></script>
+<!-- The shared app layout loads the chart controller after scan sessions. -->
 
 <div class='main-content' style='padding: 0; height: 100%;'>
   <DiskPanel />

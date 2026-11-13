@@ -19,7 +19,7 @@
     because the scan hashes candidates in full before calling them identical —
     see packages/disk/src/duplicates.ts.
   - The scan runs in the agent, not the page. Navigating away leaves it
-    running, so `rejoin()` asks the server what happened rather than showing an
+    running, so the shared scan session asks the server what happened rather than showing an
     empty screen over a live scan.
 -->
 <div x-data="{
@@ -30,6 +30,10 @@
   wastedFormatted: '0 B',
   scanned: false,
   scanning: false,
+  cancelling: false,
+  cancelled: false,
+  scanId: '',
+  scanStatus: '',
   truncated: false,
   scanTime: '',
   scanRoot: '',
@@ -39,12 +43,10 @@
   deleting: false,
   scanProgress: '',
   scanProgressPath: '',
-  progressTimer: null,
-  rejoinTimer: null,
   toasts: [],
   toastId: 0,
 
-  init() { this.rejoin(); },
+  init() { attachScanPage(this, 'duplicates'); },
 
   post(endpoint, data) {
     return fetch(endpoint, {
@@ -58,34 +60,8 @@
     });
   },
 
-  scan() {
-    if (this.scanning) return;
-    var self = this;
-    this.scanning = true;
-    this.groups = [];
-    this.selected = [];
-    this.scanned = false;
-    this.scanProgress = '';
-    this.scanProgressPath = '';
-    this.pollProgress();
-    this.post('/api/duplicates-scan', { path: this.scanRoot, minSizeMB: this.minSizeMB }).then(function(r) {
-      self.scanning = false;
-      self.stopProgress();
-      if (!r.success) { self.toast(r.error || 'Scan failed', 'error'); return; }
-      self.applyResult(r);
-      if (window.notifyIfAway) {
-        window.notifyIfAway({
-          elapsedMs: (parseFloat(String(r.scanTime || '0')) || 0) * 1000,
-          title: 'Duplicate scan finished',
-          body: r.duplicateCount + ' redundant copies, ' + r.wastedFormatted + ' reclaimable.',
-        });
-      }
-    }).catch(function(err) {
-      self.scanning = false;
-      self.stopProgress();
-      self.toast('Scan failed: ' + (err && err.message ? err.message : 'network'), 'error');
-    });
-  },
+  scan() { startScanPage(this, 'duplicates', { minSizeMB: Number(this.minSizeMB), path: this.scanRoot }); },
+  cancelScan() { cancelScanPage(this, 'duplicates'); },
 
   applyResult(r) {
     this.groups = r.groups || [];
@@ -99,60 +75,6 @@
     var present = {};
     this.groups.forEach(function(g) { g.files.forEach(function(f) { present[f.path] = true; }); });
     this.selected = this.selected.filter(function(p) { return present[p]; });
-  },
-
-  rejoin() {
-    var self = this;
-    this.post('/api/scan-progress').then(function(d) {
-      if (!d || !d.scanning || d.kind !== 'duplicates') { self.collectFinished(); return; }
-      self.scanning = true;
-      self.pollProgress();
-      self.watchForResult();
-    }).catch(function() {});
-  },
-
-  watchForResult() {
-    var self = this;
-    if (this.rejoinTimer) clearInterval(this.rejoinTimer);
-    this.rejoinTimer = setInterval(function() {
-      self.post('/api/scan-progress').then(function(d) {
-        if (d && d.scanning && d.kind === 'duplicates') return;
-        clearInterval(self.rejoinTimer);
-        self.rejoinTimer = null;
-        self.scanning = false;
-        self.stopProgress();
-        self.collectFinished();
-      }).catch(function() {});
-    }, 700);
-  },
-
-  collectFinished() {
-    var self = this;
-    this.post('/api/last-scan', { kind: 'duplicates' }).then(function(d) {
-      if (!d || !d.result || !d.result.success) return;
-      self.applyResult(d.result);
-    }).catch(function() {});
-  },
-
-  pollProgress() {
-    var self = this;
-    this.stopProgress();
-    this.progressTimer = setInterval(function() {
-      self.post('/api/scan-progress').then(function(d) {
-        if (!d || !d.scanning || d.kind !== 'duplicates' || !self.scanning) return;
-        if (d.snapshot) self.applyResult(d.snapshot);
-        var n = d.scanned;
-        var count = n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n);
-        self.scanProgress = count + ' items · ' + Math.round(d.elapsedMs / 1000) + 's';
-        self.scanProgressPath = self.shortPath(d.path || '');
-      }).catch(function() {});
-    }, 400);
-  },
-
-  stopProgress() {
-    if (this.progressTimer) { clearInterval(this.progressTimer); this.progressTimer = null; }
-    this.scanProgress = '';
-    this.scanProgressPath = '';
   },
 
   async chooseFolder() {

@@ -43,10 +43,16 @@
         x-text="busy ? 'Moving…' : 'Move ' + selected.length + ' to Trash'"></button>
       <button class='btn btn-sm' data-rescan @click='scan()' :disabled='scanning'
         x-text="scanning ? 'Scanning…' : (scanned ? 'Rescan' : 'Scan')">Scan</button>
+  <button class='btn btn-sm' type='button' data-cancel-scan x-show='scanning' x-cloak
+    @click='cancelScan()' :disabled='cancelling || !scanId' x-text="cancelling ? 'Cancelling…' : 'Cancel Scan'">Cancel Scan</button>
     </div>
   </div>
 
-  <div class='si-note' x-show='scanning'>
+<div class='si-note' role='status' x-show='cancelled' x-cloak>Scan cancelled. Results found so far are kept. <span x-text='scanProgress'></span></div>
+
+  <div class='si-note' role='status' x-show='scanning'>
+    <div x-text='scanProgress'></div>
+    <div class='scan-path' x-text='scanProgressPath'></div>
     Resampling every image to a 9&times;8 grid and comparing them. A large
     photo library takes a few minutes.
   </div>

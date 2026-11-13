@@ -28,6 +28,12 @@
   groups: [],
   selected: [],
   scanning: false,
+  cancelling: false,
+  cancelled: false,
+  scanId: '',
+  scanStatus: '',
+  scanProgress: '',
+  scanProgressPath: '',
   scanned: false,
   supported: true,
   root: '',
@@ -39,6 +45,8 @@
   busy: false,
   toasts: [],
   toastId: 0,
+
+  init() { attachScanPage(this, 'similar'); },
 
   post(endpoint, data) {
     return fetch(endpoint, {
@@ -61,27 +69,19 @@
     return this.shortPath(this.root);
   },
 
-  scan() {
-    if (this.scanning) return;
-    var self = this;
-    this.scanning = true;
-    this.selected = [];
-    this.post('/api/similar-images-scan', this.root ? { path: this.root } : {}).then(function(r) {
-      self.scanning = false;
-      self.scanned = true;
-      if (!r.success) { self.toast(r.error || 'Scan failed', 'error'); return; }
-      self.supported = r.supported !== false;
-      self.groups = r.groups || [];
-      self.root = r.root || '';
-      self.candidates = r.candidates || 0;
-      self.grouped = r.grouped || 0;
-      self.wasted = r.totalWastedFormatted || '0 B';
-      self.truncated = r.truncated === true;
-      self.scanMs = r.scanTimeMs || 0;
-    }).catch(function(err) {
-      self.scanning = false;
-      self.toast('Scan failed: ' + (err && err.message ? err.message : 'network'), 'error');
-    });
+  scan() { startScanPage(this, 'similar', { path: this.root }); },
+  cancelScan() { cancelScanPage(this, 'similar'); },
+  applyResult(r) {
+    this.scanned = true;
+    this.supported = r.supported !== false;
+    this.groups = r.groups || [];
+    this.candidates = r.candidates || 0;
+    this.grouped = r.grouped || 0;
+    this.wasted = r.totalWastedFormatted || '0 B';
+    this.truncated = !!r.truncated;
+    this.scanMs = r.scanTimeMs || 0;
+    const present = this.groups.flatMap(function(group) { return group.files.map(function(file) { return file.path; }); });
+    this.selected = this.selected.filter(function(p) { return present.indexOf(p) !== -1; });
   },
 
   thumb(file, size) {

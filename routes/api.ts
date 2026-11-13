@@ -31,8 +31,9 @@ import {
   invalidateStartupCache,
   invalidateDiskInfoCache,
 } from './data-service';
+import type { ScanSession } from '../app/Workers/scan-jobs';
 import { measurementStream } from '../app/Support/measurement-stream';
-import { lastScanResult, runDiskScan, runDuplicateScan, runLargeFileScan, scanProgress } from '../app/Workers/scan-pool';
+import { lastScanResult, runDiskScan, runDuplicateScan, runLargeFileScan, runSimilarScan, scanJobs, scanProgress } from '../app/Workers/scan-pool';
 import { findAppBundle, findAppBundleForCask, getSystemInfoSync, ICON_SIZES, listApplicationEntries, readAppVersion, renderAppIcon } from '@system-cleaner/core';
 import * as nodeOs from 'node:os';
 import {
@@ -69,7 +70,7 @@ import {
   // and this is the guard deciding what may be deleted. It has to look now.
   discoverStartupItems,
 } from '@system-cleaner/uninstall';
-import { categoryPresentation, findProjectArtifacts, findSimilarImages, renderImageThumbnail, shredPaths, THUMBNAIL_SIZES } from '@system-cleaner/disk';
+import { categoryPresentation, findProjectArtifacts, renderImageThumbnail, shredPaths, THUMBNAIL_SIZES } from '@system-cleaner/disk';
 import { getTopProcesses, sampleCpuUsage, summarizeProcesses } from '@system-cleaner/monitor';
 import { recordSystemActivity } from '../app/Support/System/activity-chart';
 import { isLocalAgent } from '../app/Support/Runtime/local-agent';
@@ -355,6 +356,7 @@ export default async function (router: Router) {
       const result = await runDiskScan(
         { home: scanRoot, maxDepth, timeoutMs: WORKER_TIMEOUT_MS },
         HARD_TIMEOUT_MS,
+        { path: body.path || '', maxDepth },
       );
       return Response.json(result);
     }
@@ -388,7 +390,7 @@ export default async function (router: Router) {
 
   await router.post('/last-scan', async (req: Request) => {
     const body = await readJsonBody<{ kind?: string }>(req);
-    const kind = body?.kind === 'large-files' || body?.kind === 'duplicates'
+    const kind = body?.kind === 'large-files' || body?.kind === 'duplicates' || body?.kind === 'similar'
       ? body.kind
       : 'tree';
     const held = lastScanResult(kind);
@@ -401,6 +403,26 @@ export default async function (router: Router) {
       ageMs: Date.now() - held.at,
       result: await presentScanResult(held.result),
     });
+  });
+
+  async function presentScanSession(session: ScanSession) {
+    return { ...session,
+      result: session.result ? await presentScanResult(session.result) : undefined,
+      progress: { ...session.progress, snapshot: session.progress.snapshot ? await presentScanResult(session.progress.snapshot) : undefined },
+    };
+  }
+
+  await router.post('/scan-state', async () => {
+    const scans = await Promise.all(scanJobs.sessions().map(presentScanSession));
+    return Response.json({ success: true, scans }, { headers: { 'Cache-Control': 'private, no-store' } });
+  });
+
+  await router.post('/cancel-scan', async (req: Request) => {
+    const body = await readJsonBody<{ id?: unknown }>(req);
+    if (!body || typeof body.id !== 'string' || !body.id) return badRequest('A scan ID is required');
+    const scan = await scanJobs.cancel(body.id);
+    if (!scan) return badRequest('This scan has been replaced. Refresh its status before cancelling.', 409);
+    return Response.json({ success: true, scan: await presentScanSession(scan) }, { headers: { 'Cache-Control': 'private, no-store' } });
   });
 
   await router.post('/scan-progress', async () => {
@@ -745,6 +767,7 @@ export default async function (router: Router) {
             categories,
           },
           HARD_TIMEOUT_MS,
+          { path: body.path || '', minSizeMB },
         ),
         protectedPathSet(),
       ]);
@@ -762,6 +785,8 @@ export default async function (router: Router) {
         totalBytes: result.totalBytes,
         truncated: result.truncated,
         scanTime: result.scanTime,
+        cancelled: result.cancelled,
+        scanId: result.scanId,
         // The protected flag is joined here rather than in the worker: the
         // worker has no database, and the list is small enough that a set
         // lookup per row costs nothing.
@@ -1667,15 +1692,18 @@ export default async function (router: Router) {
 
     similarScanInFlight = true;
     try {
-      const result = await findSimilarImages({ roots: [root], threshold });
+      const result = await runSimilarScan({ roots: [root], threshold, timeoutMs: 120_000 }, 150_000, { path: body.path || '', threshold });
+      const groups = result.groups ?? [];
       similarScan = {
-        paths: new Set(result.groups.flatMap(g => g.files.map(f => f.path))),
-        keepers: new Set(result.groups.map(g => g.keeperPath)),
+        paths: new Set(groups.flatMap(g => g.files.map(f => f.path))),
+        keepers: new Set(groups.map(g => g.keeperPath)),
       };
 
       return Response.json({
         success: true,
         supported: result.supported,
+        cancelled: result.cancelled,
+        scanId: result.scanId,
         root,
         candidates: result.candidates,
         hashed: result.hashed,
@@ -1684,7 +1712,7 @@ export default async function (router: Router) {
         scanTimeMs: result.scanTimeMs,
         totalWastedBytes: result.totalWastedBytes,
         totalWastedFormatted: result.totalWastedFormatted,
-        groups: result.groups.map(g => ({
+        groups: groups.map(g => ({
           id: g.id,
           count: g.count,
           keeperPath: g.keeperPath,
@@ -2377,6 +2405,7 @@ export default async function (router: Router) {
       const result = await runDuplicateScan(
         { roots: [root], minSizeBytes: Math.round(minSizeMB * 1024 * 1024), limit, timeoutMs: WORKER_TIMEOUT_MS },
         HARD_TIMEOUT_MS,
+        { path: body.path || '', minSizeMB },
       );
 
       if (!result.success)

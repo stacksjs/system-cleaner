@@ -32,7 +32,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import process from 'node:process'
-import { findDuplicates, scanDirectory, scanLargeFiles } from '@system-cleaner/disk'
+import { findDuplicates, findSimilarImages, scanDirectory, scanLargeFiles } from '@system-cleaner/disk'
 
 interface TreeScanRequest {
   kind: 'tree'
@@ -65,7 +65,14 @@ interface DuplicatesRequest {
   progressFile?: string
 }
 
-export type ScanRequest = TreeScanRequest | LargeFilesRequest | DuplicatesRequest
+interface SimilarRequest {
+  kind: 'similar'
+  roots: string[]
+  threshold?: number
+  timeoutMs?: number
+  progressFile?: string
+}
+export type ScanRequest = (TreeScanRequest | LargeFilesRequest | DuplicatesRequest | SimilarRequest) & { outputDirectory?: string }
 
 function isPositiveInt(value: unknown, max = Number.MAX_SAFE_INTEGER): boolean {
   return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= max
@@ -89,6 +96,7 @@ export function isValidRequest(value: unknown): value is ScanRequest {
   // every field access below an error.
   const v = value as Record<string, unknown>
 
+  if (v.outputDirectory !== undefined && (typeof v.outputDirectory !== 'string' || !path.isAbsolute(v.outputDirectory))) return false
   if (!isOptionalDuration(v.timeoutMs))
     return false
   if (v.progressFile !== undefined && (typeof v.progressFile !== 'string' || v.progressFile.length === 0))
@@ -100,6 +108,11 @@ export function isValidRequest(value: unknown): value is ScanRequest {
     if (v.maxDepth !== undefined && !isPositiveInt(v.maxDepth))
       return false
     return true
+  }
+
+  if (v.kind === 'similar') {
+    return Array.isArray(v.roots) && v.roots.length > 0 && v.roots.every(root => typeof root === 'string' && root.length > 0)
+      && (v.threshold === undefined || (typeof v.threshold === 'number' && v.threshold >= 0 && v.threshold <= 20))
   }
 
   if (v.kind === 'duplicates') {
@@ -170,6 +183,13 @@ function progressReporter(file: string | undefined) {
 export async function runScan(request: ScanRequest): Promise<Record<string, unknown>> {
   const { onProgress, onSnapshot } = progressReporter(request.progressFile)
 
+  if (request.kind === 'similar') {
+    const result = await findSimilarImages({ roots: request.roots, threshold: request.threshold, timeoutMs: request.timeoutMs,
+      onProgress: (hashed, total, currentPath) => onProgress(hashed, currentPath, 0),
+    })
+    return { success: true, ...result }
+  }
+
   if (request.kind === 'duplicates') {
     const result = findDuplicates({
       roots: request.roots,
@@ -239,11 +259,10 @@ export async function runScan(request: ScanRequest): Promise<Record<string, unkn
 }
 
 /** Write `payload` to a temp file and print its path. */
-async function emit(payload: Record<string, unknown>): Promise<never> {
-  const file = path.join(
-    fs.mkdtempSync(path.join(os.tmpdir(), 'system-cleaner-scan-')),
-    'result.json',
-  )
+async function emit(payload: Record<string, unknown>, outputDirectory?: string): Promise<never> {
+  const directory = outputDirectory ?? fs.mkdtempSync(path.join(os.tmpdir(), 'system-cleaner-scan-'))
+  fs.mkdirSync(directory, { recursive: true })
+  const file = path.join(directory, 'result.json')
   fs.writeFileSync(file, JSON.stringify(payload))
   await Bun.write(Bun.stdout, `${file}\n`)
   process.exit(0)
@@ -271,10 +290,10 @@ export async function runScannerCli(input: string): Promise<never> {
     await emit({ success: false, error: 'Invalid scan request' })
 
   try {
-    return await emit(await runScan(parsed as ScanRequest))
+    return await emit(await runScan(parsed as ScanRequest), (parsed as ScanRequest).outputDirectory)
   }
   catch (e: any) {
-    return await emit({ success: false, error: e?.message || 'Scan failed' })
+    return await emit({ success: false, error: e?.message || 'Scan failed' }, (parsed as ScanRequest).outputDirectory)
   }
 }
 

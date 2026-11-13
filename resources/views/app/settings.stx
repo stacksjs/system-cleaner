@@ -275,40 +275,39 @@
 <section class='set-pane' data-pane='software-update' data-pane-title='Software Update'>
   <script src='/updates-xdata.js'></script>
   <div x-data='updatesXData()'>
-    <div class='set-card'>
-      <div class='set-card-row' style='align-items: flex-start; padding-top: var(--space-4);'>
-        <span class='set-tile' data-tone='blue' aria-hidden='true'
-              style='width: 38px; height: 38px; border-radius: 9px;'>
-          <span class='i-f7-arrow-down-circle-fill' style='width: 22px; height: 22px;'></span>
+    <div class='set-card set-update-card'>
+      <div class='set-update-summary'>
+        <span class='set-tile set-update-icon' data-tone='blue' aria-hidden='true'>
+          <span class='i-f7-arrow-down-circle-fill'></span>
         </span>
-        <span class='set-card-row-text' style='gap: var(--space-1);'>
-          <span class='set-card-label' style='font-size: 15px; font-weight: 600; letter-spacing: -.01em;'
-                x-text='selfHeadline()'>SystemCleaner</span>
-          <span class='set-card-hint' x-show='selfDetailLine()' x-cloak x-text='selfDetailLine()'></span>
-        </span>
+        <div class='set-card-row-text'>
+          <h2 class='set-update-title'>SystemCleaner</h2>
+          <span class='set-card-hint' x-text="self.currentVersion ? 'Installed version ' + self.currentVersion : 'Reading installed version…'"></span>
+          <span class='set-update-status' role='status' aria-live='polite'
+            x-show="self.stage !== 'error'" x-text='selfDetailLine()'></span>
+        </div>
+      </div>
+      <div class='set-update-error' role='alert' x-show="self.stage === 'error'" x-cloak x-text='self.error'></div>
+      <div class='set-update-download' x-show="self.stage === 'downloading'" x-cloak>
+        <progress class='set-update-progress' max='100' :value='self.percent' aria-label='Update download progress'></progress>
+        <span class='set-card-hint' x-text='selfProgressLabel()'></span>
+      </div>
+      <div class='set-update-actions'>
         <button class='set-btn' type='button' @click='checkSelfUpdate()'
-                :disabled="self.stage === 'checking' || self.stage === 'downloading' || self.stage === 'installing'">
-          Check Now
-        </button>
+          x-show="self.stage !== 'ready' && self.stage !== 'downloading' && self.stage !== 'installing'"
+          :disabled="self.stage === 'checking' || selfActionBusy"
+          x-text="self.stage === 'checking' ? 'Checking…' : self.stage === 'error' ? 'Try Again' : 'Check for Updates'">Check for Updates</button>
         <button class='set-btn set-btn-primary' type='button' x-show="self.stage === 'available'" x-cloak
-                @click='downloadSelfUpdate()'>
-          Download
-        </button>
-        <button class='set-btn set-btn-primary' type='button' x-show="self.stage === 'ready'" x-cloak
-                @click='installSelfUpdate()'>
-          Restart to Install
-        </button>
+          @click='downloadSelfUpdate()'>Download Update</button>
+        <button class='set-btn set-btn-primary' type='button' data-install-update
+          x-show="self.stage === 'ready' || self.stage === 'installing'" x-cloak
+          :disabled="selfActionBusy || self.stage === 'installing'" @click='installSelfUpdate()'
+          x-text="self.stage === 'installing' ? 'Installing…' : 'Restart to Install'">Restart to Install</button>
       </div>
-      <div class='set-card-row' x-show="self.stage === 'downloading'" x-cloak>
-        <span class='set-card-row-text'>
-          <span class='set-card-hint' x-text='selfProgressLabel()'></span>
-        </span>
-      </div>
-      <div class='set-card-row' x-show='self.releaseNotes' x-cloak>
-        <span class='set-card-row-text'>
-          <span class='set-card-hint' style='white-space: pre-wrap;' x-text='self.releaseNotes'></span>
-        </span>
-      </div>
+      <details class='set-update-notes' x-show='self.releaseNotes' x-cloak>
+        <summary>What’s New</summary>
+        <p class='set-card-hint' style='white-space: pre-wrap;' x-text='self.releaseNotes'></p>
+      </details>
     </div>
 
     <div class='set-section-title'>Also Available</div>

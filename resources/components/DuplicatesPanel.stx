@@ -75,7 +75,11 @@
     <span class='i-f7-square-on-square' aria-hidden='true'></span>
     <span x-text="scanning ? 'Scanning…' : (scanned ? 'Rescan' : 'Find Duplicates')">Find Duplicates</span>
   </button>
+  <button class='btn' type='button' data-cancel-scan x-show='scanning' x-cloak
+    @click='cancelScan()' :disabled='cancelling || !scanId' x-text="cancelling ? 'Cancelling…' : 'Cancel Scan'">Cancel Scan</button>
 </div>
+
+<div class='dp-hint' role='status' x-show='cancelled' x-cloak>Scan cancelled. Results found so far are kept. <span x-text='scanProgress'></span></div>
 
 <div class='dp-bulkbar' x-show='selected.length > 0' x-cloak>
   <div class='dp-bulk-summary'>
@@ -92,7 +96,7 @@
   </button>
 </div>
 
-<div class='dp-partial' x-show='truncated && !scanning' x-cloak>
+<div class='dp-partial' x-show='truncated && !scanning && !cancelled' x-cloak>
   This scan stopped before it could verify everything &mdash; either it ran out
   of time or a group was too large to hash within its budget. Every group shown
   was checked in full; there may simply be more. Narrow <strong>Search in</strong>

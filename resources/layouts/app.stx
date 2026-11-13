@@ -785,6 +785,7 @@ useEventListener('mousedown', moveWindowFrom, { target: document })
 <script src="/platform-gate.js"></script>
 <script src="/native-dialog.js"></script>
 <script src="/scan-updates.js"></script>
+<script src="/disk-panel.js"></script>
 <!-- Replaces AppKit's default menubar with one that knows this app: every
      screen on Cmd+1..9, Rescan on Cmd+R, and Edit's roles wired so Copy and
      Paste work in the filter fields. -->
