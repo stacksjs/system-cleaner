@@ -87,6 +87,7 @@ storage/framework/discovered-packages.json
 # `bun run dev` and `bun run build:app` both build them; editing the output
 # rather than the source would be silently overwritten.
 /public/app-menu.js
+/public/app-toolbar.js
 /public/scan-updates.js
 /public/native-dialog.js
 /public/platform-gate.js

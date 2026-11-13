@@ -120,7 +120,7 @@ useEventListener('stx:load', syncActive)
 useIntervalFn(syncScanning, 2000, { immediate: true })
 </script>
 
-<nav class="rail" aria-label="SystemCleaner sections">
+<nav class="rail" id="app-sidebar" aria-label="SystemCleaner sections">
   <a class="rail-brand" href="/app" data-stx-link aria-label="SystemCleaner dashboard">
     <BrandMark :size="30" />
   </a>

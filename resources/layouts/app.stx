@@ -119,57 +119,27 @@ const localAgent = isLocalAgent()
     .app-column { display: flex; flex: 1; flex-direction: column; min-width: 0; }
     .main { min-width: 0; flex: 1; overflow-y: auto; background: var(--app-bg); }
 
-    /* ---------- Top strip ---------- */
-    /* Sits beside the traffic lights rather than below them: the lights are
-       over the rail's top-left corner, and this strip fills the rest of that
-       same band, which is where a Mac app with a sidebar puts its toolbar.
-
-       Putting the two on one line is a centring problem, not a clearance one.
-       The lights' centre is `buttons-y + buttons-height / 2`, and a flex row
-       centres its children on `height / 2`, so the band that puts a row on
-       their line is `2 * buttons-y + buttons-height` tall.
-
-       Those are the buttons' *own* numbers, and using them is the whole fix.
-       `--craft-window-controls-height` is not the buttons' height and never
-       was: it is the bottom edge of everything a page has to keep clear, which
-       since Craft 0.0.86 spans its own toolbar row as well — 30 where the
-       lights end at 23. Feeding that into a centring formula centred the row
-       on a rectangle taller than the thing it was meant to line up with, and
-       the 52px floor below was hiding most of the error.
-
-       The fallbacks chain so a runtime that publishes only the reserve keeps
-       the answer it had before the buttons were published separately, and
-       `max()` keeps a 52px floor for the browser — the marketing site renders
-       this same shell, where every one of these variables is absent.
-
-       That floor wins in a real window too: the lights' band comes to 32,
-       which is under it. So when it wins, take the difference back off the
-       bottom — the content box becomes exactly the lights' own band, and a
-       centred row lands on their centre.
-
-       The `min()` is what keeps that honest in a browser. The correction
-       `52px - band` is 52 when nothing is published, which would pad the whole
-       strip away on the marketing site; `band` is 0 in that same case. Taking
-       the smaller gives 0 where there are no window controls, the real
-       correction where the floor wins, and a negative that `max()` clamps to 0
-       where it does not. No attribute gate, so none of this depends on which
-       Craft version is bundled. */
+    /* AppKit publishes its window-button band; use the same centre line for
+       the app toolbar, without leaving an empty second row beneath it. */
     .topnav {
-      --chrome-band: calc(
-        2 * var(--craft-window-buttons-y, var(--craft-window-controls-inset-y, 0px))
-        + var(--craft-window-buttons-height, var(--craft-window-controls-height, 0px))
-      );
-      display: flex; align-items: center; justify-content: flex-end;
-      flex: none; padding: 0 var(--space-5);
-      height: max(52px, var(--chrome-band));
-      padding-bottom: max(0px, min(calc(52px - var(--chrome-band)), var(--chrome-band)));
-      background: var(--app-bg);
+      --chrome-band: calc(2 * var(--craft-window-buttons-y, 8px) + var(--craft-window-buttons-height, 16px));
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      flex: none; height: max(32px, var(--chrome-band)); padding: 0 16px 0 8px;
+      background: var(--app-bg); user-select: none;
     }
-    /* Below this the name and host would start crowding the page title, and
-       the avatar alone still opens the same menu. */
-    @media (max-width: 760px) {
-      .profile-text { display: none; }
+    .toolbar-navigation { flex: none; }
+    .toolbar-button {
+      display: grid; place-items: center; width: 28px; height: 28px;
+      border: 0; border-radius: 6px; background: transparent; color: var(--secondary);
+      cursor: pointer; transition: background .12s, color .12s;
     }
+    .toolbar-button span { display: block; width: 16px; height: 16px; }
+    .toolbar-button:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
+    .toolbar-button:active:not(:disabled) { background: var(--pressed); }
+    .toolbar-button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .toolbar-button:disabled { color: var(--tertiary); opacity: .4; cursor: default; }
+    .toolbar-separator { width: .5px; height: 14px; margin: 0 5px; background: var(--line); }
+    @media (max-width: 600px) { .profile-text { display: none; } }
 
     /* ---------- Account menu ---------- */
     /* An AppKit menu, in CSS: a translucent sheet with a blurred backdrop,
@@ -177,7 +147,8 @@ const localAgent = isLocalAgent()
        blur is what makes it read as a menu rather than a dropped-in panel —
        it is the one surface in this window allowed to sit *above* the
        material rather than on it. */
-    .profile { position: relative; }
+    .profile { position: relative; min-width: 0; }
+    .menu-heading { padding: 6px 8px 3px; color: var(--secondary); font-size: 12px; font-weight: 500; }
     .menu {
       position: absolute; top: calc(100% + 6px); right: 0; z-index: 60;
       display: flex; flex-direction: column; min-width: 208px; padding: var(--space-1);
@@ -226,47 +197,33 @@ const localAgent = isLocalAgent()
     }
     .menu-badge[hidden] { display: none; }
 
-    /* ---------- Profile chip ---------- */
-    /* At the trailing end of the band — see AppTopNav.stx for why: Craft's own
-       toolbar owns the leading end and draws over anything put there.
-       It is now the only control in the strip, and the one that opens the
-       account menu, so it is drawn as a button rather than as a label with a
-       divider beside it. */
+    /* A single-line account control belongs on the window-button line.
+       The machine name is context inside its menu rather than a second title. */
     .profile-chip {
-      display: flex; align-items: center; gap: var(--space-2);
-      padding: var(--space-1) var(--space-2) var(--space-1) var(--space-tight);
-      border: 0; border-radius: 9px;
+      display: flex; align-items: center; gap: 7px; max-width: 240px; height: 28px;
+      padding: 0 6px; border: 0; border-radius: 6px;
       background: transparent; color: var(--secondary);
       font-family: inherit; text-align: left; cursor: pointer;
-      transition: background .12s, color .12s;
     }
-    .profile-chip[hidden] { display: none; }
     .profile-chip:hover { background: var(--hover); color: var(--ink); }
     .profile-chip[aria-expanded='true'] { background: var(--pressed); color: var(--ink); }
-    .profile-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-    .profile-caret { width: 11px; height: 11px; flex: none; color: var(--tertiary); }
-    .profile-avatar {
-      position: relative; overflow: visible;
-      display: grid; width: 24px; height: 24px; flex: none; place-items: center;
-      border-radius: 50%;
-      background: var(--surface-soft); color: var(--secondary);
-      font-size: 11px; font-weight: 650;
+    .profile-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .profile-caret { width: 9px; height: 9px; flex: none; color: var(--secondary); margin-left: 2px; }
+    .profile-avatar { position: relative; display: grid; width: 20px; height: 20px; flex: none; }
+    .profile-picture {
+      display: grid; place-items: center; width: 100%; height: 100%; overflow: hidden;
+      border-radius: 50%; background: var(--surface-soft); color: var(--secondary);
+      font-size: 10px; font-weight: 600;
     }
-    .profile-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
-
-    /* "There is something in the menu." A closed menu cannot honestly say more
-       than that, and the count itself is on the item inside it. The ring is
-       what keeps it legible over a photograph. */
+    .profile-picture > span { width: 12px; height: 12px; }
+    .profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
     .profile-dot {
-      position: absolute; top: -1px; right: -1px;
-      width: 8px; height: 8px;
-      border: 1.5px solid var(--app-bg); border-radius: 50%;
-      background: var(--orange);
+      position: absolute; top: -1px; right: -1px; width: 7px; height: 7px;
+      border: 1.5px solid var(--app-bg); border-radius: 50%; background: var(--orange);
     }
     .profile-dot[hidden] { display: none; }
-    .profile-text { display: flex; flex-direction: column; line-height: 1.15; }
-    .profile-name { font-size: 12px; font-weight: 600; color: var(--ink); }
-    .profile-host { font-size: 10px; color: var(--tertiary); }
+    .profile-text { min-width: 0; }
+    .profile-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 500; color: var(--secondary); }
 
     /* Inactive window: colour, not opacity — a faded tint reads as a disabled
        control, where grey reads as a window that has stood down. */
@@ -281,20 +238,7 @@ const localAgent = isLocalAgent()
     }
 
     /* ---------- Collapsed sidebar ---------- */
-    /* Craft's toolbar carries a sidebar button, and it did nothing here.
-       The runtime's own user script answers that click by stamping
-       `data-sidebar-collapsed` on the root element and injecting
-       `html[data-sidebar-collapsed] body { padding-left: 128px }` — a pad
-       sized for its default 286px native sidebar, on a shell whose rail is
-       74px and which lays itself out with flex rather than with body padding.
-       Nothing here read the attribute, so the button moved nothing; the pad
-       would have shoved the whole window sideways if anything had.
-
-       So: honour the attribute, and neutralise the pad. The rail collapses to
-       nothing and the content takes the width, which is what the button in a
-       Mac toolbar means. `data-sidebar-collapsed` is Craft's, like
-       `data-craft-window-active` — this rule reads it and claims nothing else
-       about the root element. */
+    /* The app toolbar and View menu both control this same rail. */
     html[data-sidebar-collapsed] body { padding-left: 0 !important; }
     :root[data-sidebar-collapsed] .rail {
       width: 0; min-width: 0;
@@ -303,16 +247,7 @@ const localAgent = isLocalAgent()
       opacity: 0;
       pointer-events: none;
     }
-    /* The window buttons stay where AppKit drew them, so the strip has to keep
-       their room clear once the rail is no longer doing it.
-
-       `--craft-window-controls-width` is already the room to leave, measured
-       from the viewport's left edge rather than from the buttons — so adding
-       the inset to it counted the same gap twice. It also covers Craft's own
-       toolbar row now (the sidebar toggle and the history arrows), which the
-       runtime under-reported until craft#cc781de: it answered 69 for a row
-       that reaches 189, and anything placed in between sat under real
-       NSButtons. */
+    /* Collapsing the rail does not move AppKit's window buttons. */
     :root[data-sidebar-collapsed] .topnav {
       padding-left: calc(var(--craft-window-controls-width, 0px) + 16px);
     }
@@ -790,6 +725,7 @@ useEventListener('mousedown', moveWindowFrom, { target: document })
      screen on Cmd+1..9, Rescan on Cmd+R, and Edit's roles wired so Copy and
      Paste work in the filter fields. -->
 <script src="/app-menu.js"></script>
+<script src="/app-toolbar.js"></script>
 <!-- Wires the Settings panel above: Cmd+, from the menubar or the page, the
      profile chip in the top strip, and the controls inside it. -->
 <script src="/settings-panel.js"></script>

@@ -115,6 +115,12 @@ describe('windowArgs', () => {
     expect(args).not.toContain('--web-window-material')
   })
 
+  it('leaves app navigation to the themed toolbar on macOS', () => {
+    expect(windowArgs('darwin', base, all)).toContain('--no-web-chrome-controls')
+    expect(windowArgs('win32', base, all)).not.toContain('--no-web-chrome-controls')
+    expect(windowArgs('darwin', base, none)).not.toContain('--no-web-chrome-controls')
+  })
+
   it('opens a plain titlebar on macOS when the runtime cannot host chrome', () => {
     const args = windowArgs('darwin', base, none)
     expect(args).not.toContain('--titlebar-hidden')

@@ -199,6 +199,8 @@ export function windowArgs(
 
   if (platform === 'darwin' && supports('--titlebar-hidden')) {
     args.push('--titlebar-hidden')
+    // The app supplies a single themed toolbar; AppKit keeps the window buttons.
+    if (supports('--no-web-chrome-controls')) args.push('--no-web-chrome-controls')
     args.push(...(supports('--web-window-material')
       ? ['--web-window-material']
       : ['--web-sidebar-material', '--web-sidebar-width', '74', '--web-sidebar-material-opacity', '0.25']))
