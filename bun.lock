@@ -643,7 +643,7 @@
 
     "ts-medium-editor": ["ts-medium-editor@0.2.0", "", { "hasInstallScript": true }, "sha512-XR4Orpxm1v9OfP6dCMImYpPaqdJUdoRl3laUUiPB9dR9WJHSFbWZmHCBdPG3uiQiaQljeSssKQTZTUcfQnsj3g=="],
 
-    "ts-pantry": ["ts-pantry@0.11.199", "", { "dependencies": { "@stacksjs/bumpx": "^0.2.29", "@stacksjs/env": "^0.75.311" }, "bin": { "ts-pantry": "./dist/bin/cli.js", "pantry-desktop": "./dist/bin/desktop.js" } }, "sha512-DhtHTemTiZGdL5m5W9a/HwUcbdeSlUx8yILrE2XPf8C1RuXW3EOSpUC5rWO1/Psh3bdyfCxHurrkEmwSwJHnjQ=="],
+    "ts-pantry": ["ts-pantry@0.11.201", "", { "dependencies": { "@stacksjs/bumpx": "^0.2.29", "@stacksjs/env": "^0.75.311" }, "bin": { "ts-pantry": "./dist/bin/cli.js", "pantry-desktop": "./dist/bin/desktop.js" } }, "sha512-yznQydJVXvpAFdqc0rIgwTLMsBvkMeyTTHlnAtjuBM+7N6FNCoXUJX0fG6GbbN4k9CdCU5eu9OeXPGk7DwjQNg=="],
 
     "ts-qr-codes": ["ts-qr-codes@0.1.9", "", { "bin": { "qrx": "./dist/cli.js" } }, "sha512-q2U4hjgx+L57IsCKew/+an/P+mdcvRLr2tlW4waOaulRCpm5OZLakZ32czjscUaHiGOIeG13J28lxUawyIc9/Q=="],
 

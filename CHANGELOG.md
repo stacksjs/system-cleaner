@@ -1,5 +1,15 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.21...v0.3.22)
+
+## 🐛 Bug Fixes
+
+- make the app toolbar compact and consistent ([6721186](https://github.com/stacksjs/system-cleaner/commit/6721186)) _(by Chris)_
+
+## Contributors
+
+- _Chris_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.20...v0.3.21)
 
 ## 🐛 Bug Fixes
