@@ -1,5 +1,15 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.20...v0.3.21)
+
+## 🐛 Bug Fixes
+
+- stop owned app processes during update restarts ([3d0221d](https://github.com/stacksjs/system-cleaner/commit/3d0221d)) _(by Chris)_
+
+## Contributors
+
+- _Chris_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.19...v0.3.20)
 
 ## ✨ Features
