@@ -120,7 +120,7 @@ try {
   await page.evaluate(() => (window as unknown as { startDiskScan: () => void }).startDiskScan())
   await page.waitForSelector('#sunburst .segment', { visible: true })
   assert.equal(scanning, true)
-  assert.match(await page.$eval('.disk-live-status', element => element.textContent || ''), /Updating disk usage/)
+  assert.match(await page.$eval('.disk-live-status', element => element.textContent || ''), /Scanning disk/)
   // The actual host emits this event after displaying a native context menu.
   let revealRequest = page.waitForRequest(request => new URL(request.url()).pathname === '/api/reveal-in-finder')
   await page.evaluate(() => {

@@ -50,6 +50,7 @@
   scanError: '',
   scanProgress: '',
   scanProgressPath: '',
+  scanProgressFullPath: '',
   scanStalled: false,
   centerSize() { return this.hovered ? this.hovered.formattedSize : this.defaultSize; },
   centerName() { return this.hovered ? this.hovered.name : this.defaultName; },
@@ -138,12 +139,14 @@
 
   <!-- Sunburst chart -->
   <div class='disk-chart'>
-  <div class='disk-live-status' role='status' x-show="scanState === 'scanning' && hasResults" x-cloak>
-    <strong>Updating disk usage as folders are measured.</strong>
-    <span x-text='scanProgress'></span>
-    <div class='scan-path' x-text='scanProgressPath'></div>
-    <div>Sizes and proportions show measured items so far.</div>
-  </div>
+    <div class='disk-live-status' aria-description='The chart shows folders measured so far.' x-show="scanState === 'scanning' && hasResults" x-cloak>
+      <div class='flex items-center gap-2 min-w-0'>
+        <span class='disk-live-indicator i-f7-arrow-2-circlepath' aria-hidden='true'></span>
+        <span class='disk-live-heading' role='status' x-text="cancelling ? 'Cancelling scan…' : (scanStatus === 'queued' ? 'Scan queued' : 'Scanning disk')">Scanning disk</span>
+        <span class='disk-live-metrics' x-text='scanProgress'></span>
+      </div>
+      <div class='disk-live-path' x-text='scanProgressPath' :title='scanProgressFullPath'></div>
+    </div>
 
     <div id='disk-loading' x-show="!hasResults || scanState === 'error'" style='position: relative; z-index: 1; text-align: center; color: var(--tertiary); font-size: 13px;'>
       <div class='disk-empty-glyph' :class="scanState === 'scanning' ? 'is-scanning' : ''">

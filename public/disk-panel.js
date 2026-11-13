@@ -35,10 +35,10 @@
     if(node._d===undefined||arr.length>=CFG.maxSegs)return;
     if(node._d===0){if(node.c)for(var i=0;i<node.c.length;i++)flatten(node.c[i],arr,i);return;}
     if(node._ea-node._sa<CFG.minAngle)return;
-    var col=lighten(PAL[ci%PAL.length],Math.max(0,(node._d-1)*0.15));
+    var col=lighten(PAL[(node._colorIdx === undefined ? ci : node._colorIdx)%PAL.length],Math.max(0,(node._d-1)*0.15));
     var d=arcPath(node._sa,node._ea,node._ir,node._or);if(!d)return;
     arr.push({idx:arr.length,d:d,color:col,name:node.n,fullPath:node.p||'',size:node.s,formattedSize:fmtBytes(node.s),depth:node._d,aggregate:!!node.aggregate,isDir:node.d!==false,childCount:node.c?node.c.length:0,percent:'0',colorIdx:ci,_node:node});
-    if(node.c)for(var j=0;j<node.c.length;j++)flatten(node.c[j],arr,ci);
+    if(node.c && node._d < CFG.maxDepth)for(var j=0;j<node.c.length;j++)flatten(node.c[j],arr,ci);
   }
   function normalize(node) {
     var result = { aggregate: !!node.aggregate, n: node.name || node.n, s: node.sizeBytes || node.s || 0, p: node.path || node.p || '', d: node.isDirectory !== undefined ? node.isDirectory : (node.d !== false) };
@@ -68,6 +68,15 @@
   var tree = null;
   var viewStack = [];
   var currentRoot = null;
+  var branchColors = new Map();
+  function assignColors(node, inherited) {
+    if (inherited !== undefined) node._colorIdx = inherited;
+    (node.c || []).forEach(function(child) {
+      var key = JSON.stringify([child.p, !!child.aggregate]);
+      if (inherited === undefined && !branchColors.has(key)) branchColors.set(key, branchColors.size % PAL.length);
+      assignColors(child, inherited === undefined ? branchColors.get(key) : inherited);
+    });
+  }
 
   window.__diskExecQueue = window.__diskExecQueue || [];
   window.__diskTopItems = [];
@@ -138,6 +147,7 @@
 
   function renderSegments(root) {
     currentRoot = root;
+    assignColors(tree || root);
     computeLayout(root, CFG.maxDepth);
     var ns = []; flatten(root, ns, 0);
     var rs = root.s;
@@ -146,19 +156,11 @@
 
     var segGroup = document.getElementById('segments-group');
     if (segGroup) {
-      segGroup.innerHTML = '';
-      var svgns = 'http://www.w3.org/2000/svg';
-      for (var k = 0; k < segs.length; k++) {
-        var p = document.createElementNS(svgns, 'path');
-        p.setAttribute('class', 'segment');
-        p.setAttribute('d', segs[k].d);
-        p.setAttribute('fill', segs[k].color);
-        p.setAttribute('data-idx', segs[k].idx);
-        var t = document.createElementNS(svgns, 'title');
-        t.textContent = segs[k].name + ' — ' + segs[k].formattedSize + ' (' + segs[k].percent + '%)';
-        p.appendChild(t);
-        segGroup.appendChild(p);
-      }
+      window.renderDiskChart(segGroup, segs.map(function(segment) {
+        return { key: JSON.stringify([segment.fullPath, segment.aggregate]), idx: segment.idx,
+          start: segment._node._sa, end: segment._node._ea, inner: segment._node._ir, outer: segment._node._or,
+          color: segment.color, label: segment.name + ' — ' + segment.formattedSize + ' (' + segment.percent + '%)' };
+      }));
     }
     var cb = document.getElementById('center-back');
     if (cb) cb.style.opacity = viewStack.length > 0 ? '0.6' : '0';
@@ -187,7 +189,7 @@
       // place that exists.
       drilled: viewStack.length > 0,
       scanTotalLabel: label,
-      hovered: null,
+      hovered: window.__diskHovered ? segs.find(function(segment) { return segment.fullPath === window.__diskHovered.fullPath && segment.aggregate === window.__diskHovered.aggregate; }) || null : null,
     });
   }
 
@@ -301,6 +303,7 @@
     var fields = {
       scanProgress: fmtCount(d.scanned) + ' items · ' + Math.round(d.elapsedMs / 1000) + 's',
       scanProgressPath: shortenPath(d.path),
+      scanProgressFullPath: d.path || '',
       // A walk that has counted nothing after several seconds is not slow, it
       // is stopped — parked in a syscall macOS will not return from until
       // someone answers a permission prompt. Saying so beats counting seconds
@@ -337,6 +340,7 @@
       renderedResult = null;
       viewStack = [];
       currentRoot = null;
+      branchColors.clear();
       patchDiskScope({ hasResults: false, topItems: [], scanInfo: null, scanTotalLabel: '0 B so far' });
     }
     var elapsed = Math.max(0, (session.finishedAt || Date.now()) - (session.startedAt || Date.now()));
