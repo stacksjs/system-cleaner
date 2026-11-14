@@ -174,6 +174,7 @@ export interface WindowOptions {
    * this is a decision of the app's.
    */
   tray?: boolean
+  trayPopover?: boolean
 }
 
 /**
@@ -204,6 +205,11 @@ export function windowArgs(
     args.push(...(supports('--web-window-material')
       ? ['--web-window-material']
       : ['--web-sidebar-material', '--web-sidebar-width', '74', '--web-sidebar-material-opacity', '0.25']))
+  }
+
+  if (platform === 'darwin' && options.trayPopover) {
+    if (!supports('--tray-popover')) throw new Error('The pinned Craft runtime must support --tray-popover')
+    args.push('--tray-popover')
   }
 
   // Everything the page stores lives in `localStorage` — the colour mode read

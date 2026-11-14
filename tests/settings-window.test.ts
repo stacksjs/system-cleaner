@@ -18,7 +18,7 @@ import { describe, expect, it } from 'bun:test'
 const SIDEBAR = 'resources/components/SettingsSidebar.stx'
 const VIEW = 'resources/views/app/settings.stx'
 const SCRIPT = 'resources/scripts/settings-window.ts'
-const OPENER = 'resources/scripts/settings-panel.ts'
+const OPENER = 'resources/lib/app-windows.ts'
 const LAYOUT = 'resources/layouts/settings.stx'
 
 async function read(file: string): Promise<string> {

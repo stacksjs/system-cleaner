@@ -203,10 +203,11 @@ await waitForHealth(port)
 craft = Bun.spawn([
   craftBinary,
   ...windowArgs(platform, {
-    url: `http://127.0.0.1:${port}/app`,
+    url: `http://127.0.0.1:${port}/app${platform === 'darwin' ? '/tray' : ''}`,
     title: APP_NAME,
-    width: 1400,
-    height: 900,
+    width: platform === 'darwin' ? 360 : 1400,
+    height: platform === 'darwin' ? 460 : 900,
+    trayPopover: platform === 'darwin',
     devtools: process.env.SYSTEM_CLEANER_DEVTOOLS === '1',
     // With this on, `craft.exited` below no longer fires when the window
     // closes — only when the tray's Quit does. Which is what the shutdown

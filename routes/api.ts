@@ -1,3 +1,4 @@
+import { getSystemStatus } from '../app/Support/Monitor/system-status';
 import type { Router } from '@stacksjs/bun-router';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -1080,6 +1081,12 @@ export default async function (router: Router) {
       uptimeStr: uptimeDays > 0 ? `${uptimeDays}d ${uptimeHours % 24}h` : `${uptimeHours}h`,
     };
   }
+
+  await router.post('/system-status', async () => {
+    return Response.json({ success: true, ...await getSystemStatus() }, {
+      headers: { 'Cache-Control': 'private, no-store' },
+    });
+  });
 
   await router.post('/dashboard-stats', async () => {
     const cached = dashboardStatsCache.get('stats');

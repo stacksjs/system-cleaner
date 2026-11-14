@@ -1,0 +1,89 @@
+@extends('layouts/tray')
+@section('body')
+<script client>
+interface TrayStatus {
+  sampledAt: number
+  hostname: string
+  uptimeSeconds: number
+  cpu: { percent: number, model: string, cores: number }
+  memory: { totalBytes: number, usedBytes: number, availableBytes: number, usedPercent: number }
+  disk: { totalBytes: number, usedBytes: number, freeBytes: number, usedPercent: number } | null
+}
+const reading = state<TrayStatus | null>(null)
+const refreshing = state(false)
+const statusError = state('')
+const actionError = state('')
+const byteLabel = (bytes: number | undefined): string => {
+  if (bytes === undefined) return '—'
+  return bytes >= 1e12 ? (bytes / 1e12).toFixed(1) + ' TB' : (bytes / 1e9).toFixed(1) + ' GB'
+}
+const uptimeLabel = derived(() => {
+  const seconds = reading()?.uptimeSeconds
+  if (seconds === undefined) return 'Reading this Mac…'
+  const hours = Math.floor(seconds / 3600)
+  return hours >= 24 ? 'Up ' + Math.floor(hours / 24) + 'd ' + hours % 24 + 'h' : 'Up ' + hours + 'h ' + Math.floor(seconds % 3600 / 60) + 'm'
+})
+async function refreshTrayStats(): Promise<void> {
+  if (refreshing()) return
+  refreshing.set(true)
+  try {
+    const response = await fetch('/api/system-status', { method: 'POST', cache: 'no-store' })
+    const data = await response.json()
+    if (!response.ok || !data.success) throw new Error('Stats unavailable')
+    reading.set(data)
+    statusError.set('')
+    trayUpdateTooltip(byteLabel(data.disk?.freeBytes) + ' free · RAM ' + data.memory.usedPercent + '% · CPU ' + data.cpu.percent + '%')
+  }
+  catch { statusError.set(reading() ? 'Connection lost. Showing the last reading.' : 'Could not read system stats. Try refreshing.') }
+  finally { refreshing.set(false) }
+}
+const polling = useIntervalFn(refreshTrayStats, 3000)
+function showTrayStats(): void {
+  polling.resume()
+  void refreshTrayStats()
+}
+function pauseTrayStats(): void { polling.pause() }
+onMount(() => {
+  polling.pause()
+  void refreshTrayStats()
+})
+useEventListener('craft:window:focus', showTrayStats)
+useEventListener('craft:window:blur', pauseTrayStats)
+useEventListener('focus', showTrayStats)
+useEventListener('blur', pauseTrayStats)
+useEventListener('systemcleaner:tray-refresh', refreshTrayStats)
+useEventListener('systemcleaner:tray-error', (event: CustomEvent) => actionError.set(String(event.detail)))
+useEventListener('keydown', (event: KeyboardEvent) => { if (event.key === 'Escape') trayHide() })
+</script>
+<section class='tray-panel' aria-label='System overview'>
+  <header class='flex items-center tray-header'>
+    <div class='tray-brand'><BrandMark :size="32" /></div>
+    <div class='tray-heading'><h1>SystemCleaner</h1><span class='tray-host' x-text="reading()?.hostname || 'This Mac'"></span></div>
+    <button class='tray-icon-button' @click='refreshTrayStats()' :disabled='refreshing()' aria-label='Refresh stats' title='Refresh stats'><span class='i-f7-arrow-clockwise' aria-hidden='true'></span></button>
+    <button class='tray-icon-button' @click='trayOpenSettings()' aria-label='Settings' title='Settings'><span class='i-f7-gear-alt' aria-hidden='true'></span></button>
+  </header>
+  <div class='tray-error' role='status' :if='statusError() || actionError()' x-text='statusError() || actionError()'></div>
+  <div class='tray-metrics'>
+    <section class='tray-metric' aria-label='Storage'>
+      <div class='tray-metric-heading'><span class='i-f7-tray-2-fill' aria-hidden='true'></span>Storage</div>
+      <div class='tray-value'><strong data-stat='disk-free' x-text='byteLabel(reading()?.disk?.freeBytes)'></strong><small>available</small></div>
+      <progress class='tray-meter' max='100' :value='reading()?.disk?.usedPercent || 0' :class="(reading()?.disk?.usedPercent || 0) >= 95 ? 'is-critical' : ((reading()?.disk?.usedPercent || 0) >= 85 ? 'is-tight' : '')" aria-label='Storage used'></progress>
+      <div class='tray-detail'><span x-text="reading()?.disk ? byteLabel(reading().disk.usedBytes) + ' used' : 'Storage unavailable'"></span><span x-text="reading()?.disk ? byteLabel(reading().disk.totalBytes) + ' total' : ''"></span></div>
+    </section>
+    <section class='tray-metric' aria-label='Memory'>
+      <div class='tray-metric-heading'><span class='i-f7-square-stack-3d-up-fill' aria-hidden='true'></span>Memory</div>
+      <div class='tray-value'><strong data-stat='memory-used' x-text='byteLabel(reading()?.memory.usedBytes)'></strong><small>used <span x-text="reading() ? '· ' + reading().memory.usedPercent + '%' : ''"></span></small></div>
+      <progress class='tray-meter' max='100' :value='reading()?.memory.usedPercent || 0' aria-label='Memory used'></progress>
+      <div class='tray-detail'><span x-text="reading() ? byteLabel(reading().memory.availableBytes) + ' available' : 'Reading memory…'"></span><span x-text="reading() ? byteLabel(reading().memory.totalBytes) + ' total' : ''"></span></div>
+    </section>
+    <section class='tray-metric' aria-label='CPU'>
+      <div class='tray-metric-heading'><span class='i-f7-gauge' aria-hidden='true'></span>CPU</div>
+      <div class='tray-value'><strong data-stat='cpu' x-text="reading() ? reading().cpu.percent + '%' : '—'"></strong><small>in use</small></div>
+      <progress class='tray-meter' max='100' :value='reading()?.cpu.percent || 0' aria-label='CPU in use'></progress>
+      <div class='tray-detail'><span x-text="reading()?.cpu.model || 'Reading processor…'"></span><span x-text="reading() ? reading().cpu.cores + ' cores' : ''"></span></div>
+    </section>
+  </div>
+  <div class='flex items-center justify-between tray-foot'><span x-text='uptimeLabel()'></span><span x-text="statusError() ? 'Offline' : (reading() ? 'Updated ' + new Date(reading().sampledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '')"></span><button class='tray-quit' @click='trayQuit()'>Quit</button></div>
+  <button class='tray-open' @click='trayOpenApp()'>Open SystemCleaner</button>
+</section>
+@endsection

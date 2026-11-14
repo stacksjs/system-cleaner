@@ -26,13 +26,32 @@ SystemCleaner.app/Contents/
 ```
 
 The launcher starts `SystemCleaner agent` on loopback, waits for `/__health`,
-opens Craft on `/app`, and stops the agent when the window closes. Disk scans
+opens Craft's native tray popover on `/app/tray`, and stops the agent when the app quits. Disk scans
 run in another process as `SystemCleaner scan <json>`, so a blocked scan can be
 stopped independently. All three share one executable and one embedded Bun
 runtime.
 
 Application data lives in `~/Library/Application Support/SystemCleaner/`.
 The installed bundle is read-only and replaced wholesale on update.
+
+## Menu bar overview
+
+On macOS, the native `--tray-popover` window owns the menu-bar icon. Its
+`/app/tray` page opens a named `dashboard` window on launch, so the full app
+remains available normally. Closing that window keeps the tray and agent alive;
+Open SystemCleaner brings the same window back with its page and scans intact.
+View → System Overview (Shift-Command-M) also opens the popover. The primary
+tray page owns the application menu and routes page commands to the dashboard.
+The panel reuses `BrandMark`; the status item uses a native template rendered
+from `public/images/systemcleaner-mark.svg`. After changing that artwork, run
+`bun scripts/render-tray-icon.ts` and commit the resulting PNG.
+
+The panel shows available startup-disk space, used and available memory, CPU
+utilization, processor details and uptime. `/api/system-status` measures these
+without a process listing or cleanup scan. Readings refresh every three seconds
+while the popover is focused. A failed refresh keeps the last reading and shows
+its timestamp and an offline notice. The tray, app and Settings share appearance
+preferences through the persistent website data store.
 
 ## How the build is split
 

@@ -121,6 +121,12 @@ describe('windowArgs', () => {
     expect(windowArgs('darwin', base, none)).not.toContain('--no-web-chrome-controls')
   })
 
+  it('uses the native anchored popover only on macOS', () => {
+    expect(windowArgs('darwin', { ...base, tray: true, trayPopover: true }, all)).toContain('--tray-popover')
+    expect(windowArgs('win32', { ...base, trayPopover: true }, all)).not.toContain('--tray-popover')
+    expect(() => windowArgs('darwin', { ...base, trayPopover: true }, none)).toThrow('must support --tray-popover')
+  })
+
   it('opens a plain titlebar on macOS when the runtime cannot host chrome', () => {
     const args = windowArgs('darwin', base, none)
     expect(args).not.toContain('--titlebar-hidden')

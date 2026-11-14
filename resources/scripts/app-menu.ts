@@ -16,6 +16,23 @@
  * were written down.
  */
 import { menu, standardMenus } from '@stacksjs/desktop/browser'
+import { openSettings as openSettingsWindow } from '../lib/app-windows'
+
+type DashboardCommand = { action: 'navigate', href: string } | { action: 'rescan' | 'sidebar' }
+const isTray = location.pathname === '/app/tray'
+const dashboardChannel = new BroadcastChannel('systemcleaner-dashboard')
+function inDashboard(command: DashboardCommand): boolean {
+  if (!isTray) return false
+  dashboardChannel.postMessage(command)
+  return true
+}
+dashboardChannel.addEventListener('message', event => {
+  if (isTray) return
+  const command = event.data as DashboardCommand
+  if (command.action === 'navigate') go(command.href)
+  if (command.action === 'rescan') rescan()
+  if (command.action === 'sidebar') toggleSidebar()
+})
 
 interface Screen {
   label: string
@@ -55,6 +72,7 @@ const MAX_SHORTCUTS = 9
  * and the scroll reset that a bare `location.href` would all skip.
  */
 function go(href: string): void {
+  if (inDashboard({ action: 'navigate', href })) return
   const link = document.querySelector<HTMLAnchorElement>(`[data-rail-item][href="${href}"]`)
   if (link)
     link.click()
@@ -64,6 +82,7 @@ function go(href: string): void {
 
 /** The toolbar and menu share this attribute; the toolbar observes it. */
 function toggleSidebar(): void {
+  if (inDashboard({ action: 'sidebar' })) return
   const root = document.documentElement
   const collapsed = root.hasAttribute('data-sidebar-collapsed')
   if (collapsed)
@@ -74,6 +93,7 @@ function toggleSidebar(): void {
 
 /** Re-run whatever the current screen calls a scan. */
 function rescan(): void {
+  if (inDashboard({ action: 'rescan' })) return
   const startDiskScan = (window as { startDiskScan?: () => void }).startDiskScan
   if (window.location.pathname === '/app/disk' && typeof startDiskScan === 'function') {
     startDiskScan()
@@ -134,6 +154,10 @@ function withSettingsItem(menus: ReturnType<typeof standardMenus.leading>): type
  * dispatched directly and the panel works the same way.
  */
 function openSettings(source: string): void {
+  if (isTray) {
+    void openSettingsWindow()
+    return
+  }
   const settings = (globalThis as { craft?: { settings?: { open?: (source: string) => void } } }).craft?.settings
   if (settings?.open) {
     settings.open(source)
@@ -143,27 +167,43 @@ function openSettings(source: string): void {
   window.dispatchEvent(new CustomEvent('craft:settings:open', { detail: { source } }))
 }
 
-menu.set({
-  menus: [
-    ...withSettingsItem(standardMenus.leading(APP_NAME)),
-    {
-      label: 'View',
-      items: [
-        { label: 'Rescan', shortcut: 'cmd+r', onClick: rescan },
-        { separator: true },
-        { label: 'Hide Sidebar', shortcut: 'cmd+alt+s', onClick: toggleSidebar },
-        { separator: true },
-        ...SCREENS.map((screen, index) => ({
-          label: screen.label,
-          ...(index < MAX_SHORTCUTS ? { shortcut: `cmd+${index + 1}` } : {}),
-          onClick: () => go(screen.href),
-        })),
-        { separator: true },
-        { label: 'Enter Full Screen', role: 'fullscreen' as const },
-      ],
-    },
-    standardMenus.window(),
-  ],
-}).catch((error: unknown) => {
-  console.warn('[app-menu] could not set the application menu:', error)
-})
+function installMenu(hasTray: boolean): void {
+  void menu.set({
+    menus: [
+      ...withSettingsItem(standardMenus.leading(APP_NAME)),
+      {
+        label: 'View',
+        items: [
+          ...(hasTray ? [{ label: 'System Overview', shortcut: 'cmd+shift+m', onClick: () => {
+            const channel = new BroadcastChannel('systemcleaner-tray')
+            channel.postMessage({ action: 'show' })
+            channel.close()
+          } }] : []),
+          { label: 'Rescan', shortcut: 'cmd+r', onClick: rescan },
+          { separator: true },
+          { label: 'Hide Sidebar', shortcut: 'cmd+alt+s', onClick: toggleSidebar },
+          { separator: true },
+          ...SCREENS.map((screen, index) => ({
+            label: screen.label,
+            ...(index < MAX_SHORTCUTS ? { shortcut: `cmd+${index + 1}` } : {}),
+            onClick: () => go(screen.href),
+          })),
+          { separator: true },
+          { label: 'Enter Full Screen', role: 'fullscreen' as const },
+        ],
+      },
+      standardMenus.window(),
+    ],
+  }).catch((error: unknown) => {
+    console.warn('[app-menu] could not set the application menu:', error)
+  })
+}
+
+void fetch('/api/platform', { method: 'POST', cache: 'no-store' })
+  .then(response => response.json())
+  .then((info: { platform?: string }) => {
+    // Native menu callbacks belong to the primary page. On macOS the tray
+    // owns the app menu and routes dashboard commands to its retained window.
+    if (info.platform !== 'macos' || isTray) installMenu(info.platform === 'macos')
+  })
+  .catch(() => installMenu(false))

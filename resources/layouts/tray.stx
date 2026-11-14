@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+  <meta charset='UTF-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+  <title>SystemCleaner Menu</title>
+  @appearanceBootstrap({
+    storageKey: 'systemcleaner-appearance',
+    appearance: { key: 'sidebarStyle', attribute: 'appearance', allowed: ['macos'], default: 'macos' },
+    colorMode: { key: 'colorMode', attribute: 'color-mode', default: 'system' },
+  })
+  <link rel='stylesheet' href='/app-theme.css'>
+  <script src='/tray.js'></script>
+  <script src='/app-menu.js' defer></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: var(--app-bg); color: var(--ink); font: 13px/1.4 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    :root[data-craft-native-sidebar] body { background: color-mix(in srgb, var(--app-bg) var(--material-opacity), transparent); }
+    [x-cloak], [hidden] { display: none !important; }
+    button { font: inherit; cursor: pointer; }
+    button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .tray-panel { display: flex; flex-direction: column; gap: 10px; height: 100%; padding: 14px; overflow-y: auto; }
+    .tray-header { display: flex; align-items: center; gap: 10px; }
+    .tray-brand { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; color: var(--ink); flex: none; }
+    .tray-brand .brand-mark { width: 32px; height: 32px; }
+    .tray-heading { flex: 1; min-width: 0; }
+    .tray-heading h1 { margin: 0; font-size: 14px; font-weight: 650; }
+    .tray-host { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--secondary); font-size: 11px; }
+    .tray-icon-button { display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 6px; background: none; color: var(--secondary); }
+    .tray-icon-button:hover { background: var(--hover); color: var(--ink); }
+    .tray-icon-button span { width: 15px; height: 15px; }
+    .tray-icon-button:disabled { opacity: .5; cursor: default; }
+    .tray-metrics { display: flex; flex-direction: column; gap: 8px; }
+    .tray-metric { padding: 10px; border: .5px solid var(--line); border-radius: 10px; background: var(--surface); }
+    .tray-metric-heading { display: flex; align-items: center; gap: 7px; color: var(--secondary); font-size: 11px; font-weight: 500; }
+    .tray-metric-heading span { display: inline-block; width: 13px; height: 13px; color: var(--accent); }
+    .tray-value { display: flex; align-items: baseline; gap: 6px; margin: 3px 0 7px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+    .tray-value strong { font-size: 23px; font-weight: 650; letter-spacing: -.03em; }
+    .tray-value small { color: var(--secondary); font-size: 11px; }
+    .tray-detail { display: flex; justify-content: space-between; gap: 8px; color: var(--secondary); font-size: 10px; font-variant-numeric: tabular-nums; }
+    .tray-detail span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tray-meter { display: block; width: 100%; height: 4px; margin: 0 0 7px; border: 0; border-radius: 3px; overflow: hidden; background: var(--track); appearance: none; }
+    .tray-meter::-webkit-progress-bar { background: var(--track); border-radius: 3px; }
+    .tray-meter::-webkit-progress-value { background: var(--accent); border-radius: 3px; transition: width .25s ease; }
+    .tray-meter.is-tight::-webkit-progress-value { background: var(--orange); }
+    .tray-meter.is-critical::-webkit-progress-value { background: var(--red); }
+    .tray-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; color: var(--secondary); font-size: 10px; }
+    .tray-quit { border: 0; background: none; color: var(--secondary); padding: 2px 0 2px 8px; font-size: 10px; }
+    .tray-quit:hover { color: var(--ink); }
+    .tray-open { width: 100%; min-height: 34px; flex: none; border: 0; border-radius: 7px; color: white; background: var(--accent-fill); font-size: 12px; font-weight: 600; }
+    .tray-open:hover { filter: brightness(1.08); }
+    .tray-error { border-radius: 6px; padding: 7px 9px; color: var(--red); background: var(--surface); font-size: 11px; }
+    @media (prefers-reduced-motion: reduce) { .tray-meter::-webkit-progress-value { transition: none; } }
+  </style>
+</head>
+<body>
+  @yield('body')
+</body>
+</html>
