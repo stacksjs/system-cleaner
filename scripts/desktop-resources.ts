@@ -42,7 +42,7 @@ export async function stageDesktopWeb(source: string, destination: string): Prom
 
     if (file.endsWith('.html')) {
       await new HTMLRewriter()
-        .on('script[src], link[rel="stylesheet"][href], link[rel="icon"][href], img[src], source[src]', {
+        .on('script[src], link[rel="stylesheet"][href], link[rel="icon"][href], link[rel="preload"][href], img[src], source[src]', {
           element(element) {
             const reference = element.getAttribute('src') || element.getAttribute('href')
             if (reference)

@@ -10,6 +10,7 @@
     colorMode: { key: 'colorMode', attribute: 'color-mode', default: 'system' },
   })
   <link rel='stylesheet' href='/app-theme.css'>
+  <link rel='preload' as='fetch' href='/images/tray-template.png' crossorigin='anonymous'>
   <script src='/tray.js'></script>
   <script src='/app-menu.js' defer></script>
   <style>
