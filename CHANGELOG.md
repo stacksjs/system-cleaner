@@ -1,5 +1,15 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.23...v0.3.24)
+
+## ✨ Features
+
+- add a live native system tray overview ([9d42128](https://github.com/stacksjs/system-cleaner/commit/9d42128)) _(by Chris)_
+
+## Contributors
+
+- _Chris_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.22...v0.3.23)
 
 ## 🐛 Bug Fixes
