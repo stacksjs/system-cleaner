@@ -1,5 +1,15 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.24...v0.3.25)
+
+## 🐛 Bug Fixes
+
+- include preloaded tray artwork in desktop bundles ([0946e47](https://github.com/stacksjs/system-cleaner/commit/0946e47)) _(by Chris)_
+
+## Contributors
+
+- _Chris_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.23...v0.3.24)
 
 ## ✨ Features
