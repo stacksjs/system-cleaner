@@ -166,7 +166,7 @@
 
 <div class='main-header'>
   <div class='main-title'>App Permissions</div>
-  <div class='main-subtitle'>Every grant on this Mac, grouped by the app that holds it &mdash; including the ones whose app is gone</div>
+  <div class='main-subtitle'>Every grant on this Mac, grouped by the app that holds it, including the ones whose app is gone</div>
 </div>
 <div class='main-content'>
   <PermissionsPanel />

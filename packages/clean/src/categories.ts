@@ -202,7 +202,7 @@ const MACOS_TARGETS: CleanTarget[] = [
   t('docker-scout', 'Docker Scout Cache', `${HOME}/.docker/scout`, 'developer', 'Docker Scout analysis cache', true),
   t('orbstack-logs', 'OrbStack Logs', `${HOME}/.orbstack/log`, 'developer', 'OrbStack machine logs', true),
   t('terraform-plugin-cache', 'Terraform Plugin Cache', `${HOME}/.terraform.d/plugin-cache`, 'developer', 'Terraform provider plugin downloads', true),
-  c('vagrant-boxes', 'Vagrant Boxes', `${HOME}/.vagrant.d/boxes`, 'developer', 'Downloaded Vagrant box images — each has to be pulled again', true),
+  c('vagrant-boxes', 'Vagrant Boxes', `${HOME}/.vagrant.d/boxes`, 'developer', 'Downloaded Vagrant box images; each has to be pulled again', true),
 
   // ═══════════════════════════════════════════════════════════════
   // DEVELOPER — Ruby, PHP, Dart/Flutter, Misc
@@ -225,7 +225,7 @@ const MACOS_TARGETS: CleanTarget[] = [
   t('zed-node', 'Zed Node Runtime', `${HOME}/Library/Application Support/Zed/node`, 'developer', 'Node runtime Zed downloads for language servers', true),
   t('zed-cache', 'Zed Cache', `${HOME}/Library/Caches/dev.zed.Zed`, 'developer', 'Zed editor cache', true),
   t('zed-logs', 'Zed Logs', `${HOME}/Library/Logs/Zed`, 'developer', 'Zed log files', true),
-  t('jetbrains-cache', 'JetBrains Caches', `${HOME}/Library/Caches/JetBrains`, 'developer', 'IntelliJ, WebStorm, PyCharm and friends — indexes and caches', true),
+  t('jetbrains-cache', 'JetBrains Caches', `${HOME}/Library/Caches/JetBrains`, 'developer', 'Indexes and caches for IntelliJ, WebStorm, PyCharm and the other JetBrains IDEs', true),
   t('jetbrains-logs', 'JetBrains Logs', `${HOME}/Library/Logs/JetBrains`, 'developer', 'JetBrains IDE logs', true),
   t('github-desktop-cache', 'GitHub Desktop Cache', `${HOME}/Library/Application Support/GitHub Desktop/Cache`, 'developer', 'GitHub Desktop web cache', true),
 
@@ -275,14 +275,14 @@ const MACOS_TARGETS: CleanTarget[] = [
   t('claude-code-cache', 'Claude Code Cache', `${HOME}/.claude/cache`, 'developer', 'Claude Code internal cache', true),
   t('claude-code-paste-cache', 'Claude Code Paste Cache', `${HOME}/.claude/paste-cache`, 'developer', 'Images and text pasted into Claude Code', true),
   t('claude-code-downloads', 'Claude Code Downloads', `${HOME}/.claude/downloads`, 'developer', 'Files Claude Code downloaded during sessions', true),
-  c('claude-code-projects', 'Claude Code Session History', `${HOME}/.claude/projects`, 'developer', 'Full transcripts of every Claude Code session — cleaning ends --resume and --continue for past work', true),
+  c('claude-code-projects', 'Claude Code Session History', `${HOME}/.claude/projects`, 'developer', 'Full transcripts of every Claude Code session. Cleaning ends --resume and --continue for past work.', true),
   // Codex
   t('codex-cache', 'Codex Cache', `${HOME}/Library/Caches/com.openai.codex`, 'developer', 'Codex CLI cache', true),
   t('codex-runtimes', 'Codex Runtimes', `${HOME}/.cache/codex-runtimes`, 'developer', 'Downloaded Codex runtime images, re-fetched on demand', true),
   t('codex-internal-cache', 'Codex Internal Cache', `${HOME}/.codex/cache`, 'developer', 'Codex working cache', true),
   t('codex-logs', 'Codex Logs', `${HOME}/Library/Logs/com.openai.codex`, 'developer', 'Codex CLI logs', true),
   c('codex-sessions', 'Codex Sessions', `${HOME}/.codex/sessions`, 'developer', 'Transcripts of current Codex sessions', true),
-  c('codex-archived-sessions', 'Codex Archived Sessions', `${HOME}/.codex/archived_sessions`, 'developer', 'Transcripts of past Codex sessions — usually the largest single directory on an agent-heavy machine', true),
+  c('codex-archived-sessions', 'Codex Archived Sessions', `${HOME}/.codex/archived_sessions`, 'developer', 'Transcripts of past Codex sessions, usually the largest single directory on an agent-heavy machine', true),
   // Codex desktop (Chromium-based)
   t('codex-app-crx', 'Codex App Component Cache', `${HOME}/Library/Application Support/Codex/component_crx_cache`, 'application', 'Codex desktop component downloads', true),
   t('codex-app-crashpad', 'Codex App Crash Dumps', `${HOME}/Library/Application Support/Codex/Crashpad`, 'application', 'Codex desktop crash dumps', true),
@@ -300,8 +300,8 @@ const MACOS_TARGETS: CleanTarget[] = [
   t('cursor-logs', 'Cursor Logs', `${HOME}/Library/Application Support/Cursor/logs`, 'developer', 'Cursor log files', true),
   t('windsurf-cache', 'Windsurf Cache', `${HOME}/Library/Application Support/Windsurf/Cache`, 'developer', 'Windsurf editor cache', true),
   // Local models — gigabytes each, and a re-download rather than a rebuild
-  c('ollama-models', 'Ollama Models', `${HOME}/.ollama/models`, 'developer', 'Downloaded Ollama models — each has to be pulled again', true),
-  c('lmstudio-models', 'LM Studio Models', `${HOME}/.cache/lm-studio/models`, 'developer', 'Downloaded LM Studio models — each has to be pulled again', true),
+  c('ollama-models', 'Ollama Models', `${HOME}/.ollama/models`, 'developer', 'Downloaded Ollama models; each has to be pulled again', true),
+  c('lmstudio-models', 'LM Studio Models', `${HOME}/.cache/lm-studio/models`, 'developer', 'Downloaded LM Studio models; each has to be pulled again', true),
 
   // ═══════════════════════════════════════════════════════════════
   // APPLICATIONS — Media & Music

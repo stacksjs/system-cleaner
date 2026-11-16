@@ -17,12 +17,12 @@
   <div class='card'>
     <div class='card-label'>Selected</div>
     <div class='card-value' :style="selected.length ? 'color: var(--accent);' : ''"
-         x-text="scanned ? fmtBytes(selectedBytes()) : '—'">—</div>
+         x-text="scanned ? fmtBytes(selectedBytes()) : '-'">-</div>
     <div class='card-detail' x-text="scanned ? (selected.length + ' of ' + visible().length + ' shown') : 'Nothing selected'">Nothing selected</div>
   </div>
   <div class='card'>
     <div class='card-label'>Found</div>
-    <div class='card-value' x-text="scanned ? fmtBytes(totalBytes) : '—'">—</div>
+    <div class='card-value' x-text="scanned ? fmtBytes(totalBytes) : '-'">-</div>
     <div class='card-detail'>
       <span x-show='!scanned' x-text="scanning ? 'Looking for large files…' : 'No scan yet'">No scan yet</span>
       <span x-show='scanned' x-cloak>
@@ -33,7 +33,7 @@
   </div>
   <div class='card'>
     <div class='card-label'>Reclaimed All Time</div>
-    <div class='card-value' :style="runCount ? 'color: var(--green);' : ''" x-text="runCount ? lifetimeFreed : '—'">—</div>
+    <div class='card-value' :style="runCount ? 'color: var(--green);' : ''" x-text="runCount ? lifetimeFreed : '-'">-</div>
     <div class='card-detail' x-text="runCount ? ('across ' + runCount + ' cleanup' + (runCount === 1 ? '' : 's')) : 'No cleanups yet'">No cleanups yet</div>
   </div>
 </div>
@@ -222,7 +222,7 @@
 
 <div class='lf-note' x-show='scanned' x-cloak>
   Bundles such as <strong>.app</strong>, <strong>.photoslibrary</strong>, and
-  <strong>.sparsebundle</strong> are listed as a single item — deleting one
+  <strong>.sparsebundle</strong> are listed as a single item, so deleting one
   removes everything inside it. Files inside sensitive directories (keys,
   credentials) are never offered for deletion.
 </div>

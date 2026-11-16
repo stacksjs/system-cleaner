@@ -1,23 +1,26 @@
 <script server>
+// The tour shows the app as it opens: the overview, then two of the section
+// pages it leads to. Section pages wear the same colours in light and dark
+// mode, so each view needs one image rather than a pair.
 export const lead = {
-  name: 'Dashboard',
-  copy: 'A health score, the four numbers that move it, and a live CPU and memory plot with labelled axes on both sides. Enough to know whether anything needs you today.',
-  image: 'dashboard',
+  name: 'Overview',
+  copy: 'A health score and one card per section: junk you can clean, free space, login items, pending updates and browsing traces. One look tells you where to go next.',
+  image: 'overview',
   href: '/app',
 }
 
 export const pair = [
   {
-    name: 'Live Processes',
-    copy: 'CPU and memory pressure in context. Filter the list without losing the system-wide picture.',
-    image: 'processes',
-    href: '/app/processes',
+    name: 'Cleanup',
+    copy: 'How much junk is safe to remove, the tools that remove it, and a record of what you have already reclaimed.',
+    image: 'cleanup',
+    href: '/app/clean',
   },
   {
-    name: 'Quick Clean',
-    copy: 'Safe categories, every target visible, and nothing removed until you say so.',
-    image: 'cleanup',
-    href: '/app/cleanup',
+    name: 'Storage',
+    copy: 'Free space at a glance, the quickest wins, and the tools that find large files, duplicates and similar photos.',
+    image: 'storage',
+    href: '/app/storage',
   },
 ]
 </script>
@@ -25,8 +28,8 @@ export const pair = [
 <section id="app-tour" class="app-tour section" aria-labelledby="app-tour-title">
   <div class="site-container">
     <div class="section-heading">
-      <h2 id="app-tour-title">One source list. Three clear jobs.</h2>
-      <p class="section-intro">Every view keeps the same navigation, the same density, and the same local-first posture.</p>
+      <h2 id="app-tour-title">Six sections. One window.</h2>
+      <p class="section-intro">Each section opens on what matters right now, with its tools one click away. Every scan stays on your Mac.</p>
     </div>
 
     <div class="tour-lead">
@@ -36,8 +39,7 @@ export const pair = [
           <span>{{ lead.name }}</span>
         </figcaption>
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="/images/showcase/{{ lead.image }}-dark.png" />
-          <img src="/images/showcase/{{ lead.image }}-light.png" width="1400" height="900" loading="lazy" alt="SystemCleaner {{ lead.name }} view" />
+          <img src="/images/showcase/{{ lead.image }}.jpg" width="1400" height="900" loading="lazy" alt="SystemCleaner {{ lead.name }}: a health score and one card for each section" />
         </picture>
       </figure>
       <div class="tour-lead-copy">
@@ -58,8 +60,7 @@ export const pair = [
               <span>{{ view.name }}</span>
             </figcaption>
             <picture>
-              <source media="(prefers-color-scheme: dark)" srcset="/images/showcase/{{ view.image }}-dark.png" />
-              <img src="/images/showcase/{{ view.image }}-light.png" width="1400" height="900" loading="lazy" alt="SystemCleaner {{ view.name }} view" />
+                  <img src="/images/showcase/{{ view.image }}.jpg" width="1400" height="900" loading="lazy" alt="SystemCleaner {{ view.name }} section page" />
             </picture>
           </figure>
           <div>

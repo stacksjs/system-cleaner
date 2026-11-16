@@ -157,8 +157,8 @@ describe('blockedByRunningBrowser', () => {
   // The two callers say different things because they are doing different
   // things, and a message about clearing data on an uninstall reads as a bug.
   it('words the reason for what the caller is doing', () => {
-    expect(blockedByRunningBrowser('Edge', ['Edge'], 'remove')).toContain('removing an extension')
-    expect(blockedByRunningBrowser('Edge', ['Edge'], 'clear')).toContain('writing to a live profile')
+    expect(blockedByRunningBrowser('Edge', ['Edge'], 'remove')).toContain('Removing an extension')
+    expect(blockedByRunningBrowser('Edge', ['Edge'], 'clear')).toContain('Writing to a live profile')
   })
 
   it('matches on the exact browser, not a prefix', () => {

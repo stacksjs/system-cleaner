@@ -27,10 +27,6 @@ export const headlineTemplate = section.headlineMetric ? section.headlineMetric.
         <span class="hub-orb-glow"></span>
         <span class="hub-orb-body"><span class="hub-orb-icon {{ section.icon }}"></span></span>
       </div>
-      <span class="hub-art-caption">
-        <span class="i-f7-lock-fill" aria-hidden="true"></span>
-        Checked on this Mac, nothing uploaded
-      </span>
     </div>
 
     <div class="hub-intro">

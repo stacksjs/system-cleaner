@@ -421,7 +421,7 @@
        it would be freeing into. -->
   <div class='vol-card' x-show='disk' x-cloak>
     <div class='vol-head'>
-      <span class='vol-name'>Macintosh HD</span>
+      <span class='vol-name'>Startup disk</span>
       <span class='vol-pct' x-text="disk ? disk.fDiskPct + '% full' : ''"></span>
     </div>
     <div class='vol-bar'><div class='vol-fill' :style="disk ? disk.fDiskBarStyle : 'width: 0%'"></div></div>

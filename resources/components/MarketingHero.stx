@@ -32,8 +32,7 @@ export const macAppStoreUrl = MAC_APP_STORE_URL
         <span>SystemCleaner</span>
       </figcaption>
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="/images/showcase/dashboard-dark.png" />
-        <img src="/images/showcase/dashboard-light.png" width="1400" height="900" alt="SystemCleaner dashboard showing a system health score, memory and disk usage, live CPU and memory history, and the busiest processes" fetchpriority="high" />
+        <img src="/images/showcase/overview.jpg" width="1400" height="900" alt="SystemCleaner overview: a health score and one card for each section, showing junk to clean, free space, login items, pending updates and browsing traces" fetchpriority="high" />
       </picture>
     </figure>
   </div>

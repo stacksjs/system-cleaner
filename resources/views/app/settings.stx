@@ -146,14 +146,14 @@
         <span class='set-card-label'>Protected paths</span>
         <span class='set-card-hint'>Folders no clean is allowed to enter.</span>
       </span>
-      <span class='set-card-value' data-value='protectedCount'>&mdash;</span>
+      <span class='set-card-value' data-value='protectedCount'>-</span>
     </div>
     <div class='set-card-row'>
       <span class='set-card-row-text'>
         <span class='set-card-label'>Kept cookies</span>
         <span class='set-card-hint'>Sites that stay signed in when browser data is cleaned.</span>
       </span>
-      <span class='set-card-value' data-value='keptCookieCount'>&mdash;</span>
+      <span class='set-card-value' data-value='keptCookieCount'>-</span>
     </div>
   </div>
   <p class='set-card-note'>
@@ -209,7 +209,7 @@
       <span class='set-card-row-text'>
         <span class='set-card-label'>When it runs</span>
       </span>
-      <span class='set-card-value' data-value='scheduleDescription'>&mdash;</span>
+      <span class='set-card-value' data-value='scheduleDescription'>-</span>
     </div>
     <div class='set-card-row'>
       <span class='set-card-row-text'>
@@ -346,7 +346,7 @@
     <div class='set-card'>
       <div class='set-card-row'>
         <span class='set-card-row-text'><span class='set-card-label'>Installed</span></span>
-        <span class='set-card-value' x-text="macosVersion ? 'macOS ' + installedLabel() : '—'"></span>
+        <span class='set-card-value' x-text="macosVersion ? 'macOS ' + installedLabel() : '-'"></span>
       </div>
       <div class='set-card-row'>
         <span class='set-card-row-text'><span class='set-card-label'>Command Line Tools</span></span>
@@ -356,7 +356,7 @@
         <span class='set-card-row-text'>
           <span class='set-card-label'>Last checked</span>
         </span>
-        <span class='set-card-value' x-text='lastCheckedLabel()'>—</span>
+        <span class='set-card-value' x-text='lastCheckedLabel()'>-</span>
       </div>
     </div>
 
@@ -373,9 +373,9 @@
     <div class='set-card-row'>
       <span class='set-card-row-text'>
         <span class='set-card-label'>Startup disk</span>
-        <span class='set-card-hint' data-value='diskUsage'>&mdash;</span>
+        <span class='set-card-hint' data-value='diskUsage'>-</span>
       </span>
-      <span class='set-card-value' data-value='diskAvail'>&mdash;</span>
+      <span class='set-card-value' data-value='diskAvail'>-</span>
     </div>
     <div class='set-card-row'>
       <span class='set-card-row-text'>
@@ -400,24 +400,24 @@
       </span>
       <span class='set-card-row-text' style='gap: var(--space-1);'>
         <span class='set-card-label' style='font-size: 16px; font-weight: 600; letter-spacing: -.015em;'>SystemCleaner</span>
-        <span class='set-card-hint' data-value='appVersion'>—</span>
+        <span class='set-card-hint' data-value='appVersion'>-</span>
       </span>
     </div>
     <div class='set-card-row'>
       <span class='set-card-row-text'><span class='set-card-label'>Computer</span></span>
-      <span class='set-card-value' data-value='hostName'>—</span>
+      <span class='set-card-value' data-value='hostName'>-</span>
     </div>
     <div class='set-card-row'>
       <span class='set-card-row-text'><span class='set-card-label'>macOS</span></span>
-      <span class='set-card-value' data-value='osVersion'>—</span>
+      <span class='set-card-value' data-value='osVersion'>-</span>
     </div>
     <div class='set-card-row'>
       <span class='set-card-row-text'><span class='set-card-label'>Chip</span></span>
-      <span class='set-card-value' data-value='cpuModel'>—</span>
+      <span class='set-card-value' data-value='cpuModel'>-</span>
     </div>
     <div class='set-card-row'>
       <span class='set-card-row-text'><span class='set-card-label'>Memory</span></span>
-      <span class='set-card-value' data-value='memory'>—</span>
+      <span class='set-card-value' data-value='memory'>-</span>
     </div>
   </div>
   <p class='set-card-foot'>

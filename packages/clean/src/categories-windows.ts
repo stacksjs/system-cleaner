@@ -169,7 +169,7 @@ export function buildWindowsTargets(env: Record<string, string | undefined> = pr
     // "Select All Safe" and carry a label. Same ids as the macOS table: these
     // tools are cross-platform, and the UI copy, the tests and the schedule
     // specs all key off the id.
-    c('claude-code-projects', 'Claude Code Projects', home('.claude', 'projects'), 'developer', 'Claude Code session transcripts — the only copy of each conversation'),
+    c('claude-code-projects', 'Claude Code Projects', home('.claude', 'projects'), 'developer', 'Claude Code session transcripts, the only copy of each conversation'),
     c('codex-sessions', 'Codex Sessions', home('.codex', 'sessions'), 'developer', 'Codex session transcripts'),
     c('codex-archived-sessions', 'Codex Archived Sessions', home('.codex', 'archived_sessions'), 'developer', 'Archived Codex session transcripts'),
     c('ollama-models', 'Ollama Models', home('.ollama', 'models'), 'developer', 'Downloaded Ollama models, several gigabytes each'),

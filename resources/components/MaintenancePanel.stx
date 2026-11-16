@@ -20,7 +20,7 @@
   </div>
   <div class='card'>
     <div class='card-label'>Snapshots</div>
-    <div class='card-value' x-text="snapLoading ? '…' : (snapUnavailable ? '—' : snapshots.length)">…</div>
+    <div class='card-value' x-text="snapLoading ? '…' : (snapUnavailable ? '-' : snapshots.length)">…</div>
     <div class='card-detail'
       x-text="snapUnavailable ? 'Could not be read' : snapCardDetail()"></div>
   </div>
@@ -51,7 +51,7 @@
           <div class='item-sub'>Finder's per-folder view settings, scattered through your home folder and into every archive you share</div>
         </td>
         <td style='width: 120px; font-variant-numeric: tabular-nums;'
-            x-text="junkLoading ? '…' : (dsStoreCount === null ? '—' : dsStoreCount + ' files')">…</td>
+            x-text="junkLoading ? '…' : (dsStoreCount === null ? '-' : dsStoreCount + ' files')">…</td>
         <td class='action-cell' style='width: 110px;'>
           <button class='btn btn-sm' @click='cleanDsStore()' :disabled='junkBusy || !dsStoreCount'>Remove</button>
         </td>
@@ -145,7 +145,7 @@
   <div class='mt-snap-caveat' x-show='!snapLoading && !snapUnavailable && snapshots.length > 0' x-cloak>
     <strong>Why there is no size next to these.</strong>
     A snapshot's cost is the blocks <em>only it</em> still references, which
-    changes the moment another one is deleted &mdash; two snapshots can each be
+    changes the moment another one is deleted: two snapshots can each be
     holding the same 10 GB. macOS does not report that figure per snapshot, so
     rather than add them into a number that would be wrong, this lists what
     APFS will say: how many there are, when each was taken, and which ones it
@@ -241,7 +241,7 @@
       which is what shredding is normally for. It cannot promise the original
       bytes are gone from the SSD: APFS writes copies rather than replacing
       blocks, and the drive's controller moves data around underneath that. For
-      the stronger guarantee, turn on FileVault &mdash; then the leftover blocks
+      the stronger guarantee, turn on FileVault. Then the leftover blocks
       are unreadable whether or not they were overwritten.
     </div>
   </div>

@@ -17,12 +17,12 @@
   </div>
   <div class='card'>
     <div class='card-label'>Total Size</div>
-    <div class='card-value' x-text="fmtBytes(totalAppBytes()) + (sizesPending ? ' so far' : '')">—</div>
+    <div class='card-value' x-text="fmtBytes(totalAppBytes()) + (sizesPending ? ' so far' : '')">-</div>
     <div class='card-detail' x-text="sizesPending ? 'Measuring…' : 'Across every app bundle'">Measuring…</div>
   </div>
   <div class='card'>
     <div class='card-label'>Reviewing</div>
-    <div class='card-value' x-text="scan ? scan.app.name : '—'">—</div>
+    <div class='card-value' x-text="scan ? scan.app.name : '-'">-</div>
     <div class='card-detail' x-text="scan ? (scan.remnants.length + ' leftover item(s) · ' + scan.totalFormatted + ' in total') : 'Pick an app below'">Pick an app below</div>
   </div>
 </div>
@@ -121,7 +121,7 @@
        checkbox that fails. -->
   <div class='un-note' x-show='adminCount() > 0' x-cloak>
     <strong x-text='adminCount()'>0</strong> item(s) live outside your home
-    folder — system-wide launch daemons and install receipts. Removing those
+    folder: system-wide launch daemons and install receipts. Removing those
     needs administrator rights, so they are listed but not selectable. Reveal
     one to see where it is.
   </div>
@@ -182,7 +182,7 @@
           </td>
           <td class='dim mono' style='font-size: 11px;' x-text='app.version'></td>
           <td style='font-variant-numeric: tabular-nums;'
-              x-text="app.sizeBytes === null ? '—' : fmtBytes(app.sizeBytes)">—</td>
+              x-text="app.sizeBytes === null ? '-' : fmtBytes(app.sizeBytes)">-</td>
           <td class='dim' x-text='fmtDate(app.installedAt)'></td>
           <td class='action-cell'>
             <template x-if='isUpdating(app.name)'>
@@ -203,7 +203,7 @@
                     x-text="updateFor(app).source === 'mas' ? 'App Store' : 'Manual'"></span>
             </template>
             <template x-if='!isUpdating(app.name) && !wasUpdated(app.name) && !hasUpdate(app)'>
-              <span class='un-update-state dim' x-text="updatesLoading ? '' : '—'"></span>
+              <span class='un-update-state dim' x-text="updatesLoading ? '' : '-'"></span>
             </template>
           </td>
           <td class='action-cell'>

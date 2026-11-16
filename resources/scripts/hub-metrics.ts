@@ -265,8 +265,15 @@ const PANELS: Record<string, () => Promise<PanelResult>> = {
         ? [empty('Nothing cleaned yet. Quick Clean is the place to start.')]
         : runs.map((run) => {
             const known = SOURCE_LABELS[run.source] || { label: String(run.source), icon: 'i-f7-sparkles' }
-            const where = run.mode === 'trash' ? ' · moved to Trash' : ''
-            return row({ icon: known.icon, title: known.label, sub: `${plural(run.itemCount, 'item')} · ${shortDate(run.createdAt)}${where}`, value: run.freedFormatted })
+            // A run that moved files to the Trash has freed nothing yet; the
+            // space comes back when the Trash is emptied, so say where it went.
+            const trashed = run.mode === 'trash'
+            return row({
+              icon: known.icon,
+              title: known.label,
+              sub: `${shortDate(run.createdAt)} · ${plural(run.itemCount, 'item')}${trashed ? ' moved to Trash' : ''}`,
+              value: trashed && !run.freedBytes ? 'In Trash' : run.freedFormatted,
+            })
           }),
     }
   },
@@ -282,7 +289,7 @@ const PANELS: Record<string, () => Promise<PanelResult>> = {
     )
     const rows: HTMLElement[] = [status]
     if (d.lastRunAt)
-      rows.push(row({ icon: 'i-f7-clock-fill', title: 'Last run', sub: d.lastStatus || '', value: shortDate(d.lastRunAt) }))
+      rows.push(row({ icon: 'i-f7-clock-fill', title: 'Last run', sub: d.lastFreedBytes ? `Freed ${d.lastFreedFormatted}` : 'Nothing needed cleaning', value: shortDate(d.lastRunAt) }))
     if (!on)
       rows.push(row({ icon: 'i-f7-calendar', title: 'Set one up', sub: 'Pick a day and an hour; it runs while you sleep.', href: '/app/schedule' }))
     return { body: rows }

@@ -180,7 +180,7 @@ export function shredPaths(targets: string[], options: ShredOptions = {}): Shred
     if (oversized.length > 0) {
       outcome.skipped.push({
         path: target,
-        reason: `Contains a file over ${formatBytes(maxFileBytes)} — delete it permanently instead`,
+        reason: `Contains a file over ${formatBytes(maxFileBytes)}. Delete it permanently instead.`,
       })
       continue
     }

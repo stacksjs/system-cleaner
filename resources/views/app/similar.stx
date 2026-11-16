@@ -179,7 +179,7 @@
 
 <div class='main-header'>
   <div class='main-title'>Similar Images</div>
-  <div class='main-subtitle'>Photos that look the same without being the same file &mdash; bursts, re-exports and resized copies</div>
+  <div class='main-subtitle'>Photos that look the same without being the same file: bursts, re-exports and resized copies</div>
 </div>
 <div class='main-content'>
   <SimilarImagesPanel />

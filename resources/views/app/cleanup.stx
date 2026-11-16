@@ -498,7 +498,7 @@ function scanCleanupSizes(force) {
     if (window._cleanupScanPromise === pending) window._cleanupScanPromise = null;
     if (gen !== (window._cleanupScanGen || 0)) return;
     if (totalEl) {
-      totalEl.textContent = '—';
+      totalEl.textContent = '-';
       totalEl.classList.remove('is-scanning');
     }
     _exec("toast('Scan failed: " + (err && err.message || 'network').replace(/'/g, "\\'") + "', 'error')");

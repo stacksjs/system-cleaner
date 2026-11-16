@@ -13,13 +13,13 @@
   <div class='card'>
     <div class='card-label'>Selected</div>
     <div class='card-value' :style="selected.length ? 'color: var(--accent);' : ''"
-         x-text="scanned ? fmtBytes(selectedBytes()) : '—'">—</div>
+         x-text="scanned ? fmtBytes(selectedBytes()) : '-'">-</div>
     <div class='card-detail' x-text="scanned ? (selected.length + ' copy(ies) marked for removal') : 'Nothing selected'">Nothing selected</div>
   </div>
   <div class='card'>
     <div class='card-label'>Reclaimable</div>
     <div class='card-value' :style="wastedBytes ? 'color: var(--green);' : ''"
-         x-text="scanned ? wastedFormatted : '—'">—</div>
+         x-text="scanned ? wastedFormatted : '-'">-</div>
     <div class='card-detail'>
       <span x-show='!scanned'>No scan yet</span>
       <span x-show='scanned' x-cloak>
@@ -97,7 +97,7 @@
 </div>
 
 <div class='dp-partial' x-show='truncated && !scanning && !cancelled' x-cloak>
-  This scan stopped before it could verify everything &mdash; either it ran out
+  This scan stopped before it could verify everything. Either it ran out
   of time or a group was too large to hash within its budget. Every group shown
   was checked in full; there may simply be more. Narrow <strong>Search in</strong>
   or raise the minimum size to cover the rest.
@@ -181,7 +181,7 @@
     <p>
       Photos imported twice, a downloads folder full of <strong>report (3).pdf</strong>,
       an old backup copied into a new one. This finds files that are identical
-      byte for byte &mdash; not merely similarly named &mdash; and keeps one of
+      byte for byte, not merely similarly named, and keeps one of
       each.
     </p>
     <button class='btn btn-icon' @click='scan()'>

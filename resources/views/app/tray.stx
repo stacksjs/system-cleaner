@@ -14,7 +14,7 @@ const refreshing = state(false)
 const statusError = state('')
 const actionError = state('')
 const byteLabel = (bytes: number | undefined): string => {
-  if (bytes === undefined) return '—'
+  if (bytes === undefined) return '-'
   return bytes >= 1e12 ? (bytes / 1e12).toFixed(1) + ' TB' : (bytes / 1e9).toFixed(1) + ' GB'
 }
 const uptimeLabel = derived(() => {
@@ -78,7 +78,7 @@ useEventListener('keydown', (event: KeyboardEvent) => { if (event.key === 'Escap
     </section>
     <section class='tray-metric' aria-label='CPU'>
       <div class='tray-metric-heading'><span class='i-f7-gauge' aria-hidden='true'></span>CPU</div>
-      <div class='tray-value'><strong data-stat='cpu' x-text="reading() ? reading().cpu.percent + '%' : '—'"></strong><small>in use</small></div>
+      <div class='tray-value'><strong data-stat='cpu' x-text="reading() ? reading().cpu.percent + '%' : '-'"></strong><small>in use</small></div>
       <progress class='tray-meter' max='100' :value='reading()?.cpu.percent || 0' aria-label='CPU in use'></progress>
       <div class='tray-detail'><span x-text="reading()?.cpu.model || 'Reading processor…'"></span><span x-text="reading() ? reading().cpu.cores + ' cores' : ''"></span></div>
     </section>

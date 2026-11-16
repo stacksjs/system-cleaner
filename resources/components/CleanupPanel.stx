@@ -96,7 +96,7 @@
               </div>
               <div class='item-sub'>{{ cat.desc }}</div>
             </td>
-            <td class='clean-size is-pending'>&mdash;</td>
+            <td class='clean-size is-pending'>-</td>
             <td><div class="item-path" :title="cat.path">{{ shortPath(cat.path) }}</div></td>
             <td>
               <!-- Neutral, deliberately. Thirty-nine red buttons in a column
@@ -116,13 +116,13 @@
   </div>
 
   <div style='margin-top: var(--space-3); padding: var(--space-3) var(--space-4); background: var(--surface-soft); border-radius: 8px; border: 0.5px solid var(--line); font-size: 11px; color: var(--tertiary);'>
-    Cleaning removes contents inside each directory. Some apps may rebuild caches on next launch. Rows marked <span class='badge badge-orange'>not rebuilt</span> hold real content &mdash; session transcripts, downloaded models &mdash; so <strong style='color: var(--secondary);'>Select All Safe</strong> leaves them for you to tick yourself. Some directories sit inside others; the total above counts the overlap once. Click <strong style='color: var(--secondary);'>Rescan</strong> after cleaning to see updated sizes.
+    Cleaning removes contents inside each directory. Some apps may rebuild caches on next launch. Rows marked <span class='badge badge-orange'>not rebuilt</span> hold real content (session transcripts, downloaded models), so <strong style='color: var(--secondary);'>Select All Safe</strong> leaves them for you to tick yourself. Some directories sit inside others; the total above counts the overlap once. Click <strong style='color: var(--secondary);'>Rescan</strong> after cleaning to see updated sizes.
   </div>
 </div>
 
 <div x-show='!targetsLoading && cleanCategories.length === 0' x-cloak>
   <div class='tbl-wrap'>
-    <div class='empty-state'>Your system is clean! No cache directories found.</div>
+    <div class='empty-state'>Nothing to clean. No cache directories were found.</div>
   </div>
 </div>
 

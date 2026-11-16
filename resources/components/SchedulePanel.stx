@@ -119,7 +119,7 @@
       <input type='checkbox' class='check' :checked='includePrivacy' @change='includePrivacy = $event.target.checked' />
       <span>
         <strong>Clear browser caches and history</strong>
-        <span class='sc-check-note'>Cookies, sessions and logins are never touched by a scheduled run &mdash; only the parts browsers rebuild on their own.</span>
+        <span class='sc-check-note'>Cookies, sessions and logins are never touched by a scheduled run. Only the parts browsers rebuild on their own are cleared.</span>
       </span>
     </label>
     <label class='sc-check'>
@@ -171,7 +171,7 @@
 
   <div class='sc-actions'>
     <div class='sc-summary' x-show='!hasWork()' x-cloak>
-      Nothing selected &mdash; saving now turns automatic cleaning off.
+      Nothing selected. Saving now turns automatic cleaning off.
     </div>
     <div class='sc-summary' x-show='hasWork()' x-text='description'></div>
     <button class='btn btn-sm' @click='runNow()' :disabled='runningNow || !hasWork()'
@@ -195,8 +195,8 @@
 
 <div class='sc-note'>
   Only targets marked safe can be scheduled. The ones Quick Clean flags as
-  caution &mdash; chat transcripts, downloaded models, virtual machine images
-  &mdash; hold content nothing rebuilds, so they stay a deliberate choice you
+  caution (chat transcripts, downloaded models, virtual machine images)
+  hold content nothing rebuilds, so they stay a deliberate choice you
   make while looking at them.
 </div>
 

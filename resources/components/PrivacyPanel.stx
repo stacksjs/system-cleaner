@@ -77,7 +77,7 @@
               </div>
               <div class='item-sub' x-text='item.description'></div>
             </td>
-            <td class='dim' x-text="item.profile || '—'">—</td>
+            <td class='dim' x-text="item.profile || '-'">-</td>
             <td style='font-variant-numeric: tabular-nums;' x-text='item.sizeFormatted'></td>
             <td>
               <span class='badge badge-gray' x-show='!item.sensitive'>rebuilt</span>
@@ -117,7 +117,7 @@
 
     <p class='pv-keep-note' x-show='keptDomains.length === 0' x-cloak>
       Nothing kept yet. Clearing cookies will sign you out of every site. Add
-      the handful you never want to log into again &mdash; a subdomain match is
+      the handful you never want to log into again. A subdomain match is
       included, so <strong>github.com</strong> also covers
       <strong>gist.github.com</strong>.
     </p>
@@ -126,7 +126,7 @@
 
 <div class='pv-note'>
   Safari stores its cookies in a single binary file rather than a database, so
-  it is the one browser where the keep-list cannot apply &mdash; clearing
+  it is the one browser where the keep-list cannot apply: clearing
   Safari cookies clears all of them. Passwords are never touched: they live in
   the Keychain, which nothing here reads.
 </div>

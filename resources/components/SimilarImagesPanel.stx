@@ -11,12 +11,12 @@
 <div class='card-row'>
   <div class='card'>
     <div class='card-label'>Groups</div>
-    <div class='card-value' x-text="scanning ? '…' : (scanned ? groups.length : '—')">—</div>
+    <div class='card-value' x-text="scanning ? '…' : (scanned ? groups.length : '-')">-</div>
     <div class='card-detail' x-text="scanned ? grouped + ' images across them' : 'Not scanned yet'"></div>
   </div>
   <div class='card'>
     <div class='card-label'>Recoverable</div>
-    <div class='card-value' x-text="scanning ? '…' : (scanned ? wasted : '—')">—</div>
+    <div class='card-value' x-text="scanning ? '…' : (scanned ? wasted : '-')">-</div>
     <div class='card-detail'>Keeping the best copy of each</div>
   </div>
   <div class='card'>
@@ -66,7 +66,7 @@
 
   <div class='si-note' x-show='!scanning && !scanned' x-cloak>
     Nothing scanned yet. This looks for photographs that are visually the same
-    without being the same file &mdash; a burst where you wanted one frame, a
+    without being the same file: a burst where you wanted one frame, a
     HEIC and its JPEG export, an image re-saved at a different size or quality.
     Byte-identical copies belong on the <strong>Duplicates</strong> screen; this
     one finds what that scan cannot see.
@@ -131,7 +131,7 @@
     catches re-encodes and resizes almost perfectly and is less sure about
     crops and bursts. Nothing is selected for you, the copy marked
     <strong>keeping</strong> can never be selected, and anything you do choose
-    goes to the Trash rather than being erased &mdash; so the last look is
+    goes to the Trash rather than being erased, so the last look is
     always yours.
   </div>
 </div>

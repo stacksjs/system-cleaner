@@ -10,17 +10,17 @@
 <div class='card-row'>
   <div class='card'>
     <div class='card-label'>Apps With Grants</div>
-    <div class='card-value' x-text="loading ? '…' : (unavailable ? '—' : apps.length)">…</div>
+    <div class='card-value' x-text="loading ? '…' : (unavailable ? '-' : apps.length)">…</div>
     <div class='card-detail' x-text="unavailable ? 'Could not be read' : (grantCount() + ' permissions in total')"></div>
   </div>
   <div class='card'>
     <div class='card-label'>App Is Gone</div>
-    <div class='card-value' :style="missing ? 'color: var(--orange);' : ''" x-text="loading ? '…' : (unavailable ? '—' : missing)">…</div>
+    <div class='card-value' :style="missing ? 'color: var(--orange);' : ''" x-text="loading ? '…' : (unavailable ? '-' : missing)">…</div>
     <div class='card-detail'>Grants outliving the app that asked</div>
   </div>
   <div class='card'>
     <div class='card-label'>Full Disk Access</div>
-    <div class='card-value' x-text="loading ? '…' : (unavailable ? '—' : fullDiskHolders())">…</div>
+    <div class='card-value' x-text="loading ? '…' : (unavailable ? '-' : fullDiskHolders())">…</div>
     <div class='card-detail'>Apps that can read every file you own</div>
   </div>
 </div>
@@ -128,7 +128,7 @@
   <div class='pm-caveat' x-show='!loading' x-cloak>
     <strong>This screen reads; it does not grant.</strong>
     There is no supported way for any app to give itself or anything else a
-    permission &mdash; SIP blocks writing to the permission database even as
+    permission. SIP blocks writing to the permission database even as
     root, and Automation entries cannot be added by hand at all.
     <strong>Forget</strong> runs <code>tccutil reset</code>, which deletes the
     stored decision rather than writing a denial: an app that still needs the

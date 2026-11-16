@@ -165,7 +165,7 @@ export async function removeExtensions(ids: string[]): Promise<ExtensionRemovalO
   const found = new Set(installed.map(extension => extension.id))
   for (const id of wanted) {
     if (!found.has(id))
-      outcome.skipped.push({ id, reason: 'No longer installed — the list is out of date' })
+      outcome.skipped.push({ id, reason: 'No longer installed. The list is out of date.' })
   }
 
   for (const extension of installed) {

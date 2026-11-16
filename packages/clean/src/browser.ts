@@ -229,7 +229,7 @@ export function scanFirefoxExtensions(): ExtensionInfo[] {
         extensions.push({
           id: `firefox-${addon.id}`,
           name: addon.defaultLocale?.name || addon.id,
-          version: addon.version || '—',
+          version: addon.version || '-',
           description: (addon.defaultLocale?.description || '').slice(0, 120),
           browser: 'Firefox',
           browserIcon: 'i-f7-flame-fill',
@@ -411,16 +411,16 @@ export function blockedByRunningBrowser(browser: string, running: Iterable<strin
     // profile corrupts it, and silence is not evidence that none is open.
     if (open === BROWSER_PROBE_FAILED) {
       return action === 'clear'
-        ? 'Could not tell whether a browser is open, so this was not cleared — a live profile would be corrupted'
-        : 'Could not tell whether a browser is open, so nothing was removed — a live profile would be corrupted'
+        ? 'Could not tell whether a browser is open, so this was not cleared. A live profile would be corrupted.'
+        : 'Could not tell whether a browser is open, so nothing was removed. A live profile would be corrupted.'
     }
 
     if (open !== browser)
       continue
 
     return action === 'clear'
-      ? `Quit ${browser} first — writing to a live profile corrupts it`
-      : `Quit ${browser} first — removing an extension from a live profile corrupts it`
+      ? `Quit ${browser} first. Writing to a live profile corrupts it.`
+      : `Quit ${browser} first. Removing an extension from a live profile corrupts it.`
   }
 
   return null

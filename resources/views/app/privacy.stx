@@ -201,7 +201,7 @@
 
 <div class='main-header'>
   <div class='main-title'>Privacy</div>
-  <div class='main-subtitle'>Clear browsing history, cookies and the traces macOS keeps &mdash; while staying signed in where you want to</div>
+  <div class='main-subtitle'>Clear browsing history, cookies and the traces macOS keeps, while staying signed in where you want to</div>
 </div>
 <div class='main-content'>
   <div x-show='loading' class='empty-state'>Reading browser profiles&hellip;</div>

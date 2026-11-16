@@ -435,12 +435,12 @@ function loadMachine(): void {
   }>('/dashboard-stats').then((d) => {
     if (!d?.success)
       return
-    setValue('hostName', d.hostname || '—')
-    setValue('osVersion', d.macosVersion ? `macOS ${d.macosVersion}` : '—')
-    setValue('cpuModel', d.cpuLabel ? `${d.cpuLabel} · ${d.cpuCores} cores` : '—')
-    setValue('memory', d.totalMemGB ? `${d.totalMemGB} GB` : '—')
-    setValue('diskUsage', d.diskUsed && d.diskTotal ? `${d.diskUsed} of ${d.diskTotal} used` : '—')
-    setValue('diskAvail', d.diskAvail ? `${d.diskAvail} free` : '—')
+    setValue('hostName', d.hostname || '-')
+    setValue('osVersion', d.macosVersion ? `macOS ${d.macosVersion}` : '-')
+    setValue('cpuModel', d.cpuLabel ? `${d.cpuLabel} · ${d.cpuCores} cores` : '-')
+    setValue('memory', d.totalMemGB ? `${d.totalMemGB} GB` : '-')
+    setValue('diskUsage', d.diskUsed && d.diskTotal ? `${d.diskUsed} of ${d.diskTotal} used` : '-')
+    setValue('diskAvail', d.diskAvail ? `${d.diskAvail} free` : '-')
   })
 }
 

@@ -35,7 +35,10 @@ export interface Tool {
 export interface Panel {
   id: string
   title: string
-  /** Where the panel's "See all" goes. */
+  /**
+   * Where the panel's header link goes. Left off when the page's round button
+   * already goes there, so no page offers the same action twice.
+   */
   link?: { label: string, href: string }
 }
 
@@ -133,7 +136,7 @@ export const SECTIONS: Section[] = [
     lede: 'Find the big folders, the forgotten files and the copies you never meant to keep.',
     primary: { label: 'Explore Disk Usage', short: 'Explore', href: '/app/disk' },
     panels: [
-      { id: 'disk', title: 'Startup disk', link: { label: 'Explore', href: '/app/disk' } },
+      { id: 'disk', title: 'Startup disk' },
       { id: 'quick-wins', title: 'Quick wins' },
     ],
     tools: [
@@ -269,7 +272,7 @@ export const SECTIONS: Section[] = [
     lede: 'Clear your browsing traces, review what apps were allowed to reach, and check the network you are on.',
     primary: { label: 'Clean Privacy Traces', short: 'Clean', href: '/app/privacy' },
     panels: [
-      { id: 'traces', title: 'Largest browsing traces', link: { label: 'Clean', href: '/app/privacy' } },
+      { id: 'traces', title: 'Largest browsing traces' },
       { id: 'access', title: 'App access', link: { label: 'Review', href: '/app/permissions' } },
     ],
     tools: [

@@ -19,13 +19,11 @@
       <span class="hub-ring-label" data-metric="health-label">Health</span>
     </div>
     <div class="hub-hero-text">
-      <div class="hub-eyebrow">Overview</div>
       <h1 class="hub-title">Here is how your Mac is doing</h1>
       <p class="hub-lede">What can be cleaned, what is taking the space, and what is slowing things down, checked on this Mac and nowhere else.</p>
       <ul class="hub-facts" aria-label="This Mac">
         <li><span class="i-f7-desktopcomputer" aria-hidden="true"></span><span data-metric="macos" data-metric-fallback="macOS">macOS</span></li>
         <li><span class="i-f7-bolt-fill" aria-hidden="true"></span><span data-metric="chip" data-metric-fallback="Apple silicon">&hellip;</span></li>
-        <li><span class="i-f7-chart-bar-alt-fill" aria-hidden="true"></span><span data-metric="cpu" data-metric-template="{value} CPU">CPU</span></li>
         <li><span class="i-f7-clock-fill" aria-hidden="true"></span><span data-metric="uptime" data-metric-template="Up {value}">Uptime</span></li>
       </ul>
       <div class="hub-actions">

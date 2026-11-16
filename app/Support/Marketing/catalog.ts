@@ -105,7 +105,7 @@ export const FEATURES: MarketingFeature[] = [
     name: 'Extension Audit',
     shortName: 'Extensions',
     summary: 'Find browser extensions across every profile, see what they can reach, and remove the ones you do not want.',
-    description: 'Extension Audit brings scattered browser add-ons into one place with their size and permission count, and removes them — telling you plainly which ones a sync account could bring back, and which are gone for good.',
+    description: 'Extension Audit brings scattered browser add-ons into one place with their size and permission count, and removes them, telling you plainly which ones a sync account could bring back, and which are gone for good.',
     icon: 'square-stack-3d-up-fill',
     metric: 'One inventory',
     detail: 'Every profile and browser in one removable list.',

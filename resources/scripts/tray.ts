@@ -42,7 +42,7 @@ Object.assign(window, {
   trayOpenSettings: settings,
   trayHide: hide,
   trayQuit: () => app.quit(),
-  trayUpdateTooltip: (summary: string) => host?.tray?.setTooltip(`SystemCleaner — ${summary}`),
+  trayUpdateTooltip: (summary: string) => host?.tray?.setTooltip(`SystemCleaner: ${summary}`),
 })
 
 async function install(): Promise<void> {
@@ -58,7 +58,7 @@ async function install(): Promise<void> {
   const bytes = new Uint8Array(await icon.arrayBuffer())
   await tray.setIcon('data:image/png;base64,' + btoa(String.fromCharCode(...bytes)))
   await tray.setTitle('')
-  await tray.setTooltip('SystemCleaner — live system stats')
+  await tray.setTooltip('SystemCleaner: live system stats')
   const item = (title: string, action: string): TrayMenuItem => ({ title, label: title, action })
   const channel = new BroadcastChannel('systemcleaner-tray')
   channel.addEventListener('message', event => {

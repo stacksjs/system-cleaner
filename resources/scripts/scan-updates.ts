@@ -83,7 +83,7 @@ function attachScanPage(page: ScanPage, kind: ScanKind): void {
     else if (page.scanning) { page.applyResult({}); page.scanned = false }
     const elapsed = Math.max(0, Math.round(((session.finishedAt ?? Date.now()) - (session.startedAt ?? Date.now())) / 1000))
     const count = session.progress.scanned.toLocaleString()
-    page.scanProgress = session.status === 'queued' ? 'Queued — waiting for another scan'
+    page.scanProgress = session.status === 'queued' ? 'Queued behind another scan'
       : `${page.cancelling ? 'Cancelling… · ' : ''}${count} items · ${elapsed}s`
     page.scanProgressPath = session.progress.path
     page.scanStalled = false

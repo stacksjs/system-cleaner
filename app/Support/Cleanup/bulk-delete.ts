@@ -157,14 +157,14 @@ export async function bulkDelete(
       skipped.push({
         path: target,
         reason: verdict === 'tracked'
-          ? 'Git tracks files here — deleting it would destroy committed work'
+          ? 'Git tracks files here. Deleting it would destroy committed work.'
           : 'Inside a git repository and git could not be asked what is tracked',
       })
       continue
     }
 
     if (protectedPaths.has(target)) {
-      skipped.push({ path: target, reason: 'Protected — remove it from the protected list first' })
+      skipped.push({ path: target, reason: 'Protected. Remove it from the protected list first.' })
       continue
     }
 

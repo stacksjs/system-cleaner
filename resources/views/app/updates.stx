@@ -380,7 +380,7 @@
           <td>
             <span x-show='app.latestVersion && app.updateAvailable' class='mono' style='font-size: 11px; color: var(--green);'>{{ app.latestVersion }}</span>
             <span x-show='app.latestVersion && !app.updateAvailable' class='dim mono' style='font-size: 11px;'>{{ app.latestVersion }}</span>
-            <span x-show='!app.latestVersion' class='dim' style='font-size: 10px;'>&mdash;</span>
+            <span x-show='!app.latestVersion' class='dim' style='font-size: 10px;'>-</span>
           </td>
           <td>
             <span x-show="app.source === 'brew'" class='badge badge-purple' style='font-size: 9px;'>Homebrew</span>
@@ -420,7 +420,7 @@
 
 <div x-show='totalOutdated() === 0 && !loading' class='empty-state'>
   <div style='font-size: 32px; margin-bottom: var(--space-2);'>&#10004;</div>
-  Everything is up to date!
+  Everything is up to date.
 </div>
 
 </div>

@@ -129,7 +129,7 @@ useIntervalFn(syncScanning, 2000, { immediate: true })
     <!-- The one figure worth carrying everywhere: how full the disk is. -->
     <a class="side-disk" href="/app/disk" data-stx-link aria-label="Disk Usage">
       <span class="side-disk-head">
-        <span class="side-disk-name">Macintosh HD</span>
+        <span class="side-disk-name">Startup disk</span>
         <span class="side-disk-free" data-metric="disk-free" data-metric-template="{value} free">&hellip;</span>
       </span>
       <span class="side-disk-bar"><span data-metric="disk-pct" data-metric-style="--pct"></span></span>

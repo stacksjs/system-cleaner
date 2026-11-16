@@ -222,7 +222,7 @@ export async function uninstall(
   // is. Say what is actually true and what to do about it.
   outcome.skipped = outcome.skipped.map(entry => (
     entry.reason === 'Path is outside home directory'
-      ? { path: entry.path, reason: 'Needs administrator rights — remove it in Terminal with sudo' }
+      ? { path: entry.path, reason: 'Needs administrator rights. Remove it in Terminal with sudo.' }
       : entry
   ))
 

@@ -135,7 +135,7 @@ function finalizeUpdate(partial: Partial<SoftwareUpdate> & { label: string }): S
     title,
     version: partial.version || '',
     sizeBytes,
-    sizeLabel: sizeBytes > 0 ? formatBytes(sizeBytes) : '—',
+    sizeLabel: sizeBytes > 0 ? formatBytes(sizeBytes) : '-',
     recommended: partial.recommended ?? false,
     restartRequired: partial.restartRequired ?? false,
     kind: partial.kind || classifyUpdate(title),

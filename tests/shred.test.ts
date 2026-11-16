@@ -120,7 +120,7 @@ describe('shredPaths', () => {
     const outcome = shredPaths([target], { maxFileBytes: 1024 })
 
     expect(outcome.shredded).toEqual([])
-    expect(outcome.skipped[0].reason).toContain('delete it permanently instead')
+    expect(outcome.skipped[0].reason).toContain('Delete it permanently instead')
     expect(fs.existsSync(target)).toBe(true)
   })
 

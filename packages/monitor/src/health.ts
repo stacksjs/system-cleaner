@@ -80,7 +80,7 @@ export function calculateHealthScore(
     let desc = ''
     if (partition.usedPercent > 90) {
       penalty = Math.min(20, Math.round(((partition.usedPercent - 90) / 10) * 20))
-      desc = `${partition.mountPoint} at ${partition.usedPercent}% — ${formatGB(partition.freeBytes)} free`
+      desc = `${partition.mountPoint} at ${partition.usedPercent}%, ${formatGB(partition.freeBytes)} free`
     }
     else if (partition.usedPercent > 70) {
       penalty = Math.min(10, Math.round(((partition.usedPercent - 70) / 20) * 10))
@@ -101,7 +101,7 @@ export function calculateHealthScore(
     if (cpu.temperature >= 85) {
       const penalty = Math.min(15, Math.round(((cpu.temperature - 85) / 15) * 15))
       score -= penalty
-      factors.push({ name: 'Temperature', impact: penalty, description: `CPU at ${cpu.temperature.toFixed(0)}°C — overheating` })
+      factors.push({ name: 'Temperature', impact: penalty, description: `CPU at ${cpu.temperature.toFixed(0)}°C, overheating` })
     }
     else if (cpu.temperature >= 60) {
       const penalty = Math.min(7, Math.round(((cpu.temperature - 60) / 25) * 7))

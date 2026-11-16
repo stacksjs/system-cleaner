@@ -82,7 +82,7 @@ export const WINDOWS_MAINTENANCE_TASKS: MaintenanceTask[] = [
     id: 'win-dism',
     name: 'Repair the component store',
     description: 'Have Windows Update supply fresh copies of anything corrupt in the component store',
-    effect: 'The step that makes a failing system-file check succeed — run it first when sfc cannot repair',
+    effect: 'The step that makes a failing system-file check succeed. Run it first when sfc cannot repair.',
     command: 'DISM /Online /Cleanup-Image /RestoreHealth',
     requiresSudo: true,
     elevationLabel: 'an Administrator PowerShell',
@@ -125,7 +125,7 @@ export const WINDOWS_MAINTENANCE_TASKS: MaintenanceTask[] = [
   {
     id: 'win-optimize',
     name: 'Optimise drives',
-    description: 'Retrim an SSD, or defragment a mechanical disk — Windows picks per drive',
+    description: 'Retrim an SSD, or defragment a mechanical disk. Windows picks per drive.',
     effect: 'Restores write performance on an SSD that has been full for a long time',
     command: 'defrag %SystemDrive% /O',
     requiresSudo: true,
