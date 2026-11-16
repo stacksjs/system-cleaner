@@ -40,7 +40,7 @@ On macOS, the native `--tray-popover` window owns the menu-bar icon. Its
 `/app/tray` page opens a named `dashboard` window on launch, so the full app
 remains available normally. Closing that window keeps the tray and agent alive;
 Open SystemCleaner brings the same window back with its page and scans intact.
-View → System Overview (Shift-Command-M) also opens the popover. The primary
+View → Menu Bar Stats (Shift-Command-M) also opens the popover. The primary
 tray page owns the application menu and routes page commands to the dashboard.
 The panel reuses `BrandMark`; the status item uses a native template rendered
 from `public/images/systemcleaner-mark.svg`. After changing that artwork, run

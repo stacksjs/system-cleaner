@@ -13,6 +13,7 @@ const localAgent = isLocalAgent()
   <meta charset='UTF-8'>
   <meta name='viewport' content='width=device-width, initial-scale=1.0'>
   <title>SystemCleaner</title>
+  <link rel="icon" href="/favicon.ico">
   @appearanceBootstrap({
     storageKey: 'systemcleaner-appearance',
     appearance: { key: 'sidebarStyle', attribute: 'appearance', allowed: ['macos'], default: 'macos' },
@@ -243,8 +244,12 @@ const localAgent = isLocalAgent()
     :root[data-sidebar-collapsed] .topnav {
       padding-left: calc(var(--craft-window-controls-width, 0px) + 16px);
     }
-    :root[data-sidebar-collapsed] .app-column { margin-left: 8px; }
-    :root[data-sidebar-collapsed] .app-body:has(.hub) .app-column { margin-left: 0; }
+    /* With the sidebar gone there is no frame left to inset the sheet into,
+       and an inset sheet puts the window buttons astride its rounded corner.
+       So the sheet fills the window and its toolbar takes the buttons' line,
+       the way every Mac window without a sidebar looks. */
+    :root[data-sidebar-collapsed] .app-column { margin: 0; border-radius: 0; box-shadow: none; }
+    :root[data-sidebar-collapsed] .topnav,
     .app-body:has(.hub) .topnav { height: max(32px, var(--chrome-band)); }
     .rail { transition: width .2s ease, min-width .2s ease, opacity .2s ease, padding .2s ease; }
     .app-column { transition: margin .2s ease; }

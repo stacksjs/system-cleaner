@@ -10,7 +10,7 @@ export const crumbTool = place && place.tool ? place.tool : null
 // Updates, Maintenance and Privacy moved into the sidebar's sections. What is
 // left here configures the app rather than acting on the Mac.
 export const items = [
-  { id: 'schedule', label: 'Schedule', icon: 'i-f7-clock-fill', href: '/app/schedule' },
+  { id: 'schedule', label: 'Scheduled Clean', icon: 'i-f7-clock-fill', href: '/app/schedule' },
 ]
 </script>
 

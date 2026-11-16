@@ -130,7 +130,11 @@ function render(element: HTMLElement, value: string): void {
   }
   const template = element.getAttribute('data-metric-template')
   const bare = (element.getAttribute('data-metric-bare') || '').split('|')
-  element.textContent = template && !bare.includes(value) ? template.replace('{value}', value) : value
+  const clear = element.getAttribute('data-metric-clear')
+  if (bare.includes(value))
+    element.textContent = clear || value
+  else
+    element.textContent = template ? template.replace('{value}', value) : value
   element.setAttribute('data-metric-ready', '')
   // The overview's health ring reads its score from here.
   const ring = element.closest<HTMLElement>('[data-health-ring]')
@@ -244,7 +248,7 @@ const SOURCE_LABELS: Record<string, { label: string, icon: string }> = {
   'orphans': { label: 'Leftover Data', icon: 'i-f7-tray-fill' },
   'extensions': { label: 'Extensions', icon: 'i-f7-square-stack-3d-up-fill' },
   'privacy': { label: 'Privacy', icon: 'i-f7-eye-slash-fill' },
-  'apps': { label: 'Uninstaller', icon: 'i-f7-xmark-square-fill' },
+  'apps': { label: 'Installed Apps', icon: 'i-f7-xmark-square-fill' },
   'disk': { label: 'Disk Usage', icon: 'i-f7-chart-pie-fill' },
   'trash': { label: 'Trash', icon: 'i-f7-trash-fill' },
 }
@@ -308,14 +312,19 @@ const PANELS: Record<string, () => Promise<PanelResult>> = {
   },
 
   async 'quick-wins'() {
-    const [junk, privacy] = await Promise.all([api('safe-to-clean'), api('privacy-scan')])
-    return {
-      body: [
-        row({ icon: 'i-f7-sparkles', title: 'Caches and logs', sub: 'Safe to remove; apps rebuild them', value: junk?.success ? formatBytes(junk.bytes) : undefined, href: '/app/cleanup' }),
-        row({ icon: 'i-f7-eye-slash-fill', title: 'Browsing traces', sub: 'History, cookies and browser caches', value: privacy?.success ? formatBytes(privacy.totalBytes) : undefined, href: '/app/privacy' }),
-        row({ icon: 'i-f7-tray-fill', title: 'Leftover app data', sub: 'Support files from apps you removed', href: '/app/orphans' }),
-      ],
+    // The rows are known up front; only their sizes take time, and the junk
+    // total is a disk walk that can run for half a minute. So the rows draw
+    // at once and each size lands in place when its own measurement does.
+    const junk = row({ icon: 'i-f7-sparkles', title: 'Caches and logs', sub: 'Safe to remove; apps rebuild them', value: '…', href: '/app/cleanup' })
+    const traces = row({ icon: 'i-f7-eye-slash-fill', title: 'Browsing traces', sub: 'History, cookies and browser caches', value: '…', href: '/app/privacy' })
+    const leftovers = row({ icon: 'i-f7-tray-fill', title: 'Leftover app data', sub: 'Support files from apps you removed', href: '/app/orphans' })
+    const settle = (node: HTMLElement, text: string): void => {
+      const value = node.querySelector('.hub-row-value')
+      if (value) value.textContent = text
     }
+    void api('safe-to-clean').then(d => settle(junk, d?.success ? formatBytes(d.bytes) : '-'))
+    void api('privacy-scan').then(d => settle(traces, d?.success ? formatBytes(d.totalBytes) : '-'))
+    return { body: [junk, traces, leftovers] }
   },
 
   async 'gauges'() {

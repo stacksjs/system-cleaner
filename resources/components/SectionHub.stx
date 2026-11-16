@@ -18,6 +18,7 @@ export const tools = section.tools
 export const panels = section.panels || []
 export const headlineMetric = section.headlineMetric ? section.headlineMetric.metric : ''
 export const headlineTemplate = section.headlineMetric ? section.headlineMetric.template : ''
+export const headlineClear = section.headlineMetric && section.headlineMetric.whenClear ? section.headlineMetric.whenClear : ''
 </script>
 
 <div class="hub" data-tone="{{ section.id }}">
@@ -33,7 +34,7 @@ export const headlineTemplate = section.headlineMetric ? section.headlineMetric.
       <h1 class="hub-name">{{ section.label }}</h1>
       <p class="hub-headline">
         @if(headlineMetric)
-          <span data-metric="{{ headlineMetric }}" data-metric-template="{{ headlineTemplate }}" data-metric-bare="Up to date">{{ section.headline }}</span>
+          <span data-metric="{{ headlineMetric }}" data-metric-template="{{ headlineTemplate }}" data-metric-bare="Up to date" data-metric-clear="{{ headlineClear }}">{{ section.headline }}</span>
         @else
           {{ section.headline }}
         @endif

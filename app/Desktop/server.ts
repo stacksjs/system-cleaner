@@ -158,7 +158,10 @@ export async function startAgentServer(options: AgentServerOptions) {
 
   await registerApiRoutes(collector)
 
-  const notFound = new Response('Not found', { status: 404 })
+  // A function, not one shared Response: a body can be sent once, so a single
+  // instance answered the first miss with a 404 and every later one with a
+  // 500 when Bun found its body already consumed.
+  const notFound = (): Response => new Response('Not found', { status: 404 })
 
   // A port that is asked for and refused is not fatal — see `runAgent` for why
   // the launcher asks for one at all. Anything else is a real failure and is
@@ -191,7 +194,7 @@ export async function startAgentServer(options: AgentServerOptions) {
 
       const file = resolveStaticFile(webRoot, url.pathname)
       if (!file)
-        return notFound
+        return notFound()
 
       return new Response(Bun.file(file), {
         headers: {

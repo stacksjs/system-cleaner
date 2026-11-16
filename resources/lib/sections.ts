@@ -51,8 +51,11 @@ export interface Section {
   lede: string
   /** The headline while its live figure is loading, and if it never arrives. */
   headline: string
-  /** The live headline, with `{value}` standing in for the metric. */
-  headlineMetric?: { metric: string, template: string }
+  /**
+   * The live headline, with `{value}` standing in for the metric. `whenClear`
+   * replaces the whole sentence when the figure is the all-clear value.
+   */
+  headlineMetric?: { metric: string, template: string, whenClear?: string }
   /** The round button: the tool most people came for. `short` fits inside it. */
   primary?: { label: string, short: string, href: string }
   tools: Tool[]
@@ -229,9 +232,9 @@ export const SECTIONS: Section[] = [
     href: '/app/apps',
     icon: 'i-f7-app-fill',
     headline: 'Manage every app in one place',
-    headlineMetric: { metric: 'updates', template: '{value} waiting to install' },
+    headlineMetric: { metric: 'updates', template: '{value} waiting to install', whenClear: 'Every app is up to date' },
     lede: 'Uninstall apps completely, keep the rest up to date, and clear out extensions you never meant to install.',
-    primary: { label: 'Open Applications', short: 'Open', href: '/app/applications' },
+    primary: { label: 'Open Installed Apps', short: 'Open', href: '/app/applications' },
     panels: [
       { id: 'updates-breakdown', title: 'Updates by source', link: { label: 'Review', href: '/app/updates' } },
       { id: 'extensions', title: 'Browser extensions', link: { label: 'Manage', href: '/app/extensions' } },
@@ -239,7 +242,7 @@ export const SECTIONS: Section[] = [
     tools: [
       {
         id: 'applications',
-        label: 'Uninstaller',
+        label: 'Installed Apps',
         href: '/app/applications',
         icon: 'i-f7-xmark-square-fill',
         description: 'Remove an app together with everything it left around.',
@@ -254,7 +257,7 @@ export const SECTIONS: Section[] = [
       },
       {
         id: 'extensions',
-        label: 'Extensions',
+        label: 'Browser Extensions',
         href: '/app/extensions',
         icon: 'i-f7-square-stack-3d-up-fill',
         description: 'Browser extensions installed across your browsers.',

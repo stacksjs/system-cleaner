@@ -22,6 +22,7 @@
     "cli": "bun run packages/cli/bin/system-cleaner.ts",
     "shoot": "bun ./scripts/shoot.ts",
     "e2e:webview": "bun ./scripts/e2e-webview.ts",
+    "e2e:sections": "bun ./scripts/e2e-sections.ts",
     "dev:docs": "bunpress dev docs",
     "build:docs": "bunpress build docs",
     "preview:docs": "bunpress preview docs",

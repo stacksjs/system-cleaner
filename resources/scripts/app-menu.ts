@@ -175,7 +175,7 @@ function installMenu(hasTray: boolean): void {
       {
         label: 'View',
         items: [
-          ...(hasTray ? [{ label: 'System Overview', shortcut: 'cmd+shift+m', onClick: () => {
+          ...(hasTray ? [{ label: 'Menu Bar Stats', shortcut: 'cmd+shift+m', onClick: () => {
             const channel = new BroadcastChannel('systemcleaner-tray')
             channel.postMessage({ action: 'show' })
             channel.close()

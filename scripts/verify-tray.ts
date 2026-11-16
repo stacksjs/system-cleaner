@@ -45,7 +45,7 @@ try {
   await page.waitForFunction(() => (window as unknown as { trayCalls: { method: string }[] }).trayCalls.some(call => call.method === 'app-menu'))
   await page.evaluate(() => {
     const calls = (window as unknown as { trayCalls: { method: string, value?: { menus: { items: { label?: string, id?: string }[] }[] } }[] }).trayCalls
-    const overview = calls.find(call => call.method === 'app-menu')?.value?.menus.flatMap(menu => menu.items).find(item => item.label === 'System Overview')
+    const overview = calls.find(call => call.method === 'app-menu')?.value?.menus.flatMap(menu => menu.items).find(item => item.label === 'Menu Bar Stats')
     if (!overview?.id) throw new Error('Missing native overview command')
     window.dispatchEvent(new CustomEvent('craft:menu:action', { detail: { id: overview.id } }))
   })
