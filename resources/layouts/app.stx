@@ -22,7 +22,7 @@ const localAgent = isLocalAgent()
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
-      height: 100%; overflow: hidden; background: var(--app-bg); color: var(--ink);
+      height: 100%; overflow: hidden; background: var(--sidebar-bg); color: var(--ink);
       font-family: -apple-system, 'SF Pro Text', BlinkMacSystemFont, system-ui, sans-serif;
       -webkit-font-smoothing: antialiased;
     }
@@ -35,7 +35,7 @@ const localAgent = isLocalAgent()
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { border-radius: 3px; background: var(--line); }
 
-    .app-chrome { display: flex; width: 100vw; height: 100vh; flex-direction: column; overflow: hidden; background: var(--app-bg); }
+    .app-chrome { display: flex; width: 100vw; height: 100vh; flex-direction: column; overflow: hidden; background: var(--sidebar-bg); }
     .app-body { display: flex; min-width: 0; flex: 1; overflow: hidden; }
 
     /* ---------- Vibrant window ---------- */
@@ -72,17 +72,14 @@ const localAgent = isLocalAgent()
        choice. `--app-bg` already flips with the colour mode, so one rule
        covers both. */
     :root[data-craft-web-material='window'] body {
-      background: color-mix(in srgb, var(--app-bg) var(--material-opacity), transparent);
+      background: color-mix(in srgb, var(--sidebar-bg) var(--material-opacity), transparent);
     }
 
     /* A sidebar-span material — what a runtime older than the window span
        gives us — keeps the arrangement it was built for: vibrancy under the
        rail, an opaque content column beside it, and the hairline Finder puts
        in the same place. */
-    :root[data-craft-native-sidebar]:not([data-craft-web-material='window']) .app-column {
-      background: var(--app-bg);
-      border-left: 0.5px solid var(--line-soft);
-    }
+    :root[data-craft-native-sidebar]:not([data-craft-web-material='window']) body { background: transparent; }
 
     /* ---------- Inactive window ---------- */
     /* A Mac window that is not in front goes quiet. AppKit does that for the
@@ -100,23 +97,33 @@ const localAgent = isLocalAgent()
        leaves it pale blue, which reads as a disabled control rather than an
        inactive window — Finder's icons go grey at full strength. So the rail
        drops to the neutral it would have had if it had never been tinted. */
-    :root[data-craft-window-active='false'] .rail-item { color: var(--secondary); }
     :root[data-craft-window-active='false'] .rail-item[data-active] {
-      background: var(--surface-soft);
+      background: var(--pressed);
       color: var(--ink);
-      box-shadow: none;
     }
-    /* The mark is artwork rather than a tinted glyph, so `color` cannot reach
-       it and it would sit there as the one saturated thing left in a sidebar
-       that has otherwise stood down. */
-    :root[data-craft-window-active='false'] .rail-brand .brand-mark { filter: grayscale(1); opacity: .75; }
-    .rail-item, .rail-icon, .rail-brand .brand-mark {
-      transition: background .18s ease, color .18s ease, opacity .18s ease, box-shadow .18s ease, filter .18s ease;
+    /* The tiles are the one saturated thing left in a sidebar that has
+       otherwise stood down, and `color` cannot reach a gradient. */
+    :root[data-craft-window-active='false'] .side-tile { filter: grayscale(1); opacity: .6; }
+    .rail-item, .side-tile {
+      transition: background .18s ease, color .18s ease, opacity .18s ease, filter .18s ease;
     }
     @media (prefers-reduced-motion: reduce) {
-      .rail-item, .rail-icon, .rail-brand .brand-mark { transition: none; }
+      .rail-item, .side-tile { transition: none; }
     }
-    .app-column { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+    /* The content column is a panel lifted off the sidebar's surface rather
+       than a second region of the same one. The sidebar is navigation and the
+       panel is the work, and giving them different depths says so without a
+       divider. Over a window material the panel stays opaque: the vibrancy
+       belongs to the sidebar, and text on a panel that moves with the desktop
+       behind it is text that is harder to read for no gain. */
+    .app-column {
+      display: flex; flex: 1; flex-direction: column; min-width: 0;
+      margin: 6px 6px 6px 0; overflow: hidden;
+      border: .5px solid var(--line); border-radius: 12px;
+      background: var(--app-bg);
+      box-shadow: 0 1px 2px rgb(0 0 0 / .04), 0 6px 24px rgb(0 0 0 / .06);
+    }
+    :root.dark .app-column { box-shadow: 0 1px 2px rgb(0 0 0 / .3), 0 8px 28px rgb(0 0 0 / .35); }
     .main { min-width: 0; flex: 1; overflow-y: auto; background: var(--app-bg); }
 
     /* AppKit publishes its window-button band; use the same centre line for
@@ -124,7 +131,7 @@ const localAgent = isLocalAgent()
     .topnav {
       --chrome-band: calc(2 * var(--craft-window-buttons-y, 8px) + var(--craft-window-buttons-height, 16px));
       display: flex; align-items: center; justify-content: space-between; gap: 16px;
-      flex: none; height: max(32px, var(--chrome-band)); padding: 0 16px 0 8px;
+      flex: none; height: max(32px, calc(var(--chrome-band) - 12px)); padding: 0 12px 0 8px;
       background: var(--app-bg); user-select: none;
     }
     .toolbar-navigation { flex: none; }
@@ -186,17 +193,6 @@ const localAgent = isLocalAgent()
     .menu-shortcut { color: var(--tertiary); font-size: 12px; }
     .menu-rule { height: .5px; margin: var(--space-1) var(--space-2); background: var(--line); }
 
-    /* The count on Updates. Sized to hold two digits without changing the
-       row's height, so the menu does not reflow when the number arrives. */
-    .menu-badge {
-      min-width: 17px; height: 17px; padding: 0 var(--space-1);
-      border-radius: 9px;
-      background: var(--warning-fill); color: #fff;
-      font-size: 10px; font-weight: 700; line-height: 17px;
-      text-align: center; font-variant-numeric: tabular-nums;
-    }
-    .menu-badge[hidden] { display: none; }
-
     /* A single-line account control belongs on the window-button line.
        The machine name is context inside its menu rather than a second title. */
     .profile-chip {
@@ -217,11 +213,6 @@ const localAgent = isLocalAgent()
     }
     .profile-picture > span { width: 12px; height: 12px; }
     .profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
-    .profile-dot {
-      position: absolute; top: -1px; right: -1px; width: 7px; height: 7px;
-      border: 1.5px solid var(--app-bg); border-radius: 50%; background: var(--orange);
-    }
-    .profile-dot[hidden] { display: none; }
     .profile-text { min-width: 0; }
     .profile-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 500; color: var(--secondary); }
 
@@ -229,12 +220,11 @@ const localAgent = isLocalAgent()
        control, where grey reads as a window that has stood down. */
     :root[data-craft-window-active='false'] .profile-name { color: var(--secondary); }
     :root[data-craft-window-active='false'] .profile-avatar img { filter: grayscale(1); opacity: .8; }
-    :root[data-craft-window-active='false'] .profile-dot { background: var(--tertiary); }
-    .profile-chip, .profile-avatar img, .profile-dot {
+    .profile-chip, .profile-avatar img {
       transition: background .18s ease, color .18s ease, filter .18s ease, opacity .18s ease;
     }
     @media (prefers-reduced-motion: reduce) {
-      .profile-chip, .profile-avatar img, .profile-dot { transition: none; }
+      .profile-chip, .profile-avatar img { transition: none; }
     }
 
     /* ---------- Collapsed sidebar ---------- */
@@ -251,8 +241,9 @@ const localAgent = isLocalAgent()
     :root[data-sidebar-collapsed] .topnav {
       padding-left: calc(var(--craft-window-controls-width, 0px) + 16px);
     }
-    :root[data-sidebar-collapsed] .app-column { border-left: 0; }
-    .rail { transition: width .2s ease, opacity .2s ease, padding .2s ease; }
+    :root[data-sidebar-collapsed] .app-column { margin-left: 6px; }
+    .rail { transition: width .2s ease, min-width .2s ease, opacity .2s ease, padding .2s ease; }
+    .app-column { transition: margin .2s ease; }
     @media (prefers-reduced-motion: reduce) {
       .rail { transition: none; }
     }
@@ -277,104 +268,146 @@ const localAgent = isLocalAgent()
       -webkit-mask-image: linear-gradient(to bottom, #000 74%, transparent);
     }
 
-    /* ---------- Icon rail ---------- */
-    /* No fill and no divider: the rail sits on the same surface as the
-       content column so the two read as one canvas, and the only thing that
-       draws a shape is the selected button. */
-    /*
+    /* ---------- Sidebar ---------- */
+    /* Two destinations, then five sections. Each section has one coloured
+       tile and its screens are plain text beneath it: seven icons where there
+       were fourteen, and a word on every row.
+
        The window has no titlebar, so its close/minimise/zoom buttons sit in
-       this rail's top-left corner — the arrangement every Mac app with a
+       this sidebar's top-left corner — the arrangement every Mac app with a
        sidebar uses. Two consequences, and neither of them is a number typed in
        here:
 
-       1. The brand mark starts below them, and below *them* is the point.
-          Craft publishes two rectangles: `--craft-window-buttons-*`, the
-          traffic lights themselves, and `--craft-window-controls-*`, the room
-          to leave — which spans Craft's own toolbar row as well, since 0.0.86.
-          That row starts around x=78 and never reaches this 74px rail, so
-          reserving it here cost the mark 16px of height for a row that is not
-          above it. The buttons' own bottom (`y + height`, because the inset is
-          where they start rather than where the window does) plus the rail's
-          breathing room is the real clearance.
-
-          The fallbacks chain deliberately: a runtime that publishes only the
-          reserve gets the old, safe answer rather than nothing, and `max()`
-          keeps 16px where neither is published — a browser, which has no
-          window buttons at all.
-       2. This rail is part of the window's drag handle, which the script at
+       1. The first row starts below them. Craft publishes the traffic lights'
+          own rectangle as `--craft-window-buttons-*`, and their bottom
+          (`y + height`, because the inset is where they start rather than
+          where the window does) plus some breathing room is the clearance.
+          The fallbacks chain to the older reserve, then to 16px where neither
+          is published — a browser, which has no window buttons at all.
+       2. This sidebar is part of the window's drag handle, which the script at
           the end of this file wires up. Not `-webkit-app-region: drag`: that
-          property is Chromium's, WebKit does not implement it, and a WKWebView
-          drops it on the floor — `style.setProperty('-webkit-app-region')`
-          reads back as the empty string. Written that way, the rail looks
-          draggable in the stylesheet and the window cannot be moved at all. */
+          property is Chromium's, and a WKWebView drops it on the floor. */
     .rail {
-      display: flex; width: 74px; min-width: 74px; height: 100%;
-      flex-direction: column; align-items: center; gap: var(--space-6);
+      display: flex; width: 232px; min-width: 232px; height: 100%;
+      flex-direction: column; gap: var(--space-2);
       padding: max(16px, calc(
         var(--craft-window-buttons-y, var(--craft-window-controls-inset-y, 0px))
         + var(--craft-window-buttons-height, var(--craft-window-controls-height, 0px))
-        + 8px
-      )) 0 16px;
+        + 14px
+      )) 10px 10px;
       background: transparent;
+      user-select: none;
     }
-    .rail-brand { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 13px; color: var(--ink); }
-    .rail-brand .brand-mark { width: 28px; height: 28px; }
-    /* Groups are separated by space alone. A rule between 46px buttons reads
-       as a stray underline rather than a divider. */
-    .rail-groups { display: flex; flex: 1; flex-direction: column; gap: var(--space-6); min-height: 0; overflow-y: auto; scrollbar-width: none; }
+    .rail-groups {
+      display: flex; flex: 1; flex-direction: column; gap: 2px;
+      min-height: 0; overflow-y: auto; scrollbar-width: none;
+    }
     .rail-groups::-webkit-scrollbar { width: 0; height: 0; }
-    .rail-group { display: flex; flex-direction: column; gap: var(--space-2); }
-    .rail-foot { display: flex; flex-direction: column; gap: var(--space-2); }
 
-    .rail-item {
-      position: relative; display: grid; width: 46px; height: 46px; place-items: center;
-      border-radius: 14px; color: var(--accent); text-decoration: none;
-      transition: background .14s ease, color .14s ease, transform .14s ease;
+    .side-primary {
+      display: flex; flex-direction: column; gap: 2px;
+      margin-bottom: var(--space-2); padding-bottom: var(--space-2);
+      border-bottom: .5px solid var(--line);
     }
-    .rail-item:hover { background: var(--hover); }
 
-    /* A scan keeps running after you leave its screen. The dot is the only
-       thing that says so from anywhere else in the app. */
-    .rail-item[data-scanning]::after {
-      content: '';
-      position: absolute;
-      top: 5px;
-      right: 5px;
-      width: 6px;
-      height: 6px;
-      border: 1.5px solid var(--surface);
-      border-radius: 50%;
-      background: var(--accent-fill);
+    .side-row {
+      position: relative; display: flex; align-items: center; gap: 10px;
+      min-height: 34px; padding: 0 var(--space-2);
+      border-radius: 8px; color: var(--ink);
+      font-size: 13px; font-weight: 500; line-height: 1.2;
+      text-decoration: none; cursor: default;
+    }
+    .side-row:hover { background: var(--hover); }
+    .side-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .side-row-primary { min-height: 40px; font-weight: 600; }
+    .side-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .side-tile {
+      display: grid; width: 24px; height: 24px; flex: none; place-items: center;
+      border-radius: 7px; color: #fff;
+      box-shadow: inset 0 0 0 .5px rgb(255 255 255 / .22), 0 1px 2px rgb(0 0 0 / .14);
+    }
+    .side-tile > span { width: 14px; height: 14px; }
+    .side-row-primary .side-tile { width: 28px; height: 28px; border-radius: 8px; }
+    .side-row-primary .side-tile > span { width: 16px; height: 16px; }
+    .tile-green { background: linear-gradient(160deg, #4cd97b, #12a150); }
+    .tile-blue { background: linear-gradient(160deg, #5aa4ff, #1f62e0); }
+    .tile-pink { background: linear-gradient(160deg, #ff7a9a, #e8325c); }
+    .tile-orange { background: linear-gradient(160deg, #ffc04d, #f07c00); }
+    .tile-purple { background: linear-gradient(160deg, #c97cff, #7d3bdc); }
+    .tile-cyan { background: linear-gradient(160deg, #52d3f0, #0a7fd6); }
+    .tile-indigo { background: linear-gradient(160deg, #8f8cff, #4b45d6); }
+
+    /* Sections: a native disclosure, so keyboard, VoiceOver and the open
+       state all work without a line of script. */
+    .side-heading { list-style: none; }
+    .side-heading::-webkit-details-marker { display: none; }
+    .side-chevron {
+      order: 2; width: 9px; height: 9px; flex: none;
+      color: var(--tertiary); opacity: .55;
+      transition: transform .18s ease, opacity .18s ease;
+    }
+    .side-heading:hover .side-chevron { opacity: 1; }
+    .side-section[open] > .side-heading .side-chevron { transform: rotate(90deg); }
+    .side-section:not([open]):has([data-active]) > .side-heading { font-weight: 600; }
+
+    .side-children { display: flex; flex-direction: column; gap: 1px; padding: 1px 0 var(--space-2); }
+    .side-child {
+      min-height: 28px; padding-left: 42px;
+      color: var(--secondary); font-weight: 450;
+    }
+    .side-child:hover { color: var(--ink); }
+
+    .rail-item:active { background: var(--pressed); }
+    .rail-item[data-active] {
+      background: color-mix(in srgb, var(--accent) 14%, transparent);
+      color: var(--accent); font-weight: 600;
+    }
+    .side-row-primary[data-active] { color: var(--ink); }
+
+    /* A scan keeps running after you leave its screen. The dot says so from
+       anywhere in the app, and from the heading of a closed section. */
+    .side-child[data-scanning]::after,
+    .side-section:not([open]):has([data-scanning]) > .side-heading::after,
+    .side-section:not([open]):has([data-updates-badge]:not([hidden])) > .side-heading::after {
+      order: 1; width: 6px; height: 6px; flex: none; content: '';
+      border-radius: 50%; background: var(--accent-fill);
       animation: rail-scan-pulse 1.6s ease-in-out infinite;
+    }
+    .side-section:not([open]):has([data-updates-badge]:not([hidden])) > .side-heading::after {
+      background: var(--warning-fill); animation: none;
     }
     @keyframes rail-scan-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
     @media (prefers-reduced-motion: reduce) {
-      .rail-item[data-scanning]::after { animation: none; }
+      .side-child[data-scanning]::after,
+      .side-section:not([open]):has([data-scanning]) > .side-heading::after { animation: none; }
+      .side-chevron { transition: none; }
     }
-    .rail-item:active { transform: scale(.95); }
-    .rail-item[data-active] { background: var(--accent-fill); color: #fff; box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 34%, transparent); }
-    .rail-item[data-active]:hover { background: var(--accent-fill); }
-    .rail-icon { width: 21px; height: 21px; }
-    .rail-badge { color: var(--tertiary); cursor: default; }
 
-    /* Labels moved into hover tooltips when the rail lost its text column. */
-    .rail-tip {
-      position: absolute; left: calc(100% + 10px); z-index: 50;
-      padding: var(--space-1) var(--space-2); border: .5px solid var(--line); border-radius: 7px;
-      background: var(--surface); color: var(--ink); box-shadow: var(--shadow);
-      font-size: 11px; font-weight: 500; white-space: nowrap;
-      opacity: 0; pointer-events: none; transform: translateX(-4px);
-      transition: opacity .14s ease, transform .14s ease;
+    /* The count on Updates. Sized to hold two digits without changing the
+       row's height, so nothing reflows when the number arrives. */
+    .side-badge {
+      min-width: 18px; height: 18px; padding: 0 5px; flex: none;
+      border-radius: 9px; background: var(--warning-fill); color: #fff;
+      font-size: 10.5px; font-weight: 700; line-height: 18px;
+      text-align: center; font-variant-numeric: tabular-nums;
     }
-    .rail-item:hover .rail-tip, .rail-item:focus-visible .rail-tip { opacity: 1; transform: translateX(0); }
-    .rail-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-    .main-title { font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
-    .main-subtitle { margin-top: var(--space-half); color: var(--secondary); font-size: 12px; }
+    .side-badge[hidden] { display: none; }
+
+    .rail-foot { padding: var(--space-2) var(--space-1) 0; border-top: .5px solid var(--line); }
+    .side-local {
+      display: flex; align-items: center; gap: var(--space-tight);
+      padding: var(--space-1) var(--space-1);
+      color: var(--tertiary); font-size: 11px; font-weight: 500;
+    }
+    .side-local > span:first-child { width: 11px; height: 11px; flex: none; }
+    .main-title { font-size: 24px; font-weight: 700; letter-spacing: -.025em; }
+    .main-subtitle { margin-top: var(--space-half); color: var(--secondary); font-size: 13px; }
     .main-content { padding: 0 var(--space-6) var(--space-8); }
 
     .card-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-5); }
     .card, .tbl-wrap, .disk-card { border: .5px solid var(--line); background: var(--surface); }
-    .card { padding: var(--space-4); border-radius: 16px; transition: border-color .15s, box-shadow .15s; }
+    .card { padding: var(--space-4); border-radius: 14px; box-shadow: 0 1px 2px rgb(0 0 0 / .03); transition: border-color .15s, box-shadow .15s; }
     .card:hover { border-color: color-mix(in srgb, var(--ink) 22%, transparent); box-shadow: 0 4px 18px rgba(0, 0, 0, .045); }
     .card-label { margin-bottom: var(--space-tight); color: var(--secondary); font-size: 10px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; }
     .card-value { font-size: 24px; font-weight: 700; letter-spacing: -.02em; }
@@ -383,7 +416,8 @@ const localAgent = isLocalAgent()
     .progress { height: 5px; margin-top: var(--space-tight); }
     .progress-fill { height: 100%; border-radius: 3px; transition: width .6s ease; }
 
-    .tbl-wrap { overflow: hidden; margin-bottom: var(--space-5); border-radius: 16px; }
+    .tbl-wrap { overflow: hidden; margin-bottom: var(--space-5); border-radius: 14px; box-shadow: 0 1px 2px rgb(0 0 0 / .03); }
+    td.clean-size { white-space: nowrap; }
     .tbl-bar { display: flex; align-items: center; justify-content: space-between; padding: var(--space-3) var(--space-4); border-bottom: .5px solid var(--line); }
     .tbl-title { font-size: 14px; font-weight: 600; }
     .tbl-count, .updating-label { color: var(--secondary); font-size: 11px; }
@@ -404,11 +438,11 @@ const localAgent = isLocalAgent()
     .badge-blue { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
     .action-cell { min-width: 88px; white-space: nowrap; }
 
-    .btn { padding: var(--space-1) var(--space-3); border: .5px solid var(--line); border-radius: 6px; background: var(--surface-soft); color: var(--ink); cursor: pointer; font-family: inherit; font-size: 11px; font-weight: 500; transition: background .1s, border-color .1s; }
+    .btn { padding: 5px var(--space-3); border: .5px solid var(--line); border-radius: 7px; background: var(--surface-soft); color: var(--ink); cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 500; box-shadow: 0 .5px 1px rgb(0 0 0 / .05); transition: background .1s, border-color .1s; }
     .btn:hover { background: var(--pressed); }
     .btn-danger { border-color: color-mix(in srgb, var(--red) 25%, transparent); background: color-mix(in srgb, var(--red) 10%, transparent); color: var(--red); }
     .btn-danger:hover { background: color-mix(in srgb, var(--red) 18%, transparent); }
-    .btn-sm { padding: var(--space-half) var(--space-2); font-size: 10px; }
+    .btn-sm { padding: 3px 9px; font-size: 11px; }
     .btn-icon { display: inline-flex; align-items: center; gap: var(--space-1); }
     .btn-icon > span[class*='i-f7-'] { width: 12px; height: 12px; }
     .toast-glyph { width: 14px; height: 14px; flex-shrink: 0; }
@@ -675,7 +709,7 @@ const localAgent = isLocalAgent()
  * moved at all. Craft's own answer is `startDrag()`, which hands the press to
  * AppKit and runs a real window drag loop from it.
  *
- * The bands are the icon rail, the top strip and the sticky page header:
+ * The bands are the sidebar, the top strip and the sticky page header:
  * chrome by intent,
  * and between them they cover the top of the window wherever the pointer
  * lands. A press on anything interactive is left alone, and in a browser —
@@ -701,7 +735,7 @@ function moveWindowFrom(event: Event): void {
     return
   if (!target.closest('.rail, .topnav, .main-header'))
     return
-  if (target.closest('a, button, input, select, textarea, [role="button"], [data-rail-item]'))
+  if (target.closest('a, button, summary, input, select, textarea, [role="button"], [data-rail-item]'))
     return
 
   drag.call(craft.window)

@@ -1,6 +1,9 @@
     :root {
       color-scheme: light;
       --app-bg: #f5f5f7;
+      /* The window behind the content panel: the sidebar's surface. A step
+         darker than the panel so the panel reads as lifted off it. */
+      --sidebar-bg: #e7e7ec;
       --material-opacity: 94%;
       --surface: #ffffff;
       --surface-soft: #eeeef1;
@@ -48,6 +51,7 @@
     :root.dark {
       color-scheme: dark;
       --app-bg: #1a1a1c;
+      --sidebar-bg: #111113;
       --surface: #242426;
       --surface-soft: #2c2c2e;
       --surface-inset: #202022;

@@ -182,8 +182,8 @@ export interface WindowOptions {
  *
  * The chrome is macOS-only, and deliberately so rather than incidentally. On
  * macOS, hiding the titlebar puts the window's own buttons over the page's
- * top-left corner, which is where this app's chrome belongs — and the icon
- * rail offsets its first button below them. Windows has no traffic lights to
+ * top-left corner, which is where this app's chrome belongs — and the
+ * sidebar starts its first row below them. Windows has no traffic lights to
  * offset against, and `--web-window-material` is an `NSVisualEffectView`: the
  * flag parses there and backs nothing, so asking for it would hide the
  * titlebar and leave a window with no chrome at all and no way to drag it.
@@ -204,7 +204,7 @@ export function windowArgs(
     if (supports('--no-web-chrome-controls')) args.push('--no-web-chrome-controls')
     args.push(...(supports('--web-window-material')
       ? ['--web-window-material']
-      : ['--web-sidebar-material', '--web-sidebar-width', '74', '--web-sidebar-material-opacity', '0.25']))
+      : ['--web-sidebar-material', '--web-sidebar-width', '232', '--web-sidebar-material-opacity', '0.25']))
   }
 
   if (platform === 'darwin' && options.trayPopover) {

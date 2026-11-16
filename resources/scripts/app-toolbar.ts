@@ -54,23 +54,18 @@ function loadProfile(): void {
 }
 
 /**
- * The count on Updates, in two places.
+ * The count on Updates, on its sidebar row.
  *
- * Promoting Updates out of the rail cost it the scanning dot the rail gives
- * its items, and an errand you cannot see the size of is one you never run.
- * Moving it again, into a menu, would have cost it the badge as well — a
- * number nobody opens the menu to find is the same as no number.
- *
- * So the count stays on the item and a dot goes on the chip that opens it.
- * The dot says only "there is something in here", which is all a closed menu
- * can honestly say and all it needs to.
+ * An errand you cannot see the size of is one you never run, so the number
+ * sits on the row itself, and a dot on the Apps heading carries it when that
+ * section is closed (the stylesheet does that part from the badge's own
+ * `hidden` state).
  *
  * The summary endpoint is cached on the agent side, so this is cheap enough to
  * ask for on every load.
  */
 function loadUpdateCount(): void {
   const badge = document.querySelector<HTMLElement>('[data-updates-badge]')
-  const dot = document.querySelector<HTMLElement>('[data-updates-dot]')
   if (!badge)
     return
 
@@ -80,7 +75,6 @@ function loadUpdateCount(): void {
       const total = d?.success ? (d.total || 0) : 0
       badge.textContent = total > 99 ? '99+' : String(total)
       badge.toggleAttribute('hidden', total === 0)
-      dot?.toggleAttribute('hidden', total === 0)
     })
     .catch(() => {})
 }

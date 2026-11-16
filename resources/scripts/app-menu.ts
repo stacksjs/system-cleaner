@@ -3,7 +3,7 @@
  *
  * Without one, a Craft app inherits AppKit's default menubar: the app name,
  * Edit and Window, with nothing of this app in it. Every screen is reachable
- * only by clicking the rail, there is no ⌘R, and Edit's Copy and Paste are
+ * only by clicking the sidebar, there is no ⌘R, and Edit's Copy and Paste are
  * inert because nothing claimed the roles. That is the difference between an
  * app and a website in a window.
  *
@@ -39,36 +39,41 @@ interface Screen {
   href: string
 }
 
-/** The rail then the top strip, in the order the eye reads them, so ⌘1..⌘9 match. */
+/** The sidebar in reading order, then the account menu, so ⌘1..⌘9 match what the eye sees. */
 const SCREENS: Screen[] = [
   { label: 'Quick Clean', href: '/app/cleanup' },
   { label: 'Dashboard', href: '/app' },
-  { label: 'Startup Items', href: '/app/startup' },
-  { label: 'Processes', href: '/app/processes' },
+  { label: 'Developer Junk', href: '/app/developer' },
+  { label: 'Leftover Data', href: '/app/orphans' },
   { label: 'Disk Usage', href: '/app/disk' },
   { label: 'Large Files', href: '/app/large-files' },
   { label: 'Duplicates', href: '/app/duplicates' },
-  { label: 'Applications', href: '/app/applications' },
-  { label: 'Extensions', href: '/app/extensions' },
-  { label: 'Updates', href: '/app/updates' },
+  { label: 'Similar Images', href: '/app/similar' },
+  { label: 'Startup Items', href: '/app/startup' },
+  { label: 'Processes', href: '/app/processes' },
   { label: 'Maintenance', href: '/app/maintenance' },
+  { label: 'Applications', href: '/app/applications' },
+  { label: 'Updates', href: '/app/updates' },
+  { label: 'Extensions', href: '/app/extensions' },
   { label: 'Privacy', href: '/app/privacy' },
+  { label: 'App Permissions', href: '/app/permissions' },
+  { label: 'VPN', href: '/app/vpn' },
   { label: 'Schedule', href: '/app/schedule' },
 ]
 
 /**
  * There are only nine of ⌘1..⌘9, and more screens than that.
  *
- * The first nine keep their shortcut, in rail order, so the numbers still
+ * The first nine keep their shortcut, in sidebar order, so the numbers still
  * match what the eye sees. The rest are in the menu without one — which is
  * how AppKit itself handles a Window menu longer than the digits.
  */
 const MAX_SHORTCUTS = 9
 
 /**
- * Go to a screen the way clicking the rail would.
+ * Go to a screen the way clicking the sidebar would.
  *
- * Clicking the rail's own anchor keeps SPA navigation, the active-state sync
+ * Clicking the sidebar's own anchor keeps SPA navigation, the active-state sync
  * and the scroll reset that a bare `location.href` would all skip.
  */
 function go(href: string): void {

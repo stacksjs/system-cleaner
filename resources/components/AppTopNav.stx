@@ -1,9 +1,8 @@
 <script server>
 export const active = $props.active || ''
+// Updates, Maintenance and Privacy moved into the sidebar's sections. What is
+// left here configures the app rather than acting on the Mac.
 export const items = [
-  { id: 'updates', label: 'Updates', icon: 'i-f7-arrow-down-circle-fill', href: '/app/updates' },
-  { id: 'maintenance', label: 'Maintenance', icon: 'i-f7-wrench-fill', href: '/app/maintenance' },
-  { id: 'privacy', label: 'Privacy', icon: 'i-f7-eye-slash-fill', href: '/app/privacy' },
   { id: 'schedule', label: 'Schedule', icon: 'i-f7-clock-fill', href: '/app/schedule' },
 ]
 </script>
@@ -32,7 +31,6 @@ export const items = [
     >
       <span class="profile-avatar" aria-hidden="true">
         <span class="profile-picture" data-profile-picture><span class="i-f7-person-fill"></span></span>
-        <span class="profile-dot" data-updates-dot hidden></span>
       </span>
       <span class="profile-text">
         <span class="profile-name" data-profile-name>This Mac</span>
@@ -54,9 +52,6 @@ export const items = [
         >
           <span class="menu-icon {{ item.icon }}" aria-hidden="true"></span>
           <span class="menu-label">{{ item.label }}</span>
-          @if(item.id === 'updates')
-            <span class="menu-badge" data-updates-badge hidden></span>
-          @endif
         </a>
       @endforeach
 
@@ -64,7 +59,7 @@ export const items = [
 
       <!--
         Settings opens a panel instead of navigating, which is why it is below
-        the rule rather than a fifth link above it. `data-open-settings` is the
+        the rule rather than a link above it. `data-open-settings` is the
         same hook the ⌘, menu item uses; `settings-panel.ts` listens for it on
         the document.
       -->

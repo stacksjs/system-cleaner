@@ -1,74 +1,133 @@
 <script server>
-// Icon rail. Labels live in tooltips rather than in the row, so the rail
-// costs 76px instead of 234px and the content column gets the difference.
+// The sidebar. Five sections under two top-level destinations, the way a Mac
+// utility that does many things organises them: one coloured tile per
+// section, and plain text for what sits inside it.
 //
-// Privacy, Schedule, Updates and Maintenance are not here — they live in the
-// top strip (`AppTopNav`). None of them is a place you go to look at your Mac:
-// two configure the app, and two act on it. What is left in this rail is one
-// idea — the things that scan — plus the one thing you came to do.
+// It was an icon-only rail with fourteen glyphs, each a different shape in the
+// same colour, and the only way to learn which was which was to hover them one
+// at a time. Fourteen icons is not a toolbar, it is a puzzle. Grouping the
+// screens by the question they answer — what can go, what is taking the
+// space, what is slowing the Mac down, what is installed, what can see me —
+// cuts the icons to seven and puts a word on every row.
 //
-// Quick Clean leads it. It was last, under the scanners, which put the reason
-// most people open this app at the bottom of a list of ways to investigate it.
-// Extensions follows Applications because a browser extension is an installed
-// thing, and the question it answers ("what is on here that I did not mean to
-// install") is the one Applications asks two rows up.
+// Quick Clean leads because it is the reason most people open the app. The
+// Dashboard follows it because it is where you land.
+//
+// Updates, Maintenance and Privacy used to live in the account menu, because a
+// rail of icons had no room for them. A sidebar with sections does: Updates
+// belongs with the apps it updates, Maintenance with the other things that
+// speed the Mac up, Privacy with the other things that protect it. The account
+// menu keeps only what configures the app itself.
 //
 // `active` is passed by each view so a cold page load paints the correct
-// selection with no flash. SPA navigations only swap `[data-stx-content]`,
-// which leaves this rail mounted, so the client block below re-syncs the
-// selection on every route change.
+// selection, and the correct section open, with no flash. SPA navigations
+// only swap `[data-stx-content]`, which leaves this sidebar mounted, so the
+// client block below re-syncs both on every route change.
 export const active = $props.active || ''
 
-export const groups = [
-  [
-    { id: 'cleanup', label: 'Quick Clean', icon: 'i-f7-sparkles', href: '/app/cleanup' },
-  ],
-  [
-    { id: 'dashboard', label: 'Dashboard', icon: 'i-f7-square-grid-2x2-fill', href: '/app' },
-  ],
-  [
-    { id: 'startup', label: 'Startup Items', icon: 'i-f7-bolt-fill', href: '/app/startup' },
-    { id: 'processes', label: 'Processes', icon: 'i-f7-chart-bar-alt-fill', href: '/app/processes' },
-  ],
-  [
-    { id: 'disk', label: 'Disk Usage', icon: 'i-f7-chart-pie-fill', href: '/app/disk' },
-    { id: 'large-files', label: 'Large Files', icon: 'i-f7-doc-on-doc-fill', href: '/app/large-files' },
-    { id: 'duplicates', label: 'Duplicates', icon: 'i-f7-square-on-square', href: '/app/duplicates' },
-    // Beside Duplicates because it is the other half of the same question.
-    // That screen buckets by byte size first, so it can only ever find
-    // byte-identical files; this one finds the photographs that look the
-    // same without being the same file. See #34.
-    { id: 'similar', label: 'Similar Images', icon: 'i-f7-photo-on-rectangle', href: '/app/similar' },
-    { id: 'developer', label: 'Developer Junk', icon: 'i-f7-chevron-left-slash-chevron-right', href: '/app/developer' },
-  ],
-  [
-    { id: 'applications', label: 'Applications', icon: 'i-f7-app-fill', href: '/app/applications' },
-    { id: 'extensions', label: 'Extensions', icon: 'i-f7-square-stack-3d-up-fill', href: '/app/extensions' },
-    // Sits with Applications because it is about apps, not storage: what an
-    // uninstall left behind. Disk Usage above answers "what is big"; this
-    // answers "what has no owner any more".
-    { id: 'orphans', label: 'Leftover Data', icon: 'i-f7-tray-fill', href: '/app/orphans' },
-    // Also about apps rather than storage. Applications asks what is
-    // installed and Leftover Data what has no owner; this asks what the
-    // installed ones were allowed to reach — including grants whose app is
-    // long gone, which no pane in System Settings will show you.
-    { id: 'permissions', label: 'App Permissions', icon: 'i-f7-hand-raised-fill', href: '/app/permissions' },
-  ],
-  // VPN sits in its own group because it is the one row that is not about
-  // what is on this Mac. Everything above scans local storage or local
-  // processes; this is the state of a network the Mac is joined to. Grouping
-  // it with Applications would have read as a sixth kind of thing to clean.
-  //
-  // It is in the rail rather than the top strip for the reason that separates
-  // the two: it is a place you go to look at something, not an errand you run
-  // or a preference you set once.
-  [
-    { id: 'vpn', label: 'VPN', icon: 'i-f7-lock-shield-fill', href: '/app/vpn' },
-  ],
+export const primary = [
+  { id: 'cleanup', label: 'Quick Clean', icon: 'i-f7-sparkles', tile: 'tile-green', href: '/app/cleanup' },
+  { id: 'dashboard', label: 'Dashboard', icon: 'i-f7-square-grid-2x2-fill', tile: 'tile-blue', href: '/app' },
 ]
+
+export const sections = [
+  {
+    id: 'cleanup',
+    label: 'Cleanup',
+    icon: 'i-f7-trash-fill',
+    tile: 'tile-pink',
+    items: [
+      { id: 'developer', label: 'Developer Junk', href: '/app/developer' },
+      // What an uninstall left behind. Applications below asks what is
+      // installed; this asks what has no owner any more — which is junk.
+      { id: 'orphans', label: 'Leftover Data', href: '/app/orphans' },
+    ],
+  },
+  {
+    id: 'storage',
+    label: 'Storage',
+    icon: 'i-f7-folder-fill',
+    tile: 'tile-orange',
+    items: [
+      { id: 'disk', label: 'Disk Usage', href: '/app/disk' },
+      { id: 'large-files', label: 'Large Files', href: '/app/large-files' },
+      { id: 'duplicates', label: 'Duplicates', href: '/app/duplicates' },
+      // The other half of Duplicates' question: that screen can only find
+      // byte-identical files; this one finds photographs that look the same
+      // without being the same file. See #34.
+      { id: 'similar', label: 'Similar Images', href: '/app/similar' },
+    ],
+  },
+  {
+    id: 'performance',
+    label: 'Performance',
+    icon: 'i-f7-speedometer',
+    tile: 'tile-purple',
+    items: [
+      { id: 'startup', label: 'Startup Items', href: '/app/startup' },
+      { id: 'processes', label: 'Processes', href: '/app/processes' },
+      { id: 'maintenance', label: 'Maintenance', href: '/app/maintenance' },
+    ],
+  },
+  {
+    id: 'applications',
+    label: 'Apps',
+    icon: 'i-f7-app-fill',
+    tile: 'tile-cyan',
+    items: [
+      { id: 'applications', label: 'Applications', href: '/app/applications' },
+      { id: 'updates', label: 'Updates', href: '/app/updates', badge: 'updates' },
+      { id: 'extensions', label: 'Extensions', href: '/app/extensions' },
+    ],
+  },
+  {
+    id: 'protection',
+    label: 'Protection',
+    icon: 'i-f7-checkmark-shield-fill',
+    tile: 'tile-indigo',
+    items: [
+      { id: 'privacy', label: 'Privacy', href: '/app/privacy' },
+      // What installed apps were allowed to reach — including grants whose
+      // app is long gone, which no pane in System Settings will show you.
+      { id: 'permissions', label: 'App Permissions', href: '/app/permissions' },
+      // The state of a network the Mac is joined to rather than of the Mac
+      // itself, which is still a question of who can see what.
+      { id: 'vpn', label: 'VPN', href: '/app/vpn' },
+    ],
+  },
+].map(section => ({ ...section, open: section.items.some(item => item.id === active) }))
 </script>
 
 <script client>
+/**
+ * Which sections the person has opened, kept across launches.
+ *
+ * The section holding the current screen is always open; the rest stay as
+ * they were left. Storage can be missing or throw in a locked-down WebView,
+ * and the sidebar works without it — every section simply starts closed.
+ */
+const OPEN_KEY = 'systemcleaner-sidebar-open'
+
+function readOpen(): Set<string> {
+  try {
+    const raw = localStorage.getItem(OPEN_KEY)
+    return new Set(raw ? (JSON.parse(raw) as string[]) : [])
+  }
+  catch {
+    return new Set()
+  }
+}
+
+function writeOpen(): void {
+  const open = Array.from(document.querySelectorAll<HTMLDetailsElement>('[data-side-section]'))
+    .filter(section => section.open)
+    .map(section => section.getAttribute('data-side-section') || '')
+  try {
+    localStorage.setItem(OPEN_KEY, JSON.stringify(open))
+  }
+  catch { /* The sections still open and close for this session. */ }
+}
+
 function syncActive(): void {
   const path = useRoute().path
   const items = Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-rail-item]'))
@@ -90,15 +149,29 @@ function syncActive(): void {
     else
       item.removeAttribute('aria-current')
   }
+
+  // Arriving at a screen by ⌘-number or the Go menu must not leave it hidden
+  // inside a closed section.
+  const holder = best?.closest<HTMLDetailsElement>('[data-side-section]')
+  if (holder && !holder.open)
+    holder.open = true
+}
+
+function restoreOpen(): void {
+  const remembered = readOpen()
+  for (const section of Array.from(document.querySelectorAll<HTMLDetailsElement>('[data-side-section]'))) {
+    if (remembered.has(section.getAttribute('data-side-section') || ''))
+      section.open = true
+    section.addEventListener('toggle', writeOpen)
+  }
 }
 
 /**
  * Mark the section whose scan is still running.
  *
  * A disk or large-file scan keeps going in the agent after you leave its
- * screen, and until now nothing said so — you came back to a spinner with no
- * way of knowing whether it had been working the whole time or had died. The
- * rail outlives navigation, so it is the one place that can carry this.
+ * screen. The sidebar outlives navigation, so it is the one place that can say
+ * so — on the row, and on its section's heading when that section is closed.
  */
 function syncScanning(): void {
   fetch('/api/scan-state', { method: 'POST', cache: 'no-store' })
@@ -112,6 +185,7 @@ function syncScanning(): void {
     .catch(() => {})
 }
 
+restoreOpen()
 useEventListener('stx:navigate', syncActive)
 useEventListener('stx:load', syncActive)
 
@@ -121,34 +195,53 @@ useIntervalFn(syncScanning, 2000, { immediate: true })
 </script>
 
 <nav class="rail" id="app-sidebar" aria-label="SystemCleaner sections">
-  <a class="rail-brand" href="/app" data-stx-link aria-label="SystemCleaner dashboard">
-    <BrandMark :size="30" />
-  </a>
-
   <div class="rail-groups">
-    @foreach (groups as group)
-      <div class="rail-group">
-        @foreach (group as item)
-          <a
-            class="rail-item"
-            data-rail-item="{{ item.id }}"
-            href="{{ item.href }}"
-            data-stx-link
-            aria-label="{{ item.label }}"
-            @if(active === item.id)data-active aria-current="page"@endif
-          >
-            <span class="rail-icon {{ item.icon }}" aria-hidden="true"></span>
-            <span class="rail-tip" role="tooltip">{{ item.label }}</span>
-          </a>
-        @endforeach
-      </div>
+    <div class="side-primary">
+      @foreach (primary as item)
+        <a
+          class="rail-item side-row side-row-primary"
+          data-rail-item="{{ item.id }}"
+          href="{{ item.href }}"
+          data-stx-link
+          @if(active === item.id)data-active aria-current="page"@endif
+        >
+          <span class="side-tile {{ item.tile }}" aria-hidden="true"><span class="{{ item.icon }}"></span></span>
+          <span class="side-label">{{ item.label }}</span>
+        </a>
+      @endforeach
+    </div>
+
+    @foreach (sections as section)
+      <details class="side-section" data-side-section="{{ section.id }}" @if(section.open)open@endif>
+        <summary class="side-heading side-row">
+          <span class="side-tile {{ section.tile }}" aria-hidden="true"><span class="{{ section.icon }}"></span></span>
+          <span class="side-label">{{ section.label }}</span>
+          <span class="i-f7-chevron-right side-chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="side-children">
+          @foreach (section.items as item)
+            <a
+              class="rail-item side-child side-row"
+              data-rail-item="{{ item.id }}"
+              href="{{ item.href }}"
+              data-stx-link
+              @if(active === item.id)data-active aria-current="page"@endif
+            >
+              <span class="side-label">{{ item.label }}</span>
+              @if(item.badge === 'updates')
+                <span class="side-badge" data-updates-badge hidden></span>
+              @endif
+            </a>
+          @endforeach
+        </div>
+      </details>
     @endforeach
   </div>
 
   <div class="rail-foot">
-    <span class="rail-badge rail-item" aria-label="All processing happens on this Mac">
-      <span class="i-f7-lock-shield-fill rail-icon" aria-hidden="true"></span>
-      <span class="rail-tip" role="tooltip">Local only</span>
+    <span class="side-local" title="Every scan and every clean runs on this Mac. Nothing is uploaded.">
+      <span class="i-f7-lock-fill" aria-hidden="true"></span>
+      <span>Everything stays on this Mac</span>
     </span>
   </div>
 </nav>
