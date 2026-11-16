@@ -218,6 +218,33 @@ const orphanCache = new TtlCache<{ items: unknown[]; totalBytes: number }>(5 * 6
 const projectArtifactsCache = new TtlCache<{ artifacts: unknown[], totalBytes: number, safeBytes: number }>(10 * 60_000);
 
 /**
+ * The safe sweep's total. Three screens ask for it (the overview, Cleanup and
+ * Storage's quick wins) and measuring it walks every cache directory for
+ * several seconds, so it is kept briefly and dropped the moment anything is
+ * cleaned.
+ */
+const safeToCleanCache = new TtlCache<{ bytes: number, count: number }>(2 * 60_000);
+
+/** Maintenance's junk scan: .DS_Store files and abandoned downloads. */
+const junkScanCache = new TtlCache<Record<string, unknown>>(2 * 60_000);
+
+/**
+ * One run of an expensive scan, however many callers ask during it.
+ *
+ * The app now warms slow screens before you open them, so the warm-up and the
+ * screen itself can ask for the same twelve-second walk a moment apart. The
+ * second caller waits on the first walk instead of starting another one.
+ */
+const inflight = new Map<string, Promise<unknown>>();
+function coalesce<T>(key: string, work: () => Promise<T>): Promise<T> {
+  const running = inflight.get(key) as Promise<T> | undefined;
+  if (running) return running;
+  const promise = work().finally(() => inflight.delete(key));
+  inflight.set(key, promise);
+  return promise;
+}
+
+/**
  * The account picture and name.
  *
  * An hour, because this changes when the user changes it in System Settings
@@ -509,6 +536,7 @@ export default async function (router: Router) {
   });
 
   await router.post('/clean-dir', async (req: Request) => {
+    safeToCleanCache.delete('total');
     const body = await readJsonBody<{ path: string }>(req);
     if (body === null) return badJson();
     const { path: target } = body;
@@ -692,6 +720,7 @@ export default async function (router: Router) {
   });
 
   await router.post('/empty-trash', async () => {
+    safeToCleanCache.delete('total');
     const result = await emptyTrash();
     invalidateSizeCaches();
     return Response.json({
@@ -812,6 +841,7 @@ export default async function (router: Router) {
   });
 
   await router.post('/bulk-delete', async (req: Request) => {
+    safeToCleanCache.delete('total');
     const body = await readJsonBody<{ paths: unknown; mode?: unknown; source?: unknown }>(req);
     if (body === null) return badJson();
 
@@ -1434,25 +1464,31 @@ export default async function (router: Router) {
    * it actually removed, which is where the two numbers are allowed to differ.
    */
   await router.post('/safe-to-clean', async () => {
-    const targets = safeCleanTargets()
-      .map(t => path.resolve(t.path))
-      .filter(p => isWithinHome(p));
+    const hit = safeToCleanCache.get('total');
+    if (hit) return Response.json({ success: true, ...hit, cached: true });
 
-    // `getDirSizes`, not a `Promise.all` over `getDirSize`. Each measure is a
-    // `du` with a 15-second timeout that returns 0 — not an error — when it
-    // runs out, so firing all of them at once makes them contend, time out,
-    // and silently read as empty. That is how this endpoint came to answer
-    // 28 MB, then 124 MB, for a machine that had not changed: the total was
-    // a function of how many walks happened to finish. The batching here is
-    // the same bound `/dir-sizes` applies for the same reason.
-    const sizes = await getDirSizes(targets);
-    const measured = targets.map(p => sizes[p] ?? 0);
+    const total = await coalesce('safe-to-clean', async () => {
+      const targets = safeCleanTargets()
+        .map(t => path.resolve(t.path))
+        .filter(p => isWithinHome(p));
 
-    return Response.json({
-      success: true,
-      bytes: measured.reduce((sum, n) => sum + n, 0),
-      count: measured.filter(n => n > 0).length,
+      // `getDirSizes`, not a `Promise.all` over `getDirSize`. Each measure is a
+      // `du` with a 15-second timeout that returns 0 (not an error) when it
+      // runs out, so firing all of them at once makes them contend, time out,
+      // and silently read as empty. That is how this endpoint came to answer
+      // 28 MB, then 124 MB, for a machine that had not changed: the total was
+      // a function of how many walks happened to finish. The batching here is
+      // the same bound `/dir-sizes` applies for the same reason.
+      const sizes = await getDirSizes(targets);
+      const measured = targets.map(p => sizes[p] ?? 0);
+      return {
+        bytes: measured.reduce((sum, n) => sum + n, 0),
+        count: measured.filter(n => n > 0).length,
+      };
     });
+
+    safeToCleanCache.set('total', total);
+    return Response.json({ success: true, ...total, cached: false });
   });
 
   /**
@@ -1464,6 +1500,7 @@ export default async function (router: Router) {
    * the set is derived here, so the endpoint cannot be pointed somewhere else.
    */
   await router.post('/clean-safe', async () => {
+    safeToCleanCache.delete('total');
     const targets = safeCleanTargets();
 
     let freedBytes = 0;
@@ -1523,7 +1560,7 @@ export default async function (router: Router) {
       if (hit) return Response.json({ success: true, ...hit, cached: true });
     }
 
-    const found = await findProjectArtifacts();
+    const found = await coalesce('project-artifacts', () => findProjectArtifacts());
     // `lastModified` is a Date and would serialize to an ISO string the UI has
     // no use for; the rest is already JSON-shaped.
     const artifacts = found.map(a => ({
@@ -2126,6 +2163,7 @@ export default async function (router: Router) {
   });
 
   await router.post('/privacy-clean', async (req: Request) => {
+    safeToCleanCache.delete('total');
     const body = await readJsonBody<{ ids: unknown }>(req);
     if (body === null) return badJson();
 
@@ -2203,7 +2241,7 @@ export default async function (router: Router) {
     const cached = orphanCache.get('orphans');
     if (cached) return Response.json({ success: true, ...cached, cached: true });
 
-    const [items, protectedPaths] = await Promise.all([findOrphanedAppData(), protectedPathSet()]);
+    const [items, protectedPaths] = await coalesce('orphaned-data', () => Promise.all([findOrphanedAppData(), protectedPathSet()]));
 
     const rows = items.map(item => ({
       path: item.path,
@@ -2258,27 +2296,38 @@ export default async function (router: Router) {
    * `packages/clean` with no caller since they were written.
    */
   await router.post('/junk-scan', async () => {
-    const [dsStore, incomplete] = await Promise.all([findDsStoreFiles(), findIncompleteDownloads()]);
+    // Walks the whole home folder for .DS_Store files, several seconds on a
+    // full disk, so the result is kept briefly and shared by overlapping calls.
+    const hit = junkScanCache.get('junk');
+    if (hit) return Response.json({ ...hit, cached: true });
 
-    return Response.json({
-      success: true,
-      dsStoreCount: dsStore.count,
-      incompleteDownloads: incomplete.map(file => ({
-        path: file.path,
-        name: file.name,
-        sizeBytes: file.sizeBytes,
-      })),
-      incompleteBytes: incomplete.reduce((sum, file) => sum + file.sizeBytes, 0),
+    const payload = await coalesce('junk-scan', async () => {
+      const [dsStore, incomplete] = await Promise.all([findDsStoreFiles(), findIncompleteDownloads()]);
+      return {
+        success: true,
+        dsStoreCount: dsStore.count,
+        incompleteDownloads: incomplete.map(file => ({
+          path: file.path,
+          name: file.name,
+          sizeBytes: file.sizeBytes,
+        })),
+        incompleteBytes: incomplete.reduce((sum, file) => sum + file.sizeBytes, 0),
+      };
     });
+
+    junkScanCache.set('junk', payload);
+    return Response.json(payload);
   });
 
   await router.post('/clean-ds-store', async () => {
+    junkScanCache.delete('junk');
     const result = await cleanDsStoreFiles();
     invalidateSizeCaches();
     return Response.json({ success: result.errors === 0, ...result });
   });
 
   await router.post('/clean-incomplete-downloads', async () => {
+    junkScanCache.delete('junk');
     const result = await cleanIncompleteDownloads();
 
     invalidateSizeCaches();

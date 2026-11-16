@@ -90,6 +90,7 @@ storage/framework/discovered-packages.json
 /public/app-toolbar.js
 /public/disk-chart.js
 /public/hub-metrics.js
+/public/prefetch.js
 /public/scan-updates.js
 /public/native-dialog.js
 /public/platform-gate.js

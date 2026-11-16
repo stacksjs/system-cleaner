@@ -167,6 +167,9 @@ export const DEFAULT_PROJECT_ROOTS: string[] = [
   'Documents',
 ].map(dir => path.join(HOME, dir))
 
+/** How many `du` measures run at once while sizing project artifacts. */
+const SIZE_CONCURRENCY = 16
+
 export async function findProjectArtifacts(
   searchPaths: string[] = DEFAULT_PROJECT_ROOTS,
   maxDepth = 4,
@@ -187,13 +190,18 @@ export async function findProjectArtifacts(
     await scanForArtifacts(searchPath, 0, maxDepth, patternNames, patterns, artifacts)
   }
 
-  // Get sizes concurrently
-  await Promise.all(
-    artifacts.map(async (artifact) => {
+  // Sized through a small pool rather than all at once. Every measure is a
+  // `du` process, and a working machine matches thousands of candidates:
+  // spawning one per match in a single tick froze the agent (and every page
+  // it serves) for seconds while the system juggled thousands of processes.
+  // Sixteen at a time keeps the disk busy without either.
+  const queue = artifacts.slice()
+  await Promise.all(Array.from({ length: Math.min(SIZE_CONCURRENCY, queue.length) }, async () => {
+    for (let artifact = queue.shift(); artifact; artifact = queue.shift()) {
       artifact.sizeBytes = await getDirSize(artifact.path)
       artifact.sizeFormatted = formatBytes(artifact.sizeBytes)
-    }),
-  )
+    }
+  }))
 
   // Ask git last, in one batch, after the size filter has already thinned the
   // list. Two subprocesses per repository instead of two per candidate: a
@@ -249,9 +257,16 @@ async function scanForArtifacts(
   if (depth > maxDepth)
     return
 
+  // Asynchronous on purpose. This walk runs inside the app's agent, which
+  // also serves every page and API call. With `readdirSync` the whole walk ran
+  // without once yielding (awaiting a resolved promise only drains
+  // microtasks), so a cold Developer Junk scan froze the entire app for
+  // seconds at a time: pages, figures, even the HTML for the next screen
+  // waited behind it. One awaited read per directory hands the event loop
+  // back between directories.
   let entries: fs.Dirent[]
   try {
-    entries = fs.readdirSync(dirPath, { withFileTypes: true })
+    entries = await fs.promises.readdir(dirPath, { withFileTypes: true })
   }
   catch {
     return

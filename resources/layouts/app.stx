@@ -27,7 +27,23 @@ const localAgent = isLocalAgent()
       font-family: -apple-system, 'SF Pro Text', BlinkMacSystemFont, system-ui, sans-serif;
       -webkit-font-smoothing: antialiased;
     }
-    ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .1s; }
+    /* Page changes. The router wraps every SPA swap in a view transition.
+       The window itself (sidebar, toolbar, the section colour) cross-fades,
+       so moving from green Cleanup to teal Storage blends one colour into
+       the next, while the page content leaves quickly and the new page
+       settles in from just below. The sidebar never appears to move. */
+    ::view-transition-old(root), ::view-transition-new(root) {
+      animation-duration: .26s; animation-timing-function: cubic-bezier(.2, .8, .2, 1);
+    }
+    [data-stx-content] { view-transition-name: page; }
+    ::view-transition-group(page) { animation-duration: .3s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
+    ::view-transition-old(page) { animation: page-out .14s ease-in both; }
+    ::view-transition-new(page) { animation: page-in .32s cubic-bezier(.2, .8, .2, 1) both; }
+    @keyframes page-out { to { opacity: 0; transform: scale(.99); } }
+    @keyframes page-in { from { opacity: 0; transform: translateY(8px); } }
+    @media (prefers-reduced-motion: reduce) {
+      ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+    }
     ::view-transition-group(root) { background: var(--app-bg); }
     :root[data-craft-native-sidebar] ::view-transition-group(root) { background: transparent; }
     [data-stx-content] { min-height: 100%; background: var(--app-bg); }
@@ -101,7 +117,10 @@ const localAgent = isLocalAgent()
     :root[data-craft-window-active='false'] .rail-item[data-active] {
       background: var(--side-hover);
     }
-    :root[data-craft-window-active='false'] .app-body:has(.topnav[data-tone]:not([data-tone=''])) { filter: saturate(.55); }
+    /* Paused when the window is in the background: an idle window should
+       cost nothing, and nobody is watching the sphere drift. */
+    :root[data-craft-window-active='false'] .hub-orb-body,
+    :root[data-craft-window-active='false'] .hub-skeleton { animation-play-state: paused; }
     /* The tiles are the one saturated thing left in a sidebar that has
        otherwise stood down, and `color` cannot reach a gradient. */
     :root[data-craft-window-active='false'] .side-tile { filter: grayscale(1); opacity: .6; }
@@ -421,7 +440,7 @@ const localAgent = isLocalAgent()
     .side-disk-name { font-weight: 600; }
     .side-disk-free { color: var(--side-dim); font-variant-numeric: tabular-nums; }
     .side-disk-bar { display: block; height: 5px; margin-top: var(--space-2); overflow: hidden; border-radius: 3px; background: var(--side-line); }
-    .side-disk-bar > span { display: block; width: var(--pct, 0%); height: 100%; border-radius: 3px; background: var(--side-ink); }
+    .side-disk-bar > span { display: block; width: var(--pct, 0%); height: 100%; border-radius: 3px; background: var(--side-ink); transition: width .9s cubic-bezier(.2, .8, .2, 1); }
     .side-utility { min-height: 34px; color: var(--side-dim); }
     .side-utility:hover { color: var(--side-ink); }
     .side-utility-icon { display: grid; width: 28px; flex: none; place-items: center; }
@@ -485,7 +504,7 @@ const localAgent = isLocalAgent()
         inset 0 12px 28px rgb(255 255 255 / .3),
         0 30px 50px rgb(0 0 0 / .32);
     }
-    .hub-orb-body { width: 214px; height: 214px; animation: hub-float 6s ease-in-out infinite; }
+    .hub-orb-body { width: 214px; height: 214px; animation: hub-float 6s ease-in-out infinite; will-change: transform; }
     .hub-orb-icon { width: 88px; height: 88px; color: #fff; filter: drop-shadow(0 8px 14px rgb(0 0 0 / .25)); }
     @keyframes hub-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
 
@@ -558,8 +577,9 @@ const localAgent = isLocalAgent()
       border: 1px solid rgb(255 255 255 / .13); border-radius: 20px;
       background: rgb(255 255 255 / .08); color: #fff; text-decoration: none;
       box-shadow: inset 0 1px 0 rgb(255 255 255 / .08);
-      backdrop-filter: blur(20px) saturate(140%);
-      -webkit-backdrop-filter: blur(20px) saturate(140%);
+      /* No backdrop blur: what sits behind these is a smooth gradient, which
+         blurs to itself, and a live blur is re-rendered on every paint and
+         every scroll for no visible difference. */
     }
     .hub-panel { min-height: 220px; padding: 16px 18px 14px; }
     .hub-panel-head { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
@@ -710,6 +730,54 @@ const localAgent = isLocalAgent()
       .hub-ring { transition: none; }
       .hub-feature, .hub-module, .hub-cta, .hub-run-button, .hub-panel-link, .hub-panel-button { transition: none; }
     }
+
+    /* ---------- Motion ---------- */
+    /* A section page assembles itself on arrival: the artwork rises into
+       place, the copy follows, the tools cascade in one after another, then
+       the round button and the panels. Short, transform and opacity only, so
+       it is all compositor work, and none of it under Reduce Motion. The fill
+       is `backwards`, never `both`: a held end state would override the hover
+       lift on the same elements. */
+    @keyframes hub-rise { from { opacity: 0; transform: translateY(12px); } }
+    @keyframes hub-pop { from { opacity: 0; transform: scale(.92); } }
+    @keyframes hub-orb-in { from { opacity: 0; transform: translateY(18px) scale(.9); } }
+    @media (prefers-reduced-motion: no-preference) {
+      .hub-orb, .hub-ring { animation: hub-orb-in .7s cubic-bezier(.2, .8, .2, 1) backwards; }
+      .hub-intro > *, .hub-hero-text > * { animation: hub-rise .5s cubic-bezier(.2, .8, .2, 1) backwards; }
+      .hub-intro > :nth-child(2), .hub-hero-text > :nth-child(2) { animation-delay: .04s; }
+      .hub-intro > :nth-child(3), .hub-hero-text > :nth-child(3) { animation-delay: .08s; }
+      .hub-intro > :nth-child(4), .hub-hero-text > :nth-child(4) { animation-delay: .12s; }
+      .hub-feature { animation: hub-rise .45s cubic-bezier(.2, .8, .2, 1) backwards; animation-delay: .14s; }
+      .hub-feature:nth-child(2) { animation-delay: .19s; }
+      .hub-feature:nth-child(3) { animation-delay: .24s; }
+      .hub-feature:nth-child(4) { animation-delay: .29s; }
+      .hub-feature:nth-child(5) { animation-delay: .34s; }
+      .hub-run { animation: hub-pop .5s .3s cubic-bezier(.2, .8, .2, 1) backwards; }
+      .hub-panel { animation: hub-rise .55s .34s cubic-bezier(.2, .8, .2, 1) backwards; }
+      .hub-panel + .hub-panel { animation-delay: .4s; }
+      .hub-module { animation: hub-rise .5s cubic-bezier(.2, .8, .2, 1) backwards; animation-delay: .12s; }
+      .hub-module:nth-child(2) { animation-delay: .17s; }
+      .hub-module:nth-child(3) { animation-delay: .22s; }
+      .hub-module:nth-child(4) { animation-delay: .27s; }
+      .hub-module:nth-child(5) { animation-delay: .32s; }
+
+      /* Hover: things lean toward the pointer a little. */
+      .hub-feature-chevron { transition: transform .2s ease, opacity .2s ease; }
+      .hub-feature:hover .hub-feature-chevron { transform: translateX(3px); opacity: .9; }
+      .hub-feature-icon { transition: transform .25s cubic-bezier(.2, .8, .2, 1), background .2s ease; }
+      .hub-feature:hover .hub-feature-icon { transform: scale(1.08); background: rgb(255 255 255 / .24); }
+      .hub-module-orb { transition: transform .5s cubic-bezier(.2, .8, .2, 1); }
+      .hub-module:hover .hub-module-orb { transform: rotate(-2deg) scale(1.06) translateY(3px); }
+      .hub-row-chevron { transition: transform .2s ease; }
+      .hub-row-link:hover .hub-row-chevron { transform: translateX(3px); }
+      .side-tile { transition: transform .25s cubic-bezier(.2, .8, .2, 1), filter .18s ease, opacity .18s ease; }
+      .side-row:hover .side-tile { transform: scale(1.06); }
+      .rail-item[data-active] .side-tile { transform: scale(1.04); }
+
+      /* The page's scroll, inside its own container, glides. */
+      .main { scroll-behavior: smooth; }
+    }
+    .hub-row-bar > span, .hub-meter-fill { transform-origin: left center; }
 
     /* ---------- Toolbar breadcrumb ---------- */
     /* Where you are, centred like a window title: the section, and the tool
@@ -1098,6 +1166,7 @@ useEventListener('mousedown', moveWindowFrom, { target: document })
 <script src="/app-menu.js"></script>
 <script src="/app-toolbar.js"></script>
 <script src="/hub-metrics.js"></script>
+<script src="/prefetch.js"></script>
 <!-- Wires the Settings panel above: Cmd+, from the menubar or the page, the
      profile chip in the top strip, and the controls inside it. -->
 <script src="/settings-panel.js"></script>

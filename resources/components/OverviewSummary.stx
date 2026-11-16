@@ -40,7 +40,7 @@ export const cards = SECTIONS.filter(section => section.id !== 'overview').map(s
         <span class="hub-module-name">{{ card.label }}</span>
       </span>
       <span class="hub-module-orb" aria-hidden="true"><span class="{{ card.icon }}"></span></span>
-      <span class="hub-module-value" data-metric="{{ card.metric }}" data-metric-fallback="Not available">&hellip;</span>
+      <span class="hub-module-value" data-metric-count data-metric="{{ card.metric }}" data-metric-fallback="Not available">&hellip;</span>
       <span class="hub-module-caption">{{ card.caption }}</span>
       <span class="hub-module-go">Review</span>
     </a>

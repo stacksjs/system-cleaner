@@ -34,7 +34,7 @@ export const headlineClear = section.headlineMetric && section.headlineMetric.wh
       <h1 class="hub-name">{{ section.label }}</h1>
       <p class="hub-headline">
         @if(headlineMetric)
-          <span data-metric="{{ headlineMetric }}" data-metric-template="{{ headlineTemplate }}" data-metric-bare="Up to date" data-metric-clear="{{ headlineClear }}">{{ section.headline }}</span>
+          <span data-metric-count data-metric="{{ headlineMetric }}" data-metric-template="{{ headlineTemplate }}" data-metric-bare="Up to date" data-metric-clear="{{ headlineClear }}">{{ section.headline }}</span>
         @else
           {{ section.headline }}
         @endif

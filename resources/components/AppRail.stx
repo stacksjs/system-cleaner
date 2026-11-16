@@ -73,6 +73,10 @@ function syncActive(): void {
  * so from anywhere in the app.
  */
 function syncScanning(): void {
+  // Nobody can see the dot while the window is hidden; ask again when it is
+  // shown rather than every two seconds in the dark.
+  if (document.hidden)
+    return
   fetch('/api/scan-state', { method: 'POST', cache: 'no-store' })
     .then(r => r.json())
     .then((d: { scans?: { kind: string, status: string }[] }) => {
@@ -88,6 +92,9 @@ function syncScanning(): void {
 
 useEventListener('stx:navigate', syncActive)
 useEventListener('stx:load', syncActive)
+// The runtime's document overload does not attach (its first argument is
+// read as the event name), and visibilitychange bubbles to the window anyway.
+useEventListener('visibilitychange' as keyof WindowEventMap, syncScanning)
 
 // Two seconds: fast enough that the dot appears while you are still deciding
 // where to click, slow enough to be invisible next to a scan's own work.

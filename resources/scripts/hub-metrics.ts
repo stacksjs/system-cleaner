@@ -56,6 +56,43 @@ function shortDate(iso: string): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
+// ── Motion ───────────────────────────────────────────────────────────
+
+const calm = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').matches
+const EASE = 'cubic-bezier(.2, .8, .2, 1)'
+
+/** New text slides up into place instead of snapping. */
+function settleIn(element: HTMLElement, delay = 0): void {
+  if (calm() || typeof element.animate !== 'function') return
+  element.animate([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: 320, delay, easing: EASE, fill: 'backwards' })
+}
+
+/**
+ * Count a figure up from zero: "24.3 GB" runs 0.0, 6.1, 17.9 ... 24.3 over
+ * most of a second, keeping the decimals and the unit it arrived with. Text
+ * with no number in it just settles in.
+ */
+function countUp(element: HTMLElement, text: string): void {
+  const match = text.match(/\d+(?:\.\d+)?/)
+  if (calm() || !match) {
+    element.textContent = text
+    settleIn(element)
+    return
+  }
+  const target = Number(match[0])
+  const decimals = (match[0].split('.')[1] || '').length
+  const start = performance.now()
+  const duration = 750
+  const frame = (now: number): void => {
+    const progress = Math.min(1, (now - start) / duration)
+    const eased = 1 - (1 - progress) ** 3
+    element.textContent = text.replace(match[0], (target * eased).toFixed(decimals))
+    if (progress < 1 && element.isConnected) requestAnimationFrame(frame)
+    else element.textContent = text
+  }
+  requestAnimationFrame(frame)
+}
+
 // ── Figures ──────────────────────────────────────────────────────────
 
 type Values = Record<string, string>
@@ -131,10 +168,18 @@ function render(element: HTMLElement, value: string): void {
   const template = element.getAttribute('data-metric-template')
   const bare = (element.getAttribute('data-metric-bare') || '').split('|')
   const clear = element.getAttribute('data-metric-clear')
-  if (bare.includes(value))
-    element.textContent = clear || value
+  const next = bare.includes(value) ? (clear || value) : (template ? template.replace('{value}', value) : value)
+  const changed = element.textContent !== next
+  // Only the first arrival animates. A minute later the same figure comes
+  // back from the cache, and counting up again would be noise.
+  if (changed && element.hasAttribute('data-metric-count') && !element.hasAttribute('data-metric-ready'))
+    countUp(element, next)
+  else if (changed && !element.hasAttribute('data-metric-ready')) {
+    element.textContent = next
+    settleIn(element)
+  }
   else
-    element.textContent = template ? template.replace('{value}', value) : value
+    element.textContent = next
   element.setAttribute('data-metric-ready', '')
   // The overview's health ring reads its score from here.
   const ring = element.closest<HTMLElement>('[data-health-ring]')
@@ -319,8 +364,10 @@ const PANELS: Record<string, () => Promise<PanelResult>> = {
     const traces = row({ icon: 'i-f7-eye-slash-fill', title: 'Browsing traces', sub: 'History, cookies and browser caches', value: '…', href: '/app/privacy' })
     const leftovers = row({ icon: 'i-f7-tray-fill', title: 'Leftover app data', sub: 'Support files from apps you removed', href: '/app/orphans' })
     const settle = (node: HTMLElement, text: string): void => {
-      const value = node.querySelector('.hub-row-value')
-      if (value) value.textContent = text
+      const value = node.querySelector<HTMLElement>('.hub-row-value')
+      if (!value) return
+      value.textContent = text
+      settleIn(value)
     }
     void api('safe-to-clean').then(d => settle(junk, d?.success ? formatBytes(d.bytes) : '-'))
     void api('privacy-scan').then(d => settle(traces, d?.success ? formatBytes(d.totalBytes) : '-'))
@@ -419,6 +466,25 @@ const PANELS: Record<string, () => Promise<PanelResult>> = {
   },
 }
 
+/**
+ * A panel's content arrives as a cascade rather than all at once, and its
+ * bars and gauges grow from nothing to their value. Transform and opacity
+ * only, so a panel of rows costs the compositor, not the layout.
+ */
+function reveal(body: HTMLElement): void {
+  if (calm()) return
+  Array.from(body.children).forEach((child, index) => settleIn(child as HTMLElement, index * 45))
+  for (const bar of Array.from(body.querySelectorAll<HTMLElement>('.hub-row-bar > span, .hub-meter-fill')))
+    bar.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], { duration: 800, delay: 120, easing: EASE, fill: 'backwards' })
+  for (const gauge of Array.from(body.querySelectorAll<HTMLElement>('.hub-gauge'))) {
+    const score = gauge.style.getPropertyValue('--score')
+    try {
+      gauge.animate([{ '--score': '0' }, { '--score': score }] as Keyframe[], { duration: 900, delay: 120, easing: EASE, fill: 'backwards' })
+    }
+    catch { /* An engine that cannot animate a registered property shows the value at once. */ }
+  }
+}
+
 function fillPanels(): void {
   for (const panel of Array.from(document.querySelectorAll<HTMLElement>('[data-panel]'))) {
     if (panel.hasAttribute('data-panel-filled')) continue
@@ -432,6 +498,7 @@ function fillPanels(): void {
         if (!panel.isConnected) return
         body.replaceChildren(...result.body)
         body.removeAttribute('aria-busy')
+        reveal(body)
         const aside = panel.querySelector<HTMLElement>('[data-panel-aside]')
         if (aside) aside.textContent = result.aside || ''
       })
@@ -462,5 +529,11 @@ if (content) {
   }).observe(content, { childList: true })
 }
 
-// The sidebar's disk meter outlives every navigation; keep it current.
-setInterval(fillMetrics, TTL_MS)
+// The sidebar's disk meter outlives every navigation; keep it current, but
+// only while the window can be seen. A hidden window should cost nothing.
+setInterval(() => {
+  if (!document.hidden) fillMetrics()
+}, TTL_MS)
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) fillMetrics()
+})

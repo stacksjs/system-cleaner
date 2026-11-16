@@ -15,7 +15,7 @@
 <div class="hub hub-overview" data-tone="overview">
   <section class="hub-hero">
     <div class="hub-ring" data-health-ring aria-label="System health">
-      <span class="hub-ring-value" data-metric="health">&hellip;</span>
+      <span class="hub-ring-value" data-metric="health" data-metric-count>&hellip;</span>
       <span class="hub-ring-label" data-metric="health-label">Health</span>
     </div>
     <div class="hub-hero-text">
