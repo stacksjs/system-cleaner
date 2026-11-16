@@ -1,5 +1,12 @@
 <script server>
+const { sectionFor } = require('~/resources/lib/sections')
+
 export const active = $props.active || ''
+// The breadcrumb's first paint. `app-toolbar.ts` rebuilds it from the URL on
+// every SPA navigation, since this bar outlives them.
+const place = sectionFor(active)
+export const crumbSection = place ? place.section : null
+export const crumbTool = place && place.tool ? place.tool : null
 // Updates, Maintenance and Privacy moved into the sidebar's sections. What is
 // left here configures the app rather than acting on the Mac.
 export const items = [
@@ -8,7 +15,7 @@ export const items = [
 </script>
 
 <!-- AppKit owns the window buttons; this app owns its navigation toolbar. -->
-<header class="topnav" aria-label="Window toolbar">
+<header class="topnav" aria-label="Window toolbar" data-tone="{{ crumbSection ? crumbSection.id : '' }}">
   <nav class="toolbar-navigation flex items-center gap-1" aria-label="Page navigation">
     <button class="toolbar-button" type="button" data-toolbar-sidebar aria-label="Hide Sidebar" aria-controls="app-sidebar" aria-expanded="true" title="Hide Sidebar (⌥⌘S)">
       <span class="i-f7-sidebar-left" aria-hidden="true"></span>
@@ -19,6 +26,15 @@ export const items = [
       <button class="toolbar-button" type="button" data-toolbar-forward aria-label="Forward" title="Forward" disabled><span class="i-f7-chevron-right" aria-hidden="true"></span></button>
     </div>
   </nav>
+  <div class="toolbar-title" data-toolbar-title>
+    @if(crumbSection && crumbTool)
+      <a class="toolbar-crumb" href="{{ crumbSection.href }}" data-stx-link>{{ crumbSection.label }}</a>
+      <span class="i-f7-chevron-right toolbar-crumb-sep" aria-hidden="true"></span>
+      <span class="toolbar-crumb-current">{{ crumbTool.label }}</span>
+    @elseif(crumbSection)
+      <span class="toolbar-crumb-current">{{ crumbSection.label }}</span>
+    @endif
+  </div>
   <div class="profile" data-profile>
     <button
       class="profile-chip"

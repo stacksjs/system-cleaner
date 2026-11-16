@@ -1,144 +1,58 @@
 <script server>
-// The sidebar. Five sections under two top-level destinations, the way a Mac
-// utility that does many things organises them: one coloured tile per
-// section, and plain text for what sits inside it.
+// The sidebar: six places, one row each.
 //
-// It was an icon-only rail with fourteen glyphs, each a different shape in the
-// same colour, and the only way to learn which was which was to hover them one
-// at a time. Fourteen icons is not a toolbar, it is a puzzle. Grouping the
-// screens by the question they answer — what can go, what is taking the
-// space, what is slowing the Mac down, what is installed, what can see me —
-// cuts the icons to seven and puts a word on every row.
+// It lists sections, never tools. Each section has a page of its own that
+// presents its tools as cards, so the sidebar stays a short list of places to
+// go instead of an index of every screen in the app. It was fourteen icons,
+// then fourteen rows under five headings; both made the sidebar the thing you
+// had to read before you could do anything.
 //
-// Quick Clean leads because it is the reason most people open the app. The
-// Dashboard follows it because it is where you land.
+// The table lives in `resources/lib/sections.ts`, which the toolbar, the
+// section pages and the Go menu read too.
 //
-// Updates, Maintenance and Privacy used to live in the account menu, because a
-// rail of icons had no room for them. A sidebar with sections does: Updates
-// belongs with the apps it updates, Maintenance with the other things that
-// speed the Mac up, Privacy with the other things that protect it. The account
-// menu keeps only what configures the app itself.
-//
-// `active` is passed by each view so a cold page load paints the correct
-// selection, and the correct section open, with no flash. SPA navigations
-// only swap `[data-stx-content]`, which leaves this sidebar mounted, so the
-// client block below re-syncs both on every route change.
-export const active = $props.active || ''
+// `active` is the view's `nav` id: a section page's `hub-…`, or a tool's own
+// id, which lights the section holding it. SPA navigations only swap
+// `[data-stx-content]` and leave this mounted, so the client block below
+// re-syncs the selection from the URL on every route change.
+const { SECTIONS, sectionFor } = require('~/resources/lib/sections')
 
-export const primary = [
-  { id: 'cleanup', label: 'Quick Clean', icon: 'i-f7-sparkles', tile: 'tile-green', href: '/app/cleanup' },
-  { id: 'dashboard', label: 'Dashboard', icon: 'i-f7-square-grid-2x2-fill', tile: 'tile-blue', href: '/app' },
+const current = sectionFor($props.active || '')
+export const activeSection = current ? current.section.id : ''
+
+export const rows = SECTIONS.map(section => ({
+  id: section.id,
+  label: section.label,
+  href: section.href,
+  icon: section.icon,
+  // Every path that lights this row, space-separated for the client sync.
+  routes: [section.href, ...(section.id === 'overview' ? [] : section.tools.map(tool => tool.href))].join(' '),
+  scans: section.tools.flatMap(tool => tool.scans || []).join(' '),
+}))
+
+export const groups = [
+  rows.filter(row => row.id === 'overview'),
+  rows.filter(row => row.id !== 'overview'),
 ]
-
-export const sections = [
-  {
-    id: 'cleanup',
-    label: 'Cleanup',
-    icon: 'i-f7-trash-fill',
-    tile: 'tile-pink',
-    items: [
-      { id: 'developer', label: 'Developer Junk', href: '/app/developer' },
-      // What an uninstall left behind. Applications below asks what is
-      // installed; this asks what has no owner any more — which is junk.
-      { id: 'orphans', label: 'Leftover Data', href: '/app/orphans' },
-    ],
-  },
-  {
-    id: 'storage',
-    label: 'Storage',
-    icon: 'i-f7-folder-fill',
-    tile: 'tile-orange',
-    items: [
-      { id: 'disk', label: 'Disk Usage', href: '/app/disk' },
-      { id: 'large-files', label: 'Large Files', href: '/app/large-files' },
-      { id: 'duplicates', label: 'Duplicates', href: '/app/duplicates' },
-      // The other half of Duplicates' question: that screen can only find
-      // byte-identical files; this one finds photographs that look the same
-      // without being the same file. See #34.
-      { id: 'similar', label: 'Similar Images', href: '/app/similar' },
-    ],
-  },
-  {
-    id: 'performance',
-    label: 'Performance',
-    icon: 'i-f7-speedometer',
-    tile: 'tile-purple',
-    items: [
-      { id: 'startup', label: 'Startup Items', href: '/app/startup' },
-      { id: 'processes', label: 'Processes', href: '/app/processes' },
-      { id: 'maintenance', label: 'Maintenance', href: '/app/maintenance' },
-    ],
-  },
-  {
-    id: 'applications',
-    label: 'Apps',
-    icon: 'i-f7-app-fill',
-    tile: 'tile-cyan',
-    items: [
-      { id: 'applications', label: 'Applications', href: '/app/applications' },
-      { id: 'updates', label: 'Updates', href: '/app/updates', badge: 'updates' },
-      { id: 'extensions', label: 'Extensions', href: '/app/extensions' },
-    ],
-  },
-  {
-    id: 'protection',
-    label: 'Protection',
-    icon: 'i-f7-checkmark-shield-fill',
-    tile: 'tile-indigo',
-    items: [
-      { id: 'privacy', label: 'Privacy', href: '/app/privacy' },
-      // What installed apps were allowed to reach — including grants whose
-      // app is long gone, which no pane in System Settings will show you.
-      { id: 'permissions', label: 'App Permissions', href: '/app/permissions' },
-      // The state of a network the Mac is joined to rather than of the Mac
-      // itself, which is still a question of who can see what.
-      { id: 'vpn', label: 'VPN', href: '/app/vpn' },
-    ],
-  },
-].map(section => ({ ...section, open: section.items.some(item => item.id === active) }))
 </script>
 
 <script client>
-/**
- * Which sections the person has opened, kept across launches.
- *
- * The section holding the current screen is always open; the rest stay as
- * they were left. Storage can be missing or throw in a locked-down WebView,
- * and the sidebar works without it — every section simply starts closed.
- */
-const OPEN_KEY = 'systemcleaner-sidebar-open'
-
-function readOpen(): Set<string> {
-  try {
-    const raw = localStorage.getItem(OPEN_KEY)
-    return new Set(raw ? (JSON.parse(raw) as string[]) : [])
-  }
-  catch {
-    return new Set()
-  }
-}
-
-function writeOpen(): void {
-  const open = Array.from(document.querySelectorAll<HTMLDetailsElement>('[data-side-section]'))
-    .filter(section => section.open)
-    .map(section => section.getAttribute('data-side-section') || '')
-  try {
-    localStorage.setItem(OPEN_KEY, JSON.stringify(open))
-  }
-  catch { /* The sections still open and close for this session. */ }
-}
-
 function syncActive(): void {
-  const path = useRoute().path
+  const path = (useRoute().path || '/').replace(/\/+$/, '') || '/'
   const items = Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-rail-item]'))
 
-  // Longest matching href wins, so `/app/disk` does not also light up `/app`.
+  // A section's own page wins outright; otherwise the longest tool path that
+  // matches, so `/app/disk` never also lights `/app`.
   let best: HTMLAnchorElement | null = null
+  let bestLength = -1
   for (const item of items) {
-    const href = item.getAttribute('href') || ''
-    const matches = path === href || path.startsWith(`${href}/`)
-    if (matches && (!best || href.length > (best.getAttribute('href') || '').length))
-      best = item
+    for (const route of (item.getAttribute('data-rail-routes') || '').split(' ')) {
+      if (!route) continue
+      const matches = path === route || (route !== '/app' && path.startsWith(`${route}/`))
+      if (matches && route.length > bestLength) {
+        best = item
+        bestLength = route.length
+      }
+    }
   }
 
   for (const item of items) {
@@ -149,21 +63,6 @@ function syncActive(): void {
     else
       item.removeAttribute('aria-current')
   }
-
-  // Arriving at a screen by ⌘-number or the Go menu must not leave it hidden
-  // inside a closed section.
-  const holder = best?.closest<HTMLDetailsElement>('[data-side-section]')
-  if (holder && !holder.open)
-    holder.open = true
-}
-
-function restoreOpen(): void {
-  const remembered = readOpen()
-  for (const section of Array.from(document.querySelectorAll<HTMLDetailsElement>('[data-side-section]'))) {
-    if (remembered.has(section.getAttribute('data-side-section') || ''))
-      section.open = true
-    section.addEventListener('toggle', writeOpen)
-  }
 }
 
 /**
@@ -171,21 +70,22 @@ function restoreOpen(): void {
  *
  * A disk or large-file scan keeps going in the agent after you leave its
  * screen. The sidebar outlives navigation, so it is the one place that can say
- * so — on the row, and on its section's heading when that section is closed.
+ * so from anywhere in the app.
  */
 function syncScanning(): void {
   fetch('/api/scan-state', { method: 'POST', cache: 'no-store' })
     .then(r => r.json())
     .then((d: { scans?: { kind: string, status: string }[] }) => {
       const busy = new Set((d.scans || []).filter(scan => ['queued', 'running', 'cancelling'].includes(scan.status))
-        .map(scan => scan.kind === 'tree' ? 'disk' : scan.kind))
-      for (const item of Array.from(document.querySelectorAll<HTMLElement>('[data-rail-item]')))
-        item.toggleAttribute('data-scanning', busy.has(item.getAttribute('data-rail-item') || ''))
+        .map(scan => scan.kind))
+      for (const item of Array.from(document.querySelectorAll<HTMLElement>('[data-rail-item]'))) {
+        const kinds = (item.getAttribute('data-rail-scans') || '').split(' ').filter(Boolean)
+        item.toggleAttribute('data-scanning', kinds.some(kind => busy.has(kind)))
+      }
     })
     .catch(() => {})
 }
 
-restoreOpen()
 useEventListener('stx:navigate', syncActive)
 useEventListener('stx:load', syncActive)
 
@@ -195,50 +95,49 @@ useIntervalFn(syncScanning, 2000, { immediate: true })
 </script>
 
 <nav class="rail" id="app-sidebar" aria-label="SystemCleaner sections">
+  <!--
+    Three bands, top to bottom: where you start, the five places you go, and
+    the app itself. Overview stands apart because it is the one row that is
+    about every section at once.
+  -->
   <div class="rail-groups">
-    <div class="side-primary">
-      @foreach (primary as item)
-        <a
-          class="rail-item side-row side-row-primary"
-          data-rail-item="{{ item.id }}"
-          href="{{ item.href }}"
-          data-stx-link
-          @if(active === item.id)data-active aria-current="page"@endif
-        >
-          <span class="side-tile {{ item.tile }}" aria-hidden="true"><span class="{{ item.icon }}"></span></span>
-          <span class="side-label">{{ item.label }}</span>
-        </a>
-      @endforeach
-    </div>
-
-    @foreach (sections as section)
-      <details class="side-section" data-side-section="{{ section.id }}" @if(section.open)open@endif>
-        <summary class="side-heading side-row">
-          <span class="side-tile {{ section.tile }}" aria-hidden="true"><span class="{{ section.icon }}"></span></span>
-          <span class="side-label">{{ section.label }}</span>
-          <span class="i-f7-chevron-right side-chevron" aria-hidden="true"></span>
-        </summary>
-        <div class="side-children">
-          @foreach (section.items as item)
-            <a
-              class="rail-item side-child side-row"
-              data-rail-item="{{ item.id }}"
-              href="{{ item.href }}"
-              data-stx-link
-              @if(active === item.id)data-active aria-current="page"@endif
-            >
-              <span class="side-label">{{ item.label }}</span>
-              @if(item.badge === 'updates')
-                <span class="side-badge" data-updates-badge hidden></span>
-              @endif
-            </a>
-          @endforeach
-        </div>
-      </details>
+    @foreach (groups as group)
+      <div class="side-group">
+        @foreach (group as row)
+          <a
+            class="rail-item side-row"
+            data-tone="{{ row.id }}"
+            data-rail-item="{{ row.id }}"
+            data-rail-routes="{{ row.routes }}"
+            data-rail-scans="{{ row.scans }}"
+            href="{{ row.href }}"
+            data-stx-link
+            @if(activeSection === row.id)data-active aria-current="page"@endif
+          >
+            <span class="side-tile" aria-hidden="true"><span class="{{ row.icon }}"></span></span>
+            <span class="side-label">{{ row.label }}</span>
+            @if(row.id === 'apps')
+              <span class="side-badge" data-updates-badge hidden></span>
+            @endif
+          </a>
+        @endforeach
+      </div>
     @endforeach
   </div>
 
   <div class="rail-foot">
+    <!-- The one figure worth carrying everywhere: how full the disk is. -->
+    <a class="side-disk" href="/app/disk" data-stx-link aria-label="Disk Usage">
+      <span class="side-disk-head">
+        <span class="side-disk-name">Macintosh HD</span>
+        <span class="side-disk-free" data-metric="disk-free" data-metric-template="{value} free">&hellip;</span>
+      </span>
+      <span class="side-disk-bar"><span data-metric="disk-pct" data-metric-style="--pct"></span></span>
+    </a>
+    <button class="side-row side-utility" type="button" data-open-settings>
+      <span class="side-utility-icon" aria-hidden="true"><span class="i-f7-gear-alt-fill"></span></span>
+      <span class="side-label">Settings</span>
+    </button>
     <span class="side-local" title="Every scan and every clean runs on this Mac. Nothing is uploaded.">
       <span class="i-f7-lock-fill" aria-hidden="true"></span>
       <span>Everything stays on this Mac</span>

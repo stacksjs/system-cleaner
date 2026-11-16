@@ -1,0 +1,6 @@
+@extends('layouts/app')
+@section('nav', 'hub-cleanup')
+@section('body')
+<!-- The cleanup section's own page. Its content lives in resources/lib/sections.ts. -->
+<SectionHub section="cleanup" />
+@endsection

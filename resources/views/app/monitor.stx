@@ -1,0 +1,109 @@
+<script server>
+const os = require('node:os')
+const { getSystemInfoSync } = require('@system-cleaner/core')
+
+const sysInfo = getSystemInfoSync()
+const cpuModel = sysInfo.cpuModel
+const cpuCores = sysInfo.cpuCores
+const totalMemGB = (os.totalmem() / 1e9).toFixed(1)
+const freeMemGB = (os.freemem() / 1e9).toFixed(1)
+const usedMemGB = ((os.totalmem() - os.freemem()) / 1e9).toFixed(1)
+const memPercent = Math.round(((os.totalmem() - os.freemem()) / os.totalmem()) * 100)
+const uptimeHours = Math.round(os.uptime() / 3600)
+const uptimeDays = Math.floor(uptimeHours / 24)
+const uptimeRemHours = uptimeHours % 24
+const uptimeStr = uptimeDays > 0 ? `${uptimeDays}d ${uptimeRemHours}h` : `${uptimeHours}h`
+const hostname = sysInfo.hostname
+
+const memBarStyle = 'width: ' + memPercent + '%; background: ' + (memPercent > 80 ? 'var(--red)' : memPercent > 60 ? 'var(--orange)' : 'var(--green)') + ';'
+const memDotColor = memPercent > 80 ? 'var(--red)' : memPercent > 60 ? 'var(--orange)' : 'var(--green)'
+const cpuLabel = cpuModel.split(' ').slice(0, 3).join(' ')
+const healthDasharray = String(2 * Math.PI * 40)
+</script>
+
+@extends('layouts/app')
+@section('nav', 'monitor')
+@section('body')
+
+<style>
+.cpu-cell { white-space: nowrap; }
+</style>
+
+<script src='/dashboard-xdata.js'></script>
+<div x-data='dashboardXData()'>
+
+<div class='main-header'>
+  <div class='main-title'>System Monitor</div>
+  <div class='main-subtitle'>System overview for {{ stats ? stats.hostname : hostname }}</div>
+</div>
+<div class='main-content'>
+  <DashboardCards />
+
+  <SystemActivityChart />
+
+  <div x-show='pendingUpdates != null && pendingUpdates' x-cloak style='margin-bottom: var(--space-5);'>
+    <a href='/app/updates' data-stx-link class='card' style='display: flex; align-items: center; justify-content: space-between; text-decoration: none; color: inherit; border-color: color-mix(in srgb, var(--orange) 25%, transparent);'>
+      <div>
+        <div class='card-label'>Pending Updates</div>
+        <div class='card-value' style='color: var(--orange);'>{{ pendingUpdates }}</div>
+        <div class='card-detail'>System, Homebrew, and app updates available</div>
+      </div>
+      <span class='view-link'>View <span class='i-f7-arrow-right' aria-hidden='true'></span></span>
+    </a>
+  </div>
+
+  <div class='tbl-wrap'>
+    <div class='tbl-bar'>
+      <div>
+        <span class='font-semibold text-sm'>Top Processes</span>
+        <span class='dim ml-2 text-[11px]'>by CPU usage</span>
+      </div>
+      <a class='no-underline btn btn-sm' href='/app/processes' data-stx-link>View All</a>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Process</th>
+          <th>PID</th>
+          <th>CPU</th>
+          <th>Memory</th>
+          <th>User</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr x-show='statsLoading'>
+          <td colspan='5' class='dim' style='text-align: center; padding: var(--space-4);'>Loading processes...</td>
+        </tr>
+        <tr x-show='!statsLoading && !(stats && stats.processes && stats.processes.length)'>
+          <td colspan='5' class='empty-state'>No processes to show</td>
+        </tr>
+        <template x-for='proc in (stats && stats.processes ? stats.processes.slice(0, 8) : [])' :key='proc.id'>
+          <tr x-show='!statsLoading'>
+            <td><span class='font-medium'>{{ proc.name }}</span></td>
+            <td class='dim font-mono text-[11px]'>{{ proc.pid }}</td>
+            <!--
+              The track is a fixed 60px, not `flex-1` capped at 60. Flex-basis
+              zero means it surrenders every pixel when the column is tight, and
+              this column is tight on any window narrower than the screenshot it
+              was designed against: the label's 36px plus the gap took all 42px
+              the cell had, and the bar rendered at zero width. A bar that
+              disappears when the window narrows is worse than no bar.
+            -->
+            <td class='cpu-cell'>
+              <div class='flex gap-1.5 items-center'>
+                <span class='text-[11px] min-w-[36px]' :class="cpuTextClass(proc.cpu)">{{ proc.cpu.toFixed(1) + '%' }}</span>
+                <div class='cpu-track'>
+                  <div class='cpu-fill' :class="cpuBarClass(proc.cpu)" :style="cpuBarStyle(proc.cpu)"></div>
+                </div>
+              </div>
+            </td>
+            <td class='text-[11px]'>{{ proc.memMB + ' MB' }}</td>
+            <td class='dim text-[11px]'>{{ proc.user }}</td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+</div>
+</div>
+@endsection

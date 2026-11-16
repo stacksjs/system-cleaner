@@ -25,7 +25,8 @@ async function click(selector: string): Promise<void> {
 }
 async function route(path: string): Promise<void> {
   await page.waitForFunction(path => location.pathname === path, {}, path)
-  await page.waitForSelector('.main-header')
+  // Tool screens have a sticky header; section pages have a hero instead.
+  await page.waitForSelector('.main-header, .hub')
 }
 try {
   await page.setViewport({ width: 1400, height: 900 })
@@ -33,8 +34,8 @@ try {
   await page.waitForSelector('[data-toolbar-sidebar][aria-expanded="true"]')
   assert(await disabled(back))
   assert(await disabled(forward))
-  await click('.rail-item[href="/app/startup"]')
-  await route('/app/startup')
+  await click('.rail-item[href="/app/performance"]')
+  await route('/app/performance')
   await page.waitForFunction(() => !(document.querySelector('[data-toolbar-back]') as HTMLButtonElement).disabled)
   assert(await disabled(forward))
   await click(back)
@@ -42,15 +43,15 @@ try {
   await page.waitForFunction(() => !(document.querySelector('[data-toolbar-forward]') as HTMLButtonElement).disabled)
   assert(await disabled(back))
   await click(forward)
-  await route('/app/startup')
+  await route('/app/performance')
   await page.reload({ waitUntil: 'domcontentloaded' })
   await page.waitForSelector('[data-toolbar-sidebar]')
   assert.equal(await disabled(back), false, 'Reload preserves history availability')
   assert(await disabled(forward))
   await click(back)
   await route('/app')
-  await click('.rail-item[href="/app/processes"]')
-  await route('/app/processes')
+  await click('.rail-item[href="/app/storage"]')
+  await route('/app/storage')
   assert(await disabled(forward), 'New navigation clears the forward boundary')
   await click('[data-toolbar-sidebar]')
   await page.waitForSelector('html[data-sidebar-collapsed]')

@@ -1,3 +1,5 @@
+import { sectionForPath } from '../lib/sections'
+
 /**
  * Who this Mac belongs to, from the Mac itself.
  *
@@ -213,6 +215,38 @@ function syncTopNav(): void {
   }
 }
 
+/**
+ * The centred breadcrumb: the section, and the tool inside it when there is
+ * one. Built from the URL with DOM calls rather than markup, so a label can
+ * never be read as HTML.
+ */
+function syncTitle(): void {
+  const title = document.querySelector<HTMLElement>('[data-toolbar-title]')
+  if (!title) return
+  const place = sectionForPath(location.pathname)
+  // The panel takes its section's colour from this attribute.
+  title.closest('.topnav')?.setAttribute('data-tone', place ? place.section.id : '')
+  title.replaceChildren()
+  if (!place) return
+
+  const current = document.createElement('span')
+  current.className = 'toolbar-crumb-current'
+  current.textContent = place.tool ? place.tool.label : place.section.label
+
+  if (place.tool) {
+    const link = document.createElement('a')
+    link.className = 'toolbar-crumb'
+    link.href = place.section.href
+    link.setAttribute('data-stx-link', '')
+    link.textContent = place.section.label
+    const separator = document.createElement('span')
+    separator.className = 'i-f7-chevron-right toolbar-crumb-sep'
+    separator.setAttribute('aria-hidden', 'true')
+    title.append(link, separator)
+  }
+  title.append(current)
+}
+
 function syncSidebar(): void {
   const collapsed = document.documentElement.hasAttribute('data-sidebar-collapsed')
   document.querySelector('#app-sidebar')?.toggleAttribute('inert', collapsed)
@@ -262,6 +296,7 @@ function wireToolbar(): void {
   window.addEventListener('stx:navigate', () => {
     closeMenu()
     syncTopNav()
+    syncTitle()
     syncHistory()
   })
   window.addEventListener('popstate', syncHistory)

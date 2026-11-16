@@ -118,9 +118,9 @@ try {
     assert.equal(geometry.align, 'left')
   }
   const retainedGeometry = (await segment('Movies')).d
-  await page.evaluate(() => document.querySelector<HTMLAnchorElement>('[data-rail-item="dashboard"]')!.click())
+  await page.evaluate(() => document.querySelector<HTMLAnchorElement>('[data-rail-item="overview"]')!.click())
   await page.waitForFunction(() => location.pathname === '/app')
-  await page.evaluate(() => document.querySelector<HTMLAnchorElement>('[data-rail-item="disk"]')!.click())
+  await page.evaluate(() => (window as unknown as { stxRouter: { navigate: (url: string) => void } }).stxRouter.navigate('/app/disk'))
   await page.waitForSelector('#segments-group .segment', { visible: true })
   await settled()
   assert.equal((await segment('Movies')).d, retainedGeometry)

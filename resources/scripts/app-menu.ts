@@ -17,6 +17,7 @@
  */
 import { menu, standardMenus } from '@stacksjs/desktop/browser'
 import { openSettings as openSettingsWindow } from '../lib/app-windows'
+import { SECTIONS } from '../lib/sections'
 
 type DashboardCommand = { action: 'navigate', href: string } | { action: 'rescan' | 'sidebar' }
 const isTray = location.pathname === '/app/tray'
@@ -39,46 +40,41 @@ interface Screen {
   href: string
 }
 
-/** The sidebar in reading order, then the account menu, so ⌘1..⌘9 match what the eye sees. */
+/**
+ * The six sections first, in sidebar order, so ⌘1..⌘6 are the sidebar; then
+ * every tool, section by section. Read from the same table as the sidebar, so
+ * the menu cannot list a screen the app no longer has.
+ */
 const SCREENS: Screen[] = [
-  { label: 'Quick Clean', href: '/app/cleanup' },
-  { label: 'Dashboard', href: '/app' },
-  { label: 'Developer Junk', href: '/app/developer' },
-  { label: 'Leftover Data', href: '/app/orphans' },
-  { label: 'Disk Usage', href: '/app/disk' },
-  { label: 'Large Files', href: '/app/large-files' },
-  { label: 'Duplicates', href: '/app/duplicates' },
-  { label: 'Similar Images', href: '/app/similar' },
-  { label: 'Startup Items', href: '/app/startup' },
-  { label: 'Processes', href: '/app/processes' },
-  { label: 'Maintenance', href: '/app/maintenance' },
-  { label: 'Applications', href: '/app/applications' },
-  { label: 'Updates', href: '/app/updates' },
-  { label: 'Extensions', href: '/app/extensions' },
-  { label: 'Privacy', href: '/app/privacy' },
-  { label: 'App Permissions', href: '/app/permissions' },
-  { label: 'VPN', href: '/app/vpn' },
-  { label: 'Schedule', href: '/app/schedule' },
-]
+  ...SECTIONS.map(section => ({ label: section.label, href: section.href })),
+  ...SECTIONS.filter(section => section.id !== 'overview')
+    .flatMap(section => section.tools.map(tool => ({ label: tool.label, href: tool.href }))),
+].filter((screen, index, all) => all.findIndex(other => other.href === screen.href) === index)
 
 /**
- * There are only nine of ⌘1..⌘9, and more screens than that.
- *
- * The first nine keep their shortcut, in sidebar order, so the numbers still
- * match what the eye sees. The rest are in the menu without one — which is
- * how AppKit itself handles a Window menu longer than the digits.
+ * Only the sections get a digit: they are what the sidebar shows, so ⌘1..⌘6
+ * match what the eye sees, and a digit for a tool would change meaning every
+ * time a tool was added.
+ * The tools are in the menu without one, which is how AppKit itself handles
+ * a Window menu longer than the digits.
  */
-const MAX_SHORTCUTS = 9
+const MAX_SHORTCUTS = SECTIONS.length
 
 /**
  * Go to a screen the way clicking the sidebar would.
  *
- * Clicking the sidebar's own anchor keeps SPA navigation, the active-state sync
- * and the scroll reset that a bare `location.href` would all skip.
+ * Through the router, so SPA navigation, the sidebar's active-state sync and
+ * the scroll reset all happen, which a bare `location.href` would skip. Most
+ * tools have no anchor in the sidebar any more, so clicking one is not an option.
  */
 function go(href: string): void {
   if (inDashboard({ action: 'navigate', href })) return
-  const link = document.querySelector<HTMLAnchorElement>(`[data-rail-item][href="${href}"]`)
+  const router = (window as { stxRouter?: { navigate?: (url: string) => unknown } }).stxRouter
+  if (typeof router?.navigate === 'function') {
+    void router.navigate(href)
+    return
+  }
+  const link = document.querySelector<HTMLAnchorElement>(`[data-rail-item][href="${href}"], a[data-stx-link][href="${href}"]`)
   if (link)
     link.click()
   else

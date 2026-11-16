@@ -94,3 +94,19 @@ describe('runtime colour safelist', () => {
     expect(new Set(RUNTIME_COLOR_CLASSES).size).toBe(RUNTIME_COLOR_CLASSES.length)
   })
 })
+
+/**
+ * The section pages' panels are built in the browser after the page loads,
+ * so their glyphs never appear in a template and the per-page stylesheet
+ * leaves them out. Any class that script names has to be on the safelist, or
+ * the row draws an empty circle where its icon should be.
+ */
+describe('section-page panel icons', () => {
+  it('safelists every glyph hub-metrics.ts can draw', async () => {
+    const source = await Bun.file('resources/scripts/hub-metrics.ts').text()
+    const named = [...new Set(source.match(/i-f7-[a-z0-9-]+/g) || [])]
+    const uncovered = named.filter(icon => !safelist.has(icon))
+
+    expect(uncovered).toEqual([])
+  })
+})

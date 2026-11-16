@@ -1,0 +1,6 @@
+@extends('layouts/app')
+@section('nav', 'hub-performance')
+@section('body')
+<!-- The performance section's own page. Its content lives in resources/lib/sections.ts. -->
+<SectionHub section="performance" />
+@endsection

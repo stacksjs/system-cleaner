@@ -1,0 +1,6 @@
+@extends('layouts/app')
+@section('nav', 'hub-protection')
+@section('body')
+<!-- The protection section's own page. Its content lives in resources/lib/sections.ts. -->
+<SectionHub section="protection" />
+@endsection

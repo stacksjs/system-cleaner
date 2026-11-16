@@ -1,109 +1,51 @@
-<script server>
-const os = require('node:os')
-const { getSystemInfoSync } = require('@system-cleaner/core')
-
-const sysInfo = getSystemInfoSync()
-const cpuModel = sysInfo.cpuModel
-const cpuCores = sysInfo.cpuCores
-const totalMemGB = (os.totalmem() / 1e9).toFixed(1)
-const freeMemGB = (os.freemem() / 1e9).toFixed(1)
-const usedMemGB = ((os.totalmem() - os.freemem()) / 1e9).toFixed(1)
-const memPercent = Math.round(((os.totalmem() - os.freemem()) / os.totalmem()) * 100)
-const uptimeHours = Math.round(os.uptime() / 3600)
-const uptimeDays = Math.floor(uptimeHours / 24)
-const uptimeRemHours = uptimeHours % 24
-const uptimeStr = uptimeDays > 0 ? `${uptimeDays}d ${uptimeRemHours}h` : `${uptimeHours}h`
-const hostname = sysInfo.hostname
-
-const memBarStyle = 'width: ' + memPercent + '%; background: ' + (memPercent > 80 ? 'var(--red)' : memPercent > 60 ? 'var(--orange)' : 'var(--green)') + ';'
-const memDotColor = memPercent > 80 ? 'var(--red)' : memPercent > 60 ? 'var(--orange)' : 'var(--green)'
-const cpuLabel = cpuModel.split(' ').slice(0, 3).join(' ')
-const healthDasharray = String(2 * Math.PI * 40)
-</script>
-
 @extends('layouts/app')
 @section('nav', 'dashboard')
 @section('body')
 
-<style>
-.cpu-cell { white-space: nowrap; }
-</style>
+<!--
+  The overview: where the app opens. A health ring, one card per section with
+  the figure that says whether it is worth opening today, and one button for
+  the thing most people came to do. The live charts and process table that
+  used to be here are System Monitor now, under Performance.
 
-<script src='/dashboard-xdata.js'></script>
-<div x-data='dashboardXData()'>
-
-<div class='main-header'>
-  <div class='main-title'>Dashboard</div>
-  <div class='main-subtitle'>System overview for {{ stats ? stats.hostname : hostname }}</div>
-</div>
-<div class='main-content'>
-  <DashboardCards />
-
-  <SystemActivityChart />
-
-  <div x-show='pendingUpdates != null && pendingUpdates' x-cloak style='margin-bottom: var(--space-5);'>
-    <a href='/app/updates' data-stx-link class='card' style='display: flex; align-items: center; justify-content: space-between; text-decoration: none; color: inherit; border-color: color-mix(in srgb, var(--orange) 25%, transparent);'>
-      <div>
-        <div class='card-label'>Pending Updates</div>
-        <div class='card-value' style='color: var(--orange);'>{{ pendingUpdates }}</div>
-        <div class='card-detail'>System, Homebrew, and app updates available</div>
-      </div>
-      <span class='view-link'>View <span class='i-f7-arrow-right' aria-hidden='true'></span></span>
-    </a>
-  </div>
-
-  <div class='tbl-wrap'>
-    <div class='tbl-bar'>
-      <div>
-        <span class='font-semibold text-sm'>Top Processes</span>
-        <span class='dim ml-2 text-[11px]'>by CPU usage</span>
-      </div>
-      <a class='no-underline btn btn-sm' href='/app/processes' data-stx-link>View All</a>
+  Every figure is filled client-side by hub-metrics.ts: this page is
+  prerendered, and anything computed at build time would describe the build
+  machine.
+-->
+<div class="hub hub-overview" data-tone="overview">
+  <section class="hub-hero">
+    <div class="hub-ring" data-health-ring aria-label="System health">
+      <span class="hub-ring-value" data-metric="health">&hellip;</span>
+      <span class="hub-ring-label" data-metric="health-label">Health</span>
     </div>
-    <table>
-      <thead>
-        <tr>
-          <th>Process</th>
-          <th>PID</th>
-          <th>CPU</th>
-          <th>Memory</th>
-          <th>User</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr x-show='statsLoading'>
-          <td colspan='5' class='dim' style='text-align: center; padding: var(--space-4);'>Loading processes...</td>
-        </tr>
-        <tr x-show='!statsLoading && !(stats && stats.processes && stats.processes.length)'>
-          <td colspan='5' class='empty-state'>No processes to show</td>
-        </tr>
-        <template x-for='proc in (stats && stats.processes ? stats.processes.slice(0, 8) : [])' :key='proc.id'>
-          <tr x-show='!statsLoading'>
-            <td><span class='font-medium'>{{ proc.name }}</span></td>
-            <td class='dim font-mono text-[11px]'>{{ proc.pid }}</td>
-            <!--
-              The track is a fixed 60px, not `flex-1` capped at 60. Flex-basis
-              zero means it surrenders every pixel when the column is tight, and
-              this column is tight on any window narrower than the screenshot it
-              was designed against: the label's 36px plus the gap took all 42px
-              the cell had, and the bar rendered at zero width. A bar that
-              disappears when the window narrows is worse than no bar.
-            -->
-            <td class='cpu-cell'>
-              <div class='flex gap-1.5 items-center'>
-                <span class='text-[11px] min-w-[36px]' :class="cpuTextClass(proc.cpu)">{{ proc.cpu.toFixed(1) + '%' }}</span>
-                <div class='cpu-track'>
-                  <div class='cpu-fill' :class="cpuBarClass(proc.cpu)" :style="cpuBarStyle(proc.cpu)"></div>
-                </div>
-              </div>
-            </td>
-            <td class='text-[11px]'>{{ proc.memMB + ' MB' }}</td>
-            <td class='dim text-[11px]'>{{ proc.user }}</td>
-          </tr>
-        </template>
-      </tbody>
-    </table>
+    <div class="hub-hero-text">
+      <div class="hub-eyebrow">Overview</div>
+      <h1 class="hub-title">Here is how your Mac is doing</h1>
+      <p class="hub-lede">What can be cleaned, what is taking the space, and what is slowing things down, checked on this Mac and nowhere else.</p>
+      <ul class="hub-facts" aria-label="This Mac">
+        <li><span class="i-f7-desktopcomputer" aria-hidden="true"></span><span data-metric="macos" data-metric-fallback="macOS">macOS</span></li>
+        <li><span class="i-f7-bolt-fill" aria-hidden="true"></span><span data-metric="chip" data-metric-fallback="Apple silicon">&hellip;</span></li>
+        <li><span class="i-f7-chart-bar-alt-fill" aria-hidden="true"></span><span data-metric="cpu" data-metric-template="{value} CPU">CPU</span></li>
+        <li><span class="i-f7-clock-fill" aria-hidden="true"></span><span data-metric="uptime" data-metric-template="Up {value}">Uptime</span></li>
+      </ul>
+      <div class="hub-actions">
+        <a class="hub-cta hub-cta-ghost" href="/app/monitor" data-stx-link>
+          <span class="i-f7-waveform-path-ecg" aria-hidden="true"></span>
+          System Monitor
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <OverviewSummary />
+
+  <div class="hub-run">
+    <a class="hub-run-button" href="/app/cleanup" data-stx-link>
+      <span class="i-f7-sparkles" aria-hidden="true"></span>
+      <span>Clean</span>
+    </a>
+    <span class="hub-run-caption">Review everything Quick Clean found</span>
   </div>
 </div>
-</div>
+
 @endsection

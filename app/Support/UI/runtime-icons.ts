@@ -13,6 +13,7 @@
  *   - `packages/uninstall/src/discover.ts` (VENDOR_MAP)
  *   - `packages/uninstall/src/remnants.ts`  (REMNANT_PRESENTATION)
  *   - `packages/clean/src/maintenance.ts`   (MAINTENANCE_TASKS)
+ *   - `resources/scripts/hub-metrics.ts`    (section-page panel rows)
  *
  * `tests/runtime-icons.test.ts` fails if any of those ship a class that is
  * missing from this list.
@@ -85,4 +86,18 @@ export const RUNTIME_ICON_CLASSES: string[] = [
   'i-f7-checkmark-alt-circle-fill',
   'i-f7-xmark-circle-fill',
   'i-f7-exclamationmark-triangle-fill',
+
+  // Section-page panels, drawn by `resources/scripts/hub-metrics.ts` after
+  // the page loads, so no template ever names them.
+  'i-f7-chart-pie-fill',
+  'i-f7-clock-fill',
+  'i-f7-doc-on-doc-fill',
+  'i-f7-eye-slash-fill',
+  'i-f7-photo-on-rectangle',
+  'i-f7-sparkles',
+  'i-f7-square-on-square',
+  'i-f7-square-stack-3d-up-fill',
+  'i-f7-tray-fill',
+  'i-f7-xmark-square-fill',
+  'i-f7-chevron-right',
 ]

@@ -1,0 +1,48 @@
+<script server>
+// The overview's section cards. A component rather than part of the view:
+// it reads the section table, and the view's own script cannot reach `~/`.
+//
+// The overview: where the app opens.
+//
+// One card per section, each with the single figure that says whether that
+// section is worth opening today, and one button for the thing most people
+// came to do. The live charts and the process table that used to be here are
+// System Monitor now, under Performance: they answer "what is the Mac doing",
+// which is a question you go and ask, not the first thing you need to see.
+//
+// Every figure is filled client-side by `hub-metrics.ts`. This page is
+// prerendered, so anything computed here would describe the build machine.
+const { SECTIONS } = require('~/resources/lib/sections')
+
+const SUMMARY = {
+  cleanup: { metric: 'junk', caption: 'of junk to clean' },
+  storage: { metric: 'disk-free', caption: 'free on your disk' },
+  performance: { metric: 'startup', caption: 'open at login' },
+  apps: { metric: 'updates', caption: 'for your apps' },
+  protection: { metric: 'privacy', caption: 'of browsing traces' },
+}
+
+export const cards = SECTIONS.filter(section => section.id !== 'overview').map(section => ({
+  id: section.id,
+  label: section.label,
+  href: section.href,
+  icon: section.icon,
+  metric: SUMMARY[section.id].metric,
+  caption: SUMMARY[section.id].caption,
+}))
+</script>
+
+<div class="hub-summary">
+  @foreach (cards as card)
+    <a class="hub-module" data-tone="{{ card.id }}" href="{{ card.href }}" data-stx-link>
+      <span class="hub-module-head">
+        <span class="hub-module-tile" aria-hidden="true"><span class="{{ card.icon }}"></span></span>
+        <span class="hub-module-name">{{ card.label }}</span>
+      </span>
+      <span class="hub-module-orb" aria-hidden="true"><span class="{{ card.icon }}"></span></span>
+      <span class="hub-module-value" data-metric="{{ card.metric }}" data-metric-fallback="—">&hellip;</span>
+      <span class="hub-module-caption">{{ card.caption }}</span>
+      <span class="hub-module-go">Review</span>
+    </a>
+  @endforeach
+</div>

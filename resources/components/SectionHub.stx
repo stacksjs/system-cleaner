@@ -1,0 +1,95 @@
+<script server>
+// A section's own page: what you see when you click a row in the sidebar.
+//
+// Three bands. The stage says what this part of the app is for: the
+// section's artwork, its name, the live figure that makes it worth opening,
+// and every tool in it as a row you can click. The round button runs the
+// thing most people came for. The panels underneath answer the next question
+// without leaving the page: what was cleaned last, how full the disk is,
+// which processes are busy.
+//
+// Everything machine-specific arrives client-side through `hub-metrics.ts`:
+// this page is prerendered at build time, and a figure computed here would be
+// the build machine's forever.
+const { SECTIONS } = require('~/resources/lib/sections')
+
+export const section = SECTIONS.find(candidate => candidate.id === $props.section) || SECTIONS[1]
+export const tools = section.tools
+export const panels = section.panels || []
+export const headlineMetric = section.headlineMetric ? section.headlineMetric.metric : ''
+export const headlineTemplate = section.headlineMetric ? section.headlineMetric.template : ''
+</script>
+
+<div class="hub" data-tone="{{ section.id }}">
+  <section class="hub-stage">
+    <div class="hub-art">
+      <div class="hub-orb" aria-hidden="true">
+        <span class="hub-orb-glow"></span>
+        <span class="hub-orb-body"><span class="hub-orb-icon {{ section.icon }}"></span></span>
+      </div>
+      <span class="hub-art-caption">
+        <span class="i-f7-lock-fill" aria-hidden="true"></span>
+        Checked on this Mac, nothing uploaded
+      </span>
+    </div>
+
+    <div class="hub-intro">
+      <h1 class="hub-name">{{ section.label }}</h1>
+      <p class="hub-headline">
+        @if(headlineMetric)
+          <span data-metric="{{ headlineMetric }}" data-metric-template="{{ headlineTemplate }}" data-metric-bare="Up to date">{{ section.headline }}</span>
+        @else
+          {{ section.headline }}
+        @endif
+      </p>
+      <p class="hub-lede">{{ section.lede }}</p>
+
+      <nav class="hub-features" aria-label="{{ section.label }} tools">
+        @foreach (tools as tool)
+          <a class="hub-feature" href="{{ tool.href }}" data-stx-link>
+            <span class="hub-feature-icon" aria-hidden="true"><span class="{{ tool.icon }}"></span></span>
+            <span class="hub-feature-text">
+              <span class="hub-feature-name">{{ tool.label }}</span>
+              <span class="hub-feature-desc">{{ tool.description }}</span>
+            </span>
+            @if(tool.metric)
+              <span class="hub-feature-metric" data-metric="{{ tool.metric }}" data-metric-template="{{ tool.metricTemplate || '{value}' }}"></span>
+            @endif
+            <span class="hub-feature-chevron i-f7-chevron-right" aria-hidden="true"></span>
+          </a>
+        @endforeach
+      </nav>
+    </div>
+  </section>
+
+  @if(section.primary)
+    <div class="hub-run">
+      <a class="hub-run-button" href="{{ section.primary.href }}" data-stx-link aria-label="{{ section.primary.label }}">
+        <span class="i-f7-play-fill" aria-hidden="true"></span>
+        <span>{{ section.primary.short }}</span>
+      </a>
+      <span class="hub-run-caption">{{ section.primary.label }}</span>
+    </div>
+  @endif
+
+  @if(panels.length)
+    <div class="hub-panels">
+      @foreach (panels as panel)
+        <section class="hub-panel" data-panel="{{ panel.id }}">
+          <header class="hub-panel-head">
+            <h2 class="hub-panel-title">{{ panel.title }}</h2>
+            <span class="hub-panel-aside" data-panel-aside></span>
+            @if(panel.link)
+              <a class="hub-panel-link" href="{{ panel.link.href }}" data-stx-link>{{ panel.link.label }}</a>
+            @endif
+          </header>
+          <div class="hub-panel-body" data-panel-body aria-busy="true">
+            <span class="hub-skeleton"></span>
+            <span class="hub-skeleton"></span>
+            <span class="hub-skeleton"></span>
+          </div>
+        </section>
+      @endforeach
+    </div>
+  @endif
+</div>
