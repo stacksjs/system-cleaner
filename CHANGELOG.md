@@ -1,5 +1,32 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.25...v1.0.0)
+
+## ✨ Features
+
+- build a sandboxed Mac App Store edition ([238ecf7](https://github.com/stacksjs/system-cleaner/commit/238ecf7)) _(by Chris)_
+- make the four inert Settings switches do what they say ([9697977](https://github.com/stacksjs/system-cleaner/commit/9697977)) _(by Chris)_
+- make the automatic update check real and say so on the privacy page ([bc64d38](https://github.com/stacksjs/system-cleaner/commit/bc64d38)) _(by Chris)_
+- fit section pages to the window and bring the website in line with the app ([5e354a6](https://github.com/stacksjs/system-cleaner/commit/5e354a6)) _(by Chris)_
+- give every sidebar section its own coloured page ([01c566f](https://github.com/stacksjs/system-cleaner/commit/01c566f)) _(by Chris)_
+- group the sidebar into labelled sections ([849dc03](https://github.com/stacksjs/system-cleaner/commit/849dc03)) _(by Chris)_
+
+## 🐛 Bug Fixes
+
+- run the daily update check from the menu bar popover too ([009db64](https://github.com/stacksjs/system-cleaner/commit/009db64)) _(by Chris)_
+- keep automatic update checks off the network ([fb77a70](https://github.com/stacksjs/system-cleaner/commit/fb77a70)) _(by Chris)_
+- keep the privacy page's source link on brand and plain-spoken use cases ([9529995](https://github.com/stacksjs/system-cleaner/commit/9529995)) _(by Chris)_
+- tighten the app after an end-to-end pass ([32179c0](https://github.com/stacksjs/system-cleaner/commit/32179c0)) _(by Chris)_
+- polish section pages, copy and marketing screenshots ([9a707f1](https://github.com/stacksjs/system-cleaner/commit/9a707f1)) _(by Chris)_
+
+## ⚡ Performance Improvements
+
+- keep the agent responsive, warm screens early, add motion ([467adcd](https://github.com/stacksjs/system-cleaner/commit/467adcd)) _(by Chris)_
+
+## Contributors
+
+- _Chris_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.24...v0.3.25)
 
 ## 🐛 Bug Fixes
