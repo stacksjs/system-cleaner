@@ -43,6 +43,8 @@ export default {
   price: '0',
   releaseType: 'AFTER_APPROVAL',
   availableInNewTerritories: true,
+  // China mainland needs an ICP filing and a security assessment first.
+  excludedTerritories: ['CHN'],
   usesIdfa: false,
   usesNonExemptEncryption: false,
   ageRating: {},
