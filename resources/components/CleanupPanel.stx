@@ -47,7 +47,7 @@
       Cleaning <span x-text='cleanProgress ? cleanProgress.done : 0'>0</span>
       of <span x-text='cleanProgress ? cleanProgress.total : 0'>0</span>&hellip;
     </button>
-    <button class='btn btn-danger btn-icon' onclick='doEmptyTrash()'>
+    <button class='btn btn-danger btn-icon' data-sandbox-limit='trash' data-sandbox-note='none' onclick='doEmptyTrash()'>
       <span class='i-f7-trash-fill' aria-hidden='true'></span>
       Empty Trash
     </button>
