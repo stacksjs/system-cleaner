@@ -1,58 +1,107 @@
 name: Publish Mac App Store
 
+# The Store edition is built by this repository's own script, not the shared
+# Stacks workflow: that one packages the framework launcher, which opens a
+# remote URL, while this app runs its agent on loopback under Craft's App Store
+# host (see docs/guide/mac-app-store.md).
+#
 # Tag pushes validate the signed package against App Store Connect without
 # uploading it, so a signing or entitlement regression surfaces on the release
-# that caused it. Uploading a build is a deliberate act: dispatch this workflow
-# with validate-only unchecked once the artifact has passed local launch and UI
-# QA. A Store build number is immutable, so an accidental upload cannot be
-# retracted and burns that number.
+# that caused it. Uploading is a deliberate act: dispatch this workflow with
+# `upload` checked and the next build number. A build number is immutable, so
+# an upload cannot be retracted and burns that number.
+#
+# Nothing runs until the repository variable APPLE_STORE_ENABLED is `true`,
+# which is set once these secrets exist:
+#   APPLE_STORE_APP_CERTIFICATE_BASE64        Apple Distribution .p12
+#   APPLE_STORE_INSTALLER_CERTIFICATE_BASE64  3rd Party Mac Developer Installer .p12
+#   APPLE_STORE_CERTIFICATE_PASSWORD          password of both .p12 files
+#   APPLE_STORE_PROVISIONING_PROFILE_BASE64   the Mac App Store profile
+#   APP_STORE_CONNECT_API_KEY_ID              App Store Connect API key
+#   APP_STORE_CONNECT_ISSUER_ID
+#   APP_STORE_CONNECT_PRIVATE_KEY             contents of AuthKey_<id>.p8
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
     inputs:
-      release-tag:
-        description: Git tag used for the GitHub release
+      build-number:
+        description: CFBundleVersion for this upload; one higher than the last build App Store Connect accepted
         required: true
         type: string
-      validate-only:
-        description: Validate the signed package without uploading it
-        required: false
-        default: true
-        type: boolean
-      mirror-s3:
-        description: Mirror artifacts to the configured S3-compatible release registry
+      upload:
+        description: Upload to App Store Connect (unchecked only validates)
         required: false
         default: false
         type: boolean
 
+permissions:
+  contents: read
+
 jobs:
-  publish:
-    # Skips cleanly until the Apple identifiers are configured, so the CLI
-    # release in Releaser is never blocked by a half-configured Store setup.
-    # Repository variables are readable here; secrets are not.
-    if: ${{ vars.APPLE_BUNDLE_ID != '' }}
-    uses: stacksjs/stacks/.github/workflows/desktop-app-store.yml@main
-    with:
-      app-name: ${{ vars.APPLE_APP_NAME }}
-      bundle-id: ${{ vars.APPLE_BUNDLE_ID }}
-      team-id: ${{ vars.APPLE_TEAM_ID }}
-      desktop-url: ${{ vars.DESKTOP_URL }}
-      # Left empty on purpose: the reusable workflow derives the marketing
-      # version from the tag (minus the `v`), which is what `buddy release`
-      # bumped. Setting it here would let a stale variable outrank the tag.
-      app-version: ${{ vars.APPLE_APP_VERSION }}
-      # Both optional: the signing step defaults to the identities it imported.
-      app-signing-identity: ${{ vars.APPLE_APP_SIGNING_IDENTITY }}
-      installer-signing-identity: ${{ vars.APPLE_INSTALLER_SIGNING_IDENTITY }}
-      release-tag: ${{ inputs.release-tag || github.ref_name }}
-      validate-only: ${{ inputs.validate-only == null && true || inputs.validate-only }}
-      mirror-s3: ${{ inputs.mirror-s3 == true }}
-      s3-provider: ${{ vars.RELEASE_S3_PROVIDER || 'hetzner' }}
-      s3-bucket: ${{ vars.RELEASE_S3_BUCKET }}
-      s3-region: ${{ vars.RELEASE_S3_REGION }}
-      s3-endpoint: ${{ vars.RELEASE_S3_ENDPOINT }}
-      s3-prefix: ${{ vars.RELEASE_S3_PREFIX }}
-      s3-public-url: ${{ vars.RELEASE_S3_PUBLIC_URL }}
-    secrets: inherit
+  store:
+    name: Mac App Store package
+    if: ${{ vars.APPLE_STORE_ENABLED == 'true' }}
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # Pantry installs Craft (whose craft-app-store runtime becomes the main
+      # executable), imports both Store certificates into a temporary keychain,
+      # and writes the provisioning profile.
+      - name: Setup Pantry
+        id: pantry
+        uses: pantry-pm/pantry/packages/action@v0.11.210
+        with:
+          version: '0.11.210'
+          apple-signing: 'true'
+          apple-signing-application-certificate: ${{ secrets.APPLE_STORE_APP_CERTIFICATE_BASE64 }}
+          apple-signing-installer-certificate: ${{ secrets.APPLE_STORE_INSTALLER_CERTIFICATE_BASE64 }}
+          apple-signing-certificate-password: ${{ secrets.APPLE_STORE_CERTIFICATE_PASSWORD }}
+          apple-signing-provisioning-profile: ${{ secrets.APPLE_STORE_PROVISIONING_PROFILE_BASE64 }}
+
+      - name: Install Dependencies
+        run: bun install
+
+      # app-store:package and app-store:deliver ship after ts-pantry 0.11.210.
+      - name: Install the ts-pantry CLI
+        run: |
+          mkdir -p "$RUNNER_TEMP/ts-pantry"
+          cd "$RUNNER_TEMP/ts-pantry"
+          bun init -y >/dev/null
+          bun add ts-pantry@latest
+          echo "TS_PANTRY_CLI=$RUNNER_TEMP/ts-pantry/node_modules/ts-pantry/dist/bin/cli.js" >> "$GITHUB_ENV"
+
+      - name: Build and package the Store edition
+        run: bun run build:app-store
+        env:
+          APP_STORE_BUILD_NUMBER: ${{ inputs.build-number || github.run_number }}
+          APPLE_STORE_SIGNING_IDENTITY: ${{ steps.pantry.outputs.apple-signing-identity }}
+          APPLE_STORE_INSTALLER_IDENTITY: ${{ steps.pantry.outputs.apple-signing-installer-identity }}
+          APPLE_STORE_PROVISIONING_PROFILE: ${{ steps.pantry.outputs.apple-signing-provisioning-profile }}
+
+      - name: ${{ inputs.upload && 'Upload to App Store Connect' || 'Validate against App Store Connect' }}
+        run: |
+          pkg=$(ls storage/framework/app-store/*.pkg | head -1)
+          test -s "$pkg"
+          bun "$TS_PANTRY_CLI" app-store:deliver "$pkg" ${{ inputs.upload && '' || '--validate-only' }}
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+
+      - name: Keep the package
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-app-store-pkg
+          path: storage/framework/app-store/*.pkg
+          if-no-files-found: error
+          retention-days: 7
