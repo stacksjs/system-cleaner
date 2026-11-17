@@ -25,11 +25,11 @@
  * the window is hidden, and every request is a read: nothing is cleaned,
  * changed or deleted.
  *
- * Nothing here goes online. The full update check asks the Mac App Store
- * (`mas outdated`), and the privacy page promises the app reaches the
- * network only when you ask it to, so that request waits for the screen
- * that shows it. The quick tier warmed below reads what macOS, Homebrew and
- * Pantry already know.
+ * Nothing here goes online. The update checks ask Pantry's registry and the
+ * Mac App Store, and the privacy page promises the app reaches the network
+ * only when you ask it to, so those wait for the screen that shows them.
+ * `updates-summary` is the local half: macOS's cached list and Homebrew's
+ * own data.
  */
 
 interface Warm {
@@ -71,7 +71,9 @@ const SCREENS: Record<string, Array<Warm | (() => Promise<void>)>> = {
     { path: 'installed-apps', body: { sizes: true } },
     { path: 'orphaned-data' },
   ],
-  '/app/updates': [{ path: 'updates-check', body: { fullScan: false, forceRefresh: false, tier: 'quick' } }],
+  // Updates asks Pantry's registry and the App Store, so it is checked when
+  // someone opens it, never ahead of time; this warms only the local half.
+  '/app/updates': [{ path: 'updates-summary' }],
   '/app/extensions': [{ path: 'extensions-list', body: {} }, { path: 'extensions-list', body: { sizes: true } }],
 
   '/app/protection': [{ path: 'privacy-scan' }, { path: 'permissions' }],

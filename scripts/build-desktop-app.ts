@@ -128,6 +128,30 @@ const web = path.join(ROOT, 'dist')
 if (!fs.existsSync(path.join(web, 'app/large-files.html')))
   throw new Error(`View build did not produce the app pages in ${web}`)
 
+// Every page must come from this one render. The router reloads the whole
+// window when the page it fetched carries a different build stamp from the
+// one on screen, so a payload mixing two renders (an incremental build that
+// redrew only the pages whose sources changed) turns every move between an
+// old page and a new one into a full reload: blank flash, lost history,
+// Back disabled. The caches are cleared above for this reason; this makes
+// sure it held.
+{
+  const stamps = new Map<string, string[]>()
+  const walk = (dir: string): void => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) walk(full)
+      else if (entry.name.endsWith('.html')) {
+        const stamp = /<meta name="stx-build" content="([^"]*)"/.exec(fs.readFileSync(full, 'utf8'))?.[1]
+        if (stamp) stamps.set(stamp, [...(stamps.get(stamp) || []), path.relative(web, full)])
+      }
+    }
+  }
+  walk(web)
+  if (stamps.size > 1)
+    throw new Error(`View build mixes ${stamps.size} renders: ${[...stamps.entries()].map(([stamp, files]) => `${stamp} (${files.length} pages, e.g. ${files[0]})`).join('; ')}`)
+}
+
 // ── 2. Stage the payload ────────────────────────────────────────
 // `buddy build:dmg` copies this directory into Contents/Resources. Both halves
 // are build output — the rendered UI, and the migrations `buddy

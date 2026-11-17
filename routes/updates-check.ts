@@ -18,6 +18,13 @@ export interface UpdatesCheckResult {
   pantryOutdated: Array<{ name: string, current: string, wanted: string, latest: string }>
   pantryPackages: string[]
   pantryTrackedCount: number
+  /**
+   * Whether Pantry was actually asked. `pantry outdated` looks every package
+   * up in Pantry's registry, so it runs only in a check someone started; the
+   * local check behind the badge leaves it false and the page says "Not
+   * checked" rather than claiming Pantry is up to date.
+   */
+  pantryChecked: boolean
   desktopApps: Array<{
     name: string
     version: string
@@ -44,6 +51,16 @@ const responseCache = new TtlCache<UpdatesCheckResult>(5 * 60_000)
 const quickTierCache = new TtlCache<UpdatesCheckResult>(5 * 60_000)
 const fullScanCache = new TtlCache<UpdatesCheckResult>(15 * 60_000)
 const brewOutdatedCache = new TtlCache<string>(5 * 60_000)
+/** The local-only check behind the badge and the section pages. */
+const localCheckCache = new TtlCache<UpdatesCheckResult>(5 * 60_000)
+/** Pantry's last answer from a check someone started, reused by the local one. */
+const pantryAnswerCache = new TtlCache<{ ok: boolean, stdout: string, stderr: string }>(15 * 60_000)
+/**
+ * The same answer while it is under a minute old. Updates runs a quick pass
+ * and then a full one, and both used to ask Pantry's registry, a five-second
+ * round trip each, seconds apart.
+ */
+const pantryRecentCache = new TtlCache<{ ok: boolean, stdout: string, stderr: string }>(60_000)
 const brewCaskListCache = new TtlCache<string>(60 * 60_000)
 const masAvailableCache = new TtlCache<boolean>(60 * 60_000)
 
@@ -204,7 +221,11 @@ async function isMasInstalled(): Promise<boolean> {
 async function getBrewOutdatedJson(): Promise<string | null> {
   const cached = brewOutdatedCache.get('json')
   if (cached) return cached
-  const r = await exec('brew outdated --json 2>/dev/null', { timeout: 30_000 })
+  // `outdated` is not one of the commands Homebrew auto-updates before, and
+  // it reads the package data Homebrew already has. The variable makes that
+  // explicit, so a Homebrew that changed its mind still would not go online
+  // from a check nobody asked for.
+  const r = await exec('HOMEBREW_NO_AUTO_UPDATE=1 brew outdated --json 2>/dev/null', { timeout: 30_000 })
   if (r.ok && r.stdout) {
     brewOutdatedCache.set('json', r.stdout)
     return r.stdout
@@ -269,12 +290,27 @@ export async function runUpdatesCheck(
   })
 }
 
-async function performUpdatesCheck(fullScan: boolean, tier: UpdatesTier): Promise<UpdatesCheckResult> {
+async function performUpdatesCheck(fullScan: boolean, tier: UpdatesTier, network = true): Promise<UpdatesCheckResult> {
   const skipDesktop = tier === 'quick'
+  // Off the network, Pantry's answer is whatever a check someone started
+  // last found, or nothing at all.
+  const recentPantry = pantryRecentCache.get('answer')
+  const pantryAnswer = !network
+    ? Promise.resolve(pantryAnswerCache.get('answer') || { ok: false, stdout: '', stderr: '' })
+    : recentPantry
+      ? Promise.resolve(recentPantry)
+      : singleFlight('pantry-outdated', () => exec('pantry outdated 2>/dev/null', { timeout: 10_000 })).then((answer) => {
+          if (answer.ok) {
+            pantryAnswerCache.set('answer', answer)
+            pantryRecentCache.set('answer', answer)
+          }
+          return answer
+        })
+  const pantryChecked = network || pantryAnswerCache.get('answer') !== undefined
 
   const [brewJson, pantryResult, pantryPkgs, systemUpdates, brewCaskList, masResult] = await Promise.all([
     getBrewOutdatedJson(),
-    exec('pantry outdated 2>/dev/null', { timeout: 10_000 }),
+    pantryAnswer,
     Promise.resolve(getPantryTrackedFromLock()),
     checkSoftwareUpdates({ fullScan }),
     skipDesktop ? Promise.resolve('') : getBrewCaskList(),
@@ -334,6 +370,7 @@ async function performUpdatesCheck(fullScan: boolean, tier: UpdatesTier): Promis
       pantryOutdated,
       pantryPackages: pantryPackageNames,
       pantryTrackedCount,
+      pantryChecked,
       desktopApps: [],
       desktopOutdated: [],
       systemUpdates: systemOutdated,
@@ -457,6 +494,7 @@ async function performUpdatesCheck(fullScan: boolean, tier: UpdatesTier): Promis
     pantryOutdated,
     pantryPackages: pantryPackageNames,
     pantryTrackedCount,
+    pantryChecked,
     desktopApps,
     desktopOutdated,
     systemUpdates: systemOutdated,
@@ -478,45 +516,62 @@ function countOutdatedFromCheck(check: UpdatesCheckResult): number {
     + check.desktopOutdated.length
 }
 
+/**
+ * The check the app runs without being asked: the badge on Applications, the
+ * overview card and the section page. It reads only what is already on this
+ * Mac (macOS's cached list of updates and Homebrew's local package data) and
+ * never asks Pantry's registry or the App Store, so opening the app sends
+ * nothing anywhere. The full picture comes from Updates, when someone opens
+ * it or presses Check.
+ */
+export async function runLocalUpdatesCheck(): Promise<UpdatesCheckResult> {
+  const hit = localCheckCache.get('local')
+  if (hit) return { ...hit, cached: true }
+  return singleFlight('updates-check:local', async () => {
+    const again = localCheckCache.get('local')
+    if (again) return { ...again, cached: true }
+    const result = await performUpdatesCheck(false, 'quick', false)
+    localCheckCache.set('local', result)
+    return result
+  })
+}
+
 export async function getUpdatesSummary(): Promise<{
   success: true
   total: number
   systemCount: number
   brewCount: number
   pantryCount: number
+  pantryChecked: boolean
   desktopCount: number
+  /** App updates come from the App Store and Homebrew casks: the full check only. */
+  desktopChecked: boolean
+  /** Every source was asked, so a zero total means up to date. */
+  complete: boolean
   clToolsCount: number
   macosCount: number
   cached: boolean
 }> {
-  const cached = responseCache.get('quick')
+  // A check someone started knows more than the local one, so it wins while
+  // it is fresh.
+  const started = responseCache.get('quick')
     || quickTierCache.get('tier-quick')
     || fullScanCache.get('full')
-  if (cached) {
-    return {
-      success: true,
-      total: countOutdatedFromCheck(cached),
-      systemCount: cached.systemUpdateCount,
-      brewCount: cached.brewFormulae.length + cached.brewCasks.length,
-      pantryCount: cached.pantryOutdated.length,
-      desktopCount: cached.desktopOutdated.length,
-      clToolsCount: cached.systemUpdates.filter(u => u.kind === 'cltools').length,
-      macosCount: cached.systemUpdates.filter(u => u.kind === 'macos').length,
-      cached: true,
-    }
-  }
-
-  const check = await runUpdatesCheck(false, false, 'quick')
-  const fullHit = responseCache.get('quick')
+  const check = started ? { ...started, cached: true } : await runLocalUpdatesCheck()
+  const fullHit = responseCache.get('quick') || fullScanCache.get('full')
   const desktopCount = fullHit?.desktopOutdated.length ?? 0
+  const desktopChecked = fullHit !== undefined
 
   return {
     success: true,
-    total: countOutdatedFromCheck(check) + desktopCount,
+    total: countOutdatedFromCheck(check) - check.desktopOutdated.length + desktopCount,
     systemCount: check.systemUpdateCount,
     brewCount: check.brewFormulae.length + check.brewCasks.length,
     pantryCount: check.pantryOutdated.length,
+    pantryChecked: check.pantryChecked,
     desktopCount,
+    desktopChecked,
+    complete: check.pantryChecked && desktopChecked,
     clToolsCount: check.systemUpdates.filter(u => u.kind === 'cltools').length,
     macosCount: check.systemUpdates.filter(u => u.kind === 'macos').length,
     cached: check.cached,

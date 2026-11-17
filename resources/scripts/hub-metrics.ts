@@ -176,8 +176,11 @@ const SOURCES: Source[] = [
   {
     path: 'updates-summary',
     provides: ['updates'],
+    // Zero means up to date only once every source has been asked. The check
+    // the app runs on its own stays off the network, so until someone opens
+    // Updates it has not asked about app or Pantry updates and says so.
     derive: (d): Values => (d.success && typeof d.total === 'number'
-      ? { updates: d.total === 0 ? 'Up to date' : plural(d.total, 'update') }
+      ? { updates: d.total > 0 ? plural(d.total, 'update') : (d.complete === false ? 'Not checked yet' : 'Up to date') }
       : {}),
   },
   {
@@ -207,7 +210,9 @@ function render(element: HTMLElement, value: string): void {
   const template = element.getAttribute('data-metric-template')
   const bare = (element.getAttribute('data-metric-bare') || '').split('|')
   const clear = element.getAttribute('data-metric-clear')
-  const next = bare.includes(value) ? (clear || value) : (template ? template.replace('{value}', value) : value)
+  // The first bare value is the all-clear and takes the clear text ("Every
+  // app is up to date"); any other bare value stands as written.
+  const next = value === bare[0] ? (clear || value) : bare.includes(value) ? value : (template ? template.replace('{value}', value) : value)
   const changed = element.textContent !== next
   // Only the first arrival animates. A minute later the same figure comes
   // back from the cache, and counting up again would be noise.
@@ -477,16 +482,20 @@ const PANELS: Record<string, () => Promise<PanelResult>> = {
   async 'updates-breakdown'() {
     const d = await api('updates-summary')
     if (!d?.success) return { body: [empty({ icon: 'i-f7-arrow-down-circle-fill', title: 'Not checked yet', body: 'One check covers macOS, your apps, Homebrew and Pantry.', action: { label: 'Check for updates', href: '/app/updates' } })] }
+    // Apps and Pantry are asked only by a check someone starts (they reach the
+    // App Store and Pantry's registry), so until then they say so instead of
+    // claiming to be up to date.
     const sources = [
-      { title: 'macOS', icon: 'i-f7-desktopcomputer', count: d.macosCount || d.systemCount || 0 },
-      { title: 'Apps', icon: 'i-f7-app-fill', count: d.desktopCount || 0 },
-      { title: 'Homebrew', icon: 'i-f7-cube-box-fill', count: d.brewCount || 0 },
-      { title: 'Pantry', icon: 'i-f7-cube-fill', count: d.pantryCount || 0 },
-      { title: 'Command Line Tools', icon: 'i-f7-chevron-left-slash-chevron-right', count: d.clToolsCount || 0 },
+      { title: 'macOS', icon: 'i-f7-desktopcomputer', count: d.macosCount || d.systemCount || 0, checked: true },
+      { title: 'Apps', icon: 'i-f7-app-fill', count: d.desktopCount || 0, checked: d.desktopChecked !== false },
+      { title: 'Homebrew', icon: 'i-f7-cube-box-fill', count: d.brewCount || 0, checked: true },
+      { title: 'Pantry', icon: 'i-f7-cube-fill', count: d.pantryCount || 0, checked: d.pantryChecked !== false },
+      { title: 'Command Line Tools', icon: 'i-f7-chevron-left-slash-chevron-right', count: d.clToolsCount || 0, checked: true },
     ]
+    const complete = d.complete !== false
     return {
-      aside: d.total ? plural(d.total, 'update') : 'Everything is up to date',
-      body: sources.map(source => row({ icon: source.icon, title: source.title, value: source.count ? String(source.count) : 'Up to date' })),
+      aside: d.total ? plural(d.total, 'update') : (complete ? 'Everything is up to date' : 'Open Updates to check the rest'),
+      body: sources.map(source => row({ icon: source.icon, title: source.title, value: source.count ? String(source.count) : (source.checked ? 'Up to date' : 'Not checked') })),
     }
   },
 
