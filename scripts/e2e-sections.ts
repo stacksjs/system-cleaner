@@ -30,7 +30,8 @@ import process from 'node:process'
 import { SECTIONS } from '../resources/lib/sections'
 
 const BASE = (process.env.BASE_URL || 'http://127.0.0.1:50297').replace(/\/$/, '')
-const DRIVER = '.claude/skills/stacks-browse/scripts/browse.ts'
+// The tracked copy: `.claude/skills` is a local, untracked link to it, so CI has no such path.
+const DRIVER = 'storage/framework/defaults/ai/skills/stacks-browse/scripts/browse.ts'
 // A beat for the view transition before the next click; checks poll anyway.
 const SETTLE = 450
 
