@@ -15,13 +15,21 @@
  *   travel and click; the cheap requests finish in that time and the slow
  *   ones get a head start.
  * - Idle. Once the window has been open and quiet for a moment, the slow
- *   screens are warmed one at a time, never in parallel, so the app is not
- *   competing with itself and the Mac is not asked to walk the disk twice.
+ *   screens are warmed in two lanes: Developer Junk's long project walk on
+ *   its own, everything else one screen at a time beside it. Neither lane
+ *   asks for the same walk as the other, so the Mac never walks a folder
+ *   twice.
  *
  * The agent coalesces overlapping requests, so a warm-up still running when
  * the screen opens is joined rather than repeated. Nothing here is sent while
  * the window is hidden, and every request is a read: nothing is cleaned,
  * changed or deleted.
+ *
+ * Nothing here goes online. The full update check asks the Mac App Store
+ * (`mas outdated`), and the privacy page promises the app reaches the
+ * network only when you ask it to, so that request waits for the screen
+ * that shows it. The quick tier warmed below reads what macOS, Homebrew and
+ * Pantry already know.
  */
 
 interface Warm {
@@ -62,9 +70,8 @@ const SCREENS: Record<string, Array<Warm | (() => Promise<void>)>> = {
     { path: 'installed-apps', body: {} },
     { path: 'installed-apps', body: { sizes: true } },
     { path: 'orphaned-data' },
-    { path: 'updates-check', body: { tier: 'full' } },
   ],
-  '/app/updates': [{ path: 'updates-check', body: { fullScan: false, forceRefresh: false, tier: 'quick' } }, { path: 'updates-check', body: { tier: 'full' } }],
+  '/app/updates': [{ path: 'updates-check', body: { fullScan: false, forceRefresh: false, tier: 'quick' } }],
   '/app/extensions': [{ path: 'extensions-list', body: {} }, { path: 'extensions-list', body: { sizes: true } }],
 
   '/app/protection': [{ path: 'privacy-scan' }, { path: 'permissions' }],
@@ -86,7 +93,10 @@ const IDLE_LANES: string[][] = [
 
 /** A screen warmed recently is not warmed again; the agent's caches last minutes. */
 const FRESH_MS = 90_000
+/** When each screen's warm-up last finished every one of its requests. */
 const warmedAt = new Map<string, number>()
+/** Screens whose warm-up is running now, so a second trigger joins it. */
+const warming = new Map<string, Promise<void>>()
 
 function post(warm: Warm): Promise<void> {
   return fetch(`/api/${warm.path}`, {
@@ -102,19 +112,28 @@ function post(warm: Warm): Promise<void> {
  * repeat slow walks for screens nobody opens. Intent may warm again once the
  * last warm-up is stale, because then someone is about to look.
  */
-async function warm(route: string, fromIdle = false): Promise<void> {
+function warm(route: string, fromIdle = false): Promise<void> {
   const steps = SCREENS[route]
-  if (!steps || document.hidden) return
+  if (!steps || document.hidden) return Promise.resolve()
+  const running = warming.get(route)
+  if (running) return running
   const last = warmedAt.get(route) || 0
-  if (fromIdle ? last > 0 : Date.now() - last < FRESH_MS) return
-  warmedAt.set(route, Date.now())
-  // In order, not in parallel: two requests for the same screen often share
-  // a scan (the list, then its sizes), and the second is cheaper once the
-  // first has landed.
-  for (const step of steps) {
-    if (document.hidden) return
-    await (typeof step === 'function' ? step().catch(() => {}) : post(step))
-  }
+  if (fromIdle ? last > 0 : Date.now() - last < FRESH_MS) return Promise.resolve()
+
+  const run = (async () => {
+    // In order, not in parallel: two requests for the same screen often
+    // share a scan (the list, then its sizes), and the second is cheaper
+    // once the first has landed.
+    for (const step of steps) {
+      // Hidden partway: the screen stays unwarmed, so the next idle pass
+      // starts it again rather than counting half a warm-up as done.
+      if (document.hidden) return
+      await (typeof step === 'function' ? step().catch(() => {}) : post(step))
+    }
+    warmedAt.set(route, Date.now())
+  })().finally(() => warming.delete(route))
+  warming.set(route, run)
+  return run
 }
 
 function routeOf(target: EventTarget | null): string | null {
@@ -135,7 +154,7 @@ document.addEventListener('focusin', (event) => {
   if (route) void warm(route)
 })
 
-// Idle: after the window has settled, the slow screens, one at a time.
+// Idle: after the window has settled, the slow screens, in their lanes.
 const idle = (callback: () => void): void => {
   const requestIdle = (window as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void }).requestIdleCallback
   if (typeof requestIdle === 'function') requestIdle(callback, { timeout: 4000 })
@@ -147,15 +166,19 @@ let idleRunning = false
 async function warmAll(): Promise<void> {
   if (idleRunning) return
   idleRunning = true
-  await Promise.all(IDLE_LANES.map(async (lane) => {
-    // A lane stops when the window is hidden; the next idle pass resumes
-    // from the first screen it has not warmed yet.
-    for (const route of lane) {
-      if (document.hidden) return
-      await warm(route, true)
-    }
-  }))
-  idleRunning = false
+  try {
+    await Promise.all(IDLE_LANES.map(async (lane) => {
+      // A lane stops when the window is hidden; the next idle pass resumes
+      // from the first screen it has not finished warming.
+      for (const route of lane) {
+        if (document.hidden) return
+        await warm(route, true)
+      }
+    }))
+  }
+  finally {
+    idleRunning = false
+  }
 }
 
 // The menu bar popover loads this layout's scripts too; it has no screens to

@@ -30,9 +30,48 @@ function api(path: string): Promise<Json | null> {
   const data = fetch(`/api/${path}`, { method: 'POST', cache: 'no-store' })
     .then(response => (response.ok ? response.json() as Promise<Json> : null))
     .catch(() => null)
-  cache.set(path, { at: Date.now(), data })
+  const entry = { at: Date.now(), data }
+  cache.set(path, entry)
+  // A failure is not an answer. The agent is briefly busy during a long walk,
+  // and remembering that for a minute would keep "Not available" on screen
+  // long after it could have answered; the next fill asks again.
+  void data.then((result) => {
+    if (result === null && cache.get(path) === entry) cache.delete(path)
+  })
   return data
 }
+
+/**
+ * Requests that delete something. The agent drops its own totals when one of
+ * these runs, but this page keeps a copy for a minute, which is how a Quick
+ * Clean could finish and the overview go on showing the junk it had just
+ * removed. Every screen's own requests go through `fetch`, so watching it here
+ * catches all of them, including tools added later, without each page having
+ * to announce what it did.
+ */
+const CHANGES_DISK = /^\/api\/(?:clean(?!up-(?:targets|history))[\w-]*|empty-trash|bulk-delete|delete-[\w-]+|remove-[\w-]+|shred-paths|privacy-clean|app-uninstall)(?:\?|$)/
+
+function forgetAfterChanges(): void {
+  const original = window.fetch.bind(window)
+  const watched = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const result = original(input, init)
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+    const method = (init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase()
+    const pathname = new URL(url, location.href).pathname
+    if (method === 'POST' && CHANGES_DISK.test(pathname)) {
+      void result.then((response) => {
+        if (!response.ok) return
+        cache.clear()
+        // The sidebar's disk meter is on screen now; the rest refresh as
+        // their pages open.
+        fillMetrics()
+      }, () => {})
+    }
+    return result
+  }
+  window.fetch = watched as typeof fetch
+}
+forgetAfterChanges()
 
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
@@ -122,7 +161,7 @@ const SOURCES: Source[] = [
         values.health = String(d.healthScore)
         values['health-label'] = d.healthScore >= 80 ? 'Good' : d.healthScore >= 60 ? 'Fair' : 'Needs attention'
       }
-      if (typeof d.extensions === 'number') values.extensions = plural(d.extensions, 'extension')
+      if (typeof d.extensions === 'number') values.extensions = d.extensions === 0 ? 'None' : plural(d.extensions, 'extension')
       if (d.cpuLabel) values.chip = `${d.cpuLabel} · ${d.cpuCores} cores`
       if (d.uptimeStr) values.uptime = d.uptimeStr
       if (d.macosVersion) values.macos = `macOS ${d.macosVersion}`
@@ -263,8 +302,40 @@ function row(options: RowOptions): HTMLElement {
   return node
 }
 
-function empty(text: string): HTMLElement {
-  return el('p', 'hub-panel-empty', text)
+interface EmptyState {
+  icon: string
+  title: string
+  body?: string
+  /** `clear` is good news and wears the section colour; `error` offers a retry. */
+  kind?: 'clear' | 'info' | 'error'
+  action?: { label: string, href: string }
+}
+
+function empty(state: EmptyState): HTMLElement {
+  const node = el('div', 'hub-empty')
+  const mark = el('span', 'hub-empty-mark')
+  mark.dataset.kind = state.kind || 'info'
+  mark.append(glyph(state.icon))
+  node.append(mark, el('strong', 'hub-empty-title', state.title))
+  if (state.body) node.append(el('p', 'hub-empty-body', state.body))
+  if (state.action) {
+    const link = el('a', 'hub-panel-button', state.action.label)
+    link.href = state.action.href
+    link.setAttribute('data-stx-link', '')
+    node.append(link)
+  }
+  else if (state.kind === 'error') {
+    const retry = el('button', 'hub-panel-button', 'Try again')
+    retry.type = 'button'
+    retry.setAttribute('data-panel-retry', '')
+    node.append(retry)
+  }
+  return node
+}
+
+/** A panel that could not be read: the agent was busy or a source failed. */
+function failed(title: string, body = 'It may still be busy with a long scan.'): HTMLElement {
+  return empty({ icon: 'i-f7-exclamationmark-triangle-fill', kind: 'error', title, body })
 }
 
 function stat(label: string, value: string): HTMLElement {
@@ -306,12 +377,12 @@ interface PanelResult {
 const PANELS: Record<string, () => Promise<PanelResult>> = {
   async 'cleanup-history'() {
     const d = await api('cleanup-history')
-    if (!d?.success) return { body: [empty('Cleanup history is not available right now.')] }
+    if (!d?.success) return { body: [failed('History could not be read')] }
     const runs = ((d.runs as Json[]) || []).filter(run => run.itemCount > 0).slice(0, 4)
     return {
       aside: d.runCount ? `${d.lifetimeFreedFormatted} reclaimed so far` : undefined,
       body: runs.length === 0
-        ? [empty('Nothing cleaned yet. Quick Clean is the place to start.')]
+        ? [empty({ icon: 'i-f7-clock-fill', title: 'Nothing cleaned yet', body: 'Each clean you run is listed here with the space it gave back. The round button above starts the first.' })]
         : runs.map((run) => {
             const known = SOURCE_LABELS[run.source] || { label: String(run.source), icon: 'i-f7-sparkles' }
             // A run that moved files to the Trash has freed nothing yet; the
@@ -329,7 +400,7 @@ const PANELS: Record<string, () => Promise<PanelResult>> = {
 
   async 'schedule'() {
     const d = await api('schedule')
-    if (!d?.success) return { body: [empty('The schedule could not be read.')] }
+    if (!d?.success) return { body: [failed('The schedule could not be read')] }
     const on = !!d.spec?.enabled && !!d.installed
     const status = el('div', 'hub-status')
     status.append(
@@ -346,7 +417,7 @@ const PANELS: Record<string, () => Promise<PanelResult>> = {
 
   async 'disk'() {
     const d = await api('dashboard-stats')
-    if (!d?.success || !d.diskTotal || d.diskTotal === '-') return { body: [empty('The disk could not be read.')] }
+    if (!d?.success || !d.diskTotal || d.diskTotal === '-') return { body: [failed('The disk could not be read')] }
     const meter = el('div', 'hub-meter')
     const fill = el('span', 'hub-meter-fill')
     fill.style.width = `${Math.max(2, Math.min(100, d.dUsedPct))}%`
@@ -376,7 +447,7 @@ const PANELS: Record<string, () => Promise<PanelResult>> = {
 
   async 'gauges'() {
     const d = await api('dashboard-stats')
-    if (!d?.success) return { body: [empty('Live figures are not available right now.')] }
+    if (!d?.success) return { body: [failed('Live figures are not available')] }
     const gauges = el('div', 'hub-gauges')
     gauges.append(
       gauge('CPU', d.cpuAvgPercent, `${Math.round(d.cpuAvgPercent)}%`),
@@ -390,8 +461,9 @@ const PANELS: Record<string, () => Promise<PanelResult>> = {
 
   async 'processes'() {
     const d = await api('dashboard-stats')
-    const processes = (d?.processes as Json[] | undefined) || []
-    if (processes.length === 0) return { body: [empty('No process figures yet.')] }
+    if (!d?.success) return { body: [failed('Process figures are not available')] }
+    const processes = (d.processes as Json[] | undefined) || []
+    if (processes.length === 0) return { body: [empty({ icon: 'i-f7-chart-bar-alt-fill', title: 'Nothing busy right now', body: 'No process is using a noticeable share of the CPU or memory.' })] }
     return {
       body: processes.slice(0, 4).map(proc => row({
         title: proc.name,
@@ -404,7 +476,7 @@ const PANELS: Record<string, () => Promise<PanelResult>> = {
 
   async 'updates-breakdown'() {
     const d = await api('updates-summary')
-    if (!d?.success) return { body: [empty('Updates have not been checked yet.')] }
+    if (!d?.success) return { body: [empty({ icon: 'i-f7-arrow-down-circle-fill', title: 'Not checked yet', body: 'One check covers macOS, your apps, Homebrew and Pantry.', action: { label: 'Check for updates', href: '/app/updates' } })] }
     const sources = [
       { title: 'macOS', icon: 'i-f7-desktopcomputer', count: d.macosCount || d.systemCount || 0 },
       { title: 'Apps', icon: 'i-f7-app-fill', count: d.desktopCount || 0 },
@@ -420,9 +492,9 @@ const PANELS: Record<string, () => Promise<PanelResult>> = {
 
   async 'extensions'() {
     const d = await api('extensions-list')
-    if (!d?.success) return { body: [empty('Extensions could not be listed.')] }
+    if (!d?.success) return { body: [failed('Extensions could not be listed')] }
     const list = (d.extensions as Json[] | undefined) || []
-    if (list.length === 0) return { body: [empty('No browser extensions are installed. Nothing to review here.')] }
+    if (list.length === 0) return { body: [empty({ icon: 'i-f7-checkmark-shield-fill', kind: 'clear', title: 'No extensions installed', body: 'None of your browsers has an extension, so there is nothing to review.' })] }
     return {
       aside: plural(list.length, 'extension'),
       body: list.slice(0, 4).map(extension => row({
@@ -435,10 +507,10 @@ const PANELS: Record<string, () => Promise<PanelResult>> = {
 
   async 'traces'() {
     const d = await api('privacy-scan')
-    if (!d?.success) return { body: [empty('Browsers could not be read.')] }
+    if (!d?.success) return { body: [failed('Browsers could not be read')] }
     const items = ((d.items as Json[] | undefined) || []).filter(item => item.sizeBytes > 0)
       .sort((a, b) => b.sizeBytes - a.sizeBytes)
-    if (items.length === 0) return { body: [empty('No browsing traces found.')] }
+    if (items.length === 0) return { body: [empty({ icon: 'i-f7-checkmark-shield-fill', kind: 'clear', title: 'No browsing traces', body: 'Your browsers have no history, cookies or caches worth clearing.' })] }
     return {
       aside: `${formatBytes(d.totalBytes)} in all`,
       body: items.slice(0, 4).map(item => row({ icon: item.browserIcon || 'i-f7-globe', title: `${item.browser} · ${item.label}`, sub: item.profile, value: item.sizeFormatted })),
@@ -447,7 +519,7 @@ const PANELS: Record<string, () => Promise<PanelResult>> = {
 
   async 'access'() {
     const d = await api('permissions')
-    if (!d) return { body: [empty('Permissions could not be read.')] }
+    if (!d) return { body: [failed('Permissions could not be read')] }
     if (!d.success) {
       const note = el('p', 'hub-panel-note', d.reason || 'Reading what apps were granted needs Full Disk Access.')
       const button = el('button', 'hub-panel-button', 'Open Privacy & Security')
@@ -485,6 +557,37 @@ function reveal(body: HTMLElement): void {
   }
 }
 
+/**
+ * Keep a panel's rows inside the panel. A section page opens with nothing
+ * below the fold, so on a short window the panels are the band that gives
+ * way: each drops whole rows from the bottom, never half of one, and shows
+ * them again as the window grows. The first item always stays.
+ */
+function fitRows(body: HTMLElement): void {
+  const items = Array.from(body.children).filter((child): child is HTMLElement => child.matches('.hub-row, .hub-stats'))
+  for (const item of items) item.hidden = false
+  for (let index = items.length - 1; index > 0 && body.scrollHeight > body.clientHeight + 1; index--)
+    items[index].hidden = true
+}
+
+function fitAllRows(): void {
+  for (const body of Array.from(document.querySelectorAll<HTMLElement>('[data-panel-filled] [data-panel-body]')))
+    fitRows(body)
+}
+
+let fitQueued = false
+const scrollArea = document.querySelector('.main')
+if (scrollArea && typeof ResizeObserver === 'function') {
+  new ResizeObserver(() => {
+    if (fitQueued) return
+    fitQueued = true
+    requestAnimationFrame(() => {
+      fitQueued = false
+      fitAllRows()
+    })
+  }).observe(scrollArea)
+}
+
 function fillPanels(): void {
   for (const panel of Array.from(document.querySelectorAll<HTMLElement>('[data-panel]'))) {
     if (panel.hasAttribute('data-panel-filled')) continue
@@ -493,11 +596,12 @@ function fillPanels(): void {
     const body = panel.querySelector<HTMLElement>('[data-panel-body]')
     if (!draw || !body) continue
     void draw()
-      .catch((): PanelResult => ({ body: [empty('This could not be loaded.')] }))
+      .catch((): PanelResult => ({ body: [failed('This could not be loaded')] }))
       .then((result) => {
         if (!panel.isConnected) return
         body.replaceChildren(...result.body)
         body.removeAttribute('aria-busy')
+        fitRows(body)
         reveal(body)
         const aside = panel.querySelector<HTMLElement>('[data-panel-aside]')
         if (aside) aside.textContent = result.aside || ''
@@ -528,6 +632,19 @@ if (content) {
     })
   }).observe(content, { childList: true })
 }
+
+// A failed panel's "Try again": put the placeholder back and draw it anew.
+// Failures are never cached, so the retry really asks the agent again.
+document.addEventListener('click', (event) => {
+  const target = event.target instanceof Element ? event.target.closest('[data-panel-retry]') : null
+  const panel = target?.closest<HTMLElement>('[data-panel]')
+  const body = panel?.querySelector<HTMLElement>('[data-panel-body]')
+  if (!panel || !body) return
+  panel.removeAttribute('data-panel-filled')
+  body.setAttribute('aria-busy', 'true')
+  body.replaceChildren(el('span', 'hub-skeleton'), el('span', 'hub-skeleton'), el('span', 'hub-skeleton'))
+  fillPanels()
+})
 
 // The sidebar's disk meter outlives every navigation; keep it current, but
 // only while the window can be seen. A hidden window should cost nothing.

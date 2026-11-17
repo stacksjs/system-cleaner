@@ -1,28 +1,37 @@
 <script server>
-import { DOWNLOAD_URL, MAC_APP_STORE_URL, SYSTEM_REQUIREMENT } from '~/app/Support/Marketing/distribution'
+import { DOWNLOAD_URL, MAC_APP_STORE_URL, SOURCE_URL, SYSTEM_REQUIREMENT } from '~/app/Support/Marketing/distribution'
 
 export const downloadUrl = DOWNLOAD_URL
 export const macAppStoreUrl = MAC_APP_STORE_URL
+export const sourceUrl = SOURCE_URL
 export const requirement = SYSTEM_REQUIREMENT
 </script>
 
-<section class="download-band" aria-labelledby="download-title">
-  <div class="download-inner site-container">
-    <h2 id="download-title">Get SystemCleaner</h2>
-    <p>Free, open source, and local. Install it, run one scan, and decide for yourself what leaves your Mac.</p>
-    <div class="download-actions">
-      <a class="button button-lg button-primary" href="{{ downloadUrl }}" rel="noreferrer">
-        <span class="h-[18px] w-[18px] i-f7-cloud-download-fill" aria-hidden="true"></span>
-        Download for Mac
-      </a>
-      <a class="store-button" href="{{ macAppStoreUrl }}" rel="noreferrer">
-        <span class="i-f7-logo-apple store-glyph" aria-hidden="true"></span>
-        <span>
-          <small>Also on the</small>
-          <strong>Mac App Store</strong>
-        </span>
+<!-- Ends every page on the app's round button: the one the overview uses to
+     start a clean, here starting the download. -->
+<section class="download site-container" aria-labelledby="download-title">
+  <div class="tone-panel" data-tone="overview">
+    <h2 id="download-title" class="band-title">Run one scan and see what it finds</h2>
+    <p>SystemCleaner is free and open source. Install it, look through what it finds, and keep anything you are not sure about.</p>
+    <a class="round-button" href="{{ downloadUrl }}" rel="noreferrer" aria-label="Download SystemCleaner for Mac">
+      <span class="i-f7-cloud-download-fill" aria-hidden="true"></span>
+      <span>Download</span>
+    </a>
+    <span class="round-caption">{{ requirement }}</span>
+    <div class="download-more">
+      @if(macAppStoreUrl)
+        <a class="store-button" href="{{ macAppStoreUrl }}" rel="noreferrer">
+          <span class="i-f7-logo-apple store-glyph" aria-hidden="true"></span>
+          <span>
+            <small>Also on the</small>
+            <strong>Mac App Store</strong>
+          </span>
+        </a>
+      @endif
+      <a class="button button-glass" href="{{ sourceUrl }}" rel="noreferrer">
+        <span class="h-4 w-4 i-f7-logo-github" aria-hidden="true"></span>
+        Read the source
       </a>
     </div>
-    <p class="download-note">{{ requirement }}</p>
   </div>
 </section>

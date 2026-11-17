@@ -433,7 +433,7 @@
     </div>
   </div>
 
-  <div x-show='loading' class='empty-state'>Reading /Applications&hellip;</div>
+  <div x-show='loading' class='empty-state is-loading'>Reading /Applications&hellip;</div>
   <div x-show='!loading' x-cloak>
     <UninstallPanel />
   </div>

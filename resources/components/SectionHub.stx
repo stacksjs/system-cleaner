@@ -1,12 +1,12 @@
 <script server>
 // A section's own page: what you see when you click a row in the sidebar.
 //
-// Three bands. The stage says what this part of the app is for: the
-// section's artwork, its name, the live figure that makes it worth opening,
-// and every tool in it as a row you can click. The round button runs the
-// thing most people came for. The panels underneath answer the next question
-// without leaving the page: what was cleaned last, how full the disk is,
-// which processes are busy.
+// Two bands. The stage says what this part of the app is for: the
+// section's artwork with the round button under it (the thing most people
+// came for), its name, the live figure that makes it worth opening, and
+// every tool in it as a row you can click. The panels underneath answer the
+// next question without leaving the page: what was cleaned last, how full
+// the disk is, which processes are busy.
 //
 // Everything machine-specific arrives client-side through `hub-metrics.ts`:
 // this page is prerendered at build time, and a figure computed here would be
@@ -28,6 +28,15 @@ export const headlineClear = section.headlineMetric && section.headlineMetric.wh
         <span class="hub-orb-glow"></span>
         <span class="hub-orb-body"><span class="hub-orb-icon {{ section.icon }}"></span></span>
       </div>
+      @if(section.primary)
+        <div class="hub-run">
+          <a class="hub-run-button" href="{{ section.primary.href }}" data-stx-link aria-label="{{ section.primary.label }}">
+            <span class="i-f7-play-fill" aria-hidden="true"></span>
+            <span>{{ section.primary.short }}</span>
+          </a>
+          <span class="hub-run-caption">{{ section.primary.label }}</span>
+        </div>
+      @endif
     </div>
 
     <div class="hub-intro">
@@ -58,16 +67,6 @@ export const headlineClear = section.headlineMetric && section.headlineMetric.wh
       </nav>
     </div>
   </section>
-
-  @if(section.primary)
-    <div class="hub-run">
-      <a class="hub-run-button" href="{{ section.primary.href }}" data-stx-link aria-label="{{ section.primary.label }}">
-        <span class="i-f7-play-fill" aria-hidden="true"></span>
-        <span>{{ section.primary.short }}</span>
-      </a>
-      <span class="hub-run-caption">{{ section.primary.label }}</span>
-    </div>
-  @endif
 
   @if(panels.length)
     <div class="hub-panels">

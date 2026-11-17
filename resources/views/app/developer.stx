@@ -84,10 +84,12 @@
 </div>
 
 <div class='main-content'>
-  <div x-show='loading' class='empty-state'>Walking your project folders...</div>
+  <div x-show='loading' class='empty-state is-loading'>Walking your project folders&hellip;</div>
 
   <div x-cloak x-show='!loading && artifactCount === 0' class='empty-state'>
-    Nothing found. Either your projects are clean, or they live somewhere this does not look yet.
+      <span class='empty-mark' data-kind='clear'><span class='i-f7-checkmark-alt' aria-hidden='true'></span></span>
+      <strong class='empty-title'>No build output found</strong>
+      <p class='empty-body'>Your projects are clean, or they live somewhere this does not look yet.</p>
   </div>
 
   <div x-cloak x-show='!loading && artifactCount > 0'>
@@ -111,7 +113,7 @@
 
     <div class='clean-progress' x-cloak x-show='!!cleanProgress' aria-live='polite'>
       <div class='progress'>
-        <div class='progress-fill clean-progress-fill'
+        <div class='clean-progress-fill progress-fill'
           :style="'width: ' + (cleanProgress && cleanProgress.total ? Math.round(cleanProgress.done / cleanProgress.total * 100) : 0) + '%'"></div>
       </div>
     </div>

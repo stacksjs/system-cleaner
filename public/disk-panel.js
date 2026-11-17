@@ -2,7 +2,10 @@
   if (window.__diskPanelInit) return;
   window.__diskPanelInit = true;
 
-  var PAL = ['#FF6B6B','#4ECDC4','#45B7D1','#96CEB4','#F7DC6F','#DDA0DD','#98D8C8','#F8C471','#BB8FCE','#85C1E9','#82E0AA','#F1948A','#AED6F1','#D7BDE2','#F5B7B1','#73C6B6','#F0B27A','#A9CCE3','#D2B4DE','#A3E4D7'];
+  // Mid-tone, evenly spaced hues. The old palette was pastel to begin with
+  // and each ring lightened it further, so the outer rings washed out to
+  // near-white and neighbouring folders were hard to tell apart.
+  var PAL = ['#4F86E8','#2BB3A3','#EE9B3A','#E25D5D','#8E6BD8','#3FAE72','#E57FA8','#3BA7D3','#C9A12A','#6E7FE6','#E0743B','#4DB89A','#B46CD9','#D2587F','#62A845','#2F93C9','#E2AE43','#7F6FC2','#DB6670','#3C9E9E'];
   var CFG = { centerR: 60, maxR: 280, maxDepth: 4, padAngle: 0.004, minAngle: 0.005, maxSegs: 400 };
 
   function fmtBytes(b) {
@@ -35,7 +38,7 @@
     if(node._d===undefined||arr.length>=CFG.maxSegs)return;
     if(node._d===0){if(node.c)for(var i=0;i<node.c.length;i++)flatten(node.c[i],arr,i);return;}
     if(node._ea-node._sa<CFG.minAngle)return;
-    var col=lighten(PAL[(node._colorIdx === undefined ? ci : node._colorIdx)%PAL.length],Math.max(0,(node._d-1)*0.15));
+    var col=lighten(PAL[(node._colorIdx === undefined ? ci : node._colorIdx)%PAL.length],Math.max(0,(node._d-1)*0.13));
     var d=arcPath(node._sa,node._ea,node._ir,node._or);if(!d)return;
     arr.push({idx:arr.length,d:d,color:col,name:node.n,fullPath:node.p||'',size:node.s,formattedSize:fmtBytes(node.s),depth:node._d,aggregate:!!node.aggregate,isDir:node.d!==false,childCount:node.c?node.c.length:0,percent:'0',colorIdx:ci,_node:node});
     if(node.c && node._d < CFG.maxDepth)for(var j=0;j<node.c.length;j++)flatten(node.c[j],arr,ci);
@@ -147,7 +150,10 @@
 
   function renderSegments(root) {
     currentRoot = root;
-    assignColors(tree || root);
+    // Coloured from the folder on show, so an opened folder's contents get
+    // a hue each instead of all inheriting the one their parent had. Keys are
+    // paths, so the top level keeps its colours when you come back up.
+    assignColors(root);
     computeLayout(root, CFG.maxDepth);
     var ns = []; flatten(root, ns, 0);
     var rs = root.s;
@@ -179,7 +185,13 @@
       };
     });
     var label = fmtBytes(root.s);
+    // The trail from the scan root to the folder on show, for the
+    // breadcrumb above the chart.
+    var crumbs = viewStack.concat([root]).map(function(node, level, all) {
+      return { level: level, name: node.n, last: level === all.length - 1 };
+    });
     patchDiskScope({
+      crumbs: crumbs,
       topItems: window.__diskTopItems,
       defaultSize: label,
       defaultName: root.n,
@@ -407,6 +419,38 @@
     viewStack.push(currentRoot);
     renderSegments(s._node);
   }
+
+  // Open a folder from the inspector or the Largest items list, by the
+  // segment index both of them carry.
+  window.diskOpen = function(idx) { drillInto(segs[idx]); };
+
+  // Select a segment from the Largest items list. It goes through the same
+  // global the chart uses, so a re-render during a live scan keeps it rather
+  // than clearing the inspector on the next progress tick.
+  window.diskHover = function(idx) {
+    var s = segs[idx];
+    if (!s) return;
+    window.__diskHovered = s;
+    patchDiskScope({ hovered: s });
+  };
+
+  // Go back up to a breadcrumb: level 0 is the scan root.
+  window.diskUpTo = function(level) {
+    if (level < 0 || level >= viewStack.length) return;
+    var target = viewStack[level];
+    viewStack = viewStack.slice(0, level);
+    renderSegments(target);
+  };
+
+  // Escape goes up one folder, as it backs out of a folder view elsewhere.
+  if (window._diskKey) window.removeEventListener('keydown', window._diskKey);
+  window._diskKey = function(e) {
+    if (e.key !== 'Escape' || menuEl || !document.querySelector('.disk-layout') || !viewStack.length) return;
+    var tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    window.diskUpTo(viewStack.length - 1);
+  };
+  window.addEventListener('keydown', window._diskKey);
 
   function closeSegmentMenu() {
     if (!menuEl) return;

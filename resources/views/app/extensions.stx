@@ -200,7 +200,7 @@
   <div class='main-subtitle'>Every add-on across every browser and profile, with what it can reach</div>
 </div>
 <div class='main-content'>
-  <div x-show='loading' class='empty-state'>Scanning extensions&hellip;</div>
+  <div x-show='loading' class='empty-state is-loading'>Scanning extensions&hellip;</div>
   <div x-show='!loading' x-cloak>
     <ExtensionsPanel />
   </div>

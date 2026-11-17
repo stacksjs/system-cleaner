@@ -61,6 +61,30 @@ const buildEnv: Record<string, string> = {
   CRAFT_BIN: craftBin,
 }
 
+/**
+ * `migrate:regenerate` adds the files it writes to git's index, ignore rule
+ * or not, so every build left a few hundred migrations staged and the next
+ * `git commit` swept them in unless someone remembered to unstage them first.
+ * The directory is ignored and nothing in it is tracked, so any new entry
+ * staged under it is the generator's and comes back out. A tarball checkout
+ * with no git has nothing to undo.
+ */
+function unstageGeneratedMigrations(): void {
+  // Listed from the index rather than `git diff --cached`: the generator adds
+  // them intent-to-add (`git add -N`), which shows as ` A` in `git status` and
+  // not at all in a cached diff.
+  const git = (...args: string[]) => spawnSync('git', args, { cwd: ROOT, encoding: 'utf8' })
+  const indexed = git('ls-files', '--', 'database/migrations')
+  const committed = git('ls-tree', '-r', '--name-only', 'HEAD', '--', 'database/migrations')
+  if (indexed.status !== 0) return
+  const known = new Set(committed.status === 0 ? committed.stdout.split('\n').filter(Boolean) : [])
+  const files = indexed.stdout.split('\n').filter(file => file && !known.has(file))
+  if (files.length === 0) return
+  const removed = spawnSync('git', ['rm', '--cached', '--quiet', '--', ...files], { cwd: ROOT, stdio: 'inherit' })
+  if (removed.status === 0)
+    console.log(`[desktop] unstaged ${files.length} generated migration(s)`)
+}
+
 function run(cmd: string, args: string[], envOverrides: Record<string, string> = {}): void {
   const result = spawnSync(cmd, args, {
     stdio: 'inherit',
@@ -124,6 +148,7 @@ console.log(`[desktop] web payload: ${payload.files} files, ${(payload.bytes / 1
 // its migrations would otherwise refuse, and a build must not depend on
 // whether the local ledger happens to be empty.
 run('./buddy', ['migrate:regenerate', '--force'])
+unstageGeneratedMigrations()
 fs.cpSync(path.join(ROOT, 'database/migrations'), path.join(RESOURCES, 'migrations'), { recursive: true })
 
 // ── 3. Launcher, Craft runtime, manifest ────────────────────────
@@ -179,42 +204,63 @@ function finishInstaller(imagePath: string): void {
       throw new Error(`Expected one Bun runtime, found ${runtimes.length}: ${runtimes.join(', ')}`)
     run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', bundle])
 
-    const app = DMG_WINDOW.items['SystemCleaner.app']
-    const applications = DMG_WINDOW.items.Applications
-    // Pantry resolves script packages to their provider so relative support
-    // resources are found regardless of how the activation entrypoint is made.
-    run(installerBinary, [
-      '--volname', `${APP_NAME} ${APP_VERSION}`,
-      '--volicon', path.join(bundle, 'Contents/Resources/AppIcon.icns'),
-      '--background', path.join(ROOT, 'resources/dmg/installer-background.png'),
-      '--window-pos', '200', '120',
-      '--window-size', String(DMG_WINDOW.width), String(DMG_WINDOW.height),
-      '--icon-size', String(DMG_WINDOW.iconSize),
-      '--text-size', '13',
-      '--icon', `${APP_NAME}.app`, String(app.x), String(app.y),
-      '--hide-extension', `${APP_NAME}.app`,
-      '--app-drop-link', String(applications.x), String(applications.y),
-      '--format', 'ULMO',
-      '--filesystem', 'HFS+',
-      ...(process.env.DESKTOP_SIGNING_IDENTITY ? ['--codesign', process.env.DESKTOP_SIGNING_IDENTITY] : []),
-      ...(process.env.NOTARY_PROFILE ? ['--notarize', process.env.NOTARY_PROFILE] : []),
-      output, source,
-    ])
+    // create-dmg lays the window out by scripting Finder, and Finder now and
+    // then drops the background setting (the layout reads back with
+    // backgroundType 0) on a build that is otherwise fine. The same inputs
+    // pass on a second run, so one retry is the difference between a release
+    // and a person rerunning a ten-minute build by hand. A second failure is
+    // real and stops the build.
+    const ATTEMPTS = 2
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const app = DMG_WINDOW.items['SystemCleaner.app']
+        const applications = DMG_WINDOW.items.Applications
+        // Pantry resolves script packages to their provider so relative support
+        // resources are found regardless of how the activation entrypoint is made.
+        run(installerBinary, [
+          '--volname', `${APP_NAME} ${APP_VERSION}`,
+          '--volicon', path.join(bundle, 'Contents/Resources/AppIcon.icns'),
+          '--background', path.join(ROOT, 'resources/dmg/installer-background.png'),
+          '--window-pos', '200', '120',
+          '--window-size', String(DMG_WINDOW.width), String(DMG_WINDOW.height),
+          '--icon-size', String(DMG_WINDOW.iconSize),
+          '--text-size', '13',
+          '--icon', `${APP_NAME}.app`, String(app.x), String(app.y),
+          '--hide-extension', `${APP_NAME}.app`,
+          '--app-drop-link', String(applications.x), String(applications.y),
+          '--format', 'ULMO',
+          '--filesystem', 'HFS+',
+          ...(process.env.DESKTOP_SIGNING_IDENTITY ? ['--codesign', process.env.DESKTOP_SIGNING_IDENTITY] : []),
+          ...(process.env.NOTARY_PROFILE ? ['--notarize', process.env.NOTARY_PROFILE] : []),
+          output, source,
+        ])
 
-    // Validate the shipped image, not an intermediate directory. A release
-    // without artwork or a usable drop target is a failed installer build.
-    run('hdiutil', ['verify', output])
-    run('hdiutil', ['attach', output, '-nobrowse', '-readonly', '-mountpoint', mount])
-    mounted = true
-    const layout = readDmgWindowLayout(new Uint8Array(fs.readFileSync(path.join(mount, '.DS_Store'))))
-    if (layout.backgroundType !== 2 || layout.width !== DMG_WINDOW.width || layout.height !== DMG_WINDOW.height || layout.iconSize !== DMG_WINDOW.iconSize)
-      throw new Error(`Installer layout does not match the design: ${JSON.stringify(layout)}`)
-    for (const [name, position] of Object.entries(DMG_WINDOW.items)) {
-      if (layout.items[name]?.x !== position.x || layout.items[name]?.y !== position.y)
-        throw new Error(`Installer icon ${name} is misplaced`)
+        // Validate the shipped image, not an intermediate directory. A release
+        // without artwork or a usable drop target is a failed installer build.
+        run('hdiutil', ['verify', output])
+        run('hdiutil', ['attach', output, '-nobrowse', '-readonly', '-mountpoint', mount])
+        mounted = true
+        const layout = readDmgWindowLayout(new Uint8Array(fs.readFileSync(path.join(mount, '.DS_Store'))))
+        if (layout.backgroundType !== 2 || layout.width !== DMG_WINDOW.width || layout.height !== DMG_WINDOW.height || layout.iconSize !== DMG_WINDOW.iconSize)
+          throw new Error(`Installer layout does not match the design: ${JSON.stringify(layout)}`)
+        for (const [name, position] of Object.entries(DMG_WINDOW.items)) {
+          if (layout.items[name]?.x !== position.x || layout.items[name]?.y !== position.y)
+            throw new Error(`Installer icon ${name} is misplaced`)
+        }
+        if (fs.readlinkSync(path.join(mount, 'Applications')) !== '/Applications')
+          throw new Error('Installer has no Applications drop target')
+        break
+      }
+      catch (err) {
+        if (mounted) {
+          spawnSync('hdiutil', ['detach', mount], { stdio: 'inherit' })
+          mounted = false
+        }
+        fs.rmSync(output, { force: true })
+        if (attempt >= ATTEMPTS) throw err
+        console.warn(`[desktop] installer image attempt ${attempt} failed (${err instanceof Error ? err.message : String(err)}); building it again`)
+      }
     }
-    if (fs.readlinkSync(path.join(mount, 'Applications')) !== '/Applications')
-      throw new Error('Installer has no Applications drop target')
     const shippedBundle = path.join(mount, `${APP_NAME}.app`)
     run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', shippedBundle])
     if (process.env.NOTARY_PROFILE) {

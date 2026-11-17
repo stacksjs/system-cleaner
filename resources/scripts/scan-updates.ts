@@ -75,12 +75,18 @@ function attachScanPage(page: ScanPage, kind: ScanKind): void {
     page.cancelled = session.status === 'cancelled'
     if (typeof session.parameters.path === 'string') {
       if (kind === 'similar') page.root = session.parameters.path
-      else { page.scanRoot = session.parameters.path; page.customRoot = session.parameters.path }
+      else {
+        page.scanRoot = session.parameters.path
+        page.customRoot = session.parameters.path
+      }
     }
     if (typeof session.parameters.minSizeMB === 'number') page.minSizeMB = session.parameters.minSizeMB
     const result = session.result ?? session.progress.snapshot
     if (result) page.applyResult(result)
-    else if (page.scanning) { page.applyResult({}); page.scanned = false }
+    else if (page.scanning) {
+      page.applyResult({})
+      page.scanned = false
+    }
     const elapsed = Math.max(0, Math.round(((session.finishedAt ?? Date.now()) - (session.startedAt ?? Date.now())) / 1000))
     const count = session.progress.scanned.toLocaleString()
     page.scanProgress = session.status === 'queued' ? 'Queued behind another scan'

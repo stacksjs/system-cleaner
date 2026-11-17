@@ -1,50 +1,84 @@
 <script server>
-import { FEATURES, featureBySlug } from '~/app/Support/Marketing/catalog'
-import { DOWNLOAD_URL } from '~/app/Support/Marketing/distribution'
+import { FEATURES, MARKETING_SECTIONS, featureBySlug, sectionOf } from '~/app/Support/Marketing/catalog'
 
-const feature = featureBySlug($props.slug) || FEATURES[0]
-const related = FEATURES.filter(item => item.slug !== feature.slug).slice(0, 4)
-const downloadUrl = DOWNLOAD_URL
+export const feature = featureBySlug($props.slug) || FEATURES[0]
+export const section = sectionOf(feature)
+export const featureIcon = `i-f7-${feature.icon}`
+// The rest of this section first, then one feature from each other section,
+// so the list reads as "more here" before "elsewhere in the app".
+export const siblings = section.features.filter(item => item.slug !== feature.slug)
+export const elsewhere = MARKETING_SECTIONS
+  .filter(other => other.id !== section.id && other.features.length > 0)
+  .map(other => ({ ...other.features[0], tone: other.id, sectionLabel: other.label, sectionIcon: other.icon }))
+export const sectionTools = section.tools.join(', ')
 </script>
 
-<article class="site-container">
-  <header class="feature-hero">
-    <p class="eyebrow">SystemCleaner feature</p>
-    <h1>{{ feature.name }}</h1>
-    <p>{{ feature.description }}</p>
-    <div class="hero-actions">
-      <a class="button button-primary" href="{{ downloadUrl }}" rel="noreferrer">
-        <span class="h-4 w-4 i-f7-cloud-download-fill" aria-hidden="true"></span>
-        Download for Mac
-      </a>
-      <a class="button button-secondary" href="/features" data-stx-link>All features</a>
-    </div>
-  </header>
+<MarketingPageHero
+  :tone="section.id"
+  :icon="featureIcon"
+  :crumb="section.label"
+  :crumbIcon="section.icon"
+  :title="feature.name"
+  :lede="feature.summary"
+  secondaryHref="/features"
+  secondaryLabel="All features"
+/>
 
-  <section class="feature-layout" aria-labelledby="feature-detail-title">
+<article class="site-container">
+  <section class="detail" aria-labelledby="feature-how-title" data-tone="{{ section.id }}">
     <div>
-      <h2 id="feature-detail-title">Built for a quick, informed decision.</h2>
-      <p>{{ feature.summary }}</p>
-      <p>SystemCleaner keeps the interaction close to macOS conventions, uses guarded paths for sensitive actions, and moves expensive work away from the interface.</p>
+      <h2 id="feature-how-title">How it works</h2>
+      <p>{{ feature.description }}</p>
     </div>
-    <aside class="feature-fact">
-      <span class="h-7 w-7 text-[color:var(--accent)] i-f7-{{ feature.icon }}" aria-hidden="true"></span>
+    <aside class="fact">
+      <span class="tone-tile tone-tile-lg"><span class="{{ featureIcon }}" aria-hidden="true"></span></span>
       <strong>{{ feature.metric }}</strong>
       <span>{{ feature.detail }}</span>
     </aside>
   </section>
 
-  <section aria-labelledby="more-features-title">
-    <h2 id="more-features-title" class="text-2xl tracking-tight">More ways to care for your Mac</h2>
-    <ul class="feature-list">
-      @foreach (related as item)
+  <section class="where" aria-labelledby="feature-where-title">
+    <h2 id="feature-where-title" class="sub-title">Where it lives in the app</h2>
+    <div class="where-grid">
+      <p>You will find it in the app's <strong>{{ section.label }}</strong> section, which holds {{ sectionTools }}. {{ section.lede }}</p>
+      <figure class="app-window">
+        <img src="{{ section.image }}" width="1400" height="900" loading="lazy" decoding="async" alt="The {{ section.label }} page in SystemCleaner" />
+      </figure>
+    </div>
+  </section>
+
+  @if(siblings.length)
+    <section class="more" aria-labelledby="feature-siblings-title">
+      <h2 id="feature-siblings-title" class="sub-title">More in {{ section.label }}</h2>
+      <ul class="card-list">
+        @foreach (siblings as item)
+          <li>
+            <a href="/features/{{ item.slug }}" data-stx-link data-tone="{{ section.id }}">
+              <span class="tone-tile tone-tile-lg"><span class="i-f7-{{ item.icon }}" aria-hidden="true"></span></span>
+              <span>
+                <strong>{{ item.name }}</strong>
+                <small>{{ item.summary }}</small>
+              </span>
+              <span class="arrow i-f7-arrow-right" aria-hidden="true"></span>
+            </a>
+          </li>
+        @endforeach
+      </ul>
+    </section>
+  @endif
+
+  <section class="more" aria-labelledby="feature-elsewhere-title">
+    <h2 id="feature-elsewhere-title" class="sub-title">Elsewhere in SystemCleaner</h2>
+    <ul class="card-list">
+      @foreach (elsewhere as item)
         <li>
-          <a href="/features/{{ item.slug }}" data-stx-link>
+          <a href="/features/{{ item.slug }}" data-stx-link data-tone="{{ item.tone }}">
+            <span class="tone-tile tone-tile-lg"><span class="i-f7-{{ item.icon }}" aria-hidden="true"></span></span>
             <span>
               <strong>{{ item.name }}</strong>
-              <span class="block mt-1 text-[13px] text-[color:var(--muted)]">{{ item.metric }}</span>
+              <small>{{ item.sectionLabel }}: {{ item.summary }}</small>
             </span>
-            <span class="h-5 w-5 i-f7-arrow-right" aria-hidden="true"></span>
+            <span class="arrow i-f7-arrow-right" aria-hidden="true"></span>
           </a>
         </li>
       @endforeach

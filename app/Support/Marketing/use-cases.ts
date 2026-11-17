@@ -1,3 +1,5 @@
+import type { Tone } from '../../../resources/lib/sections'
+
 /**
  * Use cases: the marketing site's "who is this for" axis.
  *
@@ -23,6 +25,8 @@ export interface UseCaseStep {
 
 export interface MarketingUseCase {
   slug: string
+  /** The app section whose colour this use case wears: the one it leans on most. */
+  tone: Tone
   /** Menu and page title. */
   name: string
   /** Compact label for the mobile sheet. */
@@ -46,6 +50,7 @@ export interface MarketingUseCase {
 export const USE_CASES: MarketingUseCase[] = [
   {
     slug: 'developers',
+    tone: 'cleanup',
     name: 'Developers',
     shortName: 'Developers',
     headline: 'Your toolchain is eating the disk. Get it back.',
@@ -112,6 +117,7 @@ export const USE_CASES: MarketingUseCase[] = [
   },
   {
     slug: 'creative-pros',
+    tone: 'storage',
     name: 'Creative Pros',
     shortName: 'Creative',
     headline: 'Render caches grow forever. Clear them between projects.',
@@ -166,6 +172,7 @@ export const USE_CASES: MarketingUseCase[] = [
   },
   {
     slug: 'gamers',
+    tone: 'performance',
     name: 'Gamers',
     shortName: 'Gaming',
     headline: 'Shader caches and dead launchers, cleared.',
@@ -219,6 +226,7 @@ export const USE_CASES: MarketingUseCase[] = [
   },
   {
     slug: 'students',
+    tone: 'apps',
     name: 'Students',
     shortName: 'Students',
     headline: 'A 256 GB MacBook can last the whole degree.',
@@ -274,6 +282,7 @@ export const USE_CASES: MarketingUseCase[] = [
   },
   {
     slug: 'privacy-first',
+    tone: 'protection',
     name: 'Privacy-First Users',
     shortName: 'Privacy',
     headline: 'A maintenance tool that does not phone home.',

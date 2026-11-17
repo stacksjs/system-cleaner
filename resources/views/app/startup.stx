@@ -86,7 +86,7 @@ function esc(str) { return escapeHtml(str || '') }
   <div class='main-subtitle'>Launch Agents & Daemons that run when your Mac starts</div>
 </div>
 <div class='main-content'>
-  <div x-show='loading' class='empty-state'>Scanning startup items...</div>
+  <div x-show='loading' class='empty-state is-loading'>Reading startup items&hellip;</div>
   <div x-show='!loading' x-cloak>
     <StartupPanel />
   </div>

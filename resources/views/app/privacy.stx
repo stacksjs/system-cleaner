@@ -204,7 +204,7 @@
   <div class='main-subtitle'>Clear browsing history, cookies and the traces macOS keeps, while staying signed in where you want to</div>
 </div>
 <div class='main-content'>
-  <div x-show='loading' class='empty-state'>Reading browser profiles&hellip;</div>
+  <div x-show='loading' class='empty-state is-loading'>Reading browser profiles&hellip;</div>
   <div x-show='!loading' x-cloak>
     <PrivacyPanel />
   </div>

@@ -13,12 +13,12 @@
     <div class='card-detail' x-text="loaded ? description : 'Nothing is scheduled'">Nothing is scheduled</div>
   </div>
   <div class='card'>
-    <div class='card-label'>Last Run</div>
+    <div class='card-label'>Last run</div>
     <div class='card-value' x-text='fmtDate(lastRunAt)'>Never</div>
     <div class='card-detail' x-text="lastStatus || 'No automatic clean has run yet'">No automatic clean has run yet</div>
   </div>
   <div class='card'>
-    <div class='card-label'>Freed Last Time</div>
+    <div class='card-label'>Freed last time</div>
     <div class='card-value' :style="lastRunAt ? 'color: var(--green);' : ''" x-text='lastFreedFormatted'>0 B</div>
     <div class='card-detail' x-text="targetIds.length + ' target(s) selected'">0 targets selected</div>
   </div>
@@ -133,7 +133,7 @@
 
   <div class='sc-chips'>
     <template x-for='category in categories()' :key='category'>
-      <button class='tab cap' @click='selectCategory(category)' x-text='category'></button>
+      <button class='cap tab' @click='selectCategory(category)' x-text='category'></button>
     </template>
   </div>
 
@@ -159,14 +159,16 @@
             </div>
             <div class='item-path' :title='target.path' x-text='shortPath(target.path)'></div>
           </td>
-          <td class='dim cap' x-text='target.category'></td>
+          <td class='cap dim' x-text='target.category'></td>
         </tr>
       </template>
     </tbody>
   </table>
 
   <div class='empty-state' x-show='visibleTargets().length === 0' x-cloak>
-    Nothing matches that filter.
+      <span class='empty-mark'><span class='i-f7-search' aria-hidden='true'></span></span>
+      <strong class='empty-title'>Nothing matches that filter</strong>
+      <p class='empty-body'>Pick another category to see its folders.</p>
   </div>
 
   <div class='sc-actions'>

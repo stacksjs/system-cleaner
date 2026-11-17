@@ -16,7 +16,7 @@ export const items = [
 
 <!-- AppKit owns the window buttons; this app owns its navigation toolbar. -->
 <header class="topnav" aria-label="Window toolbar" data-tone="{{ crumbSection ? crumbSection.id : '' }}">
-  <nav class="toolbar-navigation flex items-center gap-1" aria-label="Page navigation">
+  <nav class="flex gap-1 items-center toolbar-navigation" aria-label="Page navigation">
     <button class="toolbar-button" type="button" data-toolbar-sidebar aria-label="Hide Sidebar" aria-controls="app-sidebar" aria-expanded="true" title="Hide Sidebar (⌥⌘S)">
       <span class="i-f7-sidebar-left" aria-hidden="true"></span>
     </button>
@@ -51,7 +51,7 @@ export const items = [
       <span class="profile-text">
         <span class="profile-name" data-profile-name>This Mac</span>
       </span>
-      <span class="profile-caret i-f7-chevron-down" aria-hidden="true"></span>
+      <span class="i-f7-chevron-down profile-caret" aria-hidden="true"></span>
     </button>
 
     <div class="menu" id="account-menu" role="menu" data-profile-menu hidden>
@@ -80,7 +80,7 @@ export const items = [
         the document.
       -->
       <button class="menu-item" type="button" role="menuitem" data-open-settings>
-        <span class="menu-icon i-f7-gear-alt-fill" aria-hidden="true"></span>
+        <span class="i-f7-gear-alt-fill menu-icon" aria-hidden="true"></span>
         <span class="menu-label">Settings</span>
         <span class="menu-shortcut">&#8984;,</span>
       </button>

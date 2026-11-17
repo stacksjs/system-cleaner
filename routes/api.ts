@@ -139,8 +139,8 @@ function pathInAllowedRoots(p: string, roots: string[]): boolean {
  */
 let diskScanInFlight = false;
 
-const systemAppsListCache = new TtlCache<{ name: string; sizeBytes: number | null }[]>(15 * 60_000);
-const systemAppsSizesCache = new TtlCache<{ name: string; sizeBytes: number }[]>(15 * 60_000);
+const systemAppsListCache = new TtlCache<{ name: string, sizeBytes: number | null }[]>(15 * 60_000);
+const systemAppsSizesCache = new TtlCache<{ name: string, sizeBytes: number }[]>(15 * 60_000);
 const dashboardStatsCache = new TtlCache<Record<string, unknown>>(30_000);
 const dirSizesCache = new TtlCache<Record<string, number>>(5 * 60_000);
 
@@ -202,6 +202,13 @@ async function refuseIfTracked(target: string): Promise<Response | null> {
 function invalidateSizeCaches(): void {
   dirSizesCache.clear();
   sizeCacheGeneration++;
+  // Every total derived from what is on disk goes with it: the overview's
+  // junk figure, Maintenance's junk scan, and the dashboard's free space and
+  // startup count. Each route that deletes calls this, so none has to
+  // remember which caches describe what it just removed.
+  safeToCleanCache.clear();
+  junkScanCache.clear();
+  dashboardStatsCache.clear();
   // Free space is a measurement of the same thing these caches describe, and
   // every caller here has just deleted something. Leaving it cached is how
   // Quick Clean reported "freed 20 GB" over a Disk Free card still showing
@@ -211,7 +218,7 @@ function invalidateSizeCaches(): void {
 // A full orphan sweep reads every bundle id under ~/Library and sizes what it
 // finds, which is seconds of work for an answer that changes when an app is
 // uninstalled and not otherwise.
-const orphanCache = new TtlCache<{ items: unknown[]; totalBytes: number }>(5 * 60_000);
+const orphanCache = new TtlCache<{ items: unknown[], totalBytes: number }>(5 * 60_000);
 // Walking every project root and sizing what it finds is ~8s of disk work for
 // an answer that only moves when a build runs. Long TTL, with an explicit
 // refresh for the person who just deleted something and wants to see it gone.
@@ -342,7 +349,7 @@ export default async function (router: Router) {
       );
     }
 
-    const body = await readJsonBody<{ path?: string; maxDepth?: number }>(req);
+    const body = await readJsonBody<{ path?: string, maxDepth?: number }>(req);
     if (body === null) return badJson();
 
     // A relative path resolves against HOME, not the process CWD — which for
@@ -536,7 +543,6 @@ export default async function (router: Router) {
   });
 
   await router.post('/clean-dir', async (req: Request) => {
-    safeToCleanCache.delete('total');
     const body = await readJsonBody<{ path: string }>(req);
     if (body === null) return badJson();
     const { path: target } = body;
@@ -586,7 +592,7 @@ export default async function (router: Router) {
   });
 
   await router.post('/toggle-startup', async (req: Request) => {
-    const body = await readJsonBody<{ filepath: string; action: 'enable' | 'disable' }>(req);
+    const body = await readJsonBody<{ filepath: string, action: 'enable' | 'disable' }>(req);
     if (body === null) return badJson();
     const { filepath, action } = body;
     if (typeof filepath !== 'string' || !filepath) return badRequest('No filepath provided');
@@ -675,7 +681,7 @@ export default async function (router: Router) {
   });
 
   await router.post('/dir-sizes', async (req: Request) => {
-    const body = await readJsonBody<{ paths: unknown; stream?: boolean }>(req);
+    const body = await readJsonBody<{ paths: unknown, stream?: boolean }>(req);
     if (body === null) return badJson();
     const paths = sanitizeStringArray(body.paths, 1024);
     if (paths === null) return badRequest('paths must be a non-empty string array (≤1024)');
@@ -701,8 +707,12 @@ export default async function (router: Router) {
             // 8.3 short name reaching the same directory - are resolved before
             // the comparison instead of reading as a different account.
             if (!isWithinHome(resolved)) return;
-            try { results[p] = await getDirSize(resolved); }
-            catch { results[p] = 0; }
+            try {
+              results[p] = await getDirSize(resolved);
+            }
+            catch {
+              results[p] = 0;
+            }
             publish?.({ [p]: results[p] });
           }),
         );
@@ -720,7 +730,6 @@ export default async function (router: Router) {
   });
 
   await router.post('/empty-trash', async () => {
-    safeToCleanCache.delete('total');
     const result = await emptyTrash();
     invalidateSizeCaches();
     return Response.json({
@@ -841,8 +850,7 @@ export default async function (router: Router) {
   });
 
   await router.post('/bulk-delete', async (req: Request) => {
-    safeToCleanCache.delete('total');
-    const body = await readJsonBody<{ paths: unknown; mode?: unknown; source?: unknown }>(req);
+    const body = await readJsonBody<{ paths: unknown, mode?: unknown, source?: unknown }>(req);
     if (body === null) return badJson();
 
     const paths = sanitizeStringArray(body.paths, MAX_BULK_PATHS);
@@ -870,7 +878,7 @@ export default async function (router: Router) {
   });
 
   await router.post('/protect-path', async (req: Request) => {
-    const body = await readJsonBody<{ path: unknown; reason?: unknown }>(req);
+    const body = await readJsonBody<{ path: unknown, reason?: unknown }>(req);
     if (body === null) return badJson();
     if (typeof body.path !== 'string' || !body.path) return badRequest('No path provided');
     if (!path.isAbsolute(body.path)) return badRequest('Path must be absolute');
@@ -915,7 +923,7 @@ export default async function (router: Router) {
   // ── Brew update endpoints ──────────────────────────────────
 
   await router.post('/brew-update', async (req: Request) => {
-    const body = await readJsonBody<{ name: unknown; type: unknown }>(req);
+    const body = await readJsonBody<{ name: unknown, type: unknown }>(req);
     if (body === null) return badJson();
 
     const name = sanitizePackageName(body.name);
@@ -1030,7 +1038,7 @@ export default async function (router: Router) {
   // ── Desktop app update endpoint ──────────────────────────────
 
   await router.post('/app-update', async (req: Request) => {
-    const body = await readJsonBody<{ name?: unknown; caskToken: unknown }>(req);
+    const body = await readJsonBody<{ name?: unknown, caskToken: unknown }>(req);
     if (body === null) return badJson();
 
     const safeCaskToken = sanitizePackageName(body.caskToken);
@@ -1225,7 +1233,7 @@ export default async function (router: Router) {
   });
 
   await router.post('/extensions-list', async (req: Request) => {
-    const body = await readJsonBody<{ sizes?: unknown; refresh?: unknown; stream?: boolean }>(req);
+    const body = await readJsonBody<{ sizes?: unknown, refresh?: unknown, stream?: boolean }>(req);
 
     // Rescan means rescan. The list and size caches hold for a minute and five
     // minutes respectively, which is right for navigating between screens and
@@ -1396,7 +1404,9 @@ export default async function (router: Router) {
         return null;
       }
       finally {
-        try { fs.rmSync(out, { force: true }); }
+        try {
+          fs.rmSync(out, { force: true });
+        }
         catch { /* a temp file we could not remove is not worth failing over */ }
       }
     };
@@ -1428,7 +1438,9 @@ export default async function (router: Router) {
         picture = null;
       }
       finally {
-        try { fs.rmSync(source, { force: true }); }
+        try {
+          fs.rmSync(source, { force: true });
+        }
         catch { /* see above */ }
       }
     }
@@ -1467,7 +1479,10 @@ export default async function (router: Router) {
     const hit = safeToCleanCache.get('total');
     if (hit) return Response.json({ success: true, ...hit, cached: true });
 
-    const total = await coalesce('safe-to-clean', async () => {
+    // A measurement that started before a clean finished describes the disk
+    // as it was, so it is neither joined nor kept by anyone asking afterwards.
+    const generation = sizeCacheGeneration;
+    const total = await coalesce(`safe-to-clean:${generation}`, async () => {
       const targets = safeCleanTargets()
         .map(t => path.resolve(t.path))
         .filter(p => isWithinHome(p));
@@ -1487,7 +1502,7 @@ export default async function (router: Router) {
       };
     });
 
-    safeToCleanCache.set('total', total);
+    if (generation === sizeCacheGeneration) safeToCleanCache.set('total', total);
     return Response.json({ success: true, ...total, cached: false });
   });
 
@@ -1500,7 +1515,6 @@ export default async function (router: Router) {
    * the set is derived here, so the endpoint cannot be pointed somewhere else.
    */
   await router.post('/clean-safe', async () => {
-    safeToCleanCache.delete('total');
     const targets = safeCleanTargets();
 
     let freedBytes = 0;
@@ -1608,7 +1622,7 @@ export default async function (router: Router) {
     const cached = systemAppsSizesCache.get('apps');
     if (cached) return Response.json({ success: true, apps: cached, sizesPending: false, cached: true });
 
-    const apps: { name: string; appPath: string; version: string; sizeBytes: number }[] = [];
+    const apps: { name: string, appPath: string, version: string, sizeBytes: number }[] = [];
     const appDirs = ['/Applications', path.join(HOME, 'Applications')];
     const seen = new Set<string>();
     try {
@@ -1617,7 +1631,9 @@ export default async function (router: Router) {
         try {
           entries = fs.readdirSync(dir).filter((e: string) => e.endsWith('.app')).sort();
         }
-        catch { continue; }
+        catch {
+          continue;
+        }
         const BATCH = 10;
         for (let i = 0; i < entries.length; i += BATCH) {
           const batch = entries.slice(i, i + BATCH).filter((entry) => {
@@ -1715,7 +1731,7 @@ export default async function (router: Router) {
     if (similarScanInFlight)
       return Response.json({ success: false, error: 'A scan is already in progress' }, { status: 409 });
 
-    const body = await readJsonBody<{ path?: unknown; threshold?: unknown }>(req);
+    const body = await readJsonBody<{ path?: unknown, threshold?: unknown }>(req);
     if (body === null) return badJson();
 
     let root = HOME;
@@ -1905,7 +1921,7 @@ export default async function (router: Router) {
    * not actually show.
    */
   await router.post('/reset-permission', async (req: Request) => {
-    const body = await readJsonBody<{ service: unknown; client: unknown }>(req);
+    const body = await readJsonBody<{ service: unknown, client: unknown }>(req);
     if (body === null) return badJson();
 
     const service = typeof body.service === 'string' ? body.service : '';
@@ -1999,7 +2015,7 @@ export default async function (router: Router) {
   // ── Updates check (system, brew, pantry, desktop apps) ───────
 
   await router.post('/updates-check', async (req: Request) => {
-    const body = await readJsonBody<{ fullScan?: unknown; forceRefresh?: unknown; tier?: unknown }>(req);
+    const body = await readJsonBody<{ fullScan?: unknown, forceRefresh?: unknown, tier?: unknown }>(req);
     const fullScan = body?.fullScan === true;
     const forceRefresh = body?.forceRefresh === true;
     const tier = body?.tier === 'quick' ? 'quick' : 'full';
@@ -2045,7 +2061,7 @@ export default async function (router: Router) {
    * of work before anything appears on screen.
    */
   await router.post('/installed-apps', async (req: Request) => {
-    const body = await readJsonBody<{ sizes?: unknown; stream?: boolean }>(req);
+    const body = await readJsonBody<{ sizes?: unknown, stream?: boolean }>(req);
     if (body === null) return badJson();
 
     if (body.stream === true) return measurementStream(async publish => ({ success: true, sizes: await appSizes(publish) }));
@@ -2106,7 +2122,7 @@ export default async function (router: Router) {
   });
 
   await router.post('/app-uninstall', async (req: Request) => {
-    const body = await readJsonBody<{ path: unknown; paths: unknown; mode?: unknown }>(req);
+    const body = await readJsonBody<{ path: unknown, paths: unknown, mode?: unknown }>(req);
     if (body === null) return badJson();
     if (typeof body.path !== 'string' || !body.path) return badRequest('No app path provided');
     if (!pathInAllowedRoots(body.path, ['/Applications', path.join(HOME, 'Applications')]))
@@ -2144,7 +2160,7 @@ export default async function (router: Router) {
     const [items, running, kept] = await Promise.all([
       Promise.resolve(scanPrivacyItems()),
       runningBrowsers(),
-      KeptCookie.all() as Promise<Array<{ id: number; domain: string }>>,
+      KeptCookie.all() as Promise<Array<{ id: number, domain: string }>>,
     ]);
 
     const keepDomains = kept.map(row => row.domain);
@@ -2163,7 +2179,6 @@ export default async function (router: Router) {
   });
 
   await router.post('/privacy-clean', async (req: Request) => {
-    safeToCleanCache.delete('total');
     const body = await readJsonBody<{ ids: unknown }>(req);
     if (body === null) return badJson();
 
@@ -2192,7 +2207,7 @@ export default async function (router: Router) {
   });
 
   await router.post('/kept-cookies', async () => {
-    const rows = await KeptCookie.orderByDesc('id').get() as Array<{ id: number; domain: string }>;
+    const rows = await KeptCookie.orderByDesc('id').get() as Array<{ id: number, domain: string }>;
     const domains = rows.map(row => row.domain);
     return Response.json({ success: true, domains, keptCookieCount: previewKeptCookies(domains) });
   });
@@ -2267,7 +2282,7 @@ export default async function (router: Router) {
   });
 
   await router.post('/clean-orphans', async (req: Request) => {
-    const body = await readJsonBody<{ paths: unknown; mode?: unknown }>(req);
+    const body = await readJsonBody<{ paths: unknown, mode?: unknown }>(req);
     if (body === null) return badJson();
 
     const requested = sanitizeStringArray(body.paths, MAX_BULK_PATHS);
@@ -2301,7 +2316,8 @@ export default async function (router: Router) {
     const hit = junkScanCache.get('junk');
     if (hit) return Response.json({ ...hit, cached: true });
 
-    const payload = await coalesce('junk-scan', async () => {
+    const generation = sizeCacheGeneration;
+    const payload = await coalesce(`junk-scan:${generation}`, async () => {
       const [dsStore, incomplete] = await Promise.all([findDsStoreFiles(), findIncompleteDownloads()]);
       return {
         success: true,
@@ -2315,19 +2331,17 @@ export default async function (router: Router) {
       };
     });
 
-    junkScanCache.set('junk', payload);
+    if (generation === sizeCacheGeneration) junkScanCache.set('junk', payload);
     return Response.json(payload);
   });
 
   await router.post('/clean-ds-store', async () => {
-    junkScanCache.delete('junk');
     const result = await cleanDsStoreFiles();
     invalidateSizeCaches();
     return Response.json({ success: result.errors === 0, ...result });
   });
 
   await router.post('/clean-incomplete-downloads', async () => {
-    junkScanCache.delete('junk');
     const result = await cleanIncompleteDownloads();
 
     invalidateSizeCaches();
@@ -2430,7 +2444,7 @@ export default async function (router: Router) {
       );
     }
 
-    const body = await readJsonBody<{ path?: unknown; minSizeMB?: unknown; limit?: unknown }>(req);
+    const body = await readJsonBody<{ path?: unknown, minSizeMB?: unknown, limit?: unknown }>(req);
     if (body === null) return badJson();
 
     let root = HOME;
@@ -2526,7 +2540,7 @@ export default async function (router: Router) {
    * shredder itself would not touch.
    */
   await router.post('/shred-paths', async (req: Request) => {
-    const body = await readJsonBody<{ paths: unknown; passes?: unknown }>(req);
+    const body = await readJsonBody<{ paths: unknown, passes?: unknown }>(req);
     if (body === null) return badJson();
 
     const paths = sanitizeStringArray(body.paths, 200);

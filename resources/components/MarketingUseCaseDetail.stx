@@ -1,7 +1,6 @@
 <script server>
-import { featureBySlug } from '~/app/Support/Marketing/catalog'
+import { featureBySlug, sectionOf } from '~/app/Support/Marketing/catalog'
 import { USE_CASES, useCaseBySlug } from '~/app/Support/Marketing/use-cases'
-import { DOWNLOAD_URL } from '~/app/Support/Marketing/distribution'
 
 const useCase = useCaseBySlug($props.slug) || USE_CASES[0]
 
@@ -16,33 +15,34 @@ export const steps = useCase.workflow.map((step, index) => ({
 export const relatedFeatures = useCase.features
   .map(slug => featureBySlug(slug))
   .filter(Boolean)
+  .map(feature => ({ ...feature, sectionLabel: sectionOf(feature).label }))
 
 export const related = USE_CASES.filter(item => item.slug !== useCase.slug)
 export const reclaims = useCase.reclaims
 export const name = useCase.name
 export const headline = useCase.headline
 export const description = useCase.description
-export const icon = useCase.icon
+export const icon = `i-f7-${useCase.icon}`
+export const tone = useCase.tone
 export const metric = useCase.metric
 export const detail = useCase.detail
-export const downloadUrl = DOWNLOAD_URL
 </script>
 
-<article class="site-container">
-  <header class="feature-hero">
-    <p class="eyebrow">Use case &middot; {{ name }}</p>
-    <h1>{{ headline }}</h1>
-    <p>{{ description }}</p>
-    <div class="hero-actions">
-      <a class="button button-primary" href="{{ downloadUrl }}" rel="noreferrer">
-        <span class="h-4 w-4 i-f7-cloud-download-fill" aria-hidden="true"></span>
-        Download for Mac
-      </a>
-      <a class="button button-secondary" href="/use-cases" data-stx-link>All use cases</a>
-    </div>
-  </header>
+<MarketingPageHero
+  :tone="tone"
+  :icon="icon"
+  crumb="Use cases"
+  crumbHref="/use-cases"
+  crumbIcon="i-f7-person-2-fill"
+  :title="headline"
+  :lede="description"
+  secondaryHref="/use-cases"
+  secondaryLabel="All use cases"
+/>
 
-  <section class="feature-layout" aria-labelledby="use-case-fit-title">
+<article class="site-container" data-tone="{{ tone }}">
+
+  <section class="detail" aria-labelledby="use-case-fit-title">
     <div>
       <h2 id="use-case-fit-title">What a pass looks like</h2>
       <ol class="usecase-steps">
@@ -57,18 +57,16 @@ export const downloadUrl = DOWNLOAD_URL
         @endforeach
       </ol>
     </div>
-    <aside class="feature-fact">
-      <span class="i-f7-{{ icon }} h-7 w-7 text-[color:var(--accent)]" aria-hidden="true"></span>
+    <aside class="fact">
+      <span class="tone-tile tone-tile-lg"><span class="{{ icon }}" aria-hidden="true"></span></span>
       <strong>{{ metric }}</strong>
       <span>{{ detail }}</span>
     </aside>
   </section>
 
-  <section class="usecase-reclaim" aria-labelledby="use-case-reclaim-title">
-    <div class="section-heading">
-      <h2 id="use-case-reclaim-title">What SystemCleaner finds for you</h2>
-      <p class="section-intro">Every item below is a target the app sizes on your Mac before you decide anything. Nothing here is removed without being selected first.</p>
-    </div>
+  <section class="where" aria-labelledby="use-case-reclaim-title">
+    <h2 id="use-case-reclaim-title" class="sub-title">What SystemCleaner finds for you</h2>
+    <p class="section-intro">The app sizes each of these on your Mac before you decide anything, and removes only what you select.</p>
     <div class="reclaim-grid">
       @foreach (reclaims as group)
         <div class="reclaim-card">
@@ -86,34 +84,36 @@ export const downloadUrl = DOWNLOAD_URL
     </div>
   </section>
 
-  <section aria-labelledby="use-case-features-title">
-    <h2 id="use-case-features-title" class="text-2xl tracking-tight">The tools this leans on</h2>
-    <ul class="feature-list">
+  <section class="more" aria-labelledby="use-case-features-title">
+    <h2 id="use-case-features-title" class="sub-title">The tools this leans on</h2>
+    <ul class="card-list">
       @foreach (relatedFeatures as feature)
         <li>
-          <a href="/features/{{ feature.slug }}" data-stx-link>
+          <a href="/features/{{ feature.slug }}" data-stx-link data-tone="{{ feature.section }}">
+            <span class="tone-tile tone-tile-lg"><span class="i-f7-{{ feature.icon }}" aria-hidden="true"></span></span>
             <span>
               <strong>{{ feature.name }}</strong>
-              <span class="block mt-1 text-[13px] text-[color:var(--muted)]">{{ feature.summary }}</span>
+              <small>{{ feature.sectionLabel }}: {{ feature.summary }}</small>
             </span>
-            <span class="h-5 w-5 i-f7-arrow-right" aria-hidden="true"></span>
+            <span class="arrow i-f7-arrow-right" aria-hidden="true"></span>
           </a>
         </li>
       @endforeach
     </ul>
   </section>
 
-  <section aria-labelledby="more-use-cases-title">
-    <h2 id="more-use-cases-title" class="text-2xl tracking-tight">Other ways people use it</h2>
-    <ul class="feature-list">
+  <section class="more" aria-labelledby="more-use-cases-title">
+    <h2 id="more-use-cases-title" class="sub-title">Other ways people use it</h2>
+    <ul class="card-list">
       @foreach (related as item)
         <li>
-          <a href="/use-cases/{{ item.slug }}" data-stx-link>
+          <a href="/use-cases/{{ item.slug }}" data-stx-link data-tone="{{ item.tone }}">
+            <span class="tone-tile tone-tile-lg"><span class="i-f7-{{ item.icon }}" aria-hidden="true"></span></span>
             <span>
               <strong>{{ item.name }}</strong>
-              <span class="block mt-1 text-[13px] text-[color:var(--muted)]">{{ item.summary }}</span>
+              <small>{{ item.summary }}</small>
             </span>
-            <span class="h-5 w-5 i-f7-arrow-right" aria-hidden="true"></span>
+            <span class="arrow i-f7-arrow-right" aria-hidden="true"></span>
           </a>
         </li>
       @endforeach

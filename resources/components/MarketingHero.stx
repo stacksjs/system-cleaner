@@ -1,60 +1,51 @@
 <script server>
-import { DOWNLOAD_URL, MAC_APP_STORE_URL } from '~/app/Support/Marketing/distribution'
+import { DOWNLOAD_URL, MAC_APP_STORE_URL, SOURCE_URL } from '~/app/Support/Marketing/distribution'
 
 export const downloadUrl = DOWNLOAD_URL
 export const macAppStoreUrl = MAC_APP_STORE_URL
+export const sourceUrl = SOURCE_URL
 </script>
 
-<section class="hero site-container">
-  <div class="hero-copy">
-    <p class="eyebrow">A private Mac utility</p>
-    <h1>See your Mac clearly. Keep it that way.</h1>
-    <p>Storage, startup activity, processes, and safe cleanup in one native workspace. Every scan stays local.</p>
-    <div class="hero-actions">
-      <a class="button button-lg button-primary" href="{{ downloadUrl }}" rel="noreferrer">
-        <span class="h-[18px] w-[18px] i-f7-cloud-download-fill" aria-hidden="true"></span>
-        Download for Mac
-      </a>
-      <a class="store-button" href="{{ macAppStoreUrl }}" rel="noreferrer">
-        <span class="i-f7-logo-apple store-glyph" aria-hidden="true"></span>
-        <span>
-          <small>Also on the</small>
-          <strong>Mac App Store</strong>
-        </span>
-      </a>
+<!-- The hero is the app's overview page as a block: the same purple, the
+     same grain, the same fact chips under the actions, and the window
+     itself running off the right edge. -->
+<section class="hero site-container" aria-labelledby="hero-title">
+  <div class="tone-panel" data-tone="overview">
+    <div class="hero-copy">
+      <h1 id="hero-title">Know what is filling your Mac before you delete anything.</h1>
+      <p class="hero-lede">SystemCleaner sizes the junk that is safe to clear, maps what is taking your disk and lists what starts with your Mac. You see every file before it goes, and every scan runs on your Mac.</p>
+      <div class="hero-actions">
+        <a class="button button-lg button-white" href="{{ downloadUrl }}" rel="noreferrer">
+          <span class="h-[18px] w-[18px] i-f7-cloud-download-fill" aria-hidden="true"></span>
+          Download for Mac
+        </a>
+        @if(macAppStoreUrl)
+          <a class="store-button" href="{{ macAppStoreUrl }}" rel="noreferrer">
+            <span class="i-f7-logo-apple store-glyph" aria-hidden="true"></span>
+            <span>
+              <small>Also on the</small>
+              <strong>Mac App Store</strong>
+            </span>
+          </a>
+        @else
+          <a class="button button-glass button-lg" href="{{ sourceUrl }}" rel="noreferrer">
+            <span class="h-[18px] w-[18px] i-f7-logo-github" aria-hidden="true"></span>
+            Read the source
+          </a>
+        @endif
+      </div>
+      <ul class="chips" aria-label="Requirements">
+        <li><span class="i-f7-desktopcomputer" aria-hidden="true"></span>macOS 14 or later</li>
+        <li><span class="i-f7-bolt-fill" aria-hidden="true"></span>Apple silicon</li>
+        <li><span class="i-f7-lock-shield-fill" aria-hidden="true"></span>No account</li>
+        <li><span class="i-f7-chevron-left-slash-chevron-right" aria-hidden="true"></span>Free and open source</li>
+      </ul>
     </div>
-  </div>
 
-  <div class="hero-visual">
-    <figure class="app-window">
-      <figcaption class="app-window-bar">
-        <span class="traffic-lights" aria-hidden="true"><i></i><i></i><i></i></span>
-        <span>SystemCleaner</span>
-      </figcaption>
-      <picture>
-        <img src="/images/showcase/overview.jpg" width="1400" height="900" alt="SystemCleaner overview: a health score and one card for each section, showing junk to clean, free space, login items, pending updates and browsing traces" fetchpriority="high" />
-      </picture>
-    </figure>
-  </div>
-</section>
-
-<section class="spec-band">
-  <div class="site-container spec-row">
-    <div>
-      <span class="i-f7-desktopcomputer" aria-hidden="true"></span>
-      <p><b>macOS 14 or later</b><br>Built for Apple silicon</p>
-    </div>
-    <div>
-      <span class="i-f7-lock-shield-fill" aria-hidden="true"></span>
-      <p><b>No account needed</b><br>Nothing to sign up for</p>
-    </div>
-    <div>
-      <span class="i-f7-wifi-slash" aria-hidden="true"></span>
-      <p><b>Works offline</b><br>No cloud scan, ever</p>
-    </div>
-    <div>
-      <span class="i-f7-chevron-left-slash-chevron-right" aria-hidden="true"></span>
-      <p><b>Open source</b><br>Read every scan path</p>
+    <div class="hero-visual">
+      <figure class="app-window">
+        <img src="/images/showcase/overview.jpg" width="1400" height="900" alt="The SystemCleaner overview: a health score, and a card for each section showing junk to clean, free space, items that open at login, pending updates and browsing traces" fetchpriority="high" />
+      </figure>
     </div>
   </div>
 </section>

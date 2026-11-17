@@ -19,6 +19,7 @@
   scanTotalLabel: '',
   rootName: '',
   drilled: false,
+  crumbs: [],
   defaultSize: '',
   defaultName: '',
   volumeTotal: '-',
@@ -58,8 +59,8 @@
     if (this.scanState === 'scanning') return this.scanProgress || 'Scanning disk…';
     if (this.scanState === 'cancelled') return 'Scan cancelled · ' + this.scanProgress;
     if (this.scanState === 'error') return this.scanError || 'Scan failed';
-    if (this.scanInfo) return this.scanInfo.folderCount + ' folders · ' + this.scanInfo.scanTime + (this.scanInfo.truncated ? ' · partial' : '') + (this.scanInfo.cached ? ' (cached)' : '');
-    return 'Click Scan Disk to analyze';
+    if (this.scanInfo) return Number(this.scanInfo.folderCount || 0).toLocaleString() + ' folders · took ' + this.scanInfo.scanTime + (this.scanInfo.truncated ? ' · partial' : '') + (this.scanInfo.cached ? ' · from the last scan' : '');
+    return 'Scan your home folder to see what fills it.';
   },
   unmeasuredNote() {
     var n = this.scanInfo ? (this.scanInfo.unmeasured || 0) : 0;
@@ -69,7 +70,7 @@
   },
   unreadableNote() {
     var n = this.scanInfo ? (this.scanInfo.unreadable || 0) : 0;
-    return 'macOS would not let SystemCleaner read ' + n + (n === 1 ? ' folder' : ' folders') + ', so what is inside them is missing from these numbers. Grant Full Disk Access in System Settings › Privacy & Security to include them.';
+    return 'macOS kept SystemCleaner out of ' + n.toLocaleString() + (n === 1 ? ' folder' : ' folders') + ', so what is inside is not counted. Full Disk Access lets it read them.';
   },
 }">
 
@@ -77,11 +78,11 @@
   <div class='disk-sidebar'>
     <div class='disk-sidebar-section'>
       <div class='disk-card'>
-        <div style='display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2);'>
-          <div style='width: 30px; height: 30px; background: linear-gradient(135deg, var(--surface-soft), var(--track)); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--secondary);'>HD</div>
+        <div class='disk-card-head'>
+          <span class='disk-card-icon' aria-hidden='true'><span class='i-f7-floppy-disk'></span></span>
           <div>
-            <div style='font-size: 12px; font-weight: 600;'>Startup disk</div>
-            <div style='font-size: 10px; color: var(--tertiary);' x-text="volumeTotal + ' total'">- total</div>
+            <div class='disk-card-name'>Startup disk</div>
+            <div class='disk-card-sub' x-text="volumeTotal + ' total'">- total</div>
           </div>
         </div>
         <div class='disk-usage-bar'>
@@ -97,11 +98,12 @@
     </div>
 
     <div class='disk-sidebar-section'>
-      <div style='font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--tertiary); margin-bottom: var(--space-2);' x-text="(drilled ? 'Folder: ' : 'Home: ') + rootName">Home</div>
-      <div style='font-size: 18px; font-weight: 700; margin-bottom: var(--space-half);' x-text="scanTotalLabel">-</div>
-      <div style='font-size: 10px; color: var(--tertiary);' x-text="metaText()">Click 'Scan Disk' to analyze</div>
+      <div class='disk-section-label' x-text="drilled ? rootName : 'Home folder'">Home folder</div>
+      <div class='disk-total' x-text="scanTotalLabel">-</div>
+      <div class='disk-meta' x-text="metaText()">Scan your home folder to see what fills it.</div>
       <button class='mt-3 btn btn-sm' data-cancel-scan x-show="scanState === 'scanning'" x-cloak
-        @click='cancelDiskScan()' :disabled='cancelling || !scanId' x-text="cancelling ? 'Cancelling…' : 'Cancel Scan'">Cancel Scan</button>
+        @click='cancelDiskScan()' :disabled='cancelling || !scanId' x-text="cancelling ? 'Cancelling…' : 'Cancel scan'">Cancel scan</button>
+      <button class='mt-3 btn btn-sm' x-show="scanState !== 'scanning' && hasResults" x-cloak @click='startDiskScan()'>Scan again</button>
     </div>
 
     <!-- A scan that ran out of time is a real answer, but only if it says so:
@@ -113,34 +115,50 @@
     </div>
 
     <!-- Unreadable folders are a permission problem, not a scan problem, and
-         the fix is somewhere else entirely. -->
+         the fix is somewhere else entirely, so the notice carries the way
+         there. -->
     <div class='disk-notice-wrap' x-show='scanInfo && scanInfo.unreadable > 0' x-cloak>
-      <div class='disk-notice' x-text='unreadableNote()'></div>
+      <div class='disk-notice'>
+        <span x-text='unreadableNote()'></span>
+        <button type='button' class='btn btn-sm disk-notice-action' @click="fetch('/api/open-privacy-settings', { method: 'POST' })">Open Privacy &amp; Security</button>
+      </div>
     </div>
 
-    <div class='disk-sidebar-section' style='padding-bottom: var(--space-1);'>
-      <div style='font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--tertiary);'>Largest Items</div>
+    <div class='disk-list-head disk-sidebar-section'>
+      <div class='disk-section-label'>Largest items</div>
     </div>
+    <!-- Pointing at a row shows it in the inspector and keeps it there, the
+         same rule the chart follows, so the inspector's buttons stay
+         reachable; clicking a folder opens it in the chart. -->
     <div class='folder-list'>
       <template x-for="item in topItems" :key="item.idx">
-        <div class="folder-item"
-            @mouseover="hovered = item"
-            @mouseleave="hovered = null">
+        <button type='button' class="folder-item"
+            @mouseover="diskHover(item.idx)"
+            @focus="diskHover(item.idx)"
+            @click="diskOpen(item.idx)">
           <span class="folder-dot" :style="'background:' + item.color"></span>
           <span class="folder-name">{{ item.name }}</span>
           <span class="folder-size">{{ item.formattedSize }}</span>
-          <div class="folder-bar-track">
-            <div class="folder-bar-fill" :style="'width:' + item.barPct + '%;background:' + item.color"></div>
-          </div>
-        </div>
+          <span class="folder-bar-track">
+            <span class="folder-bar-fill" :style="'width:' + item.barPct + '%;background:' + item.color"></span>
+          </span>
+        </button>
       </template>
     </div>
   </div>
 
   <!-- Sunburst chart -->
   <div class='disk-chart'>
+    <nav class='disk-crumbs' aria-label='Folder path' x-show="hasResults && crumbs.length > 1" x-cloak>
+      <template x-for="crumb in crumbs" :key="crumb.level">
+        <span class='disk-crumb'>
+          <button type='button' class='disk-crumb-link' :disabled='crumb.last' :aria-current="crumb.last ? 'page' : null" @click='diskUpTo(crumb.level)'>{{ crumb.name }}</button>
+          <span class='disk-crumb-sep i-f7-chevron-right' aria-hidden='true' x-show='!crumb.last'></span>
+        </span>
+      </template>
+    </nav>
     <div class='disk-live-status' aria-description='The chart shows folders measured so far.' x-show="scanState === 'scanning' && hasResults" x-cloak>
-      <div class='flex items-center gap-2 min-w-0'>
+      <div class='flex gap-2 items-center min-w-0'>
         <span class='disk-live-indicator i-f7-arrow-2-circlepath' aria-hidden='true'></span>
         <span class='disk-live-heading' role='status' x-text="cancelling ? 'Cancelling scan…' : (scanStatus === 'queued' ? 'Scan queued' : 'Scanning disk')">Scanning disk</span>
         <span class='disk-live-metrics' x-text='scanProgress'></span>
@@ -197,42 +215,43 @@
 
   <!-- Inspector -->
   <div class='disk-inspector'>
-    <div class='inspector-title'>Inspector</div>
+    <div class='inspector-title'>Details</div>
     <div class='inspector-body'>
       <div class='inspector-placeholder' x-show="!hovered">
-        <div>Hover over a segment<br>to inspect its details</div>
+        <span class='inspector-placeholder-mark' aria-hidden='true'><span class='i-f7-chart-pie-fill'></span></span>
+        <div>Point at a ring or a folder in the list to see what it holds.</div>
       </div>
       <template x-if="hovered">
         <div class="info-card">
           <div class="info-icon-row">
-            <div class="info-type-icon" :style="'background:' + hovered.color + '20;color:' + hovered.color">{{ hovered.isDir ? 'Dir' : 'File' }}</div>
-            <div>
+            <div class="info-type-icon" :style="'background:' + hovered.color + '24;color:' + hovered.color">
+              <span :class="hovered.isDir ? 'i-f7-folder-fill' : 'i-f7-doc-fill'" aria-hidden="true"></span>
+            </div>
+            <div class="min-w-0">
               <div class="info-type-name">{{ hovered.name }}</div>
-              <div class="info-type-kind">{{ (hovered.isDir ? 'Folder' : 'File') + ' · Level ' + hovered.depth }}</div>
+              <div class="info-type-kind">{{ (hovered.isDir ? 'Folder' : 'File') + ' in ' + rootName }}</div>
             </div>
           </div>
           <div class="info-row"><span class="info-label">Size</span><span class="info-value">{{ hovered.formattedSize }}</span></div>
-          <div class="info-row"><span class="info-label">% of View</span><span class="info-value">{{ hovered.percent + '%' }}</span></div>
+          <div class="info-row"><span class="info-label">{{ 'Share of ' + rootName }}</span><span class="info-value">{{ hovered.percent + '%' }}</span></div>
           <template x-if="hovered.isDir">
-            <div class="info-row"><span class="info-label">Items</span><span class="info-value">{{ hovered.childCount }}</span></div>
+            <div class="info-row"><span class="info-label">Items inside</span><span class="info-value">{{ hovered.childCount }}</span></div>
           </template>
-          <div class="info-row" style="border-bottom:none"><span class="info-label">Depth</span><span class="info-value">{{ 'Ring ' + hovered.depth }}</span></div>
-          <div class="info-path">{{ hovered.fullPath }}</div>
           <div class="info-bar">
-            <div class="info-bar-label">Proportion</div>
             <div class="info-bar-track"><div class="info-bar-fill" :style="'width:' + hovered.percent + '%;background:' + hovered.color"></div></div>
             <div class="info-bar-text">{{ hovered.formattedSize + ' of ' + defaultSize }}</div>
           </div>
-          <template x-if="hovered.isDir && hovered.childCount > 0">
-            <div class="info-drill">Click segment to drill down</div>
-          </template>
+          <div class="info-path" x-show="hovered.fullPath">{{ hovered.fullPath }}</div>
           <div class="info-actions" x-show="hovered.fullPath && !hovered.aggregate">
+            <button class="btn btn-accent btn-sm" x-show="hovered.isDir && hovered.childCount > 0" @click="diskOpen(hovered.idx)">Open folder</button>
             <button class="btn btn-sm" @click="diskRevealInFinder(hovered.fullPath)">Reveal in Finder</button>
+          </div>
+          <!-- The one destructive action, set apart from the two that only
+               look, and labelled with what it costs. It asks first. -->
+          <div class="info-danger" x-show="hovered.fullPath && !hovered.aggregate && hovered.isDir && hovered.depth >= 1">
             <button class="btn btn-danger btn-sm"
                     :disabled="scanState === 'scanning'"
-                    x-show="hovered.isDir && hovered.depth >= 1"
-                    @click="diskDeletePath(hovered.fullPath, hovered.name, hovered.size)"
-                    x-text="'Delete ' + hovered.formattedSize">Delete</button>
+                    @click="diskDeletePath(hovered.fullPath, hovered.name, hovered.size)">{{ 'Delete ' + hovered.formattedSize + '…' }}</button>
           </div>
         </div>
       </template>

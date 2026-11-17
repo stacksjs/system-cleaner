@@ -202,7 +202,7 @@
   <div class='main-subtitle'>Clean automatically, whether or not the app is open</div>
 </div>
 <div class='main-content'>
-  <div x-show='loading' class='empty-state'>Reading your schedule&hellip;</div>
+  <div x-show='loading' class='empty-state is-loading'>Reading your schedule&hellip;</div>
   <div x-show='!loading' x-cloak>
     <SchedulePanel />
   </div>

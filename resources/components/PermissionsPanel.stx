@@ -9,12 +9,12 @@
 -->
 <div class='card-row'>
   <div class='card'>
-    <div class='card-label'>Apps With Grants</div>
+    <div class='card-label'>Apps with grants</div>
     <div class='card-value' x-text="loading ? '…' : (unavailable ? '-' : apps.length)">…</div>
     <div class='card-detail' x-text="unavailable ? 'Could not be read' : (grantCount() + ' permissions in total')"></div>
   </div>
   <div class='card'>
-    <div class='card-label'>App Is Gone</div>
+    <div class='card-label'>App is gone</div>
     <div class='card-value' :style="missing ? 'color: var(--orange);' : ''" x-text="loading ? '…' : (unavailable ? '-' : missing)">…</div>
     <div class='card-detail'>Grants outliving the app that asked</div>
   </div>

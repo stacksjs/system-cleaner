@@ -13,9 +13,9 @@ import {
 
 export interface UpdatesCheckResult {
   success: true
-  brewFormulae: Array<{ name: string; current: string; latest: string; pinned: boolean }>
-  brewCasks: Array<{ name: string; current: string; latest: string }>
-  pantryOutdated: Array<{ name: string; current: string; wanted: string; latest: string }>
+  brewFormulae: Array<{ name: string, current: string, latest: string, pinned: boolean }>
+  brewCasks: Array<{ name: string, current: string, latest: string }>
+  pantryOutdated: Array<{ name: string, current: string, wanted: string, latest: string }>
   pantryPackages: string[]
   pantryTrackedCount: number
   desktopApps: Array<{
@@ -145,13 +145,13 @@ function appNameToCaskSlug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(?:^-+|-+$)/g, '')
 }
 
-function getPantryTrackedFromLock(cwd = process.cwd()): { count: number; names: string[] } {
+function getPantryTrackedFromLock(cwd = process.cwd()): { count: number, names: string[] } {
   const lockPath = path.join(cwd, 'pantry.lock')
   if (!fs.existsSync(lockPath))
     return { count: 0, names: [] }
   try {
     const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8')) as {
-      workspaces?: Record<string, { dependencies?: Record<string, string>; devDependencies?: Record<string, string> }>
+      workspaces?: Record<string, { dependencies?: Record<string, string>, devDependencies?: Record<string, string> }>
     }
     const root = lock.workspaces?.['']
     if (!root)
@@ -316,7 +316,7 @@ async function performUpdatesCheck(fullScan: boolean, tier: UpdatesTier): Promis
     ? parsePantryOutdated(pantryResult.stdout)
     : []
   const pantryTracked = typeof pantryPkgs === 'object' && pantryPkgs !== null && 'names' in pantryPkgs
-    ? pantryPkgs as { count: number; names: string[] }
+    ? pantryPkgs as { count: number, names: string[] }
     : { count: 0, names: [] as string[] }
   const checkingMatch = pantryResult.stdout?.match(/Checking (\d+) packages/)
   const pantryTrackedCount = checkingMatch
@@ -356,7 +356,7 @@ async function performUpdatesCheck(fullScan: boolean, tier: UpdatesTier): Promis
     brewCaskList.split('\n').map(s => s.trim()).filter(Boolean),
   )
 
-  const masOutdated: Record<string, { current: string; latest: string }> = {}
+  const masOutdated: Record<string, { current: string, latest: string }> = {}
   if (masResult.ok && masResult.stdout.trim()) {
     for (const line of masResult.stdout.split('\n')) {
       const match = line.trim().match(/^\d+\s+(.+?)\s+\((.+?)\s*->\s*(.+?)\)$/)
@@ -379,7 +379,7 @@ async function performUpdatesCheck(fullScan: boolean, tier: UpdatesTier): Promis
     if (token && !tokensToQuery.includes(token)) tokensToQuery.push(token)
   }
 
-  const caskVersions: Record<string, { version: string; autoUpdates: boolean }> = {}
+  const caskVersions: Record<string, { version: string, autoUpdates: boolean }> = {}
   if (tokensToQuery.length > 0) {
     await Promise.all(
       Array.from({ length: Math.ceil(tokensToQuery.length / 15) }, (_, i) => {

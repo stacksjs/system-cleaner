@@ -226,7 +226,7 @@
             <span class='vpn-location-city'>{{ r.city }}</span>
           </span>
           <template x-if='r.id === region'>
-            <span class='vpn-pick-check i-f7-checkmark-alt' aria-hidden='true'></span>
+            <span class='i-f7-checkmark-alt vpn-pick-check' aria-hidden='true'></span>
           </template>
         </button>
       </template>

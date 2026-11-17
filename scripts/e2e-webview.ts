@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+/* eslint-disable no-console */
 /**
  * E2E visual + DOM checks using Bun.WebView (WebKit on macOS).
  * Requires dev server at BASE_URL (default http://localhost:3456).

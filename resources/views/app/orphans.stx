@@ -97,10 +97,12 @@
 </div>
 
 <div class='main-content'>
-  <div x-show='loading' class='empty-state'>Checking which apps are still installed&hellip;</div>
+  <div x-show='loading' class='empty-state is-loading'>Checking which apps are still installed&hellip;</div>
 
   <div x-cloak x-show='!loading && itemCount === 0' class='empty-state'>
-    Nothing left behind. Every support directory on this Mac belongs to an app that is still installed.
+      <span class='empty-mark' data-kind='clear'><span class='i-f7-checkmark-alt' aria-hidden='true'></span></span>
+      <strong class='empty-title'>Nothing left behind</strong>
+      <p class='empty-body'>Every support folder on this Mac belongs to an app that is still installed.</p>
   </div>
 
   <div x-cloak x-show='!loading && itemCount > 0'>

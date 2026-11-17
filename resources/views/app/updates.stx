@@ -75,7 +75,7 @@
     <div class='card-detail'>{{ pantryTrackedCount + ' package' + (pantryTrackedCount !== 1 ? 's' : '') + ' tracked' }}</div>
   </div>
   <div class='card'>
-    <div class='card-label'>Desktop Apps</div>
+    <div class='card-label'>Desktop apps</div>
     <div class='card-value' :style="desktopOutdated.length > 0 ? 'color: var(--orange)' : 'color: var(--green)'">{{ desktopOutdated.length }}</div>
     <div class='card-detail'>{{ desktopApps.length + ' app' + (desktopApps.length !== 1 ? 's' : '') + ' scanned' }}</div>
   </div>
@@ -103,12 +103,12 @@
               :disabled="self.stage === 'checking' || self.stage === 'downloading' || self.stage === 'installing'">
         Check for Updates
       </button>
-      <button class='btn btn-sm btn-primary'
+      <button class='btn btn-primary btn-sm'
               x-show="self.stage === 'available'"
               @click='downloadSelfUpdate()'>
         Download
       </button>
-      <button class='btn btn-sm btn-primary'
+      <button class='btn btn-primary btn-sm'
               x-show="self.stage === 'ready'"
               @click='installSelfUpdate()'>
         Install and Restart
@@ -212,7 +212,8 @@
     </table>
   </div>
   <div x-show='systemOutdatedCount() === 0' class='empty-state' style='padding: var(--space-5);'>
-    <div style='font-size: 13px; color: var(--green); margin-bottom: var(--space-1);'>&#10004; No pending macOS or system updates</div>
+    <span class='empty-mark' data-kind='clear'><span class='i-f7-checkmark-alt' aria-hidden='true'></span></span>
+    <strong class='empty-title'>macOS is up to date</strong>
     <div class='dim' style='font-size: 11px;' x-show='clToolsInfo.version'>{{ 'Command Line Tools ' + clToolsInfo.version + ' installed' }}</div>
     <div class='dim' style='font-size: 11px; margin-top: var(--space-1);' x-show='updateScanCached'>Use Deep Scan for a fresh Apple catalog check</div>
   </div>
@@ -419,8 +420,9 @@
 </div>
 
 <div x-show='totalOutdated() === 0 && !loading' class='empty-state'>
-  <div style='font-size: 32px; margin-bottom: var(--space-2);'>&#10004;</div>
-  Everything is up to date.
+  <span class='empty-mark' data-kind='clear'><span class='i-f7-checkmark-alt' aria-hidden='true'></span></span>
+  <strong class='empty-title'>Everything is up to date</strong>
+  <p class='empty-body'>Nothing is waiting to install.</p>
 </div>
 
 </div>

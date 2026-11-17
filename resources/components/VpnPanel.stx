@@ -118,21 +118,21 @@
           <div>
             <div class='info-row'>
               <span class='info-label'>Coordinator</span>
-              <span class='info-value dim'>ws:// or wss:// host, optional port</span>
+              <span class='dim info-value'>ws:// or wss:// host, optional port</span>
             </div>
             <input class='check' type='text' x-model='coordinatorUrl' placeholder='ws://coordinator.example:51821'
               style='width: 100%; margin-top: var(--space-1); padding: var(--space-tight) var(--space-2); border-radius: 5px; border: .5px solid var(--line); background: var(--surface-soft); color: var(--ink); font: 11px/1.4 SF Mono, Menlo, monospace;' />
 
             <div class='info-row' style='margin-top: var(--space-3);'>
               <span class='info-label'>Auth key</span>
-              <span class='info-value dim'>blank if the coordinator is open</span>
+              <span class='dim info-value'>blank if the coordinator is open</span>
             </div>
             <input class='check' type='password' x-model='authKey' placeholder='shared secret'
               style='width: 100%; margin-top: var(--space-1); padding: var(--space-tight) var(--space-2); border-radius: 5px; border: .5px solid var(--line); background: var(--surface-soft); color: var(--ink); font: 11px/1.4 SF Mono, Menlo, monospace;' />
 
             <div class='info-row' style='margin-top: var(--space-3);'>
               <span class='info-label'>Exit node</span>
-              <span class='info-value dim'>where non-tunnel traffic goes</span>
+              <span class='dim info-value'>where non-tunnel traffic goes</span>
             </div>
             <div style='display: flex; gap: var(--space-tight); margin-top: var(--space-1);'>
               <button class='btn btn-sm' :class="useExit === 'auto' ? 'btn-active' : ''" @click="useExit = 'auto'">Auto</button>
@@ -181,7 +181,7 @@
             <tr>
               <td><div class='item-name mono'>{{ t.name }}</div></td>
               <td class='mono' style='font-size: 11px;'>{{ t.address }}</td>
-              <td class='mono dim' style='font-size: 11px;'>{{ t.peer ? t.peer : '-' }}</td>
+              <td class='dim mono' style='font-size: 11px;'>{{ t.peer ? t.peer : '-' }}</td>
               <td class='dim' style='font-size: 11px;'>{{ t.mtu ? t.mtu : '-' }}</td>
               <td>
                 <span :class="'badge ' + (t.localtunnelsRange ? 'badge-green' : 'badge-gray')">{{ t.localtunnelsRange ? 'localtunnels' : 'other' }}</span>

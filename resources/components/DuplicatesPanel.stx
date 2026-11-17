@@ -29,7 +29,7 @@
     </div>
   </div>
   <div class='card'>
-    <div class='card-label'>Minimum Size</div>
+    <div class='card-label'>Minimum size</div>
     <div class='card-value' x-text="minSizeMB >= 1024 ? (minSizeMB / 1024) + ' GB' : minSizeMB + ' MB'">1 MB</div>
     <div class='card-detail'>Smaller files are noise, not findings</div>
   </div>
@@ -87,7 +87,7 @@
     <strong x-text='fmtBytes(selectedBytes())'>0 B</strong>
   </div>
   <button class='btn btn-sm' @click='selected = []'>Clear</button>
-  <button class='btn btn-danger btn-sm btn-icon' @click="remove('trash')" :disabled='deleting || scanning'>
+  <button class='btn btn-danger btn-icon btn-sm' @click="remove('trash')" :disabled='deleting || scanning'>
     <span class='i-f7-trash-fill' aria-hidden='true'></span>
     <span x-text="deleting ? 'Working…' : 'Move to Trash'">Move to Trash</span>
   </button>
@@ -170,7 +170,9 @@
 
   <div class='tbl-wrap' x-show='groups.length === 0'>
     <div class='empty-state'>
-      No duplicates over <span x-text='minSizeMB'>1</span> MB in that folder.
+      <span class='empty-mark' data-kind='clear'><span class='i-f7-checkmark-alt' aria-hidden='true'></span></span>
+      <strong class='empty-title'>No duplicates found</strong>
+      <p class='empty-body'>Nothing over <span x-text='minSizeMB'>1</span> MB in that folder has an identical copy.</p>
     </div>
   </div>
 </div>

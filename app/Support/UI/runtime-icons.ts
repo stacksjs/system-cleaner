@@ -89,6 +89,8 @@ export const RUNTIME_ICON_CLASSES: string[] = [
 
   // Section-page panels, drawn by `resources/scripts/hub-metrics.ts` after
   // the page loads, so no template ever names them.
+  'i-f7-arrow-down-circle-fill',
+  'i-f7-chart-bar-alt-fill',
   'i-f7-chart-pie-fill',
   'i-f7-clock-fill',
   'i-f7-doc-on-doc-fill',

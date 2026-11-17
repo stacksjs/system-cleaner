@@ -9,7 +9,7 @@
 -->
 <div class='dash-grid'>
   <div class='card dash-health'>
-    <div class='card-label'>System Health</div>
+    <div class='card-label'>System health</div>
     <div class='dash-health-body'>
       <div class='health-ring'>
         <svg viewBox='0 0 100 100'>
@@ -98,7 +98,7 @@
   </div>
 
   <div class='card'>
-    <div class='card-label'>Startup Items</div>
+    <div class='card-label'>Startup items</div>
     <div class='card-value'>{{ stats ? stats.enabledStartup : '...' }}</div>
     <div class='card-detail'><span>{{ stats ? stats.disabledStartup + ' disabled · ' + stats.totalStartup + ' total' : 'loading...' }}</span></div>
   </div>

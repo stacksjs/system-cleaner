@@ -1,7 +1,7 @@
 <!-- Quick Clean panel -->
 <div class='card-row'>
   <div class='card' style='grid-column: span 2;'>
-    <div class='card-label'>Space Recoverable</div>
+    <div class='card-label'>Space recoverable</div>
     <!-- Turns green only once there is a real figure. Green on "Scanning"
          reads as a result, which it is not. The ellipsis is gone because the
          ring beside it already says the same thing, and the bar below carries
@@ -12,7 +12,7 @@
     <div class='card-detail'><span id='cleanup-visible-count'>{{ cleanCategories.length }}</span> cleanable categories found</div>
   </div>
   <div class='card'>
-    <div class='card-label'>Disk Free</div>
+    <div class='card-label'>Disk free</div>
     <div class='card-value'>{{ diskAvail }}</div>
     <div class='card-detail'><span>{{ diskPercent }}</span>% used</div>
   </div>
@@ -59,7 +59,7 @@
 
   <div class='clean-progress' x-cloak x-show='!!cleanProgress' aria-live='polite'>
     <div class='progress'>
-      <div class='progress-fill clean-progress-fill'
+      <div class='clean-progress-fill progress-fill'
         :style="'width: ' + (cleanProgress && cleanProgress.total ? Math.round(cleanProgress.done / cleanProgress.total * 100) : 0) + '%'"></div>
     </div>
   </div>
@@ -122,7 +122,11 @@
 
 <div x-show='!targetsLoading && cleanCategories.length === 0' x-cloak>
   <div class='tbl-wrap'>
-    <div class='empty-state'>Nothing to clean. No cache directories were found.</div>
+    <div class='empty-state'>
+      <span class='empty-mark' data-kind='clear'><span class='i-f7-checkmark-alt' aria-hidden='true'></span></span>
+      <strong class='empty-title'>Nothing to clean</strong>
+      <p class='empty-body'>None of the cache folders Quick Clean looks in has anything in it right now.</p>
+    </div>
   </div>
 </div>
 

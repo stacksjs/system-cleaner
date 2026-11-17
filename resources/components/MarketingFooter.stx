@@ -14,7 +14,7 @@ export const year = new Date().getFullYear()
         <BrandMark :size="30" />
         <span>SystemCleaner</span>
       </a>
-      <p>A native macOS utility for understanding, cleaning, and maintaining your Mac. Nothing leaves the machine.</p>
+      <p>A free Mac utility that shows you what is on your disk and lets you choose what goes. Every scan runs on your Mac.</p>
     </div>
 
     <div class="footer-cols">
@@ -24,7 +24,9 @@ export const year = new Date().getFullYear()
           <li><a href="/features" data-stx-link>Features</a></li>
           <li><a href="/use-cases" data-stx-link>Use cases</a></li>
           <li><a href="{{ downloadUrl }}" rel="noreferrer">Download</a></li>
-          <li><a href="{{ macAppStoreUrl }}" rel="noreferrer">Mac App Store</a></li>
+          @if(macAppStoreUrl)
+            <li><a href="{{ macAppStoreUrl }}" rel="noreferrer">Mac App Store</a></li>
+          @endif
         </ul>
       </div>
       <div>

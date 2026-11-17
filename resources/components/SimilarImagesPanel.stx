@@ -35,7 +35,7 @@
     </div>
     <div class='si-bar'>
       <span class='si-root' :title='root' x-text="'in ' + scanLabel()"></span>
-      <button class='btn btn-sm btn-icon' @click='pickRoot()' :disabled='scanning'>
+      <button class='btn btn-icon btn-sm' @click='pickRoot()' :disabled='scanning'>
         <span class='i-f7-folder' aria-hidden='true'></span>
         Choose Folder&hellip;
       </button>
@@ -114,7 +114,7 @@
               <figcaption>
                 <span class='si-name' x-text='file.name'></span>
                 <span class='si-meta' x-text="dimensions(file) + ' · ' + file.sizeFormatted"></span>
-                <span class='si-meta si-dim' x-text='shortPath(file.path)'></span>
+                <span class='si-dim si-meta' x-text='shortPath(file.path)'></span>
               </figcaption>
             </figure>
           </template>

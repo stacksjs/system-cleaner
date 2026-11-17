@@ -1,17 +1,18 @@
 @extends('layouts/marketing')
 
 @section('title', 'Privacy - SystemCleaner')
-@section('description', 'SystemCleaner runs entirely on your Mac. No account, no cloud scan, no analytics pipeline. Read exactly what the app reads and what it never sends.')
+@section('description', 'SystemCleaner runs on your Mac and needs no account. Read what the app reads, and the two occasions it goes online.')
 @section('canonical', 'https://system-cleaner.app/privacy')
 
 @section('content')
-  <article class="site-container">
-    <header class="feature-hero">
-      <p class="eyebrow">Privacy</p>
-      <h1>Your Mac stays your business.</h1>
-      <p>SystemCleaner is a local utility. It reads your system to show you what is there, and it sends none of it anywhere.</p>
-    </header>
+  <MarketingPageHero
+    tone="protection"
+    icon="i-f7-lock-shield-fill"
+    title="Your Mac stays your business"
+    lede="SystemCleaner reads your system to show you what is there, and sends none of it anywhere."
+  />
 
+  <article class="site-container">
     <div class="prose">
       <h2>What runs on your Mac</h2>
       <p>Every scan happens on the machine you are sitting at. Disk analysis, process sampling, startup item discovery, extension inventory, and cleanup all read the local filesystem and local system APIs. There is no remote scanning service and no upload step.</p>
@@ -36,7 +37,7 @@
 
       <h2>Verifying any of this</h2>
       <p>The app is open source. Every scan path, every network call, and every delete operation is readable in the repository, and the cleanup code lists its target directories explicitly rather than globbing your disk.</p>
-      <p><a class="tour-link" href="https://github.com/stacksjs/system-cleaner" rel="noreferrer">Read the source <span class="i-f7-arrow-up-right" aria-hidden="true"></span></a></p>
+      <p><a class="text-link" href="https://github.com/stacksjs/system-cleaner" rel="noreferrer">Read the source <span class="i-f7-arrow-up-right" aria-hidden="true"></span></a></p>
     </div>
   </article>
 

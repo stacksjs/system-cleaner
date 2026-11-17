@@ -57,7 +57,10 @@ function isOursByCmd(cmd: string): boolean {
 function killAll(holders: Holder[], label: string): void {
   for (const h of holders) {
     console.warn(`[dev] killing ${label} ${h.command} (pid ${h.pid})`)
-    try { process.kill(h.pid, 'SIGTERM') } catch {}
+    try {
+      process.kill(h.pid, 'SIGTERM')
+    }
+    catch {}
   }
 }
 
@@ -69,7 +72,10 @@ if (stale.length > 0) {
   await Bun.sleep(300)
   const survivors = findStaleDevProcesses()
   for (const h of survivors) {
-    try { process.kill(h.pid, 'SIGKILL') } catch {}
+    try {
+      process.kill(h.pid, 'SIGKILL')
+    }
+    catch {}
   }
   if (survivors.length > 0) await Bun.sleep(200)
 }
@@ -90,7 +96,10 @@ for (const port of [PORT, BROADCAST_PORT]) {
   killAll(ours, `port-${port} holder`)
   await Bun.sleep(300)
   for (const h of findPortHolders(port)) {
-    try { process.kill(h.pid, 'SIGKILL') } catch {}
+    try {
+      process.kill(h.pid, 'SIGKILL')
+    }
+    catch {}
   }
 }
 
@@ -126,7 +135,10 @@ for (const port of [PORT, BROADCAST_PORT]) {
 // Clear STX cache unless --fresh is passed
 const fresh = process.argv.includes('--fresh')
 if (fresh) {
-  try { fs.rmSync('.stx', { recursive: true, force: true }) } catch {}
+  try {
+    fs.rmSync('.stx', { recursive: true, force: true })
+  }
+  catch {}
 }
 
 // Locate the stx CLI. The pantry symlink (`pantry/.bin/stx`) is the

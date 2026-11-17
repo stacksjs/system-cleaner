@@ -16,7 +16,7 @@
     <div class='card-detail' x-text="browsers().length + ' source(s) on this Mac'">0 sources</div>
   </div>
   <div class='card'>
-    <div class='card-label'>Signed-in Sites Kept</div>
+    <div class='card-label'>Signed-in sites kept</div>
     <div class='card-value' style='color: var(--green);' x-text='keptDomains.length'>0</div>
     <div class='card-detail' x-text="keptCookieCount + ' cookie(s) would survive a clear'">0 cookies</div>
   </div>

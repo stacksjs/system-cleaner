@@ -35,6 +35,13 @@ const localAgent = isLocalAgent()
     ::view-transition-old(root), ::view-transition-new(root) {
       animation-duration: .26s; animation-timing-function: cubic-bezier(.2, .8, .2, 1);
     }
+    /* Belt and braces for the router's built-in loading styles (see
+       config/ui.ts): a navigation never changes the cursor or takes the
+       pointer away from a link, since WebKit would not restore either until
+       the mouse moved. */
+    .stx-navigating { cursor: auto !important; }
+    .stx-navigating a, .stx-navigating button { pointer-events: auto !important; }
+    #stx-router-progress { display: none !important; }
     [data-stx-content] { view-transition-name: page; }
     ::view-transition-group(page) { animation-duration: .3s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
     ::view-transition-old(page) { animation: page-out .14s ease-in both; }
@@ -146,7 +153,12 @@ const localAgent = isLocalAgent()
     .app-body:has(.hub) .app-column {
       margin: 0; border-radius: 0; background: transparent; box-shadow: none; color: #fff;
     }
-    .main { min-width: 0; flex: 1; overflow-y: auto; background: var(--app-bg); }
+    /* `min-height: 0`, overriding the router container's `min-height: 100%`
+       above: `.main` is that container and also the scroll area under the
+       toolbar, so 100% made it the window's full height on top of the
+       toolbar and pushed its last 32 points below the window edge, where
+       no amount of scrolling could reach them. */
+    .main { min-width: 0; min-height: 0; flex: 1; overflow-y: auto; background: var(--app-bg); }
 
     /* AppKit publishes its window-button band; use the same centre line for
        the app toolbar, without leaving an empty second row beneath it. */
@@ -471,10 +483,18 @@ const localAgent = isLocalAgent()
 
     @property --score { syntax: '<number>'; inherits: true; initial-value: 0; }
 
+    /* A section page is three bands (what it is, the tools or cards, the
+       round button and panels) and they share the window's height rather
+       than stacking at the top: the composition sits in the middle and the
+       gaps between bands grow with the window, so a tall window gives the
+       round button room to stand on its own instead of leaving a blank
+       strip under it. Content taller than the window keeps the smallest gap
+       and scrolls. */
     .hub {
       container-type: inline-size;
-      display: flex; min-height: 100%; flex-direction: column; gap: var(--space-6);
-      max-width: 1080px; margin: 0 auto; padding: var(--space-2) var(--space-8) var(--space-10);
+      display: flex; min-height: 100%; flex-direction: column; justify-content: center;
+      gap: clamp(28px, 6vh, 72px);
+      max-width: 1080px; margin: 0 auto; padding: var(--space-4) var(--space-8) var(--space-10);
       color: #fff;
     }
 
@@ -510,7 +530,7 @@ const localAgent = isLocalAgent()
 
     .hub-name { text-wrap: balance; font-size: 34px; font-weight: 600; letter-spacing: -.025em; line-height: 1.1; }
     .hub-headline { text-wrap: balance; margin-top: var(--space-2); font-size: 17px; font-weight: 600; line-height: 1.3; }
-    .hub-lede { text-wrap: pretty; max-width: 50ch; margin-top: var(--space-2); color: rgb(255 255 255 / .72); font-size: 13.5px; line-height: 1.5; }
+    .hub-lede { text-wrap: pretty; max-width: 50ch; margin-top: var(--space-2); color: rgb(255 255 255 / .8); font-size: 13.5px; line-height: 1.5; }
 
     .hub-features { display: flex; flex-direction: column; gap: 2px; margin-top: var(--space-5); }
     .hub-feature {
@@ -528,7 +548,7 @@ const localAgent = isLocalAgent()
     .hub-feature-icon > span { width: 15px; height: 15px; }
     .hub-feature-text { display: flex; flex: 1; flex-direction: column; gap: 1px; min-width: 0; }
     .hub-feature-name { font-size: 13.5px; font-weight: 600; }
-    .hub-feature-desc { overflow: hidden; color: rgb(255 255 255 / .6); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+    .hub-feature-desc { overflow: hidden; color: rgb(255 255 255 / .76); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
     .hub-feature-metric { flex: none; color: rgb(255 255 255 / .88); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
     .hub-feature-chevron { width: 9px; height: 9px; flex: none; opacity: .5; }
 
@@ -568,7 +588,7 @@ const localAgent = isLocalAgent()
     .side-disk:active { transform: scale(.99); }
     .hub-run-button:focus-visible { outline: 2px solid #fff; outline-offset: 8px; }
     .hub-run-button > span:first-child { width: 18px; height: 18px; }
-    .hub-run-caption { color: rgb(255 255 255 / .66); font-size: 12px; }
+    .hub-run-caption { color: rgb(255 255 255 / .78); font-size: 12px; }
 
     /* Live panels under the stage. */
     .hub-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: var(--space-4); }
@@ -584,7 +604,7 @@ const localAgent = isLocalAgent()
     .hub-panel { min-height: 220px; padding: 16px 18px 14px; }
     .hub-panel-head { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
     .hub-panel-title { font-size: 14px; font-weight: 650; }
-    .hub-panel-aside { flex: 1; min-width: 0; overflow: hidden; color: rgb(255 255 255 / .6); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+    .hub-panel-aside { flex: 1; min-width: 0; overflow: hidden; color: rgb(255 255 255 / .76); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
     .hub-panel-link {
       flex: none; padding: 3px 11px; border-radius: 999px;
       background: rgb(255 255 255 / .14); color: #fff;
@@ -594,7 +614,21 @@ const localAgent = isLocalAgent()
     .hub-panel-link, .hub-panel-button, .hub-cta { transition: background .15s ease, transform .12s ease; }
     .hub-panel-link:focus-visible, .hub-panel-button:focus-visible, .hub-row-link:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
     .hub-panel-body { display: flex; flex: 1; flex-direction: column; }
-    .hub-panel-empty { text-wrap: pretty; margin: auto 0; color: rgb(255 255 255 / .66); font-size: 13px; line-height: 1.5; }
+    /* A panel with nothing to list says so as a small composition rather
+       than a stray sentence: a mark, a title, one line, and the next step
+       when there is one. Good news ("nothing to clear") wears the section's
+       colour; a failure offers to try again. */
+    .hub-empty { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: var(--space-4) var(--space-3); text-align: center; }
+    .hub-empty-mark {
+      display: grid; width: 46px; height: 46px; margin-bottom: var(--space-2); place-items: center; border-radius: 50%;
+      background: rgb(255 255 255 / .14); box-shadow: inset 0 1px 0 rgb(255 255 255 / .22);
+    }
+    .hub-empty-mark > span { width: 21px; height: 21px; color: #fff; }
+    .hub-empty-mark[data-kind='clear'] { background: linear-gradient(160deg, var(--tone-a), var(--tone-b)); box-shadow: inset 0 1px 0 rgb(255 255 255 / .3), 0 8px 18px rgb(0 0 0 / .18); }
+    .hub-empty-mark[data-kind='error'] { background: rgb(0 0 0 / .18); }
+    .hub-empty-title { font-size: 14.5px; font-weight: 650; letter-spacing: -.01em; }
+    .hub-empty-body { text-wrap: pretty; max-width: 38ch; margin: 0; color: rgb(255 255 255 / .8); font-size: 12.5px; line-height: 1.5; }
+    .hub-empty .hub-panel-button { align-self: center; margin-top: var(--space-3); text-decoration: none; }
     .hub-panel-note { color: rgb(255 255 255 / .76); font-size: 13px; line-height: 1.5; }
     .hub-panel-button {
       align-self: flex-start; margin-top: var(--space-3); padding: 7px 14px;
@@ -616,7 +650,7 @@ const localAgent = isLocalAgent()
     .hub-row-main { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
     .hub-row-title, .hub-row-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .hub-row-title { font-size: 13px; font-weight: 600; }
-    .hub-row-sub { color: rgb(255 255 255 / .6); font-size: 11.5px; }
+    .hub-row-sub { color: rgb(255 255 255 / .76); font-size: 11.5px; }
     .hub-row-value { flex: none; font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
     .hub-row-chevron { width: 9px; height: 9px; flex: none; opacity: .5; }
     .hub-row-bar { display: block; height: 4px; margin-top: 3px; overflow: hidden; border-radius: 2px; background: rgb(255 255 255 / .14); }
@@ -625,7 +659,7 @@ const localAgent = isLocalAgent()
     .hub-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); margin-top: var(--space-3); }
     .hub-stat { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px; background: rgb(255 255 255 / .08); }
     .hub-stat-value { overflow: hidden; font-size: 15px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
-    .hub-stat-label { color: rgb(255 255 255 / .6); font-size: 11px; }
+    .hub-stat-label { color: rgb(255 255 255 / .76); font-size: 11px; }
     .hub-meter { height: 14px; margin-top: var(--space-2); overflow: hidden; border-radius: 7px; background: rgb(255 255 255 / .14); }
     .hub-meter-fill { display: block; height: 100%; border-radius: 7px; background: linear-gradient(90deg, rgb(255 255 255 / .75), #fff); }
     .hub-gauges { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); justify-items: center; padding: var(--space-1) 0; }
@@ -637,7 +671,7 @@ const localAgent = isLocalAgent()
         conic-gradient(#fff calc(var(--score) * 1%), rgb(255 255 255 / .16) 0);
     }
     .hub-gauge-value { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
-    .hub-gauge-label { color: rgb(255 255 255 / .7); font-size: 11.5px; font-weight: 600; }
+    .hub-gauge-label { color: rgb(255 255 255 / .8); font-size: 11.5px; font-weight: 600; }
     .hub-status { display: flex; align-items: center; gap: var(--space-3); padding: 6px 6px 10px; }
     .hub-pill { flex: none; padding: 3px 10px; border-radius: 999px; background: rgb(255 255 255 / .16); font-size: 11.5px; font-weight: 700; }
     .hub-pill-on { background: #fff; color: var(--tone-bg2); }
@@ -667,7 +701,7 @@ const localAgent = isLocalAgent()
       transition: --score 1.1s cubic-bezier(.2, .8, .2, 1);
     }
     .hub-ring-value { font-size: 48px; font-weight: 750; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
-    .hub-ring-label { margin-top: var(--space-1); color: rgb(255 255 255 / .7); font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+    .hub-ring-label { margin-top: var(--space-1); color: rgb(255 255 255 / .8); font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
     .hub-facts { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); list-style: none; }
     .hub-facts li {
       display: inline-flex; align-items: center; gap: var(--space-tight); padding: 5px 11px;
@@ -691,7 +725,7 @@ const localAgent = isLocalAgent()
     .hub-module-orb { position: absolute; top: -20px; right: -16px; width: 116px; height: 116px; transform: rotate(-10deg); }
     .hub-module-orb > span { width: 46px; height: 46px; color: #fff; filter: drop-shadow(0 4px 10px rgb(0 0 0 / .25)); }
     .hub-module-value { margin-top: auto; font-size: 27px; font-weight: 700; letter-spacing: -.02em; }
-    .hub-module-caption { color: rgb(255 255 255 / .66); font-size: 12px; }
+    .hub-module-caption { color: rgb(255 255 255 / .78); font-size: 12px; }
     .hub-module-go {
       position: absolute; right: 14px; bottom: 14px; padding: 4px 11px;
       border-radius: 999px; background: rgb(255 255 255 / .16);
@@ -699,28 +733,63 @@ const localAgent = isLocalAgent()
     }
     .hub-module-value:not([data-metric-ready]), .hub-ring-value:not([data-metric-ready]) { opacity: .45; }
 
-    @container (max-width: 760px) {
-      .hub-stage { grid-template-columns: 200px 1fr; gap: var(--space-6); }
-      .hub-orb { width: 200px; height: 200px; }
-      .hub-orb-body { width: 164px; height: 164px; }
-      .hub-orb-icon { width: 66px; height: 66px; }
+    /* Fit the window. A section page opens whole, with nothing below the
+       fold: the window is at least 650 points tall, and everything on these
+       pages takes its size from the height it is given (`cqh`, against the
+       scroll area) as well as the width (`cqw`, against the page). The
+       stage and the overview's cards keep their natural size; the panels
+       are the one band that gives way, and they give up whole rows (see
+       `fitRows` in hub-metrics.ts) rather than cutting one in half. */
+    .app-body:has(.hub) .main { container: page / size; }
+    .hub {
+      height: 100%; min-height: 0; justify-content: safe center;
+      gap: clamp(14px, 5cqh, 64px);
+      padding-block: clamp(6px, 1.6cqh, 16px) clamp(14px, 3.6cqh, 40px);
+    }
+    .hub-stage, .hub-hero, .hub-summary, .hub > .hub-run { flex: none; }
+    .hub-stage { grid-template-columns: auto minmax(0, 1fr); gap: clamp(20px, 5cqw, 56px); padding-top: 0; }
+    /* The artwork and its action are one unit: the orb, and under it the
+       round button that does what the section is for. */
+    .hub-art { --orb: clamp(118px, min(29cqh, 30cqw), 250px); gap: clamp(6px, 1.8cqh, 16px); }
+    .hub-orb { width: var(--orb); height: var(--orb); }
+    .hub-orb-body { width: 82%; height: 82%; }
+    .hub-orb-icon { width: 41%; height: 41%; }
+    .hub-run-button { width: clamp(64px, 10cqh, 88px); height: clamp(64px, 10cqh, 88px); font-size: clamp(12px, 1.6cqh, 13.5px); }
+    /* The button wears two halo rings (7 and 15 points out); the caption
+       sits clear of both rather than inside the outer one. */
+    .hub-run { gap: clamp(20px, 2.8cqh, 26px); }
+    .hub-name { font-size: clamp(26px, 4.4cqh, 34px); }
+    .hub-headline { margin-top: clamp(2px, .8cqh, 8px); font-size: clamp(15px, 2.2cqh, 17px); }
+    .hub-lede { margin-top: clamp(4px, .8cqh, 8px); font-size: clamp(12.5px, 1.8cqh, 13.5px); }
+    .hub-features { margin-top: clamp(8px, 2cqh, 20px); }
+    .hub-feature { padding-block: clamp(5px, 1.1cqh, 10px); }
+
+    .hub-panels { flex: 0 1 auto; min-height: 0; grid-auto-rows: minmax(0, 1fr); }
+    .hub-panel { min-height: clamp(112px, 20cqh, 220px); }
+    .hub-panel-body { min-height: 0; overflow: hidden; }
+    .hub-panel-body > [hidden] { display: none !important; }
+
+    .hub-hero { gap: clamp(20px, 4cqw, 32px); padding-top: 0; }
+    .hub-ring { width: clamp(116px, 23cqh, 176px); height: clamp(116px, 23cqh, 176px); }
+    .hub-ring-value { font-size: clamp(32px, 6cqh, 48px); }
+    .hub-title { font-size: clamp(24px, 4.2cqh, 32px); }
+    .hub-facts { margin-top: clamp(8px, 1.8cqh, 16px); }
+    .hub-actions { margin-top: clamp(10px, 2.2cqh, 20px); }
+    .hub-module { min-height: clamp(104px, 19cqh, 172px); }
+    .hub-module-orb { width: clamp(78px, 13cqh, 116px); height: clamp(78px, 13cqh, 116px); }
+    .hub-module-orb > span { width: 40%; height: 40%; }
+    .hub-module-value { font-size: clamp(22px, 3.6cqh, 27px); }
+
+    /* Only a genuinely narrow page (not one the app's minimum window can
+       reach) stacks the stage and wraps the cards. */
+    @container (max-width: 540px) {
       .hub-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .hub-module, .hub-module:nth-child(n + 4) { grid-column: span 1; }
       .hub-module:last-child:nth-child(odd) { grid-column: span 2; }
     }
-    @container (max-width: 600px) {
+    @container (max-width: 460px) {
       .hub-stage, .hub-hero { grid-template-columns: 1fr; justify-items: center; }
       .hub-intro { width: 100%; }
-      .hub-orb { width: 160px; height: 160px; }
-      .hub-orb-body { width: 132px; height: 132px; }
-      .hub-orb-icon { width: 54px; height: 54px; }
-    }
-    @media (max-height: 760px) {
-      .hub-orb { width: 210px; height: 210px; }
-      .hub-orb-body { width: 172px; height: 172px; }
-      .hub-orb-icon { width: 70px; height: 70px; }
-      .hub-ring { width: 150px; height: 150px; }
-      .hub-ring-value { font-size: 40px; }
     }
     @media (max-width: 1100px) {
       .hub { padding-inline: var(--space-5); }
@@ -741,6 +810,28 @@ const localAgent = isLocalAgent()
     @keyframes hub-rise { from { opacity: 0; transform: translateY(12px); } }
     @keyframes hub-pop { from { opacity: 0; transform: scale(.92); } }
     @keyframes hub-orb-in { from { opacity: 0; transform: translateY(18px) scale(.9); } }
+    /* Increase Contrast (and Reduce Transparency, which asks for the same
+       thing from a different direction). The section pages set white text on
+       colour, softened for hierarchy; here every line of it goes fully
+       opaque, the glass cards gain a dark backing so the text sits on a
+       known surface rather than wherever the gradient happens to be, and
+       every edge gets a border you can see. */
+    @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+      .hub-lede, .hub-feature-desc, .hub-feature-metric, .hub-run-caption, .hub-panel-aside,
+      .hub-panel-empty, .hub-panel-note, .hub-row-sub, .hub-stat-label, .hub-gauge-label,
+      .hub-status-text, .hub-ring-label, .hub-module-head, .hub-module-caption, .hub-empty-body,
+      .app-body:has(.hub) .toolbar-title { color: #fff; }
+      .hub-panel, .hub-module { border-color: rgb(255 255 255 / .6); background: rgb(0 0 0 / .34); box-shadow: none; }
+      .hub-module:hover { border-color: #fff; background: rgb(0 0 0 / .44); }
+      .hub-feature { border: 1px solid rgb(255 255 255 / .45); background: rgb(0 0 0 / .24); }
+      .hub-feature:hover { background: rgb(0 0 0 / .34); }
+      .hub-feature + .hub-feature { margin-top: 4px; }
+      .hub-stat { border: 1px solid rgb(255 255 255 / .4); background: rgb(0 0 0 / .26); }
+      .hub-panel-link { border: 1px solid #fff; background: rgb(0 0 0 / .3); }
+      .hub-panel-button { box-shadow: 0 0 0 2px #fff; }
+      .hub-feature:focus-visible, .hub-module:focus-visible, .hub-panel-link:focus-visible { outline-width: 3px; }
+    }
+
     @media (prefers-reduced-motion: no-preference) {
       .hub-orb, .hub-ring { animation: hub-orb-in .7s cubic-bezier(.2, .8, .2, 1) backwards; }
       .hub-intro > *, .hub-hero-text > * { animation: hub-rise .5s cubic-bezier(.2, .8, .2, 1) backwards; }
@@ -798,13 +889,24 @@ const localAgent = isLocalAgent()
     .main-subtitle { text-wrap: pretty; margin-top: var(--space-half); color: var(--secondary); font-size: 13px; }
     .main-content { padding: 0 var(--space-6) var(--space-8); }
 
-    .card-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-5); }
+    /* Stat cards. They fill their row (two cards share it, five split it)
+       instead of leaving empty tracks at the end, and each carries a faint
+       wash of the section's colour so a tool page still reads as part of its
+       section. The label is a sentence, not shouted capitals; the figure is
+       the loudest thing on the card and lines up digit for digit. */
+    .card-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-5); }
     .card, .tbl-wrap, .disk-card { border: .5px solid var(--line); background: var(--surface); }
-    .card { padding: var(--space-4); border-radius: 14px; box-shadow: 0 1px 2px rgb(0 0 0 / .03); transition: border-color .15s, box-shadow .15s; }
+    .card {
+      position: relative; overflow: hidden; display: flex; flex-direction: column;
+      padding: var(--space-4) var(--space-4) calc(var(--space-4) - 2px); border-radius: 14px;
+      background: linear-gradient(165deg, color-mix(in srgb, var(--accent) 6%, var(--surface)), var(--surface) 58%);
+      box-shadow: 0 1px 2px rgb(0 0 0 / .03); transition: border-color .15s, box-shadow .15s, transform .15s;
+    }
     .card:hover { border-color: color-mix(in srgb, var(--ink) 22%, transparent); box-shadow: 0 4px 18px rgba(0, 0, 0, .045); }
-    .card-label { margin-bottom: var(--space-tight); color: var(--secondary); font-size: 10px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; }
-    .card-value { font-size: 24px; font-weight: 700; letter-spacing: -.02em; }
-    .card-detail { margin-top: var(--space-1); color: var(--secondary); font-size: 11px; }
+    .card-label { display: flex; align-items: center; gap: 7px; margin-bottom: var(--space-2); color: var(--secondary); font-size: 12px; font-weight: 600; }
+    .card-label::before { width: 6px; height: 6px; flex: none; content: ''; border-radius: 50%; background: var(--accent); opacity: .85; }
+    .card-value { font-size: 26px; font-weight: 700; letter-spacing: -.025em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+    .card-detail { margin-top: auto; padding-top: var(--space-1); color: var(--secondary); font-size: 12px; line-height: 1.4; }
     .progress, .cpu-track, .folder-bar-track, .info-bar-track, .disk-usage-bar { overflow: hidden; border-radius: 3px; background: var(--track); }
     .progress { height: 5px; margin-top: var(--space-tight); }
     .progress-fill { height: 100%; border-radius: 3px; transition: width .6s ease; }
@@ -860,10 +962,49 @@ const localAgent = isLocalAgent()
     .item-sub-dead { font-family: 'SF Mono', Menlo, monospace; word-break: break-all; max-width: 42ch; }
     .item-row { display: flex; align-items: center; gap: var(--space-tight); }
     .item-glyph { width: 14px; height: 14px; flex-shrink: 0; color: var(--accent); }
+    /* A row with a glyph indents its second line to the name, not the glyph. */
+    .item-row:has(> .item-glyph) ~ .item-sub { padding-left: calc(14px + var(--space-tight)); }
+
+    /* Each section's colour, as the accent on its tool pages: selected tabs,
+       checkboxes, row glyphs, links and the dots on stat cards follow the
+       section the sidebar shows, instead of one blue on every page. Darker
+       in light mode and lighter in dark mode, so text in the accent stays
+       readable on either sheet; the fill behind white text is mid-tone. */
+    .app-body:has(.topnav[data-tone='overview']) { --accent: #6d28d9; --accent-fill: #7a2fe0; }
+    .app-body:has(.topnav[data-tone='cleanup']) { --accent: #0f7a3c; --accent-fill: #138a45; }
+    .app-body:has(.topnav[data-tone='storage']) { --accent: #0b737b; --accent-fill: #0c7f88; }
+    .app-body:has(.topnav[data-tone='performance']) { --accent: #b9381a; --accent-fill: #c9401f; }
+    .app-body:has(.topnav[data-tone='apps']) { --accent: #1d5bd6; --accent-fill: #1d5bd6; }
+    .app-body:has(.topnav[data-tone='protection']) { --accent: #a8226f; --accent-fill: #b0287c; }
+    :root.dark .app-body:has(.topnav[data-tone='overview']) { --accent: #c48bff; --accent-fill: #7a2fe0; }
+    :root.dark .app-body:has(.topnav[data-tone='cleanup']) { --accent: #5bd98a; --accent-fill: #12804a; }
+    :root.dark .app-body:has(.topnav[data-tone='storage']) { --accent: #5fd9cb; --accent-fill: #0b7a83; }
+    :root.dark .app-body:has(.topnav[data-tone='performance']) { --accent: #ff9478; --accent-fill: #c4401f; }
+    :root.dark .app-body:has(.topnav[data-tone='apps']) { --accent: #6cb2ff; --accent-fill: #1c5ce0; }
+    :root.dark .app-body:has(.topnav[data-tone='protection']) { --accent: #ff86c8; --accent-fill: #b0287c; }
     .run-at-load { display: inline-block; width: 13px; height: 13px; color: var(--green); }
     .item-path { max-width: 220px; overflow: hidden; color: var(--tertiary); font: 10px 'SF Mono', Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
     .check { width: 14px; height: 14px; accent-color: var(--accent); cursor: pointer; }
-    .empty-state { padding: var(--space-10) var(--space-4); color: var(--tertiary); font-size: 13px; text-align: center; }
+    /* Empty and loading states on the tool pages. A bare sentence still
+       works; the full form is a mark, a title and one line, the same shape
+       the section pages use. A loading state shows a small spinner, so a
+       slow scan reads as working rather than empty. */
+    .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: var(--space-10) var(--space-4); color: var(--secondary); font-size: 13px; line-height: 1.5; text-align: center; text-wrap: pretty; }
+    td.empty-state { display: table-cell; }
+    .empty-mark { display: grid; width: 44px; height: 44px; margin-bottom: var(--space-2); place-items: center; border-radius: 50%; background: var(--surface-inset); color: var(--secondary); }
+    .empty-mark > span { width: 21px; height: 21px; }
+    .empty-mark[data-kind='clear'] { background: color-mix(in srgb, var(--green) 14%, transparent); color: var(--green); }
+    .empty-title { color: var(--ink); font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+    .empty-body { max-width: 50ch; margin: 0; color: var(--secondary); font-size: 12.5px; }
+    .empty-state.is-loading::before {
+      width: 18px; height: 18px; margin-bottom: var(--space-2); content: '';
+      border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%;
+    }
+    td.empty-state.is-loading::before { display: block; margin-inline: auto; }
+    @media (prefers-reduced-motion: no-preference) {
+      .empty-state.is-loading::before { animation: empty-spin .8s linear infinite; }
+      @keyframes empty-spin { to { transform: rotate(1turn); } }
+    }
 
     .tabs { display: flex; width: fit-content; overflow: hidden; gap: 1px; margin-bottom: var(--space-4); border-radius: 7px; background: var(--track); }
     .tab { padding: var(--space-tight) var(--space-4); border: 0; background: var(--surface); color: var(--secondary); cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 500; transition: background .15s, color .15s; }
@@ -916,21 +1057,22 @@ const localAgent = isLocalAgent()
     .center-bg { fill: var(--app-bg); cursor: pointer; }
     .center-bg:hover { fill: var(--surface-soft); }
     .center-ring { fill: none; stroke: var(--line); stroke-width: .5; pointer-events: none; }
-    .center-text-size { fill: var(--ink); font-size: 14px; font-weight: 600; text-anchor: middle; pointer-events: none; }
-    .center-text-name { fill: var(--secondary); font-size: 10px; font-weight: 500; text-anchor: middle; pointer-events: none; }
+    .center-text-size { fill: var(--ink); font-size: 16px; font-weight: 700; text-anchor: middle; pointer-events: none; }
+    .center-text-name { fill: var(--secondary); font-size: 10.5px; font-weight: 500; text-anchor: middle; pointer-events: none; }
     .center-back { fill: var(--secondary); font-size: 8px; text-anchor: middle; pointer-events: none; opacity: 0; transition: opacity .15s; }
     .center-bg:hover ~ .center-back { opacity: 1; }
 
     .folder-list { flex: 1; overflow-y: auto; padding: 0 var(--space-3) var(--space-3); }
-    .folder-item { display: flex; align-items: center; gap: var(--space-tight); padding: var(--space-1) var(--space-tight); border-radius: 5px; cursor: default; transition: background .12s; }
+    .folder-item { display: flex; width: 100%; align-items: center; gap: var(--space-tight); padding: var(--space-1) var(--space-tight); border: 0; border-radius: 6px; background: none; color: inherit; cursor: pointer; font: inherit; text-align: left; transition: background .12s; }
+    .folder-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
     .folder-item:hover { background: var(--hover); }
     .folder-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-    .folder-name { flex: 1; overflow: hidden; color: var(--ink); font-size: 11px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
-    .folder-size { flex-shrink: 0; color: var(--secondary); font-size: 10px; font-variant-numeric: tabular-nums; }
-    .folder-bar-track { width: 40px; height: 3px; flex-shrink: 0; }
-    .folder-bar-fill { height: 100%; border-radius: 2px; }
+    .folder-name { flex: 1; overflow: hidden; color: var(--ink); font-size: 12px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+    .folder-size { flex-shrink: 0; color: var(--secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
+    .folder-bar-track { display: block; width: 40px; height: 4px; flex-shrink: 0; border-radius: 2px; background: var(--track); }
+    .folder-bar-fill { display: block; height: 100%; border-radius: 2px; }
 
-    .inspector-title { padding: var(--space-3); border-bottom: .5px solid var(--line); color: var(--secondary); font-size: 10px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; }
+    .inspector-title { padding: var(--space-3); border-bottom: .5px solid var(--line); color: var(--ink); font-size: 13px; font-weight: 600; }
     .inspector-body { flex: 1; overflow-y: auto; padding: var(--space-3); }
     .inspector-placeholder { display: flex; height: 100%; align-items: center; justify-content: center; color: var(--tertiary); font-size: 11px; text-align: center; }
     .info-card { animation: fadeSlide .15s ease; }
@@ -938,18 +1080,51 @@ const localAgent = isLocalAgent()
     .info-icon-row { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
     .info-type-icon { display: flex; width: 34px; height: 34px; align-items: center; justify-content: center; border-radius: 8px; font-size: 11px; font-weight: 700; }
     .info-type-name { font-size: 13px; font-weight: 600; word-break: break-word; }
-    .info-type-kind { margin-top: 1px; color: var(--secondary); font-size: 10px; }
-    .info-row { display: flex; justify-content: space-between; padding: var(--space-1) 0; border-bottom: .5px solid var(--line-soft); font-size: 11px; }
+    .info-type-kind { overflow: hidden; margin-top: 1px; color: var(--secondary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+    .info-row { display: flex; justify-content: space-between; gap: var(--space-2); padding: 6px 0; border-bottom: .5px solid var(--line-soft); font-size: 12px; }
     .info-label { color: var(--secondary); }
     .info-value { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
     .info-path { margin-top: var(--space-3); padding: var(--space-tight) var(--space-2); border-radius: 5px; background: var(--surface-soft); color: var(--secondary); font: 10px/1.4 'SF Mono', Menlo, monospace; word-break: break-all; }
     .info-bar { margin-top: var(--space-3); }
     .info-bar-label { margin-bottom: var(--space-1); color: var(--secondary); font-size: 10px; }
-    .info-bar-track { height: 5px; }
+    .info-bar-track { height: 5px; border-radius: 3px; background: var(--track); }
     .info-bar-fill { height: 100%; border-radius: 3px; }
     .info-bar-text { margin-top: var(--space-1); color: var(--secondary); font-size: 10px; text-align: right; }
     .info-drill { margin-top: var(--space-3); padding: var(--space-tight) var(--space-3); border: .5px solid color-mix(in srgb, var(--accent) 18%, transparent); border-radius: 5px; background: color-mix(in srgb, var(--accent) 7%, transparent); color: var(--accent); font-size: 10px; text-align: center; }
     .disk-card { padding: var(--space-3); border-radius: 8px; }
+    .disk-card-head { display: flex; align-items: center; gap: var(--space-2); }
+    .disk-card-icon { display: grid; width: 30px; height: 30px; flex: none; place-items: center; border-radius: 8px; background: color-mix(in srgb, var(--accent) 14%, var(--surface)); color: var(--accent); }
+    .disk-card-icon > span { width: 16px; height: 16px; }
+    .disk-card-name { font-size: 12.5px; font-weight: 600; }
+    .disk-card-sub { color: var(--tertiary); font-size: 11px; }
+    .disk-section-label { overflow: hidden; margin-bottom: var(--space-1); color: var(--secondary); font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+    .disk-total { font-size: 22px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+    .disk-meta { margin-top: 2px; color: var(--tertiary); font-size: 11px; line-height: 1.45; }
+    .disk-list-head { padding-bottom: var(--space-1); }
+    .disk-notice:has(.disk-notice-action) { display: flex; flex-direction: column; align-items: flex-start; }
+    .disk-notice-action { margin-top: var(--space-2); }
+    /* Path bar under the chart, where Finder keeps its own: where you are,
+       and every level above it one click away. The current folder is plain
+       text. Escape also goes up a level. */
+    .disk-crumbs {
+      position: absolute; bottom: var(--space-3); left: 50%; z-index: 2; display: flex; max-width: calc(100% - 2 * var(--space-4));
+      flex-wrap: wrap; align-items: center; justify-content: center; gap: 2px; padding: 3px 6px;
+      border: .5px solid var(--line); border-radius: 999px; background: var(--surface); box-shadow: 0 2px 10px rgb(0 0 0 / .06);
+      transform: translateX(-50%);
+    }
+    .disk-crumb { display: inline-flex; align-items: center; gap: 2px; }
+    .disk-crumb-link { padding: 3px 8px; border: 0; border-radius: 999px; background: none; color: var(--accent); cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 500; line-height: 1.4; }
+    .disk-crumb-link:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+    .disk-crumb-link:disabled { color: var(--ink); cursor: default; font-weight: 600; }
+    .disk-crumb-sep { width: 9px; height: 9px; color: var(--tertiary); }
+    .inspector-placeholder { flex-direction: column; gap: var(--space-3); padding: 0 var(--space-3); line-height: 1.5; }
+    .inspector-placeholder-mark { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 50%; background: var(--surface-inset); color: var(--tertiary); }
+    .inspector-placeholder-mark > span { width: 19px; height: 19px; }
+    .info-type-icon > span { width: 18px; height: 18px; }
+    .info-actions { display: flex; flex-wrap: wrap; gap: var(--space-tight); margin-top: var(--space-3); }
+    .info-danger { margin-top: var(--space-4); padding-top: var(--space-3); border-top: .5px solid var(--line-soft); }
+    .btn-accent { border-color: transparent; background: var(--accent-fill); color: #fff; }
+    .btn-accent:hover { background: color-mix(in srgb, var(--accent-fill) 88%, #000); }
     /* Deliberately not a .disk-sidebar-section: those draw a divider above one
        another, which landed a rule flush on this card's own top border. */
     /* Fallback context menu, for a window with no native one to open (a
@@ -1052,7 +1227,11 @@ const localAgent = isLocalAgent()
     .cap { text-transform: capitalize; }
 
     .app-icon { width: 18px; height: 18px; flex-shrink: 0; border-radius: 4px; object-fit: contain; }
-    .app-icon-missing { visibility: hidden; }
+    /* An app with no icon the agent can read (a helper, a URL handler) gets a
+       plain tile the size of the others, so its name lines up with the rest
+       of the column instead of starting at a gap. `content` swaps what the
+       image draws, broken-image glyph included. */
+    .app-icon-missing { content: linear-gradient(150deg, var(--track), var(--line)); box-shadow: inset 0 0 0 1px var(--line-soft); }
 
     .offsite-shell { display: flex; height: 100%; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-3); padding: var(--space-10); text-align: center; }
     .offsite-shell h1 { font-size: 19px; font-weight: 600; }

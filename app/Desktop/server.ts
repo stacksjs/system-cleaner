@@ -292,6 +292,32 @@ export async function runAgent(): Promise<void> {
   // goes to stderr — the launcher pipes stdout and inherits stderr, so a
   // `console.warn` here left it waiting for a port that never arrived.
   Bun.write(Bun.stdout, `system-cleaner-agent listening on ${server.url.origin}\n`)
+
+  warmFirstScreen()
+}
+
+/**
+ * Start measuring what the overview shows before the window asks.
+ *
+ * The junk total walks every cache folder, about seven seconds on a cold
+ * launch, and the overview is the first thing anyone sees. The window takes a
+ * second or two to appear and load, so starting the walk here, as soon as the
+ * port is announced, has most of it done by then. The route caches its answer
+ * and joins overlapping calls, so the page's own request picks up this one
+ * rather than starting a second walk.
+ *
+ * Both are reads. Nothing that can raise a permission prompt runs here: the
+ * privacy scan reads browser folders, and that waits for the page that shows
+ * it.
+ */
+function warmFirstScreen(): void {
+  setTimeout(() => {
+    for (const endpoint of ['/api/dashboard-stats', '/api/safe-to-clean']) {
+      const handler = routes.get(`POST ${endpoint}`)
+      if (handler)
+        void Promise.resolve(handler(new Request(`http://127.0.0.1${endpoint}`, { method: 'POST', body: '{}' }))).catch(() => {})
+    }
+  }, 0)
 }
 
 if (import.meta.main)

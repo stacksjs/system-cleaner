@@ -40,10 +40,10 @@ async function subscribe(): Promise<void> {
 </script>
 
 <section class="subscribe" aria-labelledby="subscribe-title">
-  <div class="subscribe-inner site-container">
+  <div class="site-container subscribe-inner">
     <div>
-      <h2 id="subscribe-title">A cleaner Mac, without the noise.</h2>
-      <p class="subscribe-copy">Get occasional release notes and practical macOS maintenance updates. No tracking pixels and no drip campaign.</p>
+      <h2 id="subscribe-title">Hear when a new version ships</h2>
+      <p class="subscribe-copy">Release notes when there is something worth reading, plus the occasional macOS maintenance tip. No tracking pixels.</p>
     </div>
     <form class="subscribe-form" @submit.prevent="subscribe()" novalidate>
       <div class="field">

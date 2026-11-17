@@ -9,13 +9,15 @@
 export const DOWNLOAD_URL = 'https://github.com/stacksjs/system-cleaner/releases/latest'
 
 /**
- * Mac App Store listing.
+ * The Mac App Store listing, once there is one.
  *
- * TODO: replace with the product URL (`https://apps.apple.com/app/id<APP_ID>`)
- * once the listing is live. Until then this is a real, working Apple URL
- * rather than a fabricated product id that would 404.
+ * Empty until the listing is live, and every store button is drawn only when
+ * this is set. The placeholder it replaced sent people to an App Store search
+ * that found nothing, which reads as a broken link on the one button that
+ * most needs to work. Set it to `https://apps.apple.com/app/id<APP_ID>` and
+ * the buttons appear in the hero, the download band and the footer together.
  */
-export const MAC_APP_STORE_URL = 'https://apps.apple.com/search?term=SystemCleaner'
+export const MAC_APP_STORE_URL: string = ''
 
 /** Public repository, used by the "View source" action. */
 export const SOURCE_URL = 'https://github.com/stacksjs/system-cleaner'

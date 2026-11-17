@@ -18,7 +18,12 @@ await page.evaluateOnNewDocument(() => {
   const calls: { method: string, value?: unknown }[] = []
   const record = (method: string) => async (value?: unknown) => { calls.push({ method, value }) }
   Object.assign(window, { trayCalls: calls, craft: {
-    window: { open: async (options: { name: string }) => { calls.push({ method: 'open', value: options }); return { name: options.name } }, hide: record('hide'), show: record('show'), setAppearance: record('appearance') },
+    window: {
+      open: async (options: { name: string }) => {
+        calls.push({ method: 'open', value: options })
+        return { name: options.name }
+      },
+      hide: record('hide'), show: record('show'), setAppearance: record('appearance') },
     app: { showDockIcon: record('dock'), quit: record('quit') },
     menu: { set: record('app-menu') },
     tray: { setIcon: record('icon'), setTitle: record('title'), setTooltip: record('tooltip'), setMenu: record('menu'), onMenuAction: () => {} },

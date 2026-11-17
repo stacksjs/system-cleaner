@@ -44,7 +44,7 @@ const healthDasharray = String(2 * Math.PI * 40)
   <div x-show='pendingUpdates != null && pendingUpdates' x-cloak style='margin-bottom: var(--space-5);'>
     <a href='/app/updates' data-stx-link class='card' style='display: flex; align-items: center; justify-content: space-between; text-decoration: none; color: inherit; border-color: color-mix(in srgb, var(--orange) 25%, transparent);'>
       <div>
-        <div class='card-label'>Pending Updates</div>
+        <div class='card-label'>Pending updates</div>
         <div class='card-value' style='color: var(--orange);'>{{ pendingUpdates }}</div>
         <div class='card-detail'>System, Homebrew, and app updates available</div>
       </div>
@@ -56,7 +56,7 @@ const healthDasharray = String(2 * Math.PI * 40)
     <div class='tbl-bar'>
       <div>
         <span class='font-semibold text-sm'>Top Processes</span>
-        <span class='dim ml-2 text-[11px]'>by CPU usage</span>
+        <span class='ml-2 text-[11px] dim'>by CPU usage</span>
       </div>
       <a class='no-underline btn btn-sm' href='/app/processes' data-stx-link>View All</a>
     </div>
@@ -80,7 +80,7 @@ const healthDasharray = String(2 * Math.PI * 40)
         <template x-for='proc in (stats && stats.processes ? stats.processes.slice(0, 8) : [])' :key='proc.id'>
           <tr x-show='!statsLoading'>
             <td><span class='font-medium'>{{ proc.name }}</span></td>
-            <td class='dim font-mono text-[11px]'>{{ proc.pid }}</td>
+            <td class='font-mono text-[11px] dim'>{{ proc.pid }}</td>
             <!--
               The track is a fixed 60px, not `flex-1` capped at 60. Flex-basis
               zero means it surrenders every pixel when the column is tight, and
@@ -91,14 +91,14 @@ const healthDasharray = String(2 * Math.PI * 40)
             -->
             <td class='cpu-cell'>
               <div class='flex gap-1.5 items-center'>
-                <span class='text-[11px] min-w-[36px]' :class="cpuTextClass(proc.cpu)">{{ proc.cpu.toFixed(1) + '%' }}</span>
+                <span class='min-w-[36px] text-[11px]' :class="cpuTextClass(proc.cpu)">{{ proc.cpu.toFixed(1) + '%' }}</span>
                 <div class='cpu-track'>
                   <div class='cpu-fill' :class="cpuBarClass(proc.cpu)" :style="cpuBarStyle(proc.cpu)"></div>
                 </div>
               </div>
             </td>
             <td class='text-[11px]'>{{ proc.memMB + ' MB' }}</td>
-            <td class='dim text-[11px]'>{{ proc.user }}</td>
+            <td class='text-[11px] dim'>{{ proc.user }}</td>
           </tr>
         </template>
       </tbody>

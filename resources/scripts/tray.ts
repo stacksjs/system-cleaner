@@ -56,7 +56,7 @@ async function install(): Promise<void> {
   const icon = await fetch('/images/tray-template.png')
   if (!icon.ok) throw new Error('Could not load the SystemCleaner menu-bar icon.')
   const bytes = new Uint8Array(await icon.arrayBuffer())
-  await tray.setIcon('data:image/png;base64,' + btoa(String.fromCharCode(...bytes)))
+  await tray.setIcon(`data:image/png;base64,${btoa(String.fromCharCode(...bytes))}`)
   await tray.setTitle('')
   await tray.setTooltip('SystemCleaner: live system stats')
   const item = (title: string, action: string): TrayMenuItem => ({ title, label: title, action })

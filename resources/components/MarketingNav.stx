@@ -1,9 +1,9 @@
 <script server>
-import { FEATURES } from '~/app/Support/Marketing/catalog'
+import { MARKETING_SECTIONS } from '~/app/Support/Marketing/catalog'
 import { USE_CASES } from '~/app/Support/Marketing/use-cases'
 import { DOWNLOAD_URL, SOURCE_URL } from '~/app/Support/Marketing/distribution'
 
-export const features = FEATURES
+export const sections = MARKETING_SECTIONS
 export const useCases = USE_CASES
 export const downloadUrl = DOWNLOAD_URL
 export const sourceUrl = SOURCE_URL
@@ -69,13 +69,18 @@ useEventListener('keydown', (event) => {
 
   <div class="mobile-sheet" id="mobile-sheet" :data-open="sheetOpen() ? 'true' : 'false'" :aria-hidden="sheetOpen() ? 'false' : 'true'">
     <div class="mobile-sheet-inner site-container">
-      <p class="mobile-sheet-label">Features</p>
-      <div class="mobile-links">
-        @foreach (features as feature)
-          <a class="nav-link" href="/features/{{ feature.slug }}" data-stx-link @click="closeSheet()">{{ feature.shortName }}</a>
-        @endforeach
-      </div>
-      <p class="mobile-sheet-label mobile-sheet-label-spaced">Use cases</p>
+      @foreach (sections as section)
+        <p class="mobile-sheet-label" data-tone="{{ section.id }}">
+          <span class="tone-tile"><span class="{{ section.icon }}" aria-hidden="true"></span></span>
+          {{ section.label }}
+        </p>
+        <div class="mobile-links">
+          @foreach (section.features as feature)
+            <a class="nav-link" href="/features/{{ feature.slug }}" data-stx-link @click="closeSheet()">{{ feature.name }}</a>
+          @endforeach
+        </div>
+      @endforeach
+      <p class="mobile-sheet-label">Use cases</p>
       <div class="mobile-links">
         @foreach (useCases as useCase)
           <a class="nav-link" href="/use-cases/{{ useCase.slug }}" data-stx-link @click="closeSheet()">{{ useCase.shortName }}</a>

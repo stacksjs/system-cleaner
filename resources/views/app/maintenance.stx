@@ -330,7 +330,7 @@
   <div class='main-subtitle'>Rebuild the caches and restart the services behind the things macOS gets stuck on</div>
 </div>
 <div class='main-content'>
-  <div x-show='loading' class='empty-state'>Loading maintenance tasks&hellip;</div>
+  <div x-show='loading' class='empty-state is-loading'>Loading maintenance tasks&hellip;</div>
   <div x-show='!loading' x-cloak>
     <MaintenancePanel />
   </div>

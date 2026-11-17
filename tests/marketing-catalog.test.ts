@@ -84,8 +84,15 @@ describe('use case catalog', () => {
 
 describe('distribution links', () => {
   it('points every action at an absolute https URL', () => {
-    for (const url of [DOWNLOAD_URL, MAC_APP_STORE_URL, SOURCE_URL])
+    for (const url of [DOWNLOAD_URL, SOURCE_URL])
       expect(url.startsWith('https://')).toBe(true)
+  })
+
+  it('links the App Store only to a real listing', () => {
+    // Empty hides every store button; anything else must be a product page,
+    // not a search that may find nothing.
+    if (MAC_APP_STORE_URL)
+      expect(MAC_APP_STORE_URL).toMatch(/^https:\/\/apps\.apple\.com\/(?:[a-z]{2}\/)?app\/(?:[\w-]+\/)?id\d+/)
   })
 
   it('states the requirement the release actually ships', () => {

@@ -89,7 +89,7 @@ function esc(str) { return escapeHtml(str || '') }
   <div class='main-subtitle'>Remove caches, logs, and temporary files to free up disk space</div>
 </div>
 <div class='main-content'>
-  <div x-show='targetsLoading' class='empty-state'>Loading cleanable targets...</div>
+  <div x-show='targetsLoading' class='empty-state is-loading'>Measuring what can be cleaned&hellip;</div>
   <div x-show='!targetsLoading' x-cloak>
     <CleanupPanel />
   </div>

@@ -1,0 +1,53 @@
+<script server>
+// One coloured panel per section of the app, in sidebar order, each drawn
+// from the same table the sidebar reads. The copy on the left is the
+// section's own headline and lede; the rows are the features that have a
+// page on this site; the photo is that section's page in the app.
+import { MARKETING_SECTIONS } from '~/app/Support/Marketing/catalog'
+
+export const sections = MARKETING_SECTIONS.map(section => ({
+  ...section,
+  toolList: section.tools.join(', '),
+}))
+</script>
+
+<section class="section site-container" aria-labelledby="tour-title">
+  <div class="section-heading">
+    <h2 id="tour-title">Each part of your Mac gets its own page</h2>
+    <p class="section-intro">Open a section and its first line tells you whether it needs you today: how much junk is safe to clear, how many items open at login, how many updates are waiting. Its tools sit right under that line.</p>
+  </div>
+
+  <div class="tour">
+    @foreach (sections as section)
+      <article class="tone-panel tour-row" data-tone="{{ section.id }}" aria-labelledby="tour-{{ section.id }}">
+        <div class="tour-copy">
+          <div class="tour-head">
+            <span class="tone-tile tone-tile-lg"><span class="{{ section.icon }}" aria-hidden="true"></span></span>
+            <h3 id="tour-{{ section.id }}">{{ section.label }}</h3>
+          </div>
+          <h4>{{ section.headline }}</h4>
+          <p>{{ section.lede }}</p>
+          <ul class="tour-tools">
+            @foreach (section.features as feature)
+              <li>
+                <a class="glass-row" href="/features/{{ feature.slug }}" data-stx-link>
+                  <span>
+                    <strong>{{ feature.name }}</strong>
+                    <small>{{ feature.summary }}</small>
+                  </span>
+                  <span class="i-f7-chevron-right" aria-hidden="true"></span>
+                </a>
+              </li>
+            @endforeach
+          </ul>
+          <p class="tour-also">In the app: {{ section.toolList }}</p>
+        </div>
+        <div class="tour-shot">
+          <figure class="app-window">
+            <img src="{{ section.image }}" width="1400" height="900" loading="lazy" decoding="async" alt="The {{ section.label }} page in SystemCleaner" />
+          </figure>
+        </div>
+      </article>
+    @endforeach
+  </div>
+</section>

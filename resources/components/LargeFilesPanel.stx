@@ -32,7 +32,7 @@
     </div>
   </div>
   <div class='card'>
-    <div class='card-label'>Reclaimed All Time</div>
+    <div class='card-label'>Reclaimed all time</div>
     <div class='card-value' :style="runCount ? 'color: var(--green);' : ''" x-text="runCount ? lifetimeFreed : '-'">-</div>
     <div class='card-detail' x-text="runCount ? ('across ' + runCount + ' cleanup' + (runCount === 1 ? '' : 's')) : 'No cleanups yet'">No cleanups yet</div>
   </div>
@@ -115,11 +115,11 @@
     <strong x-text='fmtBytes(selectedBytes())'>0 B</strong>
   </div>
   <button class='btn btn-sm' @click='clearSelection()'>Clear</button>
-  <button class='btn btn-sm btn-icon' @click='protectSelected()' :disabled='deleting || scanning'>
+  <button class='btn btn-icon btn-sm' @click='protectSelected()' :disabled='deleting || scanning'>
     <span class='i-f7-lock-fill' aria-hidden='true'></span>
     Protect
   </button>
-  <button class='btn btn-danger btn-sm btn-icon' @click="remove('trash')" :disabled='deleting || scanning'>
+  <button class='btn btn-danger btn-icon btn-sm' @click="remove('trash')" :disabled='deleting || scanning'>
     <span class='i-f7-trash-fill' aria-hidden='true'></span>
     <span x-text="deleting ? 'Working…' : 'Move to Trash'">Move to Trash</span>
   </button>
@@ -190,7 +190,7 @@
     </tbody>
   </table>
 
-  <div class='empty-state' x-show='scanning && files.length === 0'>
+  <div class='empty-state is-loading' x-show='scanning && files.length === 0'>
     <div>Walking the disk&hellip;</div>
     <div style='margin-top: var(--space-2); font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink);'
          x-show='scanProgress' x-text='scanProgress'></div>
@@ -201,13 +201,15 @@
     </div>
   </div>
   <div class='empty-state' x-show='scanned && !scanning && visible().length === 0'>
-    Nothing over <span x-text='minSizeMB'>100</span> MB matched. Try a smaller minimum size.
+      <span class='empty-mark'><span class='i-f7-doc-on-doc-fill' aria-hidden='true'></span></span>
+      <strong class='empty-title'>No files over <span x-text='minSizeMB'>100</span> MB</strong>
+      <p class='empty-body'>Lower the minimum size to see smaller files.</p>
   </div>
 </div>
 
 <div class='tbl-wrap' x-show='!scanned && !scanning'>
   <div class='lf-intro'>
-    <span class='lf-intro-glyph i-f7-doc-on-doc-fill' aria-hidden='true'></span>
+    <span class='i-f7-doc-on-doc-fill lf-intro-glyph' aria-hidden='true'></span>
     <p>
       Find the biggest files and document bundles in your home folder, then clear
       as many as you like in one pass. Nothing is deleted until you say so, and

@@ -1,0 +1,50 @@
+<script server>
+// The top of every inner page: a coloured panel in the tone of the section
+// it belongs to, with that section's orb, as the app draws a section page.
+// `crumb` names the section above the title, linking to it when `crumbHref`
+// is given, the way the app's toolbar shows Section > Tool.
+import { DOWNLOAD_URL } from '~/app/Support/Marketing/distribution'
+
+export const tone = $props.tone || 'overview'
+export const icon = $props.icon || 'i-f7-sparkles'
+export const crumb = $props.crumb || ''
+export const crumbHref = $props.crumbHref || ''
+export const crumbIcon = $props.crumbIcon || icon
+export const title = $props.title || ''
+export const lede = $props.lede || ''
+export const secondaryHref = $props.secondaryHref || ''
+export const secondaryLabel = $props.secondaryLabel || ''
+export const downloadUrl = DOWNLOAD_URL
+</script>
+
+<header class="page-hero site-container">
+  <div class="tone-panel" data-tone="{{ tone }}">
+    <div>
+      @if(crumb)
+        @if(crumbHref)
+          <a class="crumb" href="{{ crumbHref }}" data-stx-link>
+            <span class="tone-tile"><span class="{{ crumbIcon }}" aria-hidden="true"></span></span>
+            {{ crumb }}
+          </a>
+        @else
+          <p class="crumb">
+            <span class="tone-tile"><span class="{{ crumbIcon }}" aria-hidden="true"></span></span>
+            {{ crumb }}
+          </p>
+        @endif
+      @endif
+      <h1>{{ title }}</h1>
+      <p class="hero-lede">{{ lede }}</p>
+      <div class="hero-actions">
+        <a class="button button-white" href="{{ downloadUrl }}" rel="noreferrer">
+          <span class="h-4 w-4 i-f7-cloud-download-fill" aria-hidden="true"></span>
+          Download for Mac
+        </a>
+        @if(secondaryHref)
+          <a class="button button-glass" href="{{ secondaryHref }}" data-stx-link>{{ secondaryLabel }}</a>
+        @endif
+      </div>
+    </div>
+    <div class="orb" aria-hidden="true"><span class="orb-body"><span class="orb-icon {{ icon }}"></span></span></div>
+  </div>
+</header>

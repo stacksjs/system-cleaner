@@ -161,6 +161,65 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  # Every navigation path through the app, in a real browser, against the
+  # agent the desktop bundle runs. Built from the same section table the
+  # sidebar reads, so a tool added there is walked here without editing this
+  # file. macOS because the live figures it waits for (free space, the health
+  # score, the processes panel) come from macOS tools.
+  #
+  # Read-only by construction: `scripts/e2e-sections.ts` navigates and opens
+  # menus, and never presses a button that cleans, deletes or changes a
+  # setting, so it is safe on a runner as it is on anyone's Mac.
+  e2e:
+    name: End-to-end navigation
+    runs-on: macos-latest
+    needs: views
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Dependencies
+        run: PUPPETEER_SKIP_DOWNLOAD=1 bun install
+
+      - name: Take the rendered views
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-views
+          path: dist
+
+      - name: Generate migrations
+        run: ./buddy migrate:regenerate --force
+
+      - name: Start the agent
+        run: |
+          mkdir -p "$RUNNER_TEMP/sc-e2e"
+          SYSTEM_CLEANER_AGENT=1 \
+          SYSTEM_CLEANER_WEB_ROOT="$PWD/dist" \
+          SYSTEM_CLEANER_MIGRATIONS="$PWD/database/migrations" \
+          SYSTEM_CLEANER_PORT=50297 \
+          DB_CONNECTION=sqlite \
+          DB_DATABASE_PATH="$RUNNER_TEMP/sc-e2e/system-cleaner.sqlite" \
+          nohup bun app/Desktop/server.ts > "$RUNNER_TEMP/sc-e2e/agent.log" 2>&1 &
+          for attempt in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:50297/__health >/dev/null 2>&1 && { echo "agent up after ${attempt}s"; exit 0; }
+            sleep 1
+          done
+          echo "the agent never answered /__health"; cat "$RUNNER_TEMP/sc-e2e/agent.log"; exit 1
+
+      - name: Walk every section and tool
+        env:
+          BASE_URL: http://127.0.0.1:50297
+          BROWSE_BROWSER: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+        run: bun run e2e:sections
+
+      - name: Agent log
+        if: always()
+        run: cat "$RUNNER_TEMP/sc-e2e/agent.log" || true
+
   test-windows:
     runs-on: windows-latest
     needs: views

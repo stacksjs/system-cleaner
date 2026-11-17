@@ -14,7 +14,7 @@
     <div class='card-detail' x-text="browsers().length + ' browser(s)'">across your browsers</div>
   </div>
   <div class='card'>
-    <div class='card-label'>Total Size</div>
+    <div class='card-label'>Total size</div>
     <div class='card-value' x-text="sizesPending ? '-' : fmtBytes(totalBytes())">-</div>
     <div class='card-detail' x-text="sizesPending ? 'Measuring…' : 'On disk'">Measuring…</div>
   </div>
@@ -115,9 +115,9 @@
 <div x-show='browserExtensions.length === 0' x-cloak>
   <div class='tbl-wrap'>
     <div class='empty-state'>
-      No browser extensions found. If you know you have some, SystemCleaner
-      needs Full Disk Access to read browser profiles. Grant it in System
-      Settings &rsaquo; Privacy &amp; Security, then press Rescan.
+      <span class='empty-mark'><span class='i-f7-square-stack-3d-up-fill' aria-hidden='true'></span></span>
+      <strong class='empty-title'>No browser extensions found</strong>
+      <p class='empty-body'>If you know you have some, SystemCleaner needs Full Disk Access to read browser profiles. Grant it in System Settings &rsaquo; Privacy &amp; Security, then press Rescan.</p>
     </div>
   </div>
 </div>

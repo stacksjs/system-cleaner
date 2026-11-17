@@ -1,12 +1,18 @@
 <script server>
-import { FEATURES } from '~/app/Support/Marketing/catalog'
+import { MARKETING_SECTIONS } from '~/app/Support/Marketing/catalog'
 import { USE_CASES } from '~/app/Support/Marketing/use-cases'
 
-export const featureItems = FEATURES.map(feature => ({
-  href: `/features/${feature.slug}`,
-  name: feature.name,
-  summary: feature.summary,
-  icon: feature.icon,
+// Features grouped by the app section they live in, in sidebar order, so the
+// menu and the app's own sidebar describe the same five places.
+export const sectionItems = MARKETING_SECTIONS.map(section => ({
+  id: section.id,
+  label: section.label,
+  icon: section.icon,
+  features: section.features.map(feature => ({
+    href: `/features/${feature.slug}`,
+    name: feature.name,
+    summary: feature.summary,
+  })),
 }))
 
 export const useCaseItems = USE_CASES.map(useCase => ({
@@ -14,6 +20,7 @@ export const useCaseItems = USE_CASES.map(useCase => ({
   name: useCase.name,
   summary: useCase.summary,
   icon: useCase.icon,
+  tone: useCase.tone,
 }))
 </script>
 
@@ -85,22 +92,26 @@ useEventListener('pointerdown', (event) => {
       :data-open="openMenu() === 'features' ? 'true' : 'false'"
       :aria-hidden="openMenu() === 'features' ? 'false' : 'true'"
     >
-      <div class="mega-grid site-container">
-        @foreach (featureItems as item)
-          <a class="mega-item" href="{{ item.href }}" data-stx-link @click="closeMenu()">
-            <span class="i-f7-{{ item.icon }} mega-icon h-5 w-5" aria-hidden="true"></span>
-            <span>
-              <strong>{{ item.name }}</strong>
-              <span>{{ item.summary }}</span>
-            </span>
-          </a>
+      <div class="mega-sections site-container">
+        @foreach (sectionItems as section)
+          <div data-tone="{{ section.id }}">
+            <p class="mega-section-head">
+              <span class="tone-tile"><span class="{{ section.icon }}" aria-hidden="true"></span></span>
+              {{ section.label }}
+            </p>
+            @foreach (section.features as item)
+              <a class="mega-section-item" href="{{ item.href }}" data-stx-link @click="closeMenu()">
+                <strong>{{ item.name }}</strong>
+                <span>{{ item.summary }}</span>
+              </a>
+            @endforeach
+          </div>
         @endforeach
-        <a class="mega-item mega-item-all" href="/features" data-stx-link @click="closeMenu()">
-          <span class="h-5 w-5 i-f7-square-grid-2x2-fill mega-icon" aria-hidden="true"></span>
-          <span>
-            <strong>All features</strong>
-            <span>Every tool in one index.</span>
-          </span>
+      </div>
+      <div class="mega-foot site-container">
+        <a class="nav-link" href="/features" data-stx-link @click="closeMenu()">
+          Every feature, by section
+          <span class="h-4 w-4 i-f7-arrow-right" aria-hidden="true"></span>
         </a>
       </div>
     </div>
@@ -127,21 +138,21 @@ useEventListener('pointerdown', (event) => {
       :data-open="openMenu() === 'use-cases' ? 'true' : 'false'"
       :aria-hidden="openMenu() === 'use-cases' ? 'false' : 'true'"
     >
-      <div class="mega-grid mega-grid-3 site-container">
+      <div class="mega-grid site-container">
         @foreach (useCaseItems as item)
-          <a class="mega-item" href="{{ item.href }}" data-stx-link @click="closeMenu()">
-            <span class="i-f7-{{ item.icon }} mega-icon h-5 w-5" aria-hidden="true"></span>
+          <a class="mega-item" href="{{ item.href }}" data-stx-link data-tone="{{ item.tone }}" @click="closeMenu()">
+            <span class="tone-tile tone-tile-lg"><span class="i-f7-{{ item.icon }}" aria-hidden="true"></span></span>
             <span>
               <strong>{{ item.name }}</strong>
               <span>{{ item.summary }}</span>
             </span>
           </a>
         @endforeach
-        <a class="mega-item mega-item-all" href="/use-cases" data-stx-link @click="closeMenu()">
-          <span class="h-5 w-5 i-f7-person-2-fill mega-icon" aria-hidden="true"></span>
+        <a class="mega-item" href="/use-cases" data-stx-link data-tone="overview" @click="closeMenu()">
+          <span class="tone-tile tone-tile-lg"><span class="i-f7-person-2-fill" aria-hidden="true"></span></span>
           <span>
-            <strong>All use cases</strong>
-            <span>Every audience in one index.</span>
+            <strong>Compare them all</strong>
+            <span>Every use case side by side.</span>
           </span>
         </a>
       </div>
