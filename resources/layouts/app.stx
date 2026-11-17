@@ -768,7 +768,12 @@ const localAgent = isLocalAgent()
     .hub-features { margin-top: clamp(8px, 2cqh, 20px); }
     .hub-feature { padding-block: clamp(5px, 1.1cqh, 10px); }
 
-    .hub-panels { flex: 0 1 auto; min-height: 0; grid-auto-rows: minmax(0, 1fr); }
+    /* The panel band's height comes from the window, never from what the
+       panels hold: it takes the room below the stage up to a cap, and the
+       rows fit inside (fitRows). Sized by content, the band grew as data
+       arrived and, the page being centred, pushed everything above it up
+       by forty points mid-load, under the pointer. */
+    .hub-panels { flex: 1 1 0; min-height: clamp(112px, 20cqh, 220px); max-height: clamp(220px, 40cqh, 380px); grid-auto-rows: minmax(0, 1fr); }
     .hub-panel { min-height: clamp(112px, 20cqh, 220px); }
     .hub-panel-body { min-height: 0; overflow: hidden; }
     .hub-panel-body > [hidden] { display: none !important; }
