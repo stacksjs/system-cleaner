@@ -218,16 +218,20 @@ function grantNotice(home: string, message = ''): string {
   `
 }
 
-/** The banner the Overview carries until the home folder is granted. */
-function grantBanner(home: string): string {
+/**
+ * The band the Overview carries until the home folder is granted. It sits
+ * inside the hub, above the health ring, so it shares the page's width and
+ * its fit-to-window sizing instead of pushing the page down from outside.
+ */
+function grantBanner(): string {
   return `
-    <div class='sandbox-banner' data-home-grant-banner>
-      <span class='i-f7-folder-badge-person-crop' aria-hidden='true'></span>
+    <div class='sandbox-banner' data-home-grant-banner role='status'>
+      <span class='sandbox-banner-tile' aria-hidden='true'><span class='i-f7-folder-badge-person-crop'></span></span>
       <span class='sandbox-banner-text'>
-        <strong>Choose your home folder to see real figures.</strong>
-        Until you do, macOS lets SystemCleaner see only its own App Store container, so it cannot measure the junk or browsing traces in your home folder, ${escapeHtml(folderName(home))}.
+        <strong>Give SystemCleaner your home folder</strong>
+        <span>Until you do, macOS keeps your caches and browsing traces out of these figures.</span>
       </span>
-      <button class='btn' type='button' data-home-grant-button>Choose Home Folder&hellip;</button>
+      <button class='sandbox-banner-button' type='button' data-home-grant-button>Choose Home Folder&hellip;</button>
     </div>
   `
 }
@@ -404,7 +408,7 @@ async function gate(): Promise<void> {
 
   if (route === '/app') {
     if (!main.querySelector('[data-home-grant-banner]'))
-      main.insertAdjacentHTML('afterbegin', grantBanner(sandbox.home))
+      (main.querySelector('.hub') ?? main).insertAdjacentHTML('afterbegin', grantBanner())
     return
   }
 

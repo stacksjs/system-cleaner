@@ -1252,11 +1252,47 @@ const localAgent = isLocalAgent()
     [data-sandbox-hidden] { display: none !important; }
     .sandbox-note { margin: var(--space-2) 0; color: var(--secondary); font-size: 12px; line-height: 1.5; }
     .sandbox-note[hidden] { display: none; }
-    .sandbox-banner { display: flex; align-items: center; gap: var(--space-3); margin: 0 0 var(--space-4); padding: var(--space-3) var(--space-4); border: .5px solid color-mix(in srgb, var(--accent) 35%, transparent); border-radius: 10px; background: color-mix(in srgb, var(--accent) 8%, transparent); font-size: 12px; line-height: 1.5; }
-    .sandbox-banner > [class^='i-'] { flex: none; color: var(--accent); font-size: 22px; }
-    .sandbox-banner-text { flex: 1; color: var(--secondary); }
-    .sandbox-banner-text strong { display: block; color: var(--ink); font-weight: 600; }
-    .sandbox-banner .btn { flex: none; }
+    /* The banner is one of the hub's frosted bands: the same glass as the
+       cards under it, the section's glossy tile, and a white pill as the one
+       primary action on the page until the folder is chosen. */
+    .sandbox-banner {
+      display: flex; flex: none; align-items: center; gap: 14px;
+      padding: 10px 10px 10px 12px;
+      border: 1px solid rgb(255 255 255 / .18); border-radius: 16px;
+      background: rgb(255 255 255 / .1); color: #fff;
+      -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+    }
+    .sandbox-banner-tile {
+      display: grid; flex: none; width: 36px; height: 36px; place-items: center;
+      border-radius: 10px; background: linear-gradient(155deg, var(--tone-a, var(--accent)), var(--tone-b, var(--accent)));
+      box-shadow: inset 0 1px 0 rgb(255 255 255 / .35), 0 4px 12px rgb(0 0 0 / .18);
+    }
+    .sandbox-banner-tile > span { width: 19px; height: 19px; color: #fff; }
+    .sandbox-banner-text { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 2px; line-height: 1.4; }
+    .sandbox-banner-text strong { font-size: 13.5px; font-weight: 650; letter-spacing: -.005em; }
+    .sandbox-banner-text span { color: rgb(255 255 255 / .78); font-size: 12px; text-wrap: pretty; }
+    .sandbox-banner-button {
+      flex: none; height: 32px; padding: 0 16px; border: 0; border-radius: 999px;
+      background: #fff; color: var(--tone-b, #1d1d1f);
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      box-shadow: 0 2px 8px rgb(0 0 0 / .16);
+      transition: transform .12s ease, box-shadow .15s ease;
+    }
+    .sandbox-banner-button:hover { box-shadow: 0 4px 14px rgb(0 0 0 / .22); }
+    .sandbox-banner-button:active { transform: scale(.97); }
+    .sandbox-banner-button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+    .sandbox-banner-button:disabled { opacity: .6; cursor: default; }
+    @media (prefers-reduced-motion: reduce) { .sandbox-banner-button { transition: none; } }
+    /* The Overview opens whole with the banner too: the bands that already
+       take their size from the window's height give it the room. */
+    .hub:has(> .sandbox-banner) { gap: clamp(10px, 3cqh, 44px); }
+    .hub:has(> .sandbox-banner) .hub-ring { width: clamp(148px, 20cqh, 168px); height: clamp(148px, 20cqh, 168px); }
+    .hub:has(> .sandbox-banner) .hub-module { min-height: clamp(90px, 14.5cqh, 164px); }
+    .hub:has(> .sandbox-banner) .hub-module-orb { width: clamp(72px, 11cqh, 110px); height: clamp(72px, 11cqh, 110px); }
+    /* In a short window the banner stands in for the hero's general lede. */
+    @container page (max-height: 760px) {
+      .hub:has(> .sandbox-banner) .hub-lede { display: none; }
+    }
     @yield('styles')
   </style>
 </head>
