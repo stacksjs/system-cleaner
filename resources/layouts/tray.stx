@@ -16,6 +16,10 @@
   <!-- The popover outlives the main window, so it is what notices a scheduled
        clean that ran overnight and says so. -->
   <script src='/schedule-notice.js' defer></script>
+  <!-- And it is what keeps the daily update check running with the window
+       closed. It has no sidebar, so it checks and notifies but draws no dot;
+       the shared timestamp keeps it and the main window to one check a day. -->
+  <script src='/auto-update.js' defer></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: var(--app-bg); color: var(--ink); font: 13px/1.4 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
