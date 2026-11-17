@@ -20,29 +20,10 @@ import { nativeAutoLaunch, nativeWindow } from '@stacksjs/desktop/browser'
 
 import { COLOR_MODES, currentColorMode, setColorMode, watchAppearance } from '../lib/appearance'
 import type { ColorMode } from '../lib/appearance'
-
-/** Keys this window owns that are the app's own preference, not appearance. */
-const PREFS_KEY = 'systemcleaner-preferences'
+import { PREF_DEFAULTS, PREFS_KEY, readPref } from '../lib/preferences'
 
 /** Which pane was open when Settings was last closed. */
 const LAST_PANE_KEY = 'systemcleaner-settings-pane'
-
-/**
- * Every switch this window owns that is nothing but a stored boolean, with the
- * value it has before anyone touches it.
- *
- * Declared rather than scattered so "restore defaults" has something to
- * restore *to*, and so adding a switch is one line in two places (here and the
- * markup) rather than four.
- */
-const PREF_DEFAULTS: Record<string, boolean> = {
-  autoCheckUpdates: true,
-  confirmDeletes: true,
-  recordHistory: true,
-  notifyOnFinish: true,
-  notifyOnSchedule: true,
-  notifyOnUpdate: true,
-}
 
 // ---------------------------------------------------------------------------
 // Storage
@@ -69,11 +50,6 @@ function writeJson(key: string, value: Record<string, unknown>): void {
     // Nothing to do and nothing worth saying: the control still moved, and the
     // setting simply will not survive the window.
   }
-}
-
-function readPref(key: string): boolean {
-  const value = readJson(PREFS_KEY)[key]
-  return typeof value === 'boolean' ? value : (PREF_DEFAULTS[key] ?? false)
 }
 
 function writePref(key: string, value: boolean): void {

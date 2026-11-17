@@ -1,7 +1,7 @@
 @extends('layouts/marketing')
 
 @section('title', 'Privacy - SystemCleaner')
-@section('description', 'SystemCleaner runs on your Mac and needs no account. Read what the app reads, and the two occasions it goes online.')
+@section('description', 'SystemCleaner runs on your Mac and needs no account. Read what the app reads, and exactly when it goes online.')
 @section('canonical', 'https://system-cleaner.app/privacy')
 
 @section('content')
@@ -30,7 +30,13 @@
       <p>None of the above is transmitted, logged remotely, or written to any service. There is no telemetry, no crash reporter, no analytics script, and no advertising identifier. The app does not require an account, so there is nothing to attach a profile to.</p>
 
       <h2>When the app talks to the network</h2>
-      <p>SystemCleaner reaches the network in exactly two situations, both started by you: checking for software updates when you open Updates or Installed Apps, and downloading a new version of the app itself. Opening the app sends nothing anywhere, and those requests carry no identifying information about your Mac or its contents.</p>
+      <p>SystemCleaner reaches the network in three situations, and only one of them happens on its own:</p>
+      <ul>
+        <li><strong>A daily check for a new version of SystemCleaner.</strong> About once a day the app fetches one small file from the latest release on GitHub to see whether a newer version is out. It sends nothing about your Mac; GitHub sees an ordinary download from your network address. It is on by default and you can turn it off in Settings, under General, with "Check for updates automatically". Nothing downloads or installs until you choose to.</li>
+        <li><strong>Checking your other software for updates</strong>, when you open Updates or Installed Apps. That asks Apple, the App Store, Homebrew and Pantry what is newer than what you have installed.</li>
+        <li><strong>Downloading a new version of SystemCleaner</strong>, when you press Download in Software Update.</li>
+      </ul>
+      <p>Opening the app, scanning and cleaning send nothing anywhere, and none of these requests carries information about your Mac or its contents.</p>
 
       <h2>The marketing site</h2>
       <p>This website sets no tracking cookies and runs no analytics. If you subscribe to release notes, your email address is stored for that mailing list and used for nothing else. Unsubscribe links are in every message.</p>

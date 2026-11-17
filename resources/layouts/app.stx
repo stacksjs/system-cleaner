@@ -440,6 +440,10 @@ const localAgent = isLocalAgent()
       text-align: center; font-variant-numeric: tabular-nums;
     }
     .side-badge[hidden] { display: none; }
+    /* A newer SystemCleaner is waiting: a dot on the Settings row, which
+       then opens at Software Update. Drawn by auto-update.ts. */
+    .side-update-dot { width: 8px; height: 8px; margin-left: auto; flex: none; border-radius: 50%; background: #ff9f0a; box-shadow: 0 0 0 2px color-mix(in srgb, #ff9f0a 30%, transparent); }
+    .side-update-dot[hidden] { display: none; }
 
     .rail-foot { display: flex; flex-direction: column; gap: 3px; padding-top: var(--space-3); border-top: 1px solid var(--side-line); }
     .side-disk {
@@ -1344,6 +1348,7 @@ useEventListener('mousedown', moveWindowFrom, { target: document })
      Paste work in the filter fields. -->
 <script src="/app-menu.js"></script>
 <script src="/app-toolbar.js"></script>
+<script src="/auto-update.js"></script>
 <script src="/hub-metrics.js"></script>
 <script src="/prefetch.js"></script>
 <!-- Wires the Settings panel above: Cmd+, from the menubar or the page, the

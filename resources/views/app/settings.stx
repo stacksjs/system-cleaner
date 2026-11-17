@@ -31,7 +31,7 @@
     <div class='set-card-row'>
       <span class='set-card-row-text'>
         <span class='set-card-label'>Check for updates automatically</span>
-        <span class='set-card-hint'>Once a day, in the background. Nothing installs on its own.</span>
+        <span class='set-card-hint'>Once a day, SystemCleaner asks GitHub whether a newer version is out. Nothing downloads or installs on its own.</span>
       </span>
       <button class='set-switch' type='button' role='switch' aria-checked='false'
               aria-label='Check for updates automatically' data-switch='autoCheckUpdates'>

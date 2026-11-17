@@ -144,6 +144,7 @@ useIntervalFn(syncScanning, 2000, { immediate: true })
     <button class="side-row side-utility" type="button" data-open-settings>
       <span class="side-utility-icon" aria-hidden="true"><span class="i-f7-gear-alt-fill"></span></span>
       <span class="side-label">Settings</span>
+      <span class="side-update-dot" data-self-update-dot hidden aria-label="Update available"></span>
     </button>
     <span class="side-local" title="Every scan and every clean runs on this Mac. Nothing is uploaded.">
       <span class="i-f7-lock-fill" aria-hidden="true"></span>

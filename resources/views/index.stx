@@ -14,7 +14,7 @@
       <div class="orb" aria-hidden="true"><span class="orb-body"><span class="i-f7-lock-shield-fill orb-icon"></span></span></div>
       <h2 id="privacy-teaser-title" class="band-title">Nothing leaves your Mac.</h2>
       <div>
-        <p>Every scan, health reading and process list stays on the machine, and the app needs no account. It goes online only when you ask it to check for updates or download a new version.</p>
+        <p>Every scan, health reading and process list stays on the machine, and the app needs no account. The one thing it does online on its own is a daily check for a new version of SystemCleaner, which you can turn off.</p>
         <a class="band-link" href="/privacy" data-stx-link>Read the privacy page <span class="i-f7-arrow-right" aria-hidden="true"></span></a>
       </div>
     </div>

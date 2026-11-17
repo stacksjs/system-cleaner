@@ -285,7 +285,7 @@ export const USE_CASES: MarketingUseCase[] = [
     tone: 'protection',
     name: 'Privacy-First Users',
     shortName: 'Privacy',
-    headline: 'A maintenance tool that does not phone home.',
+    headline: 'A maintenance tool that reports nothing about you.',
     summary: 'Audit extensions, launch agents, and browser data on a machine that never reports to anyone.',
     description: 'SystemCleaner needs no account and no subscription, and sends nothing about your Mac anywhere. It runs locally, reads only what it shows you, and gives you an inventory of the things that quietly run on your Mac: browser extensions, launch agents, and daemons.',
     icon: 'lock-shield-fill',

@@ -75,7 +75,9 @@ describe('the Settings window', () => {
 
   it('handles every switch and select the panes declare', async () => {
     const view = await read(VIEW)
-    const script = await read(SCRIPT)
+    // The plain-boolean defaults live in the module the rest of the app reads
+    // them from, so they count as handled from there.
+    const script = `${await read(SCRIPT)}\n${await read('resources/lib/preferences.ts')}`
 
     // Either as a branch of its own (`id === 'scheduleEnabled'`) or as a key of
     // `PREF_DEFAULTS`, which is the plain-boolean case.
