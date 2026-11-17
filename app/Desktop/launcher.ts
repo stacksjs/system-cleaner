@@ -89,6 +89,16 @@ const platform = process.platform === 'darwin' || process.platform === 'win32' ?
 const { craftBinary, webRoot, migrationsDir } = bundleLayout(process.execPath, platform)
 
 /**
+ * The Mac App Store edition turns this around. Apple's sandbox will not let a
+ * helper put up a window of its own, so there Craft's App Store runtime is the
+ * app's main executable and starts this binary as `craft-backend`, inside its
+ * sandbox. This binary then starts the agent as usual and, instead of opening
+ * a window, speaks Craft's bundle protocol: one loopback URL with a session
+ * token on stdout, then stdin held open until the window goes away.
+ */
+const craftBackend = platform === 'darwin' && path.basename(process.execPath) === 'craft-backend'
+
+/**
  * Application data lives beside the user's other application data, never next
  * to the binary. An installed app sits somewhere the user cannot write -
  * `/Applications`, `C:\\Program Files` - and is replaced wholesale on update,
@@ -112,7 +122,7 @@ function fail(message: string): never {
 }
 
 for (const [label, target] of [
-  ['Craft runtime', craftBinary],
+  ...(craftBackend ? [] : [['Craft runtime', craftBinary]] as const),
   ['web payload', webRoot],
 ] as const) {
   if (!fs.existsSync(target))
@@ -199,6 +209,20 @@ async function waitForHealth(port: number): Promise<void> {
 const port = await readPort()
 rememberPort(portFile, port)
 await waitForHealth(port)
+
+if (craftBackend) {
+  // The agent's own output stays on its pipe, so this is the only line Craft
+  // reads. The window is the main one: the App Store edition has no menu bar
+  // popover to start from.
+  // Craft accepts exactly `http://127.0.0.1:<port>/?session=<token>`; the
+  // agent sends a request for that address on to the app.
+  process.stdout.write(`http://127.0.0.1:${port}/?session=${crypto.randomUUID()}\n`)
+  for await (const _chunk of Bun.stdin.stream()) {
+    // Craft writes nothing; the stream ending is the signal.
+  }
+  await shutdown.stop()
+  process.exit(0)
+}
 
 craft = Bun.spawn([
   craftBinary,

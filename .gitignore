@@ -101,3 +101,8 @@ storage/framework/discovered-packages.json
 /public/tray.js
 /public/vpn-panel.js
 /public/vpn-window.js
+
+# Apple signing material written by `pantry app-store:provision`
+/.pantry/
+# The Mac App Store edition and its installer package (`bun run build:app-store`)
+/storage/framework/app-store/

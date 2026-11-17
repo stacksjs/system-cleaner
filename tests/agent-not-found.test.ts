@@ -40,3 +40,26 @@ describe('agent static files', () => {
     expect(await response.text()).toContain('<title>ok</title>')
   })
 })
+
+describe('agent session address', () => {
+  let webRoot: string
+  let server: Awaited<ReturnType<typeof startAgentServer>>
+
+  beforeAll(async () => {
+    webRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-session-'))
+    fs.writeFileSync(path.join(webRoot, 'index.html'), '<!doctype html><title>site</title>')
+    server = await startAgentServer({ webRoot, port: 0 })
+  })
+
+  afterAll(() => {
+    server.stop(true)
+    fs.rmSync(webRoot, { recursive: true, force: true })
+  })
+
+  // Craft's App Store host opens `/?session=<token>`; the window belongs in the app.
+  it('sends the session address on to the app', async () => {
+    const response = await fetch(`http://127.0.0.1:${server.port}/?session=abc-123`, { redirect: 'manual' })
+    expect(response.status).toBe(302)
+    expect(response.headers.get('location')).toBe(`http://127.0.0.1:${server.port}/app`)
+  })
+})

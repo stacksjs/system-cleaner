@@ -6,6 +6,19 @@
  * Pantry's create-dmg owns the drag-and-drop installer and notarization.
  * NOTARY_PROFILE names the keychain credentials; DESKTOP_SIGNING_IDENTITY
  * accepts a Developer ID name or fingerprint (use the latter for duplicates).
+ *
+ * `--app-store` builds the Mac App Store edition instead: the same bundle,
+ * re-signed for the App Sandbox with the Store identity and profile, and
+ * packaged by Pantry as a signed installer package. `--sandbox-check` signs
+ * that edition ad hoc instead, so it can be launched on this Mac under the
+ * real sandbox; Store-signed builds only run once installed through the
+ * Store or TestFlight.
+ *
+ *   APPLE_STORE_SIGNING_IDENTITY       Apple Distribution identity (name or SHA-1)
+ *   APPLE_STORE_INSTALLER_IDENTITY     3rd Party Mac Developer Installer identity
+ *   APPLE_STORE_PROVISIONING_PROFILE   defaults to .pantry/apple/mac-app-store.provisionprofile
+ *   APP_STORE_BUILD_NUMBER             CFBundleVersion, a positive integer (default 1)
+ *   TS_PANTRY_CLI                      a ts-pantry source checkout's bin/cli.ts, instead of `bunx ts-pantry`
  */
 
 import { spawnSync } from 'node:child_process'
@@ -20,6 +33,8 @@ import { DMG_WINDOW, readDmgWindowLayout } from './dmg-window'
 
 const ROOT = process.cwd()
 const APP_NAME = process.env.DESKTOP_APP_NAME || 'SystemCleaner'
+const sandboxCheck = process.argv.includes('--sandbox-check')
+const appStore = sandboxCheck || process.argv.includes('--app-store')
 
 /** Where releases live. The installed app reads its manifest from here. */
 const UPDATE_REPOSITORY = 'stacksjs/system-cleaner'
@@ -99,13 +114,14 @@ function run(cmd: string, args: string[], envOverrides: Record<string, string> =
 // the cross-platform project. Pantry installs the pinned tool without adding
 // it to the root manifest that Linux and Windows environments also consume.
 const installerDependencies = Bun.YAML.parse(fs.readFileSync(path.join(ROOT, 'resources/dmg/deps.yaml'), 'utf8')) as { dependencies: Record<string, string> }
-for (const [name, declaredVersion] of Object.entries(installerDependencies.dependencies))
+// The Store edition is a .pkg; create-dmg has nothing to do there.
+for (const [name, declaredVersion] of appStore ? [] : Object.entries(installerDependencies.dependencies))
   run('pantry', ['install', `${name}@${declaredVersion}`, '--no-save'])
 
-const installerProvider = spawnSync('pantry', ['which', '--resolve', path.join(ROOT, 'pantry/.bin/create-dmg')], { encoding: 'utf8' })
-if (installerProvider.status !== 0 || !installerProvider.stdout.trim())
+const installerProvider = appStore ? null : spawnSync('pantry', ['which', '--resolve', path.join(ROOT, 'pantry/.bin/create-dmg')], { encoding: 'utf8' })
+if (installerProvider && (installerProvider.status !== 0 || !installerProvider.stdout.trim()))
   throw new Error(`Pantry could not resolve create-dmg: ${installerProvider.stderr}`)
-const installerBinary = installerProvider.stdout.trim()
+const installerBinary = installerProvider?.stdout.trim() ?? ''
 
 // ── 1. Render the UI ────────────────────────────────────────────
 // The STX page cache is keyed on the template, not on the environment that
@@ -196,7 +212,8 @@ console.log('[desktop] packaging')
 // Stacks owns executable placement and inside-out signing. Packaging failures
 // are fatal; do not recover an unknown staged bundle from a failed command.
 run('./buddy', ['build:dmg'], {
-  DESKTOP_SIGNING_IDENTITY: process.env.DESKTOP_SIGNING_IDENTITY || '-',
+  // The Store edition is re-signed below, so its Developer ID pass is skipped.
+  DESKTOP_SIGNING_IDENTITY: appStore ? '-' : (process.env.DESKTOP_SIGNING_IDENTITY || '-'),
   DESKTOP_NOTARY_PROFILE: '',
 })
 
@@ -206,6 +223,115 @@ if (!fs.existsSync(dmgPath))
   throw new Error(`build:dmg produced no disk image at ${dmgPath}`)
 
 /** Pantry supplies create-dmg; it owns the background, icon placement and drop link. */
+/**
+ * The Mac App Store edition, from the bundle `build:dmg` just assembled.
+ *
+ * The App Sandbox is the difference. Craft's App Store runtime is the main
+ * executable and gets `app/Desktop/AppStore.entitlements`; this app's binary
+ * runs as its `craft-backend` (and starts the agent from the same file) with
+ * `AppStoreHelper.entitlements`, which makes it inherit that sandbox. Signing
+ * goes inside out, backend before app, and Pantry then checks the result and
+ * writes the signed installer package.
+ */
+function finishAppStore(imagePath: string): void {
+  const buildNumber = process.env.APP_STORE_BUILD_NUMBER || '1'
+  if (!/^[1-9]\d*$/.test(buildNumber))
+    throw new Error(`APP_STORE_BUILD_NUMBER must be a positive integer, not ${buildNumber}`)
+  const bundleId = buildEnv.DESKTOP_BUNDLE_ID
+  const identity = sandboxCheck ? '-' : process.env.APPLE_STORE_SIGNING_IDENTITY
+  const installerIdentity = process.env.APPLE_STORE_INSTALLER_IDENTITY
+  const profile = path.resolve(ROOT, process.env.APPLE_STORE_PROVISIONING_PROFILE || '.pantry/apple/mac-app-store.provisionprofile')
+  if (!sandboxCheck && (!identity || !installerIdentity || !fs.existsSync(profile)))
+    throw new Error('The App Store edition needs APPLE_STORE_SIGNING_IDENTITY, APPLE_STORE_INSTALLER_IDENTITY and a provisioning profile (run `ts-pantry app-store:provision --apply`)')
+
+  const outDir = path.join(ROOT, 'storage/framework/app-store')
+  fs.rmSync(outDir, { recursive: true, force: true })
+  fs.mkdirSync(outDir, { recursive: true })
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'system-cleaner-app-store-'))
+  const mount = path.join(work, 'mounted')
+  fs.mkdirSync(mount)
+  const app = path.join(outDir, `${APP_NAME}.app`)
+  try {
+    run('hdiutil', ['attach', imagePath, '-nobrowse', '-readonly', '-mountpoint', mount])
+    try { run('ditto', [path.join(mount, `${APP_NAME}.app`), app]) }
+    finally { spawnSync('hdiutil', ['detach', mount], { stdio: 'inherit' }) }
+
+    // Craft's App Store runtime becomes the main executable, because the
+    // sandbox lets only the app itself put up a window; this app's binary
+    // moves to `craft-backend`, which Craft starts inside the sandbox (see
+    // `craftBackend` in app/Desktop/launcher.ts). The direct build's runtime
+    // calls private APIs App Review refuses, so it leaves the bundle, and the
+    // public one must say it is the App Store build before it goes in.
+    const macOS = path.join(app, 'Contents/MacOS')
+    const storeRuntime = path.join(path.dirname(craftBin), 'craft-app-store')
+    const probe = spawnSync(storeRuntime, ['--distribution'], { encoding: 'utf8', timeout: 10_000 })
+    if (probe.status !== 0 || probe.stdout.trim() !== 'app-store')
+      throw new Error(`${storeRuntime} is not Craft's App Store runtime; run pantry install`)
+    fs.renameSync(path.join(macOS, APP_NAME), path.join(macOS, 'craft-backend'))
+    fs.rmSync(path.join(macOS, 'craft-runtime'), { force: true })
+    fs.copyFileSync(storeRuntime, path.join(macOS, APP_NAME))
+    fs.chmodSync(path.join(macOS, APP_NAME), 0o755)
+    fs.writeFileSync(path.join(app, 'Contents/Resources/craft.json'), `${JSON.stringify({
+      title: APP_NAME,
+      appName: APP_NAME,
+      width: 1400,
+      height: 900,
+      titlebarHidden: true,
+      backend: { executable: 'craft-backend' },
+    }, null, 2)}\n`)
+
+    // The Store reads the version pair from the bundle and refuses a build
+    // number it has seen. HTTPS through the system is the only encryption the
+    // app uses, which is exempt, so the export question is answered here.
+    const plist = path.join(app, 'Contents/Info.plist')
+    run('plutil', ['-replace', 'CFBundleShortVersionString', '-string', APP_VERSION, plist])
+    run('plutil', ['-replace', 'CFBundleVersion', '-string', buildNumber, plist])
+    run('plutil', ['-replace', 'ITSAppUsesNonExemptEncryption', '-bool', 'NO', plist])
+
+    let applicationIdentifier = ''
+    let teamIdentifier = ''
+    if (!sandboxCheck) {
+      const decoded = spawnSync('security', ['cms', '-D', '-i', profile], { encoding: 'utf8' })
+      if (decoded.status !== 0)
+        throw new Error(`Could not read the provisioning profile ${profile}`)
+      const profilePlist = path.join(work, 'profile.plist')
+      fs.writeFileSync(profilePlist, decoded.stdout)
+      const json = JSON.parse(spawnSync('plutil', ['-convert', 'json', '-o', '-', profilePlist], { encoding: 'utf8' }).stdout) as { Entitlements: Record<string, string> }
+      applicationIdentifier = json.Entitlements['com.apple.application-identifier'] || ''
+      teamIdentifier = json.Entitlements['com.apple.developer.team-identifier'] || ''
+      if (applicationIdentifier !== `${teamIdentifier}.${bundleId}`)
+        throw new Error(`The provisioning profile is for ${applicationIdentifier}, not ${teamIdentifier}.${bundleId}`)
+      fs.copyFileSync(profile, path.join(app, 'Contents/embedded.provisionprofile'))
+    }
+
+    // An ad hoc signature cannot carry the profile-backed identifiers, and a
+    // local sandbox check does not need them.
+    const template = fs.readFileSync(path.join(ROOT, 'app/Desktop/AppStore.entitlements'), 'utf8')
+    const mainEntitlements = path.join(work, 'app.entitlements')
+    fs.writeFileSync(mainEntitlements, sandboxCheck
+      ? template.replace(/\s*<key>com\.apple\.application-identifier<\/key>\s*<string>[^<]*<\/string>/, '').replace(/\s*<key>com\.apple\.developer\.team-identifier<\/key>\s*<string>[^<]*<\/string>/, '')
+      : template.replace('$(APPLICATION_IDENTIFIER)', applicationIdentifier).replace('$(TEAM_IDENTIFIER)', teamIdentifier))
+
+    const helper = path.join(macOS, 'craft-backend')
+    run('codesign', ['--force', '--sign', identity!, '--entitlements', path.join(ROOT, 'app/Desktop/AppStoreHelper.entitlements'), helper])
+    run('codesign', ['--force', '--sign', identity!, '--entitlements', mainEntitlements, app])
+    run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', app])
+
+    if (sandboxCheck) {
+      console.log(`[desktop] sandboxed build for local checks: ${app}`)
+      return
+    }
+
+    const pkg = path.join(outDir, `${APP_NAME}-${APP_VERSION}-${buildNumber}.pkg`)
+    const pantry = process.env.TS_PANTRY_CLI ? ['bun', process.env.TS_PANTRY_CLI] : ['bunx', '--bun', 'ts-pantry']
+    run(pantry[0]!, [...pantry.slice(1), 'app-store:package', app, '--output', pkg, '--installer-identity', installerIdentity!])
+    console.log(`[desktop] ${pkg}`)
+  }
+  finally {
+    fs.rmSync(work, { recursive: true, force: true })
+  }
+}
+
 function finishInstaller(imagePath: string): void {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'system-cleaner-installer-'))
   const mount = path.join(work, 'mounted')
@@ -316,6 +442,11 @@ function finishInstaller(imagePath: string): void {
       spawnSync('hdiutil', ['detach', mount], { stdio: 'inherit' })
     fs.rmSync(work, { recursive: true, force: true })
   }
+}
+
+if (appStore) {
+  finishAppStore(dmgPath)
+  process.exit(0)
 }
 
 finishInstaller(dmgPath)

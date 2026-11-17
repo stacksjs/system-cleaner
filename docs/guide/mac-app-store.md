@@ -95,6 +95,38 @@ These need a human with the Apple account:
 - banking, tax, pricing, privacy, age rating, and export-compliance answers
 - the final App Review submission and release policy
 
+## Building and uploading from this Mac
+
+The Store edition is the same app with a different process layout. The App
+Sandbox lets only the app itself put up a window, so Craft's App Store runtime
+(`craft-app-store`, shipped with the pinned Craft) becomes the main executable,
+and SystemCleaner's own binary runs as its `craft-backend`, starting the agent
+inside the same sandbox. The direct build's runtime uses private APIs App Review
+refuses, so it is left out.
+
+```bash
+# Register the bundle ID and make a profile around a certificate this Mac can sign with
+ts-pantry app-store:provision --bundle-id org.stacksjs.system-cleaner --name SystemCleaner \
+  --api-key-id <id> --api-issuer-id <issuer> --api-key-path <AuthKey.p8> --apply
+
+# Launch the edition locally under the real sandbox (ad hoc signed)
+bun run build:app-store:check
+open storage/framework/app-store/SystemCleaner.app
+
+# Sign for the Store and package it
+APPLE_STORE_SIGNING_IDENTITY="Apple Distribution: …" \
+APPLE_STORE_INSTALLER_IDENTITY="3rd Party Mac Developer Installer: …" \
+APP_STORE_BUILD_NUMBER=1 bun run build:app-store
+
+# Validate, then upload to App Store Connect (TestFlight)
+ts-pantry app-store:deliver storage/framework/app-store/SystemCleaner-<version>-<build>.pkg --validate-only …
+ts-pantry app-store:deliver storage/framework/app-store/SystemCleaner-<version>-<build>.pkg …
+```
+
+`APP_STORE_BUILD_NUMBER` must grow with every upload; the marketing version is
+`package.json`'s. Set `TS_PANTRY_CLI` to a pantry checkout's
+`packages/ts-pantry/bin/cli.ts` to use unreleased pantry commands.
+
 ## Checking locally
 
 ```bash

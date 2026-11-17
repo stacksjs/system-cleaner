@@ -177,6 +177,12 @@ export async function startAgentServer(options: AgentServerOptions) {
       if (url.pathname === '/__health')
         return new Response('ok')
 
+      // The Mac App Store edition's window opens on the session address Craft
+      // was given (see `craftBackend` in launcher.ts), which is the site root;
+      // the app lives under /app.
+      if (url.pathname === '/' && url.searchParams.has('session'))
+        return Response.redirect(`${url.origin}/app`, 302)
+
       if (url.pathname.startsWith('/api/')) {
         const handler = routes.get(`${req.method} ${url.pathname}`)
         if (!handler)
