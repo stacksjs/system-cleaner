@@ -296,12 +296,17 @@ function finishAppStore(imagePath: string): void {
         throw new Error(`Could not read the provisioning profile ${profile}`)
       const profilePlist = path.join(work, 'profile.plist')
       fs.writeFileSync(profilePlist, decoded.stdout)
-      const json = JSON.parse(spawnSync('plutil', ['-convert', 'json', '-o', '-', profilePlist], { encoding: 'utf8' }).stdout) as { Entitlements: Record<string, string> }
-      applicationIdentifier = json.Entitlements['com.apple.application-identifier'] || ''
-      teamIdentifier = json.Entitlements['com.apple.developer.team-identifier'] || ''
+      // Read key by key: the profile holds dates and certificate data, which
+      // have no JSON form, so a whole-file conversion fails.
+      const entitlement = (key: string): string => spawnSync('plutil', ['-extract', `Entitlements.${key.replaceAll('.', '\\.')}`, 'raw', '-o', '-', profilePlist], { encoding: 'utf8' }).stdout.trim()
+      applicationIdentifier = entitlement('com.apple.application-identifier')
+      teamIdentifier = entitlement('com.apple.developer.team-identifier')
       if (applicationIdentifier !== `${teamIdentifier}.${bundleId}`)
         throw new Error(`The provisioning profile is for ${applicationIdentifier}, not ${teamIdentifier}.${bundleId}`)
+      // Pantry writes the profile owner-only; inside the app everyone must
+      // be able to read it, or the Store rejects the package (90255).
       fs.copyFileSync(profile, path.join(app, 'Contents/embedded.provisionprofile'))
+      fs.chmodSync(path.join(app, 'Contents/embedded.provisionprofile'), 0o644)
     }
 
     // An ad hoc signature cannot carry the profile-backed identifiers, and a
