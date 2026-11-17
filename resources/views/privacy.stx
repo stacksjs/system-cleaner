@@ -37,7 +37,7 @@
 
       <h2>Verifying any of this</h2>
       <p>The app is open source. Every scan path, every network call, and every delete operation is readable in the repository, and the cleanup code lists its target directories explicitly rather than globbing your disk.</p>
-      <p><a class="text-link" href="https://github.com/stacksjs/system-cleaner" rel="noreferrer">Read the source <span class="i-f7-arrow-up-right" aria-hidden="true"></span></a></p>
+      <p><a class="source-link" href="https://github.com/stacksjs/system-cleaner" rel="noreferrer">Read the source <span class="i-f7-arrow-up-right" aria-hidden="true"></span></a></p>
     </div>
   </article>
 

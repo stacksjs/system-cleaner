@@ -478,8 +478,8 @@
       .prose p { margin: 0 0 14px; }
       .prose ul { display: grid; gap: 8px; margin: 0 0 14px; padding-left: 20px; }
       .prose strong { color: var(--ink); font-weight: 620; }
-      .text-link { display: inline-flex; align-items: center; gap: 7px; color: var(--accent); font-size: 14px; font-weight: 650; }
-      .text-link span { width: 14px; height: 14px; }
+      .source-link { display: inline-flex; align-items: center; gap: 7px; color: var(--accent); font-size: 14px; font-weight: 650; }
+      .source-link span { width: 14px; height: 14px; }
 
       /* ---------- Motion ---------- */
       @media (prefers-reduced-motion: no-preference) {

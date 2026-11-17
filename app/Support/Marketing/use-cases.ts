@@ -101,8 +101,8 @@ export const USE_CASES: MarketingUseCase[] = [
     ],
     workflow: [
       {
-        title: 'Scan without a blocking wait',
-        body: 'Sizing a toolchain means walking a lot of small files. The scan runs off the interface thread, so results fill in while you keep working instead of freezing on a spinner.',
+        title: 'Keep working while it scans',
+        body: 'Sizing a toolchain means walking a great many small files. The scan runs in the background and results fill in as they arrive, so the window never freezes while it works.',
       },
       {
         title: 'Sort by what actually costs you',
@@ -157,7 +157,7 @@ export const USE_CASES: MarketingUseCase[] = [
     workflow: [
       {
         title: 'Find the drive hog first',
-        body: 'The disk map sizes folders by worker, so a scratch directory or an old export folder shows up as a single large block instead of a thousand files.',
+        body: 'The disk map adds up each folder, so a scratch directory or an old export folder shows up as one large block instead of a thousand separate files.',
       },
       {
         title: 'Keep the project, drop the cache',
@@ -287,7 +287,7 @@ export const USE_CASES: MarketingUseCase[] = [
     shortName: 'Privacy',
     headline: 'A maintenance tool that does not phone home.',
     summary: 'Audit extensions, launch agents, and browser data on a machine that never reports to anyone.',
-    description: 'Most cleaners want an account, an analytics pipeline, and a subscription. SystemCleaner wants none of them. It runs locally, reads only what it shows you, and gives you an inventory of the things that quietly run on your Mac: browser extensions, launch agents, and daemons.',
+    description: 'SystemCleaner needs no account and no subscription, and sends nothing about your Mac anywhere. It runs locally, reads only what it shows you, and gives you an inventory of the things that quietly run on your Mac: browser extensions, launch agents, and daemons.',
     icon: 'lock-shield-fill',
     metric: 'Zero telemetry',
     detail: 'No account, no analytics script, no crash reporter, no advertising identifier.',
