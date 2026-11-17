@@ -28,7 +28,7 @@
         <span class='set-knob' aria-hidden='true'></span>
       </button>
     </div>
-    <div class='set-card-row'>
+    <div class='set-card-row' data-sandbox-limit='selfUpdate'>
       <span class='set-card-row-text'>
         <span class='set-card-label'>Check for updates automatically</span>
         <span class='set-card-hint'>Once a day, SystemCleaner asks GitHub whether a newer version is out. Nothing downloads or installs on its own.</span>

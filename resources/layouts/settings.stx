@@ -398,6 +398,9 @@ const localAgent = isLocalAgent()
     :root[data-craft-window-active='false'] .set-tile { filter: saturate(.15); }
 
     @yield('styles')
+    /* Controls the App Store edition cannot offer; see platform-gate.ts. */
+    [data-sandbox-hidden] { display: none !important; }
+    .sandbox-note { margin: 0; padding: var(--space-2, 8px) var(--space-3, 12px); color: var(--secondary); font-size: 12px; line-height: 1.5; }
   </style>
 </head>
 <body>
@@ -443,6 +446,7 @@ const localAgent = isLocalAgent()
   </div>
 @endif
 
+<script src="/platform-gate.js"></script>
 <script src="/native-dialog.js"></script>
 <script src="/settings-window.js"></script>
 </body>

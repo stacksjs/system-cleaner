@@ -64,12 +64,12 @@
       <span x-show='updateScanCached' style='display: block; margin-top: var(--space-half);'>cached scan</span>
     </div>
   </div>
-  <div class='card'>
+  <div class='card' data-sandbox-limit='homebrew' data-sandbox-note='none'>
     <div class='card-label'>Homebrew</div>
     <div class='card-value' :style="brewTotal() > 0 ? 'color: var(--orange)' : 'color: var(--green)'">{{ brewTotal() }}</div>
     <div class='card-detail'>{{ brewFormulae.length + ' formulae \u00B7 ' + brewCasks.length + ' casks' }}</div>
   </div>
-  <div class='card'>
+  <div class='card' data-sandbox-limit='homebrew' data-sandbox-note='none'>
     <div class='card-label'>Pantry</div>
     <div class='card-value' :style="pantryOutdated.length > 0 ? 'color: var(--orange)' : 'color: var(--green)'">{{ pantryOutdated.length }}</div>
     <div class='card-detail'>{{ pantryTrackedCount + ' package' + (pantryTrackedCount !== 1 ? 's' : '') + ' tracked' }}</div>
@@ -219,7 +219,11 @@
   </div>
 </div>
 
-<div x-show='brewTotal() > 0' class='tbl-wrap'>
+<!-- The App Store edition cannot run Homebrew or Pantry, so their cards and
+     tables are hidden there and this says why. -->
+<p class='sandbox-note' data-sandbox-explain='homebrew' hidden></p>
+
+<div x-show='brewTotal() > 0' class='tbl-wrap' data-sandbox-limit='homebrew' data-sandbox-note='none'>
   <div class='tbl-bar'>
     <div>
       <span class='tbl-title'>Homebrew</span>
@@ -293,7 +297,7 @@
   </table>
 </div>
 
-<div class='tbl-wrap'>
+<div class='tbl-wrap' data-sandbox-limit='homebrew' data-sandbox-note='none'>
   <div class='tbl-bar'>
     <div>
       <span class='tbl-title'>Pantry</span>

@@ -1,8 +1,9 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import process from 'node:process'
-import { appleScriptEscape, exec } from '@system-cleaner/core'
+import { appleScriptEscape, exec, SANDBOXED } from '@system-cleaner/core'
 import { recycle } from './recycle-windows'
+import { trashWithFoundation } from './trash-native'
 
 /**
  * Which recoverable-deletion mechanism this platform has.
@@ -68,6 +69,16 @@ export async function moveToTrash(
 
 /** Finder's Trash for a whole batch, in one AppleScript. macOS only. */
 async function viaFinderBatch(batch: string[]): Promise<{ ok: boolean, error?: string }> {
+  // The sandbox refuses Apple Events to Finder. Foundation moves one item per
+  // call, so a batch is a loop that stops at the first failure, which sends
+  // the caller to its per-path retry exactly as a failed AppleScript would.
+  if (SANDBOXED) {
+    for (const p of batch) {
+      const moved = trashWithFoundation(path.resolve(p))
+      if (!moved.ok) return moved
+    }
+    return { ok: true }
+  }
   const list = batch
     .map(p => `POSIX file "${appleScriptEscape(path.resolve(p))}"`)
     .join(', ')
@@ -78,6 +89,7 @@ async function viaFinderBatch(batch: string[]): Promise<{ ok: boolean, error?: s
 
 /** Finder's Trash, via AppleScript. macOS only. */
 async function viaFinder(absPath: string): Promise<{ ok: boolean, error?: string }> {
+  if (SANDBOXED) return trashWithFoundation(absPath)
   // AppleScript escape order matters: escape backslashes first, then double
   // quotes — otherwise an injected `\"` smuggles a quote through.
   const script = `tell application "Finder" to delete POSIX file "${appleScriptEscape(absPath)}"`

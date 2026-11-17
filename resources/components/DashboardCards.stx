@@ -45,7 +45,7 @@
           <span class='statusbar-dot' style='background: var(--tertiary)'></span>
           <span class='signal-text'>Disk <b>loading...</b></span>
         </li>
-        <li x-show='stats' x-cloak>
+        <li x-show='stats' x-cloak data-sandbox-limit='startupItems' data-sandbox-note='none'>
           <span class='statusbar-dot' :style="startupDotStyle(stats.enabledStartup)"></span>
           <span class='signal-text'>Startup <b>{{ stats.enabledStartup }} of {{ stats.totalStartup }}</b> enabled</span>
         </li>
@@ -97,7 +97,7 @@
     <div class='card-value dim'>...</div>
   </div>
 
-  <div class='card'>
+  <div class='card' data-sandbox-limit='startupItems' data-sandbox-note='none'>
     <div class='card-label'>Startup items</div>
     <div class='card-value'>{{ stats ? stats.enabledStartup : '...' }}</div>
     <div class='card-detail'><span>{{ stats ? stats.disabledStartup + ' disabled · ' + stats.totalStartup + ' total' : 'loading...' }}</span></div>

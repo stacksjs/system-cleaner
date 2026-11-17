@@ -1,0 +1,24 @@
+SystemCleaner finds and removes junk on this Mac: caches, logs, browser data, developer build output, large and duplicate files, and files left behind by apps that were removed. Nothing is uploaded; every scan runs on the device.
+
+HOW TO TEST
+1. Open SystemCleaner. The Overview shows a banner asking for the home folder.
+2. Click "Choose Home Folder...". An Open panel opens at the home folder. Click Allow.
+3. The Overview now shows real figures: junk that can be cleaned, disk use and browsing traces.
+4. Open Quick Clean, review the list and click Clean. Only the items you leave ticked are removed.
+
+WHY THE APP ASKS FOR THE HOME FOLDER
+Caches, logs and browser data live in ~/Library inside the home folder. The app reads it only after the user chooses it in a standard Open panel (com.apple.security.files.user-selected.read-write). Access is kept with a security-scoped bookmark so the user is asked once. The user can choose not to grant it; the screens that need it then say so and offer the panel again.
+
+WHAT THE APP DOES NOT DO IN THIS EDITION
+The App Sandbox rules several features out, so this edition leaves them out and each screen says why in plain words, instead of showing an empty or failing screen:
+- Startup Items: cannot read or change login items. The screen links to System Settings > General > Login Items & Extensions.
+- Uninstalling apps: cannot remove other apps. The screen explains how to remove an app in Finder; Leftovers then cleans what it left behind.
+- Maintenance tasks and VPN control: need administrator rights. Not offered.
+- Scheduled Clean: would need a background agent installed outside the app. Not offered.
+- Processes: the sandbox hides other processes, so the process list is not offered. System memory, CPU and disk readouts still work.
+- Homebrew and Pantry updates: cannot run those tools. Not offered.
+- Emptying the Trash: not offered. Files the app moves to the Trash stay there until the user empties it.
+- Automatic update checks: the Mac App Store delivers updates; the app's own updater is off.
+
+TECHNICAL NOTES
+The window is Craft's native host (main executable). The app's own binary runs as a helper inside the same sandbox (com.apple.security.inherit) and serves the interface over a loopback connection on 127.0.0.1 only (com.apple.security.network.server / network.client). No other network access is made unless the user opens a link.

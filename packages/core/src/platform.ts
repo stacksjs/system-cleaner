@@ -1,4 +1,5 @@
 import process from 'node:process'
+import { SANDBOX_LIMITS, SANDBOXED } from './sandbox'
 
 /**
  * The platforms this app knows how to reason about.
@@ -126,7 +127,22 @@ const CAPABILITIES: Record<Platform, Capabilities> = {
   unsupported: { ...NONE },
 }
 
-export const capabilities: Capabilities = CAPABILITIES[PLATFORM]
+/**
+ * The Mac App Store edition runs in the App Sandbox, which rules out whole
+ * screens on a platform that otherwise has them. Those are turned off here so
+ * every gate that already reads this map refuses them; the sentence saying
+ * why comes from `sandboxLimit` in ./sandbox.
+ */
+function withinSandbox(base: Capabilities): Capabilities {
+  if (!SANDBOXED) return base
+  const limited = { ...base }
+  for (const key of Object.keys(limited) as (keyof Capabilities)[]) {
+    if (key in SANDBOX_LIMITS) limited[key] = false
+  }
+  return limited
+}
+
+export const capabilities: Capabilities = withinSandbox(CAPABILITIES[PLATFORM])
 
 /** True when the running platform implements this feature. */
 export function supports(feature: keyof Capabilities): boolean {
@@ -140,6 +156,8 @@ export function supports(feature: keyof Capabilities): boolean {
  * its own reads as a bug to anyone who has not read the release notes.
  */
 export function unsupportedReason(feature: keyof Capabilities): string {
+  const limit = SANDBOXED ? (SANDBOX_LIMITS as Record<string, string>)[feature] : undefined
+  if (limit) return limit
   const name: Record<Platform, string> = {
     macos: 'macOS',
     linux: 'Linux',

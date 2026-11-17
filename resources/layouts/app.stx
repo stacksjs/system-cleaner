@@ -1246,6 +1246,17 @@ const localAgent = isLocalAgent()
     .offsite-shell h1 { font-size: 19px; font-weight: 600; }
     .offsite-shell p { max-width: 46ch; color: var(--secondary); font-size: 13px; line-height: 1.5; }
     .offsite-shell .btn { margin-top: var(--space-tight); padding: var(--space-2) var(--space-5); font-size: 13px; text-decoration: none; }
+    /* The App Store edition: controls the sandbox rules out, the reason in
+       their place, and the Overview's home folder banner. platform-gate.ts
+       sets these; the direct build never matches them. */
+    [data-sandbox-hidden] { display: none !important; }
+    .sandbox-note { margin: var(--space-2) 0; color: var(--secondary); font-size: 12px; line-height: 1.5; }
+    .sandbox-note[hidden] { display: none; }
+    .sandbox-banner { display: flex; align-items: center; gap: var(--space-3); margin: 0 0 var(--space-4); padding: var(--space-3) var(--space-4); border: .5px solid color-mix(in srgb, var(--accent) 35%, transparent); border-radius: 10px; background: color-mix(in srgb, var(--accent) 8%, transparent); font-size: 12px; line-height: 1.5; }
+    .sandbox-banner > [class^='i-'] { flex: none; color: var(--accent); font-size: 22px; }
+    .sandbox-banner-text { flex: 1; color: var(--secondary); }
+    .sandbox-banner-text strong { display: block; color: var(--ink); font-weight: 600; }
+    .sandbox-banner .btn { flex: none; }
     @yield('styles')
   </style>
 </head>

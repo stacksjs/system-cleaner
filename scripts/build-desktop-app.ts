@@ -263,7 +263,11 @@ function finishAppStore(imagePath: string): void {
     // calls private APIs App Review refuses, so it leaves the bundle, and the
     // public one must say it is the App Store build before it goes in.
     const macOS = path.join(app, 'Contents/MacOS')
-    const storeRuntime = path.join(path.dirname(craftBin), 'craft-app-store')
+    // `CRAFT_APP_STORE_RUNTIME` points at a Craft build ahead of the pinned
+    // release, the way `CRAFT_BIN` does for the direct one.
+    const storeRuntime = process.env.CRAFT_APP_STORE_RUNTIME
+      ? path.resolve(process.env.CRAFT_APP_STORE_RUNTIME)
+      : path.join(path.dirname(craftBin), 'craft-app-store')
     const probe = spawnSync(storeRuntime, ['--distribution'], { encoding: 'utf8', timeout: 10_000 })
     if (probe.status !== 0 || probe.stdout.trim() !== 'app-store')
       throw new Error(`${storeRuntime} is not Craft's App Store runtime; run pantry install`)

@@ -8,6 +8,12 @@ import {
   isWindows,
   capabilities,
   classifyByGit,
+  EDITION,
+  HOME_GRANTED,
+  realHomeFolder,
+  SANDBOX_LIMITS,
+  SANDBOXED,
+  sandboxLimit,
   isWithinHome,
   refusesDeletion,
   PLATFORM,
@@ -119,6 +125,32 @@ async function readJsonBody<T>(req: Request): Promise<T | null> {
 const badJson = () => Response.json({ success: false, error: 'Invalid JSON body' }, { status: 400 });
 const badRequest = (msg: string, status = 400) =>
   Response.json({ success: false, error: msg }, { status });
+
+/**
+ * A scan of the home folder, asked before the App Store edition has it. The
+ * agent would walk its own container and answer 0 B, which reads as a clean
+ * Mac; answering "needs access" lets the Overview say so instead. A 200, so
+ * the page's fetch helpers read the body rather than treating it as an outage.
+ */
+function awaitHomeGrant(): Response | null {
+  if (HOME_GRANTED) return null;
+  return Response.json({
+    success: false,
+    needsHome: true,
+    error: 'Choose your home folder first. Until then SystemCleaner can only see its own App Store container.',
+  });
+}
+
+/**
+ * Refuse an action the App Sandbox rules out, with the sentence the screen
+ * shows. The screens already hide these in the App Store edition; this is the
+ * same answer for anything that calls the API directly, rather than a command
+ * that fails halfway with an error from inside the sandbox.
+ */
+function refuseInSandbox(feature: string): Response | null {
+  const reason = sandboxLimit(feature);
+  return reason ? Response.json({ success: false, unavailable: true, error: reason }, { status: 403 }) : null;
+}
 
 /**
  * Verify that a path is absolute and resolves under one of the allowed
@@ -579,6 +611,8 @@ export default async function (router: Router) {
   });
 
   await router.post('/kill-process', async (req: Request) => {
+    const limited = refuseInSandbox('processControl');
+    if (limited) return limited;
     const body = await readJsonBody<{ pid: unknown }>(req);
     if (body === null) return badJson();
     const pid = sanitizePid(body.pid);
@@ -592,6 +626,8 @@ export default async function (router: Router) {
   });
 
   await router.post('/toggle-startup', async (req: Request) => {
+    const limited = refuseInSandbox('startupItems');
+    if (limited) return limited;
     const body = await readJsonBody<{ filepath: string, action: 'enable' | 'disable' }>(req);
     if (body === null) return badJson();
     const { filepath, action } = body;
@@ -616,6 +652,8 @@ export default async function (router: Router) {
   });
 
   await router.post('/remove-startup', async (req: Request) => {
+    const limited = refuseInSandbox('startupItems');
+    if (limited) return limited;
     const body = await readJsonBody<{ filepath: string }>(req);
     if (body === null) return badJson();
     const { filepath } = body;
@@ -645,6 +683,8 @@ export default async function (router: Router) {
    * bulk delete on this screen cannot be talked into unloading a live daemon.
    */
   await router.post('/remove-dead-startup', async (req: Request) => {
+    const limited = refuseInSandbox('startupItems');
+    if (limited) return limited;
     const body = await readJsonBody<{ filepaths: unknown }>(req);
     if (body === null) return badJson();
 
@@ -677,7 +717,21 @@ export default async function (router: Router) {
    * See stacksjs/system-cleaner#23.
    */
   await router.post('/platform', async () => {
-    return Response.json({ success: true, platform: PLATFORM, capabilities });
+    return Response.json({
+      success: true,
+      platform: PLATFORM,
+      capabilities,
+      // The App Store edition: which build this is, whether the person has
+      // granted their home folder yet, and why each missing feature is
+      // missing. `limits` is empty outside the sandbox.
+      edition: EDITION,
+      sandbox: {
+        sandboxed: SANDBOXED,
+        homeGranted: HOME_GRANTED,
+        home: realHomeFolder(),
+        limits: SANDBOXED ? SANDBOX_LIMITS : {},
+      },
+    });
   });
 
   await router.post('/dir-sizes', async (req: Request) => {
@@ -730,6 +784,8 @@ export default async function (router: Router) {
   });
 
   await router.post('/empty-trash', async () => {
+    const limited = refuseInSandbox('trash');
+    if (limited) return limited;
     const result = await emptyTrash();
     invalidateSizeCaches();
     return Response.json({
@@ -940,6 +996,8 @@ export default async function (router: Router) {
   // ── Brew update endpoints ──────────────────────────────────
 
   await router.post('/brew-update', async (req: Request) => {
+    const limited = refuseInSandbox('homebrew');
+    if (limited) return limited;
     const body = await readJsonBody<{ name: unknown, type: unknown }>(req);
     if (body === null) return badJson();
 
@@ -992,6 +1050,8 @@ export default async function (router: Router) {
   });
 
   await router.post('/brew-update-all', async () => {
+    const limited = refuseInSandbox('homebrew');
+    if (limited) return limited;
     try {
       const proc = Bun.spawn(['brew', 'upgrade'], {
         stdout: 'pipe',
@@ -1021,6 +1081,8 @@ export default async function (router: Router) {
   // ── Pantry update endpoint ─────────────────────────────────
 
   await router.post('/pantry-update', async (req: Request) => {
+    const limited = refuseInSandbox('homebrew');
+    if (limited) return limited;
     const body = await readJsonBody<{ name: unknown }>(req);
     if (body === null) return badJson();
 
@@ -1209,8 +1271,15 @@ export default async function (router: Router) {
     const diskAvail = diskTotalBytes > 0 ? formatBytes(diskFreeBytes) : '-';
     const diskPercent = dUsedPct;
 
+    // The App Store edition cannot see login items, so it has no count to
+    // give; a missing figure reads "Not available" where a partial one would
+    // read as a short list.
+    const startup = SANDBOXED
+      ? { enabledStartup: null, disabledStartup: null, totalStartup: null }
+      : {};
     const payload = {
       ...base,
+      ...startup,
       // Host facts travel with the stats rather than being rendered into the
       // page. The packaged app ships prerendered HTML, so anything a
       // `<script server>` block computed would be the *build machine's* CPU,
@@ -1493,6 +1562,8 @@ export default async function (router: Router) {
    * it actually removed, which is where the two numbers are allowed to differ.
    */
   await router.post('/safe-to-clean', async () => {
+    const waiting = awaitHomeGrant();
+    if (waiting) return waiting;
     const hit = safeToCleanCache.get('total');
     if (hit) return Response.json({ success: true, ...hit, cached: true });
 
@@ -2139,6 +2210,8 @@ export default async function (router: Router) {
   });
 
   await router.post('/app-uninstall', async (req: Request) => {
+    const limited = refuseInSandbox('appUninstall');
+    if (limited) return limited;
     const body = await readJsonBody<{ path: unknown, paths: unknown, mode?: unknown }>(req);
     if (body === null) return badJson();
     if (typeof body.path !== 'string' || !body.path) return badRequest('No app path provided');
@@ -2174,6 +2247,8 @@ export default async function (router: Router) {
   // ── Browser & system privacy ────────────────────────────────
 
   await router.post('/privacy-scan', async () => {
+    const waiting = awaitHomeGrant();
+    if (waiting) return waiting;
     const [items, running, kept] = await Promise.all([
       Promise.resolve(scanPrivacyItems()),
       runningBrowsers(),
@@ -2423,6 +2498,8 @@ export default async function (router: Router) {
    * here is this app reaching for a snapshot the page did not actually offer.
    */
   await router.post('/delete-snapshots', async (req: Request) => {
+    const limited = refuseInSandbox('maintenance');
+    if (limited) return limited;
     const body = await readJsonBody<{ dates: unknown }>(req);
     if (body === null) return badJson();
 
@@ -2537,6 +2614,8 @@ export default async function (router: Router) {
   });
 
   await router.post('/run-maintenance', async (req: Request) => {
+    const limited = refuseInSandbox('maintenance');
+    if (limited) return limited;
     const body = await readJsonBody<{ id: unknown }>(req);
     if (body === null) return badJson();
     if (typeof body.id !== 'string' || !/^[a-z-]{1,32}$/.test(body.id))
@@ -2604,6 +2683,8 @@ export default async function (router: Router) {
   });
 
   await router.post('/schedule-save', async (req: Request) => {
+    const limited = refuseInSandbox('scheduledClean');
+    if (limited) return limited;
     const body = await readJsonBody<{
       spec?: unknown
       targetIds?: unknown
@@ -2633,6 +2714,8 @@ export default async function (router: Router) {
   });
 
   await router.post('/schedule-run', async () => {
+    const limited = refuseInSandbox('scheduledClean');
+    if (limited) return limited;
     const outcome = await runScheduledClean();
     // The widest delete in the app: every configured target, then privacy
     // items, .DS_Store droppings and the Trash. Tens of gigabytes can go, so
@@ -2676,6 +2759,8 @@ export default async function (router: Router) {
    * the command construction it protects.
    */
   await router.post('/vpn-connect', async (req: Request) => {
+    const limited = refuseInSandbox('vpn');
+    if (limited) return limited;
     const body = await readJsonBody<unknown>(req);
     if (body === null) return badJson();
     const result = await vpnConnect(body);
@@ -2684,6 +2769,8 @@ export default async function (router: Router) {
 
   /** Take the VPN down. Also authorized, since the tunnel runs as root. */
   await router.post('/vpn-disconnect', async () => {
+    const limited = refuseInSandbox('vpn');
+    if (limited) return limited;
     const result = await vpnDisconnect();
     return Response.json(result, { status: result.success ? 200 : 400 });
   });

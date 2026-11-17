@@ -157,7 +157,7 @@ describe('the platform gate replaces a screen that cannot work', () => {
     startupItems: false, privacy: false, maintenance: false, processes: false, trash: false,
   }
 
-  async function run(pathname: string, platform: string, caps: Record<string, boolean>, ok = true) {
+  async function run(pathname: string, platform: string, caps: Record<string, boolean>, ok = true, sandbox?: Record<string, unknown>) {
     const src = await Bun.file('public/platform-gate.js').text()
     const main = {
       _html: '<table>real content</table>',
@@ -177,12 +177,15 @@ describe('the platform gate replaces a screen that cannot work', () => {
       readyState: 'complete',
       addEventListener() {},
       querySelector: (s: string) => (s === '[data-stx-content]' ? main : null),
+      querySelectorAll: () => [],
+      documentElement: { setAttribute() {} },
+      body: {},
     }
     const fetchStub = async () => ({
-      json: async () => (ok ? { success: true, platform, capabilities: caps } : { success: false }),
+      json: async () => (ok ? { success: true, platform, capabilities: caps, ...(sandbox ? { sandbox } : {}) } : { success: false }),
     })
     // eslint-disable-next-line no-new-func
-    new Function('window', 'document', 'fetch', 'MutationObserver', src)(win, doc, fetchStub, win.MutationObserver)
+    new Function('window', 'document', 'fetch', 'MutationObserver', 'requestAnimationFrame', src)(win, doc, fetchStub, win.MutationObserver, () => 0)
     await new Promise(r => setTimeout(r, 60))
     return main
   }
@@ -215,6 +218,45 @@ describe('the platform gate replaces a screen that cannot work', () => {
   it('does nothing when the agent has no /platform route', async () => {
     const main = await run('/app/cleanup', 'windows', ALL_OFF, false)
     expect(main.innerHTML).toBe('<table>real content</table>')
+  })
+
+  /**
+   * The Mac App Store edition. A screen the sandbox rules out says why, in the
+   * agent's words; a screen that reads the home folder waits for the grant,
+   * because before it the agent sees only its own empty container and would
+   * report a clean Mac.
+   */
+  describe('in the App Store edition', () => {
+    const ALL_ON = Object.fromEntries(Object.keys(ALL_OFF).map(k => [k, true]))
+    const limits = { startupItems: 'No login items here.', scheduledClean: 'No background agent here.' }
+    const sandbox = (homeGranted: boolean) => ({ sandboxed: true, homeGranted, home: '/Users/someone', limits })
+
+    it('replaces a ruled-out screen with the reason the agent gives', async () => {
+      const main = await run('/app/startup', 'macos', { ...ALL_ON, startupItems: false }, true, sandbox(true))
+      expect(main.getAttribute('data-platform-gated')).toBe('startupItems')
+      expect(main.innerHTML).toContain('No login items here.')
+      expect(main.innerHTML).toContain('App Store edition')
+      expect(main.innerHTML).not.toContain('real content')
+    })
+
+    it('rules out Scheduled Clean although Quick Clean works', async () => {
+      const main = await run('/app/schedule', 'macos', ALL_ON, true, sandbox(true))
+      expect(main.getAttribute('data-platform-gated')).toBe('scheduledClean')
+      expect(main.innerHTML).toContain('No background agent here.')
+    })
+
+    it('asks for the home folder before a screen that reads it', async () => {
+      const main = await run('/app/cleanup', 'macos', ALL_ON, true, sandbox(false))
+      expect(main.getAttribute('data-platform-gated')).toBe('home')
+      expect(main.innerHTML).toContain('data-home-grant-button')
+      expect(main.innerHTML).toContain('someone')
+    })
+
+    it('leaves a home folder screen alone once it is granted', async () => {
+      const main = await run('/app/cleanup', 'macos', ALL_ON, true, sandbox(true))
+      expect(main.getAttribute('data-platform-gated')).toBeNull()
+      expect(main.innerHTML).toBe('<table>real content</table>')
+    })
   })
 })
 
@@ -281,4 +323,5 @@ describe('path safety is written for the platform it runs on', () => {
     const upper = path.join(HOME, '.SSH', 'id_rsa')
     expect(isPathSafe(upper).safe, 'Windows paths are case-insensitive').toBe(false)
   })
+
 })

@@ -26,6 +26,7 @@ import process from 'node:process'
 import { bundleLayout, dataDir as dataDirFor, runtimeSupports as probeRuntime, windowArgs } from './bundle'
 import { createProcessShutdown } from '../Support/Runtime/process-shutdown'
 import { readRememberedPort, rememberPort } from '../Support/Runtime/agent-port'
+import { homeIsGranted, realHomeFolder } from '../../packages/core/src/sandbox'
 
 /**
  * One executable, three jobs.
@@ -131,6 +132,45 @@ for (const [label, target] of [
 
 fs.mkdirSync(dataDir, { recursive: true })
 
+/**
+ * In the App Store edition, where the agent looks for the person's files.
+ *
+ * The sandbox points `HOME` at this app's container, so every target under
+ * `~/Library` would resolve inside it and come back empty. Once the person has
+ * granted their home folder, Craft holds it open and lists it in
+ * `CRAFT_SECURITY_SCOPED_PATHS`; this process and the agent inherit the
+ * access, and pointing the agent's `HOME` at the real folder is all every
+ * `os.homedir()` underneath needs. The database stays in the container: its
+ * path above was computed from the container home and is passed explicitly.
+ */
+const sandboxHome: Record<string, string> = {}
+if (craftBackend && process.env.APP_SANDBOX_CONTAINER_ID) {
+  const realHome = realHomeFolder()
+  sandboxHome.SYSTEM_CLEANER_REAL_HOME = realHome
+  // Claimed only once it is true: a bookmark that resolved in Craft but whose
+  // access did not reach this process would otherwise point the agent at a
+  // folder it cannot read and bring back the empty figures this fixes.
+  if (homeIsGranted()) {
+    if (canRead(path.join(realHome, 'Library'))) {
+      sandboxHome.HOME = realHome
+      sandboxHome.SYSTEM_CLEANER_HOME_GRANTED = '1'
+    }
+    else {
+      console.error(`[${APP_NAME}] ${realHome} is granted but not readable from the backend; scanning the container instead`)
+    }
+  }
+}
+
+function canRead(folder: string): boolean {
+  try {
+    fs.readdirSync(folder)
+    return true
+  }
+  catch {
+    return false
+  }
+}
+
 const agent = Bun.spawn([process.execPath, 'agent'], {
   stdout: 'pipe',
   stderr: 'inherit',
@@ -151,6 +191,7 @@ const agent = Bun.spawn([process.execPath, 'agent'], {
     SYSTEM_CLEANER_PORT: String(readRememberedPort(portFile)),
     DB_CONNECTION: 'sqlite',
     DB_DATABASE_PATH: databasePath,
+    ...sandboxHome,
   },
 })
 

@@ -171,7 +171,8 @@ const SOURCES: Source[] = [
   {
     path: 'safe-to-clean',
     provides: ['junk'],
-    derive: (d): Values => (d.success && typeof d.bytes === 'number' ? { junk: formatBytes(d.bytes) } : {}),
+    // `needsHome`: the App Store edition before the home folder is granted.
+    derive: (d): Values => (d.success && typeof d.bytes === 'number' ? { junk: formatBytes(d.bytes) } : d.needsHome ? { junk: 'Needs access' } : {}),
   },
   {
     path: 'updates-summary',
@@ -191,7 +192,7 @@ const SOURCES: Source[] = [
   {
     path: 'privacy-scan',
     provides: ['privacy'],
-    derive: (d): Values => (d.success && typeof d.totalBytes === 'number' ? { privacy: formatBytes(d.totalBytes) } : {}),
+    derive: (d): Values => (d.success && typeof d.totalBytes === 'number' ? { privacy: formatBytes(d.totalBytes) } : d.needsHome ? { privacy: 'Needs access' } : {}),
   },
 ]
 

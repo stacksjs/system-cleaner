@@ -41,6 +41,9 @@
         assumed they had killed something. Per-row kill still works. -->
     <button class='btn btn-sm' x-cloak x-show='false' aria-hidden='true'>Kill Selected</button>
   </div>
+  <!-- Filled with the reason only in the App Store edition, where the Kill
+       buttons below are hidden by platform-gate.ts. -->
+  <p class='sandbox-note' data-sandbox-explain='processControl' hidden></p>
   <table>
     <thead>
       <tr>
@@ -91,7 +94,7 @@
               <span class="dim" style="font-size: 10px;">Protected</span>
             </template>
             <template x-if="!p.isSystem">
-              <button class="btn btn-danger btn-sm" @click="confirmKill(p)">Kill</button>
+              <button class="btn btn-danger btn-sm" data-sandbox-limit="processControl" data-sandbox-note="none" @click="confirmKill(p)">Kill</button>
             </template>
           </td>
         </tr>

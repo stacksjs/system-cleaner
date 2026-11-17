@@ -14,6 +14,7 @@
  *   - `packages/uninstall/src/remnants.ts`  (REMNANT_PRESENTATION)
  *   - `packages/clean/src/maintenance.ts`   (MAINTENANCE_TASKS)
  *   - `resources/scripts/hub-metrics.ts`    (section-page panel rows)
+ *   - `resources/scripts/platform-gate.ts`  (the App Store home folder panel)
  *
  * `tests/runtime-icons.test.ts` fails if any of those ship a class that is
  * missing from this list.
@@ -102,4 +103,7 @@ export const RUNTIME_ICON_CLASSES: string[] = [
   'i-f7-tray-fill',
   'i-f7-xmark-square-fill',
   'i-f7-chevron-right',
+  // The App Store edition's home folder panel and Overview banner, which
+  // platform-gate.ts writes into the page at runtime.
+  'i-f7-folder-badge-person-crop',
 ]

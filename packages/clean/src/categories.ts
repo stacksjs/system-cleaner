@@ -1,5 +1,5 @@
 import type { CleanTarget } from './types'
-import { HOME, macPaths, PLATFORM } from '@system-cleaner/core'
+import { HOME, isWithinHome, macPaths, PLATFORM, SANDBOXED } from '@system-cleaner/core'
 import { WINDOWS_TARGETS } from './categories-windows'
 import { c, iconForCategory, t } from './target-factory'
 
@@ -414,7 +414,17 @@ const MACOS_TARGETS: CleanTarget[] = [
  * and the screen is replaced with a sentence saying so. A table nobody reaches
  * is better than a half-right one that deletes something.
  */
-export const CLEAN_TARGETS: CleanTarget[] = PLATFORM === 'windows' ? WINDOWS_TARGETS : MACOS_TARGETS
+const PLATFORM_TARGETS: CleanTarget[] = PLATFORM === 'windows' ? WINDOWS_TARGETS : MACOS_TARGETS
+
+/**
+ * The App Store edition reaches only the home folder the person granted, and
+ * cannot open the Trash, which macOS guards separately. A target outside that
+ * would always measure 0 B and fail to clean, so it is left out rather than
+ * listed as nothing to do.
+ */
+export const CLEAN_TARGETS: CleanTarget[] = SANDBOXED
+  ? PLATFORM_TARGETS.filter(target => target.category !== 'trash' && isWithinHome(target.path))
+  : PLATFORM_TARGETS
 
 /**
  * Get all clean targets, optionally filtered by category

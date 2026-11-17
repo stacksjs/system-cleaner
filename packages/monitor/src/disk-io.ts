@@ -1,4 +1,4 @@
-import { exec, getDiskInfo } from '@system-cleaner/core'
+import { exec, getDiskInfo, SANDBOXED } from '@system-cleaner/core'
 import type { DiskIoMetrics, DiskPartitionMetrics } from '@system-cleaner/core'
 import type { CollectorState } from './types'
 
@@ -43,6 +43,8 @@ export async function getDiskIoMetrics(state: CollectorState): Promise<DiskIoMet
  * Useful as supplementary info but NOT a replacement for actual free space.
  */
 export async function getPurgeableSpace(): Promise<{ purgeableBytes: number, finderFreeBytes: number } | null> {
+  // Finder answers over Apple Events, which the App Sandbox refuses.
+  if (SANDBOXED) return null
   const result = await exec(
     `osascript -e 'tell application "Finder" to return {free space of startup disk, capacity of startup disk}' 2>/dev/null`,
     { timeout: 5000 },

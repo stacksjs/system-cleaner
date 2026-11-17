@@ -9,6 +9,7 @@ import {
   stripAnsi,
   TtlCache,
   singleFlight,
+  SANDBOXED,
 } from '@system-cleaner/core'
 
 export interface UpdatesCheckResult {
@@ -219,6 +220,8 @@ async function isMasInstalled(): Promise<boolean> {
 }
 
 async function getBrewOutdatedJson(): Promise<string | null> {
+  // The App Sandbox cannot run Homebrew; the screen says so instead.
+  if (SANDBOXED) return null
   const cached = brewOutdatedCache.get('json')
   if (cached) return cached
   // `outdated` is not one of the commands Homebrew auto-updates before, and
@@ -234,6 +237,7 @@ async function getBrewOutdatedJson(): Promise<string | null> {
 }
 
 async function getBrewCaskList(): Promise<string> {
+  if (SANDBOXED) return ''
   const cached = brewCaskListCache.get('list')
   if (cached) return cached
   const r = await exec('brew list --cask 2>/dev/null', { timeout: 15_000 })
@@ -295,7 +299,7 @@ async function performUpdatesCheck(fullScan: boolean, tier: UpdatesTier, network
   // Off the network, Pantry's answer is whatever a check someone started
   // last found, or nothing at all.
   const recentPantry = pantryRecentCache.get('answer')
-  const pantryAnswer = !network
+  const pantryAnswer = !network || SANDBOXED
     ? Promise.resolve(pantryAnswerCache.get('answer') || { ok: false, stdout: '', stderr: '' })
     : recentPantry
       ? Promise.resolve(recentPantry)
