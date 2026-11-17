@@ -3,6 +3,46 @@
     "dialect": "sqlite",
     "tables": [
       {
+        "table": "app_preferences",
+        "columns": [
+          {
+            "name": "id",
+            "type": "bigint",
+            "isPrimaryKey": true,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "record_history",
+            "type": "boolean",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": true,
+            "defaultValue": true
+          },
+          {
+            "name": "created_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": true,
+            "defaultValue": "UTC_TIMESTAMP"
+          },
+          {
+            "name": "updated_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false
+          }
+        ],
+        "indexes": []
+      },
+      {
         "table": "clean_schedules",
         "columns": [
           {
@@ -325,7 +365,7 @@
       }
     ]
   },
-  "hash": "5739252b0e94e9a0851d0d529b5a5fcbe903fbe70419d47d14f6cb76355db103",
+  "hash": "6c214d16507d8f91d99b0b670d9a2c6f5c47be37bdec76cfc074f546be14102b",
   "dialect": "sqlite",
-  "updatedAt": "2026-08-31T03:46:53.813Z"
+  "updatedAt": "2026-11-17T03:29:23.534Z"
 }

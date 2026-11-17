@@ -103,7 +103,7 @@ import {
   installUpdate,
   updateStatus,
 } from '../app/Support/Update/self-update';
-import CleanupRun from '../app/Models/CleanupRun';
+import { historyEnabled, recordCleanupRun, setHistoryEnabled } from '../app/Support/Cleanup/history';
 import KeptCookie from '../app/Models/KeptCookie';
 
 /**
@@ -899,6 +899,23 @@ export default async function (router: Router) {
     return Response.json({ success: true, ...await cleanupHistory() });
   });
 
+  /**
+   * The Settings switches whose effect happens in here rather than in a
+   * window. Read on its own and written on its own, so Settings never has to
+   * send back a value it did not mean to change.
+   */
+  await router.post('/app-preferences', async () => {
+    return Response.json({ success: true, recordHistory: await historyEnabled() });
+  });
+
+  await router.post('/app-preferences-save', async (req: Request) => {
+    const body = await readJsonBody<{ recordHistory?: unknown }>(req);
+    if (body === null) return badJson();
+    if (typeof body.recordHistory !== 'boolean') return badRequest('recordHistory must be true or false');
+
+    return Response.json({ success: true, recordHistory: await setHistoryEnabled(body.recordHistory) });
+  });
+
   // ── Live process data ───────────────────────────────────────
 
   await router.post('/live-processes', async () => {
@@ -1282,7 +1299,7 @@ export default async function (router: Router) {
 
     if (outcome.removed.length > 0) {
       invalidateExtensionsCache();
-      await CleanupRun.create({
+      await recordCleanupRun({
         source: 'extensions',
         mode: 'permanent',
         itemCount: outcome.removed.length,
@@ -2194,7 +2211,7 @@ export default async function (router: Router) {
     invalidateSizeCaches();
 
     if (outcome.cleaned.length > 0) {
-      await CleanupRun.create({
+      await recordCleanupRun({
         source: 'privacy',
         mode: 'permanent',
         itemCount: outcome.cleaned.length,
@@ -2347,7 +2364,7 @@ export default async function (router: Router) {
     invalidateSizeCaches();
 
     if (result.removed > 0) {
-      await CleanupRun.create({
+      await recordCleanupRun({
         source: 'junk',
         mode: 'permanent',
         itemCount: result.removed,
@@ -2568,7 +2585,7 @@ export default async function (router: Router) {
     invalidateSizeCaches();
 
     if (outcome.shredded.length > 0) {
-      await CleanupRun.create({
+      await recordCleanupRun({
         source: 'shred',
         mode: 'permanent',
         itemCount: outcome.shredded.length,

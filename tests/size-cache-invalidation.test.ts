@@ -126,7 +126,7 @@ describe('size cache invalidation', () => {
    * The invalidation cannot sit behind a step that is allowed to fail.
    *
    * `/remove-extensions` and `/shred-paths` write a `CleanupRun` history row
-   * after doing the work. A rejected insert — locked database, unapplied
+   * through `recordCleanupRun` after doing the work. A rejected insert — locked database, unapplied
    * migration, full disk — would take the invalidation down with it, leaving
    * the files gone and their sizes cached.
    */
@@ -138,10 +138,10 @@ describe('size cache invalidation', () => {
       expect(route, path).toBeDefined()
 
       const invalidateAt = route!.body.indexOf('invalidateSizeCaches()')
-      const historyAt = route!.body.indexOf('CleanupRun.create(')
+      const historyAt = route!.body.indexOf('recordCleanupRun(')
       expect(invalidateAt, `${path} invalidates`).toBeGreaterThan(-1)
       expect(historyAt, `${path} records history`).toBeGreaterThan(-1)
-      expect(invalidateAt, `${path} invalidates before CleanupRun.create`).toBeLessThan(historyAt)
+      expect(invalidateAt, `${path} invalidates before recordCleanupRun`).toBeLessThan(historyAt)
     }
   })
 

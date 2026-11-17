@@ -396,6 +396,35 @@ function saveSchedule(patch: Partial<SchedulePayload>): void {
   })
 }
 
+/**
+ * The switches the agent acts on itself, read from it rather than from
+ * localStorage. Painted from the answer only: a switch that showed what was
+ * asked for, when the write failed, would say history is off while every
+ * clean was still being written down.
+ */
+interface AppPreferencesPayload {
+  success?: boolean
+  recordHistory?: boolean
+}
+
+function paintAppPreferences(d: AppPreferencesPayload | null): void {
+  if (d?.success)
+    syncSwitch('recordHistory', d.recordHistory !== false)
+}
+
+function loadAppPreferences(): void {
+  void post<AppPreferencesPayload>('/app-preferences').then(paintAppPreferences)
+}
+
+function saveAppPreferences(patch: { recordHistory: boolean }): void {
+  void post<AppPreferencesPayload>('/app-preferences-save', patch).then((d) => {
+    if (d?.success)
+      paintAppPreferences(d)
+    else
+      loadAppPreferences()
+  })
+}
+
 function loadMachine(): void {
   void post<{
     success?: boolean
@@ -492,6 +521,7 @@ function handleAction(action: string): void {
   if (action === 'resetPrefs') {
     writeJson(PREFS_KEY, {})
     paintAll()
+    saveAppPreferences({ recordHistory: true })
     return
   }
   if (action === 'openSoftwareUpdate') {
@@ -590,6 +620,9 @@ function wire(): void {
       else if (id === 'scheduleEmptyTrash') {
         saveSchedule({ emptyTrash: next })
       }
+      else if (id === 'recordHistory') {
+        saveAppPreferences({ recordHistory: next })
+      }
       else if (id in PREF_DEFAULTS) {
         writePref(id, next)
         syncSwitch(id, next)
@@ -650,6 +683,7 @@ function wire(): void {
   loadUpdateCount()
   loadCleaningCounts()
   loadSchedule()
+  loadAppPreferences()
   loadMachine()
   loadVersion()
 

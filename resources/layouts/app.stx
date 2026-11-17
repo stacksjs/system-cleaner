@@ -1349,6 +1349,7 @@ useEventListener('mousedown', moveWindowFrom, { target: document })
 <script src="/app-menu.js"></script>
 <script src="/app-toolbar.js"></script>
 <script src="/auto-update.js"></script>
+<script src="/schedule-notice.js"></script>
 <script src="/hub-metrics.js"></script>
 <script src="/prefetch.js"></script>
 <!-- Wires the Settings panel above: Cmd+, from the menubar or the page, the

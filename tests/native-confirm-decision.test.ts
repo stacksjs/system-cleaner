@@ -39,8 +39,8 @@ const QUESTION = {
  * resolve with or an Error to reject with. `sheets` counts how many times the
  * user was actually asked something.
  */
-async function load(answers: unknown[]): Promise<{
-  confirm: (o: typeof QUESTION) => Promise<boolean>
+async function load(answers: unknown[], prefs: Record<string, boolean> = {}): Promise<{
+  confirm: (o: typeof QUESTION & { recoverable?: boolean }) => Promise<boolean>
   sheets: () => number
   remaining: () => number
 }> {
@@ -69,9 +69,11 @@ async function load(answers: unknown[]): Promise<{
   win.globalThis = win
   win.document = { addEventListener() {}, querySelectorAll: () => [], readyState: 'complete' }
   win.navigator = { userAgent: 'test' }
+  // The Settings store, as `resources/lib/preferences.ts` reads it.
+  win.localStorage = { getItem: (key: string) => key === 'systemcleaner-preferences' ? JSON.stringify(prefs) : null }
 
-  const run = new Function('window', 'document', 'navigator', 'globalThis', `${source}\n;return window.nativeConfirm`)
-  const confirm = run(win, win.document, win.navigator, win)
+  const run = new Function('window', 'document', 'navigator', 'globalThis', 'localStorage', `${source}\n;return window.nativeConfirm`)
+  const confirm = run(win, win.document, win.navigator, win, win.localStorage)
 
   return { confirm, sheets: () => asked, remaining: () => queue.length }
 }
@@ -122,5 +124,32 @@ describe('nativeConfirm', () => {
     const { confirm, sheets } = await load(['yes please'])
     expect(await confirm(QUESTION)).toBe(false)
     expect(sheets(), 'the unreadable answer, then one fall-through').toBe(2)
+  })
+
+  /**
+   * "Confirm before deleting" in Settings. Off, a move to the Trash goes ahead
+   * without a sheet; anything that cannot be put back still asks.
+   */
+  describe('with Confirm before deleting off', () => {
+    const off = { confirmDeletes: false }
+    const TRASH = { ...QUESTION, title: 'Move 3 items to the Trash?', confirmLabel: 'Move to Trash', destructive: false, recoverable: true }
+
+    it('moves to the Trash without asking', async () => {
+      const { confirm, sheets } = await load([], off)
+      expect(await confirm(TRASH)).toBe(true)
+      expect(sheets(), 'no sheet at all').toBe(0)
+    })
+
+    it('still asks before a permanent delete', async () => {
+      const { confirm, sheets } = await load([{ ok: false }], off)
+      expect(await confirm(QUESTION)).toBe(false)
+      expect(sheets()).toBe(1)
+    })
+
+    it('asks before a move to the Trash again once it is back on', async () => {
+      const { confirm, sheets } = await load([{ ok: false }], { confirmDeletes: true })
+      expect(await confirm(TRASH)).toBe(false)
+      expect(sheets()).toBe(1)
+    })
   })
 })

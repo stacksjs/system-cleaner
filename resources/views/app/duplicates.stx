@@ -151,6 +151,7 @@
       message: 'Every group keeps one copy. ' + size + (permanent ? ' is freed immediately and cannot be recovered.' : ' is freed, and you can put them back from Finder.'),
       confirmLabel: permanent ? 'Delete' : 'Move to Trash',
       destructive: permanent,
+      recoverable: !permanent,
     })) return;
 
     var self = this;

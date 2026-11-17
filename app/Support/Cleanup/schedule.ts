@@ -17,8 +17,8 @@ import {
   scheduleStatus,
 } from '@system-cleaner/clean'
 import CleanSchedule from '../../Models/CleanSchedule'
-import CleanupRun from '../../Models/CleanupRun'
 import KeptCookie from '../../Models/KeptCookie'
+import { recordCleanupRun } from './history'
 
 /**
  * The automatic clean, joined up: the row that stores intent, the launchd
@@ -289,7 +289,7 @@ export async function runScheduledClean(): Promise<ScheduledRunOutcome> {
     await CleanSchedule.update(row.id, { lastRunAt: ranAt, lastFreedBytes: freedBytes, lastStatus: status })
 
   if (freedBytes > 0 || cleaned > 0) {
-    await CleanupRun.create({
+    await recordCleanupRun({
       source: 'schedule',
       mode: 'permanent',
       itemCount: cleaned,

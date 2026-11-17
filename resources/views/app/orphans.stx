@@ -247,6 +247,7 @@ async function doCleanSelected() {
         + 'They go to the Trash, so you can put them back until you empty it.',
       confirmLabel: 'Move to Trash',
       destructive: true,
+      recoverable: true,
     });
   }
   catch (e) {

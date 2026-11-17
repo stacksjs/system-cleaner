@@ -157,6 +157,7 @@
     this.runningNow = true;
     this.post('/api/schedule-run').then(function(r) {
       self.runningNow = false;
+      if (window.rememberScheduledRun) window.rememberScheduledRun(r.ranAt);
       self.toast('Cleaned ' + r.targets + ' item(s) - freed ' + r.freedFormatted, r.errors && r.errors.length ? 'info' : 'success');
       (r.errors || []).slice(0, 2).forEach(function(message) { self.toast(message, 'error'); });
       self.post('/api/schedule').then(function(payload) { if (payload.success) self.apply(payload); });

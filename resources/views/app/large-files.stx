@@ -170,6 +170,7 @@
         : size + ' is freed, and you can put them back from Finder.',
       confirmLabel: permanent ? 'Delete' : 'Move to Trash',
       destructive: permanent,
+      recoverable: !permanent,
     })) return;
 
     var self = this;

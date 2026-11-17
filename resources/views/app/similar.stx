@@ -136,6 +136,7 @@
       message: 'These are copies this scan judged similar to one it is keeping. They go to the Trash, so you can look before emptying it.',
       confirmLabel: 'Move to Trash',
       destructive: true,
+      recoverable: true,
     })) return;
 
     var self = this;

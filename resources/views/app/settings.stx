@@ -91,7 +91,7 @@
     <div class='set-card-row'>
       <span class='set-card-row-text'>
         <span class='set-card-label'>When scheduled cleaning runs</span>
-        <span class='set-card-hint'>What it reclaimed, after the fact.</span>
+        <span class='set-card-hint'>What it reclaimed, after the fact. If SystemCleaner was closed, it tells you when it next opens.</span>
       </span>
       <button class='set-switch' type='button' role='switch' aria-checked='false'
               aria-label='Notify when scheduled cleaning runs' data-switch='notifyOnSchedule'>
@@ -120,7 +120,7 @@
     <div class='set-card-row'>
       <span class='set-card-row-text'>
         <span class='set-card-label'>Confirm before deleting</span>
-        <span class='set-card-hint'>Ask once more before anything leaves the disk.</span>
+        <span class='set-card-hint'>Off, moves to the Trash happen at once. Anything that cannot be put back always asks.</span>
       </span>
       <button class='set-switch' type='button' role='switch' aria-checked='false'
               aria-label='Confirm before deleting' data-switch='confirmDeletes'>
@@ -129,11 +129,11 @@
     </div>
     <div class='set-card-row'>
       <span class='set-card-row-text'>
-        <span class='set-card-label'>Reveal what a clean removed</span>
-        <span class='set-card-hint'>Writes each run to the cleanup history the Quick Clean screen reads.</span>
+        <span class='set-card-label'>Keep a cleanup history</span>
+        <span class='set-card-hint'>What each clean freed, for Recent cleanups and Reclaimed all time. Off, new cleans are not written down.</span>
       </span>
       <button class='set-switch' type='button' role='switch' aria-checked='false'
-              aria-label='Reveal what a clean removed' data-switch='recordHistory'>
+              aria-label='Keep a cleanup history' data-switch='recordHistory'>
         <span class='set-knob' aria-hidden='true'></span>
       </button>
     </div>

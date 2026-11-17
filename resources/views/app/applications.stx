@@ -217,6 +217,7 @@
       message: 'These belong to software that is no longer installed. ' + size + (permanent ? ' is freed immediately and cannot be recovered.' : ' is freed, and you can put them back from Finder.'),
       confirmLabel: permanent ? 'Delete' : 'Move to Trash',
       destructive: permanent,
+      recoverable: !permanent,
     })) return;
 
     var self = this;
@@ -341,6 +342,7 @@
         : size + ' is freed, and everything goes to the Trash where you can put it back.',
       confirmLabel: permanent ? 'Delete' : 'Move to Trash',
       destructive: true,
+      recoverable: !permanent,
     })) return;
 
     var self = this;

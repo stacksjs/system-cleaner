@@ -20,6 +20,9 @@
  */
 import { clipboard, notifications, showMessageBox, showOpenDialog } from '@stacksjs/desktop/browser'
 
+import { needsConfirmation, shouldNotifyAway } from '../lib/interruptions'
+import { readPref } from '../lib/preferences'
+
 const APP_NAME = 'SystemCleaner'
 
 /**
@@ -81,6 +84,12 @@ export interface ConfirmOptions {
   confirmLabel?: string
   /** Tints the action red and makes Return mean Cancel. */
   destructive?: boolean
+  /**
+   * The action can be undone: it moves things to the Trash. Only these skip
+   * the sheet when "Confirm before deleting" is off; everything else asks
+   * regardless. See `needsConfirmation`.
+   */
+  recoverable?: boolean
 }
 
 /**
@@ -91,6 +100,9 @@ export interface ConfirmOptions {
  * which one does the thing.
  */
 async function nativeConfirm(options: ConfirmOptions): Promise<boolean> {
+  if (!needsConfirmation(options, readPref('confirmDeletes')))
+    return true
+
   const buttons = [options.confirmLabel || 'OK', 'Cancel']
   const CANCEL = 1
 
@@ -305,13 +317,12 @@ export interface AwayNotice {
  * A scan takes forty-five seconds, which is long enough to go and do something
  * else and miss the result — exactly what Notification Center is for. It is
  * also exactly the wrong thing when the window is in front: a banner announcing
- * something the user is already looking at is noise. Both conditions are
- * checked here rather than at the four call sites.
+ * something the user is already looking at is noise. Both conditions, and the
+ * "When a long scan finishes" switch in Settings, are checked here rather than
+ * at the call sites.
  */
 async function notifyIfAway(options: AwayNotice): Promise<void> {
-  if (options.elapsedMs < (options.minMs ?? 10_000))
-    return
-  if (document.hasFocus())
+  if (!shouldNotifyAway({ enabled: readPref('notifyOnFinish'), elapsedMs: options.elapsedMs, minMs: options.minMs, focused: document.hasFocus() }))
     return
 
   try {

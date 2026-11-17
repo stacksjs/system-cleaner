@@ -4,6 +4,7 @@ import { formatBytes, getDirSize, isPathSafe, classifyByGit, refusesDeletion } f
 import { moveManyToTrash } from '@system-cleaner/disk'
 import CleanupRun from '../../Models/CleanupRun'
 import ProtectedPath from '../../Models/ProtectedPath'
+import { recordCleanupRun } from './history'
 
 /**
  * Upper bound on one bulk request. Well above any plausible manual selection,
@@ -205,7 +206,7 @@ export async function bulkDelete(
   // path was protected is not a cleanup, and logging it would make the
   // history unreadable.
   if (succeeded.length > 0 || failed.length > 0) {
-    await CleanupRun.create({
+    await recordCleanupRun({
       source,
       mode,
       itemCount: succeeded.length,

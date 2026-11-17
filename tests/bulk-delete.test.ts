@@ -26,6 +26,7 @@ const MIGRATIONS = path.join(import.meta.dir, '../database/migrations')
 let root: string
 let dbPath: string
 let bulk: typeof import('../app/Support/Cleanup/bulk-delete')
+let history: typeof import('../app/Support/Cleanup/history')
 
 function write(relative: string, megabytes: number): string {
   const full = path.join(root, relative)
@@ -49,6 +50,7 @@ beforeAll(async () => {
   process.env.DB_DATABASE_PATH = dbPath
 
   bulk = await import('../app/Support/Cleanup/bulk-delete')
+  history = await import('../app/Support/Cleanup/history')
 })
 
 afterAll(() => {
@@ -192,3 +194,54 @@ describe('cleanupHistory', () => {
     expect(after.runCount).toBe(before.runCount)
   })
 })
+
+/**
+ * "Keep a cleanup history" in Settings. The switch lives in the database, not
+ * in the window's localStorage, because the agent writes the history and the
+ * scheduled clean writes it with no window open at all.
+ */
+describe('Keep a cleanup history', () => {
+  it('is on before anyone has touched it', async () => {
+    expect(await history.historyEnabled()).toBe(true)
+  })
+
+  it('stops writing cleans down once it is off, and the clean still happens', async () => {
+    expect(await history.setHistoryEnabled(false)).toBe(false)
+    try {
+      const before = await bulk.cleanupHistory()
+      const target = write('history-off/item.bin', 3)
+
+      const result = await bulk.bulkDelete([target], 'permanent', 'large-files')
+
+      expect(result.succeeded).toEqual([target])
+      expect(fs.existsSync(target)).toBe(false)
+      const after = await bulk.cleanupHistory()
+      expect(after.runCount).toBe(before.runCount)
+      expect(after.lifetimeFreedBytes).toBe(before.lifetimeFreedBytes)
+    }
+    finally {
+      await history.setHistoryEnabled(true)
+    }
+  })
+
+  it('writes them again once it is back on', async () => {
+    expect(await history.setHistoryEnabled(true)).toBe(true)
+    const before = await bulk.cleanupHistory()
+    await bulk.bulkDelete([write('history-on/item.bin', 1)], 'permanent', 'large-files')
+    expect((await bulk.cleanupHistory()).runCount).toBe(before.runCount + 1)
+  })
+
+  it('is the only way a clean reaches the history', async () => {
+    // A new endpoint that copied an old `CleanupRun.create` would write
+    // history with the switch off, and nothing else would notice.
+    const offenders: string[] = []
+    for (const file of ['routes/api.ts', ...new Bun.Glob('app/**/*.ts').scanSync('.')]) {
+      if (file.replaceAll('\\', '/').endsWith('app/Support/Cleanup/history.ts'))
+        continue
+      if ((await Bun.file(file).text()).includes('CleanupRun.create('))
+        offenders.push(file)
+    }
+    expect(offenders).toEqual([])
+  })
+})
+

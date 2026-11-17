@@ -5,7 +5,12 @@
  * Settings writes them and the rest of the app reads them, so the key and the
  * defaults live here, once. Both sides run in the same website data store (the
  * main window, the menu bar popover and Settings all share it), which is why
- * localStorage is enough and the agent never needs to know.
+ * localStorage is enough for every switch whose effect happens in a window.
+ *
+ * "Keep a cleanup history" is not here: the history is written by the agent,
+ * the scheduled clean included, and neither can read localStorage. That one
+ * lives in the database (`app/Models/AppPreference.ts`) and Settings reads and
+ * writes it over `/api/app-preferences`.
  */
 
 export const PREFS_KEY = 'systemcleaner-preferences'
@@ -17,7 +22,6 @@ export const PREFS_KEY = 'systemcleaner-preferences'
 export const PREF_DEFAULTS: Record<string, boolean> = {
   autoCheckUpdates: true,
   confirmDeletes: true,
-  recordHistory: true,
   notifyOnFinish: true,
   notifyOnSchedule: true,
   notifyOnUpdate: true,

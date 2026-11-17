@@ -93,6 +93,7 @@ storage/framework/discovered-packages.json
 /public/hub-metrics.js
 /public/prefetch.js
 /public/scan-updates.js
+/public/schedule-notice.js
 /public/native-dialog.js
 /public/platform-gate.js
 /public/settings-panel.js
