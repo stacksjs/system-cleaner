@@ -7,6 +7,8 @@
  * APP_STORE_REVIEW_CONTACT='{"firstName":…,"lastName":…,"phone":…,"email":…}'
  * when submitting.
  */
+import { readFileSync } from 'node:fs'
+
 const description = `SystemCleaner shows you what is filling your Mac before you delete anything.
 
 Give it your home folder once, and it sizes the caches, logs and leftovers that are safe to clear, maps where the rest of your disk went, and lists what takes up room you forgot about. Nothing is removed until you have seen it and said yes, and removed files go to the Trash, so you can change your mind.
@@ -44,11 +46,9 @@ export default {
   usesIdfa: false,
   usesNonExemptEncryption: false,
   ageRating: {},
-  reviewNotes: [
-    'SystemCleaner runs entirely on the Mac. It needs no account, no sign-in and no network connection to work.',
-    'On first launch it asks for the home folder through the standard open panel; that grant is what lets it size caches and map storage. Choosing a smaller folder also works, and the app then scans only that folder.',
-    'Nothing is deleted without a confirmation, and removed items go to the Trash.',
-  ].join('\n\n'),
+  // What App Review reads: how to test, why the home folder, and what this
+  // edition leaves out. Kept beside the launcher it describes.
+  reviewNotes: readFileSync(new URL('./app/Desktop/AppReviewNotes.txt', import.meta.url), 'utf8').trim(),
   screenshots: {
     APP_DESKTOP: [
       'resources/app-store/screenshots/1-overview.jpg',
