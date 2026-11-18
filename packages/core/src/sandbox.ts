@@ -37,7 +37,12 @@ export function realHomeFolder(env: NodeJS.ProcessEnv = process.env): string {
   const home = env.HOME || os.homedir()
   const id = env.APP_SANDBOX_CONTAINER_ID
   if (id) {
-    const suffix = path.join('/Library/Containers', id, 'Data')
+    // `path.posix`, not `path.join`: this is a macOS container path being read
+    // as text, and it is spelled with forward slashes wherever this code runs.
+    // On macOS the two are the same function; on the Windows leg of CI
+    // `path.join` builds `\Library\Containers\...`, which can never match, so
+    // the container path came back as the home folder.
+    const suffix = path.posix.join('/Library/Containers', id, 'Data')
     if (home.endsWith(suffix))
       return home.slice(0, -suffix.length) || '/'
   }
