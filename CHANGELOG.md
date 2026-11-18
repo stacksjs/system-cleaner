@@ -1,5 +1,41 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v1.0.0...v1.0.1)
+
+## ✨ Features
+
+- make the App Store edition read the home folder it is given ([8820f19](https://github.com/stacksjs/system-cleaner/commit/8820f19)) _(by Chris)_
+- describe the Mac App Store listing in app-store.config.ts ([2e57575](https://github.com/stacksjs/system-cleaner/commit/2e57575)) _(by Chris)_
+
+## 🐛 Bug Fixes
+
+- **update**: collect abandoned downloads, and quit before relaunching ([54ab67f](https://github.com/stacksjs/system-cleaner/commit/54ab67f)) _(by glennmichael123)_
+- give the home folder banner the Overview's own look ([316721d](https://github.com/stacksjs/system-cleaner/commit/316721d)) _(by Chris)_
+- hide Quick Clean's Empty Trash button in the App Store edition ([fe09a34](https://github.com/stacksjs/system-cleaner/commit/fe09a34)) _(by Chris)_
+- keep section pages still while their panels fill ([520f748](https://github.com/stacksjs/system-cleaner/commit/520f748)) _(by Chris)_
+- get CI green again ([be0666b](https://github.com/stacksjs/system-cleaner/commit/be0666b)) _(by Chris)_
+- make the App Store edition's provisioning profile readable ([3b71d26](https://github.com/stacksjs/system-cleaner/commit/3b71d26)) _(by Chris)_
+
+## 📝 Documentation
+
+- publish the privacy policy in the repository ([54fffd7](https://github.com/stacksjs/system-cleaner/commit/54fffd7)) _(by Chris)_
+
+## 💚 Continuous Integration
+
+- build the Mac App Store edition with this repo's own script ([d525911](https://github.com/stacksjs/system-cleaner/commit/d525911)) _(by Chris)_
+
+## 🔧 Chores
+
+- **deps**: stacks 0.75.628 ([895870f](https://github.com/stacksjs/system-cleaner/commit/895870f)) _(by Chris Breuer)_
+- keep the Mac App Store listing out of China mainland ([9869d5d](https://github.com/stacksjs/system-cleaner/commit/9869d5d)) _(by Chris)_
+- send App Review the edition's own review notes ([3a352a5](https://github.com/stacksjs/system-cleaner/commit/3a352a5)) _(by Chris)_
+
+## Contributors
+
+- _Chris_
+- _Chris Breuer_
+- _glennmichael123_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v0.3.25...v1.0.0)
 
 ## ✨ Features
