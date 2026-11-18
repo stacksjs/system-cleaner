@@ -2252,7 +2252,7 @@ export default async function (router: Router) {
     const [items, running, kept] = await Promise.all([
       Promise.resolve(scanPrivacyItems()),
       runningBrowsers(),
-      KeptCookie.all() as Promise<Array<{ id: number, domain: string }>>,
+      KeptCookie.all() as Array<{ id: number, domain: string }>,
     ]);
 
     const keepDomains = kept.map(row => row.domain);

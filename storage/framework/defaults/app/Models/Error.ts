@@ -15,6 +15,8 @@ export default defineModel({
   ],
 
   traits: {
+    // So a fresh seed fills its dashboard page (stacksjs/stacks#3000).
+    useSeeder: { count: 10 },
     useTimestamps: true,
   },
 
@@ -32,6 +34,7 @@ export default defineModel({
 
     message: {
       fillable: true,
+      type: 'text',
       validation: {
         rule: schema.string().required(),
         message: {
@@ -43,6 +46,7 @@ export default defineModel({
 
     stack: {
       fillable: true,
+      type: 'text',
       validation: {
         rule: schema.string(),
         message: {
@@ -67,7 +71,7 @@ export default defineModel({
       validation: {
         rule: schema.number(),
         message: {
-          string: 'status must be a number',
+          number: 'status must be a number',
         },
       },
       factory: faker => faker.number.int({ min: 400, max: 500 }),
@@ -86,6 +90,7 @@ export default defineModel({
 
     additional_info: {
       fillable: true,
+      type: 'text',
       validation: {
         rule: schema.string(),
         message: {
@@ -94,5 +99,9 @@ export default defineModel({
       },
       factory: faker => faker.lorem.paragraph(),
     },
+  },
+
+  dashboard: {
+    columns: ['type', 'message', 'status', 'createdAt'],
   },
 } as const)
