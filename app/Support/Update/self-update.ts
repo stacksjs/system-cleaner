@@ -12,6 +12,7 @@
  */
 
 import type { AutoUpdater, UpdateManifest, UpdateProgress } from '@stacksjs/desktop'
+import { spawn } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import process from 'node:process'
@@ -19,8 +20,18 @@ import {
   bundlePathForExecutable,
   canReplaceBundle,
   createSelfUpdater,
+  quitLauncher,
   readBundleIdentity,
 } from '@stacksjs/desktop'
+import {
+  downloadPathFor,
+  existingDownload,
+  legacyDownloadDir,
+  relaunchCommand,
+  removeEmptyDirs,
+  sweepDownloads,
+  updateDownloadDir,
+} from './downloads'
 
 /** Where releases are published. The manifest is an asset on the newest one. */
 const REPOSITORY = 'stacksjs/system-cleaner'
@@ -93,11 +104,24 @@ function readInstalledVersion(bundlePath: string | null): string {
 }
 
 const bundlePath = bundlePathForExecutable()
-const currentVersion = readInstalledVersion(bundlePath)
+
+/**
+ * The version this copy is running, read fresh every time it is asked for.
+ *
+ * Read once at import, this was wrong in the one case that matters. The agent
+ * can outlive the bundle it was started from — a copy dragged over
+ * `/Applications`, an update installed by a second copy — and a version cached
+ * at boot then offers an update to the version already installed, downloads it,
+ * and swaps it in over itself. It costs one read of a small file to not be
+ * confidently wrong about which app this is.
+ */
+function installedVersion(): string {
+  return readInstalledVersion(bundlePath)
+}
 
 let status: UpdateStatus = {
   stage: 'idle',
-  currentVersion,
+  currentVersion: installedVersion(),
   latestVersion: null,
   releaseNotes: null,
   percent: 0,
@@ -133,27 +157,54 @@ function unsupportedReason(): string | null {
 
 let updater: AutoUpdater | null = null
 let updaterPromise: Promise<AutoUpdater> | null = null
+/** The version the cached updater was built to compare against. */
+let updaterVersion: string | null = null
 
 /**
- * The updater, built once.
+ * The updater, built once per installed version.
  *
  * Construction reads the running bundle's code signature to decide which
  * signing team updates must come from, so it is async and worth caching. The
  * promise is cached rather than the result so two screens asking at the same
  * moment share one construction instead of racing.
+ *
+ * It is thrown away when the bundle underneath turns out to be a different
+ * version than the one it was built for, because `currentVersion` is what
+ * every comparison in it is made against and there is no public way to correct
+ * it in place. Never mid-transfer: a rebuild there would abandon a download
+ * the user is watching.
  */
 function getUpdater(): Promise<AutoUpdater> {
+  const version = installedVersion()
+  const settled = status.stage !== 'downloading' && status.stage !== 'installing'
+  if (updaterVersion !== null && updaterVersion !== version && settled) {
+    updater = null
+    updaterPromise = null
+  }
+
   if (updater) return Promise.resolve(updater)
   if (updaterPromise) return updaterPromise
 
+  updaterVersion = version
   updaterPromise = createSelfUpdater({
     repository: REPOSITORY,
-    currentVersion,
+    currentVersion: version,
     appPath: bundlePath ?? undefined,
     // The user asks for the download. A background fetch of 40 MB on someone
     // else's tethered connection is not a decision this app gets to make.
     autoDownload: false,
     autoInstall: false,
+    // Somewhere this app can find again, so a download survives the app
+    // quitting and an abandoned one can be collected. See `./downloads`.
+    downloadDir: updateDownloadDir(),
+    // Quit, then reopen — the opposite order to Craft's default, and the
+    // difference between keeping the loopback port and silently emptying
+    // everything the page has stored. See `relaunchCommand`.
+    relaunch: (appPath: string) => {
+      const [command, ...args] = relaunchCommand(appPath, process.ppid)
+      spawn(command, args, { detached: true, stdio: 'ignore' }).unref()
+      quitLauncher()
+    },
   }).then((instance) => {
     instance.on('download-progress', (progress: UpdateProgress) => {
       if (progress.phase === 'downloading') {
@@ -175,8 +226,13 @@ function getUpdater(): Promise<AutoUpdater> {
     // The updater emits `error` as an EventEmitter event, which crashes the
     // process when nothing is listening. This listener is the difference
     // between a failed update and a dead agent.
+    //
+    // Also written to stderr, which the launcher inherits. An update that
+    // fails leaves the user looking at one sentence in a window they are about
+    // to close; the reason a bundle swap was refused has to outlive that.
     instance.on('error', (error: unknown) => {
       status = { ...status, stage: 'error', error: describe(error) }
+      console.error('[SystemCleaner] self-update:', describe(error))
     })
 
     updater = instance
@@ -191,6 +247,75 @@ function getUpdater(): Promise<AutoUpdater> {
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * Tell the updater about a download it did not make itself.
+ *
+ * `AutoUpdater` remembers a verified download in instance state, so one that
+ * outlived the process that fetched it is invisible to the next: the disk
+ * image is there, hashed and correct, and "Restart to Install" has quietly
+ * become "Download Update" again. Thirty-five megabytes, fetched twice, for
+ * nothing — and the first copy left behind, because only the process that knew
+ * about it could have collected it.
+ *
+ * There is no public way to hand one over, so the two fields are written
+ * directly. That is safe in the way that matters: `installUpdate` recomputes
+ * the SHA-256 against the manifest before it extracts anything, so a path
+ * handed over here cannot cause something unvouched-for to be installed, only
+ * spare a second download of something that is. The feature check keeps a
+ * Craft that renames the fields to a re-download rather than an exception.
+ */
+function adoptDownload(instance: AutoUpdater, file: string): boolean {
+  const fields = instance as unknown as {
+    downloadPath?: string | null
+    verifiedDownloadPath?: string | null
+  }
+  if (!('downloadPath' in fields) || !('verifiedDownloadPath' in fields))
+    return false
+
+  fields.downloadPath = file
+  fields.verifiedDownloadPath = file
+  return true
+}
+
+/**
+ * Take stock of the download directory against what the manifest now offers.
+ *
+ * Both halves of this are the same question asked once: which file on disk, if
+ * any, is the update this app is being offered? Everything else in there is
+ * residue — a failed install's disk image, or a version that has since been
+ * superseded — and this is the only moment the app is in a position to know
+ * that, because it is the only moment it knows what the current answer is.
+ *
+ * Returns true when the update is already downloaded and verified.
+ */
+async function reconcileDownloads(
+  instance: AutoUpdater,
+  info: UpdateManifest | null,
+): Promise<boolean> {
+  const dir = updateDownloadDir()
+  const offered = info?.platforms?.darwin ?? null
+  const keep = offered ? downloadPathFor(dir, offered.url) : null
+
+  const removed = sweepDownloads(dir, keep)
+
+  // Collect whatever the version before this one abandoned in Craft's default
+  // location, which nothing else will ever look at again.
+  if (bundlePath) {
+    const legacy = legacyDownloadDir(bundlePath)
+    removed.push(...sweepDownloads(legacy, null))
+    removeEmptyDirs(legacy, path.dirname(legacy))
+  }
+
+  if (removed.length > 0)
+    console.error(`[SystemCleaner] self-update: discarded ${removed.length} stale download(s)`)
+
+  if (!offered)
+    return false
+
+  const verified = await existingDownload(dir, offered.url, offered.sha256)
+  return verified ? adoptDownload(instance, verified) : false
 }
 
 /**
@@ -214,6 +339,7 @@ export async function updateStatus(): Promise<UpdateStatus> {
     return { ...status, stage: 'unsupported', unsupportedReason: reason }
 
   await ensureTeamId()
+  status = { ...status, currentVersion: installedVersion() }
   return status
 }
 
@@ -246,11 +372,18 @@ export async function checkForUpdate(): Promise<UpdateStatus> {
       return status
     }
 
+    // A check is the only point at which this app knows which download is the
+    // one being offered, so it is where an abandoned one gets collected and an
+    // already-verified one gets picked back up.
+    const ready = await reconcileDownloads(instance, info)
+
     status = {
       ...status,
-      stage: info ? 'available' : 'up-to-date',
+      stage: info ? (ready ? 'ready' : 'available') : 'up-to-date',
+      currentVersion: installedVersion(),
       latestVersion: info?.version ?? null,
       releaseNotes: info?.releaseNotes ?? null,
+      percent: ready ? 100 : 0,
       error: null,
       checkedAt: new Date().toISOString(),
     }
