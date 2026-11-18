@@ -26,6 +26,11 @@
  * app's own agent, or `bun app/Desktop/server.ts` over a fresh `dist/`.
  * Needs a Chromium-family browser (set BROWSE_BROWSER if none is found).
  */
+import * as fs from 'node:fs'
+import * as os from 'node:os'
+// `nodePath`, because `path` below is this file's own helper for asserting on
+// `location.pathname`, and a module-scope `const` quietly wins over an import.
+import * as nodePath from 'node:path'
 import process from 'node:process'
 import { SECTIONS } from '../resources/lib/sections'
 
@@ -34,6 +39,18 @@ const BASE = (process.env.BASE_URL || 'http://127.0.0.1:50297').replace(/\/$/, '
 const DRIVER = 'storage/framework/defaults/ai/skills/stacks-browse/scripts/browse.ts'
 // A beat for the view transition before the next click; checks poll anyway.
 const SETTLE = 450
+
+/**
+ * How long the walk gets before it is treated as wedged.
+ *
+ * It needs a bound of its own rather than the workflow's. A page whose main
+ * thread blocks takes the driver down with it — every CDP command waits on a
+ * reply that is never coming, and nothing in the driver times out — so the
+ * suite stops dead and CI kills the job twenty minutes later with no output,
+ * no step, and nothing to go on. A budget here turns that into a failure that
+ * names where it stopped, while there is still a browser alive to ask.
+ */
+const BUDGET_MS = Number(process.env.E2E_TIMEOUT_MS || 8 * 60_000)
 
 type Step = Record<string, unknown>
 const steps: Step[] = []
@@ -194,14 +211,87 @@ click('[data-rail-item="storage"]')
 wait(1500)
 check('Quick wins draws its rows before the junk total lands', `document.querySelectorAll('[data-panel="quick-wins"] .hub-row').length === 3`)
 
+/**
+ * The page the browser is sitting on, asked of the browser rather than the
+ * driver.
+ *
+ * When the driver is wedged it cannot report anything, but Chrome's own HTTP
+ * endpoint is served from a different process and still answers. The driver
+ * names the profile directory after its own pid and Chrome writes the port it
+ * picked into it, so the walk's last page is recoverable from the outside.
+ *
+ * Best-effort by design: this reaches into how the driver happens to name a
+ * temporary directory, so when that changes the diagnosis gets thinner rather
+ * than throwing on the way out.
+ */
+async function parkedAt(pid: number): Promise<string | null> {
+  try {
+    const tmp = os.tmpdir()
+    for (const entry of fs.readdirSync(tmp).filter(name => name.startsWith(`stacks-browse-${pid}-`))) {
+      const portFile = nodePath.join(tmp, entry, 'DevToolsActivePort')
+      if (!fs.existsSync(portFile))
+        continue
+      const port = fs.readFileSync(portFile, 'utf8').split('\n')[0].trim()
+      const response = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(5000) })
+      const targets = await response.json() as { type: string, url: string }[]
+      const page = targets.find(target => target.type === 'page')
+      if (page)
+        return page.url
+    }
+  }
+  catch (error) {
+    // The browser is gone, or names its profile differently now.
+    if (process.env.E2E_DEBUG)
+      console.error('[e2e] parkedAt:', error)
+  }
+  return null
+}
+
 // ── Run ─────────────────────────────────────────────────────────────
 console.log(`[e2e] ${steps.filter(step => step.action === 'evaluate').length} checks against ${BASE}`)
-const run = Bun.spawnSync(['bun', DRIVER, 'scenario', `${BASE}/app`, '--viewport', '1400x900', ...steps.flatMap(step => ['--step', JSON.stringify(step)])], {
+const child = Bun.spawn(['bun', DRIVER, 'scenario', `${BASE}/app`, '--viewport', '1400x900', ...steps.flatMap(step => ['--step', JSON.stringify(step)])], {
   stdout: 'pipe',
   stderr: 'pipe',
   env: process.env,
 })
-const output = run.stdout.toString()
+
+let parked: string | null = null
+let timedOut = false
+const budget = setTimeout(async () => {
+  timedOut = true
+  // Asked before the browser is taken down with the driver.
+  parked = await parkedAt(child.pid)
+  child.kill('SIGTERM')
+  // SIGTERM lets the driver close its browser; SIGKILL is for when it cannot.
+  setTimeout(() => {
+    try {
+      child.kill('SIGKILL')
+    }
+    catch {
+      // Already gone, which is the outcome this was for.
+    }
+  }, 3000).unref?.()
+}, BUDGET_MS)
+
+const run = {
+  stdout: await new Response(child.stdout).text(),
+  stderr: await new Response(child.stderr).text(),
+}
+await child.exited
+clearTimeout(budget)
+
+if (timedOut) {
+  console.error(`[e2e] the walk stopped responding, so it was stopped after ${Math.round(BUDGET_MS / 1000)}s (driver pid ${child.pid}).`)
+  console.error(`[e2e] last page: ${parked ?? 'unknown — the browser did not answer either'}`)
+  console.error('[e2e] a page whose main thread is blocked takes the driver with it: every CDP')
+  console.error('[e2e] command waits for a reply that never comes. Reproduce the walk by hand from')
+  console.error('[e2e] the page above, and raise E2E_TIMEOUT_MS if the walk is merely slow.')
+  if (run.stderr.trim())
+    console.error(run.stderr.trim().split('\n').slice(-5).join('\n'))
+  process.exit(1)
+}
+
+const output = run.stdout
 const start = output.indexOf('{')
 // eslint-disable-next-line ts/no-explicit-any
 let report: any = null
@@ -209,7 +299,7 @@ try { report = JSON.parse(output.slice(start)) }
 catch { /* reported below */ }
 
 if (!report) {
-  console.error(output, run.stderr.toString())
+  console.error(output, run.stderr)
   process.exit(1)
 }
 
