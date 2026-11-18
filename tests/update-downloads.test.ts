@@ -39,9 +39,12 @@ function sha256(body: string): string {
 }
 
 describe('where a download lives', () => {
+  // Built with `path.join` rather than written out, because the Windows leg of
+  // CI runs this suite too and a literal separator is the one difference that
+  // has nothing to do with what is being asserted.
   it('keeps downloads in a directory of its own, not one shaped like a bundle', () => {
     const dir = updateDownloadDir('/tmp')
-    expect(dir).toBe('/tmp/system-cleaner-updates')
+    expect(dir).toBe(path.join('/tmp', 'system-cleaner-updates'))
     // Craft's default is `craft-updates/<bundle file name>/`, which reads as a
     // path inside an app bundle and cannot be swept without reproducing it.
     expect(dir).not.toContain('.app')
@@ -49,12 +52,12 @@ describe('where a download lives', () => {
 
   it('names the file the way the updater will, so the path can be predicted', () => {
     expect(downloadPathFor('/tmp/u', 'https://example.com/v1/SystemCleaner-1.0.0.dmg'))
-      .toBe('/tmp/u/SystemCleaner-1.0.0.dmg')
+      .toBe(path.join('/tmp/u', 'SystemCleaner-1.0.0.dmg'))
   })
 
   it('still knows where downloads landed before the directory was pinned', () => {
     expect(legacyDownloadDir('/Applications/SystemCleaner.app', '/tmp'))
-      .toBe('/tmp/craft-updates/SystemCleaner.app')
+      .toBe(path.join('/tmp', 'craft-updates', 'SystemCleaner.app'))
   })
 
   it('collects what the old location was left holding', () => {
@@ -167,7 +170,10 @@ describe('relaunching in the order that keeps the port', () => {
     expect(argv.slice(3)).toEqual(['sh', '/Applications/My "App"; rm -rf ~.app', '4242', '150'])
   })
 
-  it('actually blocks while the launcher is alive, and stops when it is not', async () => {
+  // The relaunch is macOS-only — `unsupportedReason` refuses anything else —
+  // and this runs the real script, so there is no `/bin/sh` to run it with on
+  // the Windows leg of CI.
+  it.skipIf(process.platform === 'win32')('actually blocks while the launcher is alive, and stops when it is not', async () => {
     // The real script text, cut before the `open` it ends with — the loop is
     // the part under test, and a test cannot be allowed to launch an app.
     const script = relaunchCommand('/unused', 0, 3)[2]
