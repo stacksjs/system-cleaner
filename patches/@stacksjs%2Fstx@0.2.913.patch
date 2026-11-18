@@ -1,0 +1,32 @@
+diff --git a/dist/chunk-9gptdyqq.js b/dist/chunk-9gptdyqq.js
+index 8497f0fb1065a10fa6f007d389325649a414332d..66acda4185570e1141dc1c3b66e68bc1e273c7fb 100644
+--- a/dist/chunk-9gptdyqq.js
++++ b/dist/chunk-9gptdyqq.js
+@@ -1350,6 +1350,13 @@ import x from"fs";import u from"path";import p from"fs";import w from"path";var
+         if(awaitingKey!==awaitedKey)return false;
+         awaitingKey='';
+         navCtxNext=ctx;
++        // Drop a prefetch that settled without filling the cache, or this
++        // branch hands off to itself: the promise is already resolved, so the
++        // re-entry takes it again on the next microtask, and again, pinning
++        // the main thread at full tilt. The window freezes and stays frozen —
++        // no error, no network, nothing to see. Dropping it sends the re-entry
++        // to the server instead, which is what the tap asked for.
++        if(!cache[awaitedKey])delete prefetching[awaitedKey];
+         return navigate(url,pushState,force);
+       });
+     }
+@@ -3776,7 +3783,12 @@ else {
+       // job would be queued before the first byte had been counted and the
+       // budget would never bite. Two prefetches run at a time, so by the time
+       // this one starts the pages before it have been weighed.
+-      if(glance){var spent=sightBudget();if(spent>0&&sightBytes>=spent)return}
++      // Give the key back when the budget stops this job. The chain below owns
++      // the delete, in a finally, and skipping the fetch skips the chain too — so
++      // prefetching[key] was left holding a promise that resolves with nothing
++      // cached behind it, and the hand-off in navigate() then waited on that
++      // same settled answer forever.
++      if(glance){var spent=sightBudget();if(spent>0&&sightBytes>=spent){delete prefetching[key];return}}
+       return fetch(href,{priority:'low',headers:prefetchHeaders(wantsFragment)}).then(function(r){
+       return readPrefetchResponse(r,wantsFragment);
+     }).then(function(result){

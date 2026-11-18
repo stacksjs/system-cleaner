@@ -70,6 +70,9 @@
       },
     },
   },
+  "patchedDependencies": {
+    "@stacksjs/stx@0.2.913": "patches/@stacksjs%2Fstx@0.2.913.patch",
+  },
   "overrides": {
     "@stacksjs/desktop": "0.2.913",
     "@stacksjs/stx": "0.2.913",
