@@ -53,10 +53,7 @@
     "puppeteer": "^24.43.1"
   },
   "overrides": {
-    "@stacksjs/stx": "0.2.913",
-    "@stacksjs/desktop": "0.2.913"
-  },
-  "patchedDependencies": {
-    "@stacksjs/stx@0.2.913": "patches/@stacksjs%2Fstx@0.2.913.patch"
+    "@stacksjs/stx": "0.2.917",
+    "@stacksjs/desktop": "0.2.917"
   }
 }

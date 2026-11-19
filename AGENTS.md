@@ -56,22 +56,6 @@ first two.
 
 Bun >= 1.3.0, SQLite >= 3.47.2, TypeScript throughout.
 
-### Patched dependencies
-
-`patches/` holds `bun patch` diffs, applied by `bun install` and pinned by
-`patchedDependencies` in `package.json`. One is live:
-
-- **`@stacksjs/stx`** — the client router leaked a `prefetching[key]` entry
-  whenever the sight budget stopped a queued glance prefetch, and the
-  `navigate()` hand-off that waits on an in-flight prefetch then re-entered
-  itself on every microtask. The window froze with no error, no request and
-  the main thread pinned. `tests/router-prefetch-handoff.test.ts` fails if an
-  install or an upgrade drops either guard. Remove the patch once a release
-  carries the fix.
-
-Re-pin after bumping a patched dependency: the patch names its version, so
-`bun install` ignores a diff written against the old one.
-
 ---
 
 ## Repository map
