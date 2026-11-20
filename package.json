@@ -54,6 +54,8 @@
   },
   "overrides": {
     "@stacksjs/stx": "0.2.917",
-    "@stacksjs/desktop": "0.2.917"
+    "@stacksjs/desktop": "0.2.917",
+    "stx-router": "0.2.917",
+    "bun-plugin-stx": "0.2.917"
   }
 }
