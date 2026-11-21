@@ -34,7 +34,7 @@ function wire(): void {
 
   // Craft's Settings item, this app's menu item, and the profile chip all land
   // here.
-  window.addEventListener('craft:settings:open', openSettings)
+  window.addEventListener('craft:settings:open', () => { void openSettings() })
 
   // Cmd+, from the page as well as from the menubar. Inside the window the
   // keystroke reaches the web view whenever the menu item is not what handled

@@ -52,6 +52,7 @@ export type UpdateStage =
   | 'downloading'
   | 'ready'
   | 'installing'
+  | 'restarting'
   | 'error'
 
 export interface UpdateStatus {
@@ -176,7 +177,7 @@ let updaterVersion: string | null = null
  */
 function getUpdater(): Promise<AutoUpdater> {
   const version = installedVersion()
-  const settled = status.stage !== 'downloading' && status.stage !== 'installing'
+  const settled = !['downloading', 'installing', 'restarting'].includes(status.stage)
   if (updaterVersion !== null && updaterVersion !== version && settled) {
     updater = null
     updaterPromise = null
@@ -200,9 +201,17 @@ function getUpdater(): Promise<AutoUpdater> {
     // Quit, then reopen — the opposite order to Craft's default, and the
     // difference between keeping the loopback port and silently emptying
     // everything the page has stored. See `relaunchCommand`.
-    relaunch: (appPath: string) => {
+    relaunch: async (appPath: string) => {
+      status = { ...status, stage: 'restarting', percent: 100 }
       const [command, ...args] = relaunchCommand(appPath, process.ppid)
-      spawn(command, args, { detached: true, stdio: 'ignore' }).unref()
+      const child = spawn(command, args, { detached: true, stdio: 'ignore' })
+      await new Promise<void>((resolve, reject) => {
+        child.once('spawn', resolve)
+        child.once('error', reject)
+      })
+      child.unref()
+      // Give the active status poll time to paint the restart before quitting.
+      await Bun.sleep(1100)
       quitLauncher()
     },
   }).then((instance) => {
@@ -349,7 +358,7 @@ export async function checkForUpdate(): Promise<UpdateStatus> {
   if (reason)
     return { ...status, stage: 'unsupported', unsupportedReason: reason }
 
-  if (['checking', 'downloading', 'ready', 'installing'].includes(status.stage)) return status
+  if (['checking', 'downloading', 'ready', 'installing', 'restarting'].includes(status.stage)) return status
   await ensureTeamId()
   status = { ...status, stage: 'checking', error: null }
 
@@ -435,14 +444,13 @@ export async function installUpdate(): Promise<UpdateStatus> {
   if (reason)
     return { ...status, stage: 'unsupported', unsupportedReason: reason }
 
-  if (status.stage === 'installing') return status
+  if (status.stage === 'installing' || status.stage === 'restarting') return status
   if (status.stage !== 'ready')
     return { ...status, stage: 'error', error: 'No update has been downloaded yet.' }
 
   status = { ...status, stage: 'installing', error: null }
 
-  const instance = await getUpdater()
-  void instance.installUpdate(true).catch((error) => {
+  void getUpdater().then(instance => instance.installUpdate(true)).catch((error) => {
     status = { ...status, stage: 'error', error: describe(error) }
   })
 

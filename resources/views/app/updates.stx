@@ -100,7 +100,7 @@
     <div style='display: flex; gap: var(--space-tight); align-items: center;'>
       <button class='btn btn-sm'
               @click='checkSelfUpdate()'
-              :disabled="self.stage === 'checking' || self.stage === 'downloading' || self.stage === 'installing'">
+              :disabled="self.stage === 'checking' || self.stage === 'downloading' || selfInstalling()">
         Check for Updates
       </button>
       <button class='btn btn-primary btn-sm'
@@ -118,6 +118,8 @@
   <div style='padding: var(--space-3) var(--space-4); display: flex; flex-direction: column; gap: var(--space-2);'>
     <div style='font-size: 12px;'
          :style="self.stage === 'error' ? 'color: var(--red)' : ''">{{ selfStatusLine() }}</div>
+
+    <progress class='w-full' x-show='selfInstalling()' x-cloak aria-label='Update installation progress'></progress>
 
     <!-- A determinate bar, because the manifest carries the byte count. -->
     <div x-show="self.stage === 'downloading'" style='display: flex; flex-direction: column; gap: var(--space-1);'>

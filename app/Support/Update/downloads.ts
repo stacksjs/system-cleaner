@@ -173,7 +173,7 @@ export function relaunchCommand(
     '  i=$((i + 1))',
     'done',
     'sleep 0.2',
-    'exec /usr/bin/open -n "$1"',
+    'exec /usr/bin/open -n "$1" --args --updated',
   ].join('\n')
 
   return ['/bin/sh', '-c', script, 'sh', appPath, String(launcherPid), String(waitTenths)]

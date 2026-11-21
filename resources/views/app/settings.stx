@@ -281,8 +281,7 @@
           <span class='i-f7-arrow-down-circle-fill'></span>
         </span>
         <div class='set-card-row-text'>
-          <h2 class='set-update-title'>SystemCleaner</h2>
-          <span class='set-card-hint' x-text="self.currentVersion ? 'Installed version ' + self.currentVersion : 'Reading installed version…'"></span>
+          <h2 class='set-update-title' x-text='selfHeadline()'>SystemCleaner</h2>
           <span class='set-update-status' role='status' aria-live='polite'
             x-show="self.stage !== 'error'" x-text='selfDetailLine()'></span>
         </div>
@@ -292,20 +291,23 @@
         <progress class='set-update-progress' max='100' :value='self.percent' aria-label='Update download progress'></progress>
         <span class='set-card-hint' x-text='selfProgressLabel()'></span>
       </div>
+      <div class='mt-4' x-show='selfInstalling()' x-cloak>
+        <progress class='set-update-progress' aria-label='Update installation progress'></progress>
+      </div>
       <div class='set-update-actions'>
         <button class='set-btn' type='button' @click='checkSelfUpdate()'
-          x-show="self.stage !== 'ready' && self.stage !== 'downloading' && self.stage !== 'installing'"
+          x-show="self.stage !== 'ready' && self.stage !== 'downloading' && !selfInstalling()"
           :disabled="self.stage === 'checking' || selfActionBusy"
           x-text="self.stage === 'checking' ? 'Checking…' : self.stage === 'error' ? 'Try Again' : 'Check for Updates'">Check for Updates</button>
         <button class='set-btn set-btn-primary' type='button' x-show="self.stage === 'available'" x-cloak
-          @click='downloadSelfUpdate()'>Download Update</button>
+          @click='downloadSelfUpdate()'>Download Now</button>
         <button class='set-btn set-btn-primary' type='button' data-install-update
-          x-show="self.stage === 'ready' || self.stage === 'installing'" x-cloak
-          :disabled="selfActionBusy || self.stage === 'installing'" @click='installSelfUpdate()'
-          x-text="self.stage === 'installing' ? 'Installing…' : 'Restart to Install'">Restart to Install</button>
+          x-show="self.stage === 'ready' || selfInstalling()" x-cloak
+          :disabled="selfActionBusy || selfInstalling()" @click='installSelfUpdate()'
+          x-text="self.stage === 'restarting' ? 'Reopening…' : selfInstalling() ? 'Installing…' : 'Restart to Install'">Restart to Install</button>
       </div>
       <details class='set-update-notes' x-show='self.releaseNotes' x-cloak>
-        <summary>What’s New</summary>
+        <summary>More Info…</summary>
         <p class='set-card-hint' style='white-space: pre-wrap;' x-text='self.releaseNotes'></p>
       </details>
     </div>

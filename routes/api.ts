@@ -360,7 +360,7 @@ export default async function (router: Router) {
     const appPath = cask ? findAppBundleForCask(cask) : findAppBundle(name!);
     if (!appPath) return new Response('No such app', { status: 404 });
 
-    const png = renderAppIcon(appPath, size);
+    const png = await renderAppIcon(appPath, size);
     if (!png) return new Response('No icon in bundle', { status: 404 });
 
     return new Response(Bun.file(png), {

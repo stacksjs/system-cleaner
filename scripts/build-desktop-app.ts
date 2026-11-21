@@ -22,12 +22,13 @@
  */
 
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import process from 'node:process'
 import { createGitHubUpdateManifest, UPDATE_MANIFEST_ASSET } from '@stacksjs/desktop'
-import { looksLikeBunExecutable, resolveCraftExecutable } from '@stacksjs/desktop-build'
+import { desktopLauncherCompileArgs, looksLikeBunExecutable, resolveCraftExecutable } from '@stacksjs/desktop-build'
 import { stageDesktopWeb } from './desktop-resources'
 import { DMG_WINDOW, readDmgWindowLayout } from './dmg-window'
 
@@ -196,16 +197,33 @@ fs.cpSync(path.join(ROOT, 'database/migrations'), path.join(RESOURCES, 'migratio
 console.log('[desktop] building the desktop bundle')
 run('./buddy', ['build:desktop'])
 
-// ── 4. Shared executable ────────────────────────────────
-// The agent and the scanner used to be two more compiled binaries alongside the
-// launcher. They are subcommands of it now — `SystemCleaner agent`,
-// `SystemCleaner scan <json>` — because `bun build --compile` embeds the whole
-// Bun runtime in every output it writes, and a hello-world measures 60 MB. Three
-// executables meant three copies of that runtime and a 230 MB bundle whose
-// actual native component, the Craft runtime, is 13 MB of it.
-//
-// The two still run out-of-process, spawned exactly as before; only the file
-// being executed changed. `app/Desktop/launcher.ts` dispatches on argv[2].
+// ── 4. Compile the compact launcher ───────────────────
+// The launcher, agent and workers share the same Bun executable. Leaving out
+// the precompiled JavaScript bytecode saves around 30 MiB of installed space.
+const desktopDist = path.join(ROOT, 'storage/framework/desktop-dist')
+const launcherName = 'stacks-desktop'
+const launcher = path.join(desktopDist, launcherName)
+const originalSize = fs.statSync(launcher).size
+const compactLauncher = `${launcher}.compact`
+run('bun', desktopLauncherCompileArgs({
+  entry: path.join(ROOT, 'app/Desktop/launcher.ts'),
+  outfile: compactLauncher,
+  bytecode: false,
+}))
+fs.renameSync(compactLauncher, launcher)
+const provenancePath = path.join(desktopDist, 'provenance.json')
+const provenance = JSON.parse(fs.readFileSync(provenancePath, 'utf8')) as {
+  artifacts: { name: string, sha256: string, bytes: number }[]
+}
+const launcherArtifact = provenance.artifacts.find(artifact => artifact.name === launcherName)
+if (!launcherArtifact)
+  throw new Error('Desktop provenance is missing the launcher')
+launcherArtifact.bytes = fs.statSync(launcher).size
+launcherArtifact.sha256 = createHash('sha256').update(await Bun.file(launcher).bytes()).digest('hex')
+fs.writeFileSync(provenancePath, `${JSON.stringify(provenance, null, 2)}\n`)
+fs.writeFileSync(path.join(desktopDist, 'checksums.sha256'),
+  `${provenance.artifacts.map(artifact => `${artifact.sha256}  ${artifact.name}`).join('\n')}\n`)
+console.log(`[desktop] launcher saved ${((originalSize - launcherArtifact.bytes) / 1024 / 1024).toFixed(1)} MiB`)
 
 // ── 5. Bundle and image ─────────────────────────────────────────
 console.log('[desktop] packaging')

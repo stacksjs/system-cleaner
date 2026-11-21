@@ -17,11 +17,13 @@ const SETTINGS_WINDOW = 'settings'
  * falls back to a tab under the same name, which is the honest equivalent
  * there and needs no branch here.
  */
-export function openSettings(): Promise<{ name: string }> {
+export function openSettings(pane?: 'software-update'): Promise<{ name: string }> {
+  const url = new URL('/app/settings', window.location.origin)
+  if (pane) url.searchParams.set('pane', pane)
   return nativeWindow.open({
     name: SETTINGS_WINDOW,
     title: 'Settings',
-    url: new URL('/app/settings', window.location.origin).toString(),
+    url: url.toString(),
     // System Settings' own proportions. Tall enough for the longest pane
     // without scrolling, narrow enough to sit beside the main window rather
     // than over it.

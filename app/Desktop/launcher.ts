@@ -248,6 +248,7 @@ async function waitForHealth(port: number): Promise<void> {
 }
 
 const port = await readPort()
+const afterUpdate = platform === 'darwin' && process.argv.includes('--updated')
 rememberPort(portFile, port)
 await waitForHealth(port)
 
@@ -268,7 +269,7 @@ if (craftBackend) {
 craft = Bun.spawn([
   craftBinary,
   ...windowArgs(platform, {
-    url: `http://127.0.0.1:${port}/app${platform === 'darwin' ? '/tray' : ''}`,
+    url: `http://127.0.0.1:${port}/app${platform === 'darwin' ? '/tray' : ''}${afterUpdate ? '?updated=1' : ''}`,
     title: APP_NAME,
     width: platform === 'darwin' ? 360 : 1400,
     height: platform === 'darwin' ? 460 : 900,

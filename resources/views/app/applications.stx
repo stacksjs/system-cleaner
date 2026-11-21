@@ -48,6 +48,8 @@
   apps: [],
   filter: '',
   loading: true,
+  loadError: false,
+  appMeasurements: {},
   sizesPending: true,
   scan: null,
   scanning: false,
@@ -56,7 +58,8 @@
   removing: false,
   orphans: [],
   orphanBytes: 0,
-  orphansLoading: true,
+  orphansLoading: false,
+  orphansScanned: false,
   orphanSelected: [],
   orphanBusy: false,
   toasts: [],
@@ -65,38 +68,60 @@
   disk: null,
 
   updates: {},
-  updatesLoading: true,
+  updatesLoading: false,
+  updatesChecked: false,
   updateBusy: [],
   updateDone: [],
 
   init() {
-    var self0 = this;
-    fetch('/api/system-disk-info', { method: 'POST' })
-      .then(function(r) { return r.json(); })
-      .then(function(d) { if (d.success) self0.disk = d; })
-      .catch(function() {});
+    const page = this;
+    this.loadApps();
+    this.post('/api/system-disk-info').then(function(result) {
+      if (result.success) page.disk = result;
+    }).catch(function() {});
+  },
 
-    var self = this;
-    this.post('/api/installed-apps').then(function(r) {
-      if (r.success) self.apps = r.apps || [];
-      self.loading = false;
-      return streamMeasurements('/api/installed-apps', {}, function(sizes) {
-        self.apps = self.apps.map(function(app) { return Object.assign({}, app, { sizeBytes: sizes[app.path] === undefined ? app.sizeBytes : sizes[app.path] }); });
+  async loadApps() {
+    this.loading = true;
+    this.loadError = false;
+    this.sizesPending = true;
+    try {
+      const result = await this.post('/api/installed-apps');
+      if (!result.success) throw new Error('Could not read installed apps');
+      this.apps = result.apps || [];
+    }
+    catch {
+      this.loadError = true;
+    }
+    finally {
+      this.loading = false;
+    }
+    if (this.loadError) {
+      this.sizesPending = false;
+      return;
+    }
+
+    const page = this;
+    try {
+      await streamMeasurements('/api/installed-apps', {}, function(sizes) {
+        page.appMeasurements = sizes;
       });
-    }).then(function() {
-      self.sizesPending = false;
-    }).catch(function() { self.loading = false; self.sizesPending = false; });
-    this.loadOrphans();
-    this.loadUpdates();
+    }
+    catch {}
+    finally {
+      this.sizesPending = false;
+    }
   },
 
   loadUpdates() {
-    var self = this;
+    const self = this;
+    if (this.updatesLoading) return;
     this.updatesLoading = true;
     this.post('/api/updates-check', { tier: 'full' }).then(function(r) {
       self.updatesLoading = false;
       if (!r || !r.desktopApps) return;
-      var map = {};
+      self.updatesChecked = true;
+      const map = {};
       r.desktopApps.forEach(function(row) { map[row.name] = row; });
       self.updates = map;
     }).catch(function() { self.updatesLoading = false; });
@@ -104,28 +129,28 @@
 
   updateFor(app) { return this.updates[app.name] || null; },
   hasUpdate(app) {
-    var row = this.updates[app.name];
+    const row = this.updates[app.name];
     return !!(row && row.updateAvailable) && this.updateDone.indexOf(app.name) === -1;
   },
   isUpdating(name) { return this.updateBusy.indexOf(name) !== -1; },
   wasUpdated(name) { return this.updateDone.indexOf(name) !== -1; },
   updatable() {
-    var self = this;
+    const self = this;
     return this.apps.filter(function(app) {
-      var row = self.updates[app.name];
+      const row = self.updates[app.name];
       return self.hasUpdate(app) && !!(row && row.caskToken);
     });
   },
   outdatedCount() {
-    var self = this;
+    const self = this;
     return this.apps.filter(function(app) { return self.hasUpdate(app); }).length;
   },
 
   async updateApp(app) {
-    var row = this.updates[app.name];
+    const row = this.updates[app.name];
     if (!row || !row.caskToken || this.isUpdating(app.name)) return;
 
-    if (!await window.nativeConfirm({
+    if (!await nativeConfirm({
       title: 'Update ' + app.name + '?',
       message: 'Homebrew will replace version ' + app.version + ' with ' + (row.latestVersion || 'the latest release') + '. Quit the app first if it is running.',
       confirmLabel: 'Update',
@@ -135,7 +160,7 @@
   },
 
   runUpdate(name, caskToken) {
-    var self = this;
+    const self = this;
     this.updateBusy = this.updateBusy.concat([name]);
     return this.post('/api/app-update', { name: name, caskToken: caskToken }).then(function(r) {
       self.updateBusy = self.updateBusy.filter(function(x) { return x !== name; });
@@ -153,30 +178,32 @@
   },
 
   async updateAll() {
-    var pending = this.updatable();
+    const pending = this.updatable();
     if (pending.length === 0) return;
 
-    if (!await window.nativeConfirm({
+    if (!await nativeConfirm({
       title: 'Update ' + pending.length + ' app' + (pending.length === 1 ? '' : 's') + '?',
       message: 'Homebrew will upgrade them one at a time. Anything currently running should be quit first.',
       confirmLabel: 'Update All',
     })) return;
 
-    for (var i = 0; i < pending.length; i++) {
-      var row = this.updates[pending[i].name];
+    for (let i = 0; i < pending.length; i++) {
+      const row = this.updates[pending[i].name];
       if (row && row.caskToken) await this.runUpdate(pending[i].name, row.caskToken);
     }
   },
 
   loadOrphans() {
-    var self = this;
+    const self = this;
+    if (this.orphansLoading) return;
     this.orphansLoading = true;
     this.post('/api/orphaned-data').then(function(r) {
       self.orphansLoading = false;
       if (!r.success) return;
+      self.orphansScanned = true;
       self.orphans = r.items || [];
       self.orphanBytes = r.totalBytes || 0;
-      var present = {};
+      const present = {};
       self.orphans.forEach(function(row) { present[row.path] = true; });
       self.orphanSelected = self.orphanSelected.filter(function(p) { return present[p]; });
     }).catch(function() { self.orphansLoading = false; });
@@ -190,27 +217,27 @@
   },
   selectableOrphans() { return this.orphans.filter(function(row) { return !row.protected; }); },
   allOrphansSelected() {
-    var rows = this.selectableOrphans();
+    const rows = this.selectableOrphans();
     if (rows.length === 0) return false;
-    var self = this;
+    const self = this;
     return rows.every(function(row) { return self.isOrphanOn(row.path); });
   },
   toggleAllOrphans() {
     this.orphanSelected = this.allOrphansSelected() ? [] : this.selectableOrphans().map(function(row) { return row.path; });
   },
   orphanSelectedBytes() {
-    var picked = {};
+    const picked = {};
     this.orphanSelected.forEach(function(p) { picked[p] = true; });
     return this.orphans.reduce(function(sum, row) { return picked[row.path] ? sum + row.sizeBytes : sum; }, 0);
   },
 
   async removeOrphans(mode) {
     if (this.orphanBusy || this.orphanSelected.length === 0) return;
-    var count = this.orphanSelected.length;
-    var size = this.fmtBytes(this.orphanSelectedBytes());
-    var permanent = mode === 'permanent';
+    const count = this.orphanSelected.length;
+    const size = this.fmtBytes(this.orphanSelectedBytes());
+    const permanent = mode === 'permanent';
 
-    if (!await window.nativeConfirm({
+    if (!await nativeConfirm({
       title: permanent
         ? 'Permanently delete ' + count + ' leftover item(s)?'
         : 'Move ' + count + ' leftover item(s) to the Trash?',
@@ -220,7 +247,7 @@
       recoverable: !permanent,
     })) return;
 
-    var self = this;
+    const self = this;
     this.orphanBusy = true;
     this.post('/api/clean-orphans', { paths: this.orphanSelected, mode: mode }).then(function(r) {
       self.orphanBusy = false;
@@ -250,7 +277,7 @@
   },
 
   visible() {
-    var needle = this.filter.trim().toLowerCase();
+    const needle = this.filter.trim().toLowerCase();
     if (!needle) return this.apps;
     return this.apps.filter(function(app) {
       return app.name.toLowerCase().indexOf(needle) !== -1
@@ -258,11 +285,15 @@
     });
   },
 
-  totalAppBytes() { return this.apps.reduce(function(sum, app) { return sum + (app.sizeBytes || 0); }, 0); },
+  appSize(app) { return this.appMeasurements[app.path] ?? app.sizeBytes; },
+
+  totalAppBytes() {
+    return this.apps.reduce((sum, app) => sum + (this.appSize(app) || 0), 0);
+  },
 
   review(app) {
     if (this.scanning) return;
-    var self = this;
+    const self = this;
     this.scanning = true;
     this.scanningPath = app.path;
     this.scan = null;
@@ -294,29 +325,29 @@
   },
 
   allRemnantsChosen() {
-    var rows = this.selectableRemnants();
+    const rows = this.selectableRemnants();
     if (rows.length === 0) return false;
-    var self = this;
+    const self = this;
     return rows.every(function(row) { return self.isChosen(row.path); });
   },
 
   toggleAllRemnants() {
-    var rows = this.selectableRemnants();
-    var touched = {};
+    const rows = this.selectableRemnants();
+    const touched = {};
     rows.forEach(function(row) { touched[row.path] = true; });
     if (this.allRemnantsChosen()) {
       this.chosen = this.chosen.filter(function(p) { return !touched[p]; });
       return;
     }
-    var keep = this.chosen.filter(function(p) { return !touched[p]; });
+    const keep = this.chosen.filter(function(p) { return !touched[p]; });
     this.chosen = keep.concat(rows.map(function(row) { return row.path; }));
   },
 
   chosenBytes() {
     if (!this.scan) return 0;
-    var picked = {};
+    const picked = {};
     this.chosen.forEach(function(p) { picked[p] = true; });
-    var total = picked[this.scan.app.path] ? this.scan.app.sizeBytes : 0;
+    let total = picked[this.scan.app.path] ? this.scan.app.sizeBytes : 0;
     this.scan.remnants.forEach(function(row) { if (picked[row.path]) total += row.sizeBytes; });
     return total;
   },
@@ -328,24 +359,24 @@
 
   async remove(mode) {
     if (!this.scan || this.removing || this.chosen.length === 0) return;
-    var permanent = mode === 'permanent';
-    var name = this.scan.app.name;
-    var size = this.fmtBytes(this.chosenBytes());
-    var takesApp = this.isChosen(this.scan.app.path);
+    const permanent = mode === 'permanent';
+    const name = this.scan.app.name;
+    const size = this.fmtBytes(this.chosenBytes());
+    const takesApp = this.isChosen(this.scan.app.path);
 
-    if (!await window.nativeConfirm({
+    if (!await nativeConfirm({
       title: permanent
         ? 'Permanently delete ' + this.chosen.length + ' item' + (this.chosen.length === 1 ? '' : 's') + '?'
         : (takesApp ? 'Uninstall ' + name + '?' : 'Remove ' + this.chosen.length + ' leftover item(s)?'),
       message: permanent
         ? size + ' is freed immediately and cannot be recovered.'
-        : size + ' is freed, and everything goes to the Trash where you can put it back.',
+        : 'Move ' + size + ' to the Trash. You can put the items back from Finder.',
       confirmLabel: permanent ? 'Delete' : 'Move to Trash',
       destructive: true,
       recoverable: !permanent,
     })) return;
 
-    var self = this;
+    const self = this;
     this.removing = true;
     this.post('/api/app-uninstall', { path: this.scan.app.path, paths: this.chosen, mode: mode })
       .then(function(r) {
@@ -353,15 +384,15 @@
         if (r.message) self.toast(r.message, 'success');
         if (r.error && !r.launched) self.toast(r.error, 'error');
         if ((r.succeeded || []).length > 0)
-          self.toast('Removed ' + r.succeeded.length + ' item(s) from ' + name + ' - freed ' + r.freedFormatted, 'success');
+          self.toast((permanent ? 'Deleted ' : 'Moved to Trash: ') + r.succeeded.length + ' item(s) from ' + name, 'success');
         if ((r.skipped || []).length > 0)
           self.toast(r.skipped.length + ' skipped: ' + r.skipped[0].reason, 'info');
         if ((r.failed || []).length > 0)
           self.toast(r.failed.length + ' failed: ' + r.failed[0].error, 'error');
 
-        var gone = {};
+        const gone = {};
         (r.succeeded || []).forEach(function(p) { gone[p] = true; });
-        self.loadOrphans();
+        if (self.orphansScanned) self.loadOrphans();
         if (gone[self.scan.app.path]) {
           self.apps = self.apps.filter(function(app) { return app.path !== self.scan.app.path; });
           self.close();
@@ -391,15 +422,15 @@
 
   fmtDate(value) {
     if (!value) return '-';
-    var d = new Date(value);
+    const d = new Date(value);
     if (isNaN(d.getTime())) return '-';
     return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
   },
 
   toast(msg, type) {
-    var id = ++this.toastId;
+    const id = ++this.toastId;
     this.toasts = [...this.toasts, { id: id, msg: msg, type: type || 'info' }];
-    var self = this;
+    const self = this;
     setTimeout(function() { self.toasts = self.toasts.filter(function(t) { return t.id !== id; }); }, 5000);
   },
 }">
@@ -436,7 +467,11 @@
   </div>
 
   <div x-show='loading' class='empty-state is-loading'>Reading /Applications&hellip;</div>
-  <div x-show='!loading' x-cloak>
+  <div x-show='loadError' class='empty-state' role='alert' x-cloak>
+    <strong>Could not load the applications list.</strong>
+    <button class='btn btn-sm' type='button' @click='loadApps()'>Try Again</button>
+  </div>
+  <div x-show='!loading && !loadError' x-cloak>
     <UninstallPanel />
   </div>
 </div>

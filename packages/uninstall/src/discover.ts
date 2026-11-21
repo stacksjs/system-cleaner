@@ -64,7 +64,7 @@ export async function discoverApps(includeSystemApps = false): Promise<AppInfo[]
  */
 export async function getAppInfo(appPath: string): Promise<AppInfo | null> {
   const stat = safeStat(appPath)
-  if (!stat || !stat.isDirectory())
+  if (!appPath.toLowerCase().endsWith('.app') || !stat?.isDirectory())
     return null
 
   const bundle = readBundleInfo(appPath)

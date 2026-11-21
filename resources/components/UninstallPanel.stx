@@ -63,7 +63,7 @@
         <td>
           <div class='item-row'>
             <img class='app-icon' loading='lazy' alt=''
-                 :src="'/api/app-icon?size=64&name=' + encodeURIComponent(scan ? scan.app.name : '')"
+                 :src="'/api/app-icon?size=32&name=' + encodeURIComponent(scan ? scan.app.name : '')"
                  onerror="this.classList.add('app-icon-missing')" />
             <span class='item-name' x-text="scan ? scan.app.name : ''"></span>
             <span class='badge badge-blue'>application</span>
@@ -153,6 +153,7 @@
       <button class='btn btn-active btn-sm' x-show='updatable().length > 0' x-cloak
               @click='updateAll()' :disabled='updateBusy.length > 0'
               x-text="updateBusy.length > 0 ? 'Updating…' : 'Update All (' + updatable().length + ')'">Update All</button>
+      <button class='btn btn-sm' type='button' @click='loadUpdates()' :disabled='updatesLoading'>Check App Updates</button>
       <input class='un-search' type='search' placeholder='Filter by name' x-model='filter' aria-label='Filter applications' />
     </div>
   </div>
@@ -174,7 +175,7 @@
           <td>
             <div class='item-row'>
               <img class='app-icon' loading='lazy' alt=''
-                   :src="'/api/app-icon?size=64&name=' + encodeURIComponent(app.name)"
+                   :src="'/api/app-icon?size=32&name=' + encodeURIComponent(app.name)"
                    onerror="this.classList.add('app-icon-missing')" />
               <span class='item-name' x-text='app.name'></span>
             </div>
@@ -182,7 +183,7 @@
           </td>
           <td class='dim mono' style='font-size: 11px;' x-text='app.version'></td>
           <td style='font-variant-numeric: tabular-nums;'
-              x-text="app.sizeBytes === null ? '-' : fmtBytes(app.sizeBytes)">-</td>
+              x-text="appSize(app) === null ? '-' : fmtBytes(appSize(app))">-</td>
           <td class='dim' x-text='fmtDate(app.installedAt)'></td>
           <td class='action-cell'>
             <template x-if='isUpdating(app.name)'>
@@ -203,7 +204,7 @@
                     x-text="updateFor(app).source === 'mas' ? 'App Store' : 'Manual'"></span>
             </template>
             <template x-if='!isUpdating(app.name) && !wasUpdated(app.name) && !hasUpdate(app)'>
-              <span class='dim un-update-state' x-text="updatesLoading ? '' : '-'"></span>
+              <span class='dim un-update-state' x-text="updatesChecked ? '-' : ''"></span>
             </template>
           </td>
           <td class='action-cell'>
@@ -235,12 +236,13 @@
     <div>
       <span class='tbl-title'>Left behind by apps you have already removed</span>
       <span class='tbl-count'
-        x-text="orphansLoading ? 'scanning…' : (orphans.length + ' items · ' + fmtBytes(orphanBytes))">scanning…</span>
+        x-text="orphansScanned ? (orphans.length + ' items · ' + fmtBytes(orphanBytes)) : ''">scanning…</span>
     </div>
     <div style='display: flex; gap: var(--space-tight);'>
       <button class='btn btn-sm' @click='toggleAllOrphans()' x-show='orphans.length > 0'
         x-text="allOrphansSelected() ? 'Deselect All' : 'Select All'">Select All</button>
-      <button class='btn btn-sm' @click='loadOrphans()' :disabled='orphansLoading'>Rescan</button>
+      <button class='btn btn-sm' @click='loadOrphans()' :disabled='orphansLoading'
+        x-text="orphansScanned ? 'Rescan' : 'Scan for Leftovers'">Scan for Leftovers</button>
     </div>
   </div>
 
@@ -290,7 +292,7 @@
     </button>
   </div>
 
-  <div class='empty-state' x-show='!orphansLoading && orphans.length === 0' x-cloak>
+  <div class='empty-state' x-show='orphansScanned && !orphansLoading && orphans.length === 0' x-cloak>
       <span class='empty-mark' data-kind='clear'><span class='i-f7-checkmark-alt' aria-hidden='true'></span></span>
       <strong class='empty-title'>Nothing left over</strong>
       <p class='empty-body'>Every cache and log under ~/Library belongs to an app that is still installed.</p>

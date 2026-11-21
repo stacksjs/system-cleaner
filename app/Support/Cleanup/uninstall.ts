@@ -1,7 +1,8 @@
 import type { AppInfo, AppRemnant, RemnantType } from '@system-cleaner/core'
+import { existsSync } from 'node:fs'
 import * as path from 'node:path'
 import { formatBytes, getDirSize, HOME, TtlCache } from '@system-cleaner/core'
-import { discoverApps, findRemnants, getAppInfo, remnantPresentation, summarizeRemnants } from '@system-cleaner/uninstall'
+import { discoverApps, findRemnantPaths, findRemnants, getAppInfo, remnantPresentation, summarizeRemnants } from '@system-cleaner/uninstall'
 import { bulkDelete, protectedPathSet } from './bulk-delete'
 import type { BulkDeleteOutcome, DeleteMode } from './bulk-delete'
 
@@ -83,16 +84,15 @@ export async function appSizes(onUpdate?: (sizes: Record<string, number>) => voi
     const measured = await Promise.all(batch.map(async (app) => {
       try {
         const size = await getDirSize(app.path)
-        onUpdate?.({ [app.path]: size })
         return [app.path, size] as const
       }
       catch {
-        onUpdate?.({ [app.path]: 0 })
         return [app.path, 0] as const
       }
     }))
     for (const [appPath, size] of measured)
       sizes[appPath] = size
+    onUpdate?.(Object.fromEntries(measured))
   }
 
   appSizeCache.set('sizes', sizes)
@@ -148,7 +148,7 @@ function shortPath(target: string): string {
 /** Everything this app has left around the system, sized and ready to review. */
 export async function scanApp(appPath: string): Promise<AppScanResult | null> {
   const info = await getAppInfo(appPath)
-  if (!info)
+  if (!info?.bundleId || info.isSystemApp)
     return null
 
   const [remnants, protectedPaths, bundleSize] = await Promise.all([
@@ -203,17 +203,17 @@ export async function uninstall(
   requestedPaths: string[],
   mode: DeleteMode,
 ): Promise<{ outcome: BulkDeleteOutcome, app: string } | null> {
-  const scan = await scanApp(appPath)
-  if (!scan)
+  const app = await getAppInfo(appPath)
+  if (!app?.bundleId || app.isSystemApp)
     return null
 
-  const allowed = new Set<string>([path.resolve(scan.app.path), ...scan.remnants.map(r => path.resolve(r.path))])
+  const allowed = new Set([app.path, ...findRemnantPaths(app).filter(existsSync)].map(target => path.resolve(target)))
   const targets = requestedPaths
     .map(p => path.resolve(p))
     .filter(p => allowed.has(p))
 
   if (targets.length === 0)
-    return { outcome: { succeeded: [], failed: [], skipped: [], freedBytes: 0, freedFormatted: '0 B' }, app: scan.app.name }
+    return { outcome: { succeeded: [], failed: [], skipped: [], freedBytes: 0, freedFormatted: '0 B' }, app: app.name }
 
   const outcome = await bulkDelete(targets, mode, 'uninstall')
 
@@ -227,5 +227,5 @@ export async function uninstall(
   ))
 
   invalidateAppCaches()
-  return { outcome, app: scan.app.name }
+  return { outcome, app: app.name }
 }

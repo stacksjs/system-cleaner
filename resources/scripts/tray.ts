@@ -77,7 +77,14 @@ async function install(): Promise<void> {
   })
   // Keep the full app's ordinary launch experience. Closing it leaves this
   // native tray page alive; reopening reuses the named window and its state.
-  await openApp()
+  if (new URLSearchParams(location.search).has('updated')) {
+    await app.showDockIcon()
+    await openSettings('software-update')
+    hide()
+  }
+  else {
+    await openApp()
+  }
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { void install().catch(report) }, { once: true })

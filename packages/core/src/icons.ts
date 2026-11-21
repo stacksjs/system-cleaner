@@ -1,4 +1,5 @@
-import { spawnSync } from 'node:child_process'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import * as crypto from 'node:crypto'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
@@ -13,6 +14,9 @@ import { parsePlistToObject } from './plist'
  * is replaced wholesale on update. `~/Library/Caches` is both writable and the
  * directory macOS expects to be able to purge.
  */
+const runFile = promisify(execFile)
+const pendingIcons = new Map<string, Promise<string | null>>()
+
 const CACHE_DIR = path.join(os.homedir(), 'Library/Caches/SystemCleaner/icons')
 
 /** Sizes the UI asks for. Anything else is refused rather than rendered. */
@@ -83,39 +87,33 @@ function cachePathFor(appPath: string, size: IconSize): string {
  * library to bundle. It is invoked argv-style — no shell — because the path
  * comes from a directory listing and may contain anything a filename may.
  */
-export function renderAppIcon(appPath: string, size: IconSize = 64): string | null {
+export function renderAppIcon(appPath: string, size: IconSize = 64): Promise<string | null> {
   const cached = cachePathFor(appPath, size)
-  if (fs.existsSync(cached)) return cached
+  if (fs.existsSync(cached)) return Promise.resolve(cached)
 
-  const icns = resolveAppIconFile(appPath)
-  if (!icns) return null
+  const pending = pendingIcons.get(cached)
+  if (pending) return pending
 
-  fs.mkdirSync(CACHE_DIR, { recursive: true })
+  const render = writeAppIcon(appPath, size, cached).finally(() => pendingIcons.delete(cached))
+  pendingIcons.set(cached, render)
+  return render
+}
 
-  // Render to a temp name and rename into place, so a killed process cannot
-  // leave a half-written PNG that every later request then serves from cache.
+async function writeAppIcon(appPath: string, size: IconSize, cached: string): Promise<string | null> {
   const staging = `${cached}.${process.pid}.tmp`
-  const result = spawnSync('sips', ['-s', 'format', 'png', '-Z', String(size), icns, '--out', staging], {
-    stdio: 'ignore',
-    timeout: 10_000,
-  })
-
-  if (result.status !== 0 || !fs.existsSync(staging)) {
-    try { fs.rmSync(staging, { force: true }) }
-    catch {}
-    return null
-  }
-
   try {
-    fs.renameSync(staging, cached)
+    const icns = resolveAppIconFile(appPath)
+    if (!icns) return null
+
+    await fs.promises.mkdir(CACHE_DIR, { recursive: true })
+    await runFile('/usr/bin/sips', ['-s', 'format', 'png', '-Z', String(size), icns, '--out', staging], { timeout: 10_000 })
+    await fs.promises.rename(staging, cached)
+    return cached
   }
   catch {
-    try { fs.rmSync(staging, { force: true }) }
-    catch {}
+    await fs.promises.rm(staging, { force: true }).catch(() => {})
     return null
   }
-
-  return cached
 }
 
 /**

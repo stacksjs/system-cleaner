@@ -1,5 +1,6 @@
+import { lstatSync } from 'node:fs'
 import * as path from 'node:path'
-import { HOME, getDirSize, macPaths, pathExists, safeStat, safeReadDir, formatBytes } from '@system-cleaner/core'
+import { HOME, getDirSize, macPaths, safeReadDir, formatBytes } from '@system-cleaner/core'
 import type { AppInfo, AppRemnant, RemnantType } from './types'
 
 interface RemnantSearchLocation {
@@ -17,6 +18,7 @@ const REMNANT_LOCATIONS: RemnantSearchLocation[] = [
   // ── User Library ────────────────────────────────────────────
   { basePath: macPaths.applicationSupport, type: 'application-support', matchBy: 'both' },
   { basePath: macPaths.caches, type: 'caches', matchBy: 'both' },
+  { basePath: path.join(macPaths.caches, 'SentryCrash'), type: 'caches', matchBy: 'name' },
   { basePath: macPaths.logs, type: 'logs', matchBy: 'both' },
   { basePath: macPaths.preferences, type: 'preferences', matchBy: 'bundleId', fuzzy: true },
   { basePath: path.join(HOME, 'Library/Preferences/ByHost'), type: 'preferences', matchBy: 'bundleId', fuzzy: true },
@@ -51,8 +53,9 @@ const REMNANT_LOCATIONS: RemnantSearchLocation[] = [
   { basePath: path.join(HOME, 'Library/Workflows'), type: 'other', matchBy: 'name', fuzzy: true },
 
   // ── Dotfiles in home directory ──────────────────────────────
-  { basePath: path.join(HOME, '.config'), type: 'other', matchBy: 'name' },
-  { basePath: path.join(HOME, '.local/share'), type: 'other', matchBy: 'name' },
+  { basePath: path.join(HOME, '.config'), type: 'other', matchBy: 'both' },
+  { basePath: path.join(HOME, '.local/share'), type: 'other', matchBy: 'both' },
+  { basePath: path.join(HOME, '.local/state'), type: 'other', matchBy: 'both' },
 
   // ── System-level locations ──────────────────────────────────
   { basePath: '/Library/Application Support', type: 'application-support', matchBy: 'both' },
@@ -92,13 +95,6 @@ function generateNameVariants(name: string): string[] {
   variants.add(clean.toLowerCase().replace(/\s+/g, '-'))  // lowercase-hyphen
   variants.add(clean.toLowerCase().replace(/\s+/g, '_'))  // lowercase_under
 
-  // Base name (strip version suffixes like "Zed Nightly" → "Zed")
-  const baseName = clean.split(/\s+/)[0]
-  if (baseName !== clean && baseName.length > 2) {
-    variants.add(baseName)
-    variants.add(baseName.toLowerCase())
-  }
-
   return [...variants]
 }
 
@@ -136,50 +132,58 @@ export function remnantPresentation(type: RemnantType): { label: string, icon: s
 /**
  * Find all remnants for a given application
  */
-export async function findRemnants(app: AppInfo): Promise<AppRemnant[]> {
-  const remnants: AppRemnant[] = []
-  const seen = new Set<string>()
+const additionalRemnants = new Map<string, Array<{ path: string, type: RemnantType }>>([
+  ['com.raycast.macos', [
+    { path: path.join(macPaths.applicationSupport, 'com.raycast.shared'), type: 'application-support' },
+    { path: path.join(macPaths.caches, 'SentryCrash/Raycast Accessibility'), type: 'caches' },
+    { path: path.join(macPaths.caches, 'SentryCrash/Raycast Pasteboard'), type: 'caches' },
+  ]],
+])
 
+function remnantCandidates(app: AppInfo): Map<string, RemnantType> {
   const terms = buildSearchTerms(app)
+  const candidates = new Map<string, RemnantType>()
 
   for (const location of REMNANT_LOCATIONS) {
-    if (!pathExists(location.basePath))
-      continue
-
-    const matches = findMatches(location, terms)
-    for (const matchPath of matches) {
-      if (seen.has(matchPath))
-        continue
-      seen.add(matchPath)
-
-      if (matchPath === app.path)
-        continue
-
-      const stat = safeStat(matchPath)
-      if (!stat)
-        continue
-
-      const sizeBytes = stat.isDirectory() ? await getDirSize(matchPath) : stat.size
-
-      remnants.push({
-        path: matchPath,
-        type: location.type,
-        sizeBytes,
-        exists: true,
-      })
-    }
+    for (const match of findMatches(location, terms))
+      candidates.set(match, location.type)
   }
 
-  // Also check for dotfiles in HOME: ~/.appname, ~/.appnamerc
   for (const variant of terms.nameVariantsLower) {
-    for (const dotfile of [path.join(HOME, `.${variant}`), path.join(HOME, `.${variant}rc`)]) {
-      if (seen.has(dotfile) || !pathExists(dotfile))
-        continue
-      seen.add(dotfile)
-      const stat = safeStat(dotfile)
-      if (!stat)
-        continue
-      remnants.push({ path: dotfile, type: 'other', sizeBytes: stat.isDirectory() ? await getDirSize(dotfile) : stat.size, exists: true })
+    if (variant.length < 3) continue
+    candidates.set(path.join(HOME, `.${variant}`), 'other')
+    candidates.set(path.join(HOME, `.${variant}rc`), 'other')
+  }
+
+  for (const remnant of additionalRemnants.get(terms.bundleIdLower) ?? [])
+    candidates.set(remnant.path, remnant.type)
+
+  candidates.delete(app.path)
+  return candidates
+}
+
+/** Resolve file ownership without running disk measurements again at removal time. */
+export function findRemnantPaths(app: AppInfo): string[] {
+  return [...remnantCandidates(app).keys()]
+}
+
+export async function findRemnants(app: AppInfo): Promise<AppRemnant[]> {
+  const candidates = [...remnantCandidates(app)]
+  const remnants: AppRemnant[] = []
+
+  for (let offset = 0; offset < candidates.length; offset += 4) {
+    const batch = await Promise.all(candidates.slice(offset, offset + 4).map(async ([remnantPath, type]) => {
+      try {
+        const stat = lstatSync(remnantPath)
+        const sizeBytes = stat.isDirectory() ? await getDirSize(remnantPath).catch(() => 0) : stat.size
+        return { path: remnantPath, type, sizeBytes, exists: true }
+      }
+      catch {
+        return null
+      }
+    }))
+    for (const remnant of batch) {
+      if (remnant) remnants.push(remnant)
     }
   }
 
@@ -219,83 +223,38 @@ export function summarizeRemnants(app: AppInfo, remnants: AppRemnant[]): {
 // ── Search infrastructure ────────────────────────────────────────
 
 interface SearchTerms {
-  exactBundleId: string
   bundleIdLower: string
-  nameVariants: string[]
   nameVariantsLower: string[]
-  /** Short unique parts of bundle ID for fuzzy matching (e.g., "spotify" from "com.spotify.client") */
-  bundleParts: string[]
 }
 
 function buildSearchTerms(app: AppInfo): SearchTerms {
-  const variants = generateNameVariants(app.name)
-  const bundleParts = app.bundleId
-    .split('.')
-    .filter(p => !['com', 'org', 'net', 'io', 'app', 'client', 'desktop', 'mac', 'macos', 'osx'].includes(p) && p.length > 2)
-
   return {
-    exactBundleId: app.bundleId,
     bundleIdLower: app.bundleId.toLowerCase(),
-    nameVariants: variants,
-    nameVariantsLower: variants.map(v => v.toLowerCase()),
-    bundleParts,
+    nameVariantsLower: generateNameVariants(app.name).map(name => name.toLowerCase()),
   }
 }
 
 function findMatches(location: RemnantSearchLocation, terms: SearchTerms): string[] {
   const matches: string[] = []
+  const bundleId = terms.bundleIdLower
 
-  let entries: string[]
-  try {
-    entries = safeReadDir(location.basePath)
-  }
-  catch {
-    return []
-  }
+  for (const entry of safeReadDir(location.basePath)) {
+    const name = entry.toLowerCase()
+    const unhidden = name.replace(/^\./, '')
+    // App groups and scripts can carry a signing-team prefix.
+    const identifier = unhidden.replace(/^[a-z0-9]{10}\./, '')
+    const matchesId = location.matchBy !== 'name' && bundleId && (
+      identifier === bundleId || identifier.startsWith(`${bundleId}.`)
+    )
 
-  for (const entry of entries) {
-    const entryLower = entry.toLowerCase()
-    let isMatch = false
+    const matchesName = location.matchBy !== 'bundleId' && terms.nameVariantsLower.some(variant =>
+      variant.length >= 3 && (unhidden === variant || unhidden.startsWith(`${variant}.`)
+        || (location.fuzzy && unhidden.startsWith(`${variant}-`))
+        || (location.type === 'crash-reports' && unhidden.startsWith(`${variant}_`))),
+    )
 
-    // Bundle ID match
-    if (location.matchBy === 'bundleId' || location.matchBy === 'both') {
-      if (terms.exactBundleId && entryLower.includes(terms.bundleIdLower)) {
-        isMatch = true
-      }
-    }
-
-    // Name variant match
-    if (!isMatch && (location.matchBy === 'name' || location.matchBy === 'both')) {
-      for (const variant of terms.nameVariantsLower) {
-        if (variant.length < 3)
-          continue
-        const REMNANT_EXTENSIONS = ['.plist', '.savedstate', '.workflow', '.qlgenerator', '.plugin', '.framework', '.prefpane', '.saver', '.app', '.component', '.vst', '.vst3', '.mdimporter', '.colorpicker']
-        if (entryLower === variant || REMNANT_EXTENSIONS.some(ext => entryLower === `${variant}${ext}`)) {
-          isMatch = true
-          break
-        }
-        // Substring match for directories
-        if (entryLower === variant || entryLower.startsWith(`${variant}.`) || entryLower.startsWith(`${variant}-`)) {
-          isMatch = true
-          break
-        }
-      }
-    }
-
-    // Fuzzy: check bundle ID parts (require length >= 4 to avoid false positives)
-    if (!isMatch && location.fuzzy) {
-      for (const part of terms.bundleParts) {
-        if (part.length >= 4 && entryLower.includes(part.toLowerCase())) {
-          isMatch = true
-          break
-        }
-      }
-    }
-
-    if (isMatch) {
+    if (matchesId || matchesName)
       matches.push(path.join(location.basePath, entry))
-    }
   }
-
   return matches
 }

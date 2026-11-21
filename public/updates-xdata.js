@@ -31,6 +31,7 @@ window.updatesXData = function () {
     },
     selfPollTimer: null,
     selfActionBusy: false,
+    selfStatusBusy: false,
 
     // On a beta the marketing version never moves — 27.0 upgrades to 27.0 —
     // so the build is the only thing that says which beta is installed and
@@ -84,6 +85,7 @@ window.updatesXData = function () {
           self.syncSelfPolling()
           return r
         }).catch(function (error) {
+          if (endpoint === 'status' && self.self.stage === 'restarting') return self.self
           self.self = Object.assign({}, self.self, { stage: 'error', error: error.message || 'Could not contact the updater' })
           self.syncSelfPolling()
           return self.self
@@ -101,10 +103,15 @@ window.updatesXData = function () {
     // polls only while there is something moving. Polling an idle app forever
     // is how a settings screen ends up costing a request a second.
     syncSelfPolling() {
-      var busy = this.self.stage === 'downloading' || this.self.stage === 'installing'
+      var busy = this.self.stage === 'downloading' || this.selfInstalling()
       if (busy && !this.selfPollTimer) {
         var self = this
-        this.selfPollTimer = setInterval(function () { self.selfPost('status') }, 500)
+        this.selfPollTimer = setInterval(async function () {
+          if (self.selfStatusBusy) return
+          self.selfStatusBusy = true
+          try { await self.selfPost('status') }
+          finally { self.selfStatusBusy = false }
+        }, 500)
       } else if (!busy && this.selfPollTimer) {
         clearInterval(this.selfPollTimer)
         this.selfPollTimer = null
@@ -143,6 +150,10 @@ window.updatesXData = function () {
       }
     },
 
+    selfInstalling() {
+      return this.self.stage === 'installing' || this.self.stage === 'restarting'
+    },
+
     selfStatusLine() {
       var s = this.self
       if (s.stage === 'unsupported') return s.unsupportedReason || 'Updates are unavailable for this copy'
@@ -151,7 +162,8 @@ window.updatesXData = function () {
       if (s.stage === 'available') return 'Version ' + s.latestVersion + ' is available'
       if (s.stage === 'downloading') return 'Downloading ' + s.latestVersion + ' - ' + s.percent + '%'
       if (s.stage === 'ready') return 'Version ' + s.latestVersion + ' is ready to install'
-      if (s.stage === 'installing') return 'Verifying and installing...'
+      if (s.stage === 'installing') return 'Preparing and installing the update…'
+      if (s.stage === 'restarting') return 'Update installed. SystemCleaner is reopening…'
       if (s.stage === 'error') return s.error || 'Something went wrong'
       return 'SystemCleaner ' + s.currentVersion
     },
@@ -163,7 +175,7 @@ window.updatesXData = function () {
     // both.
     selfHeadline() {
       var s = this.self
-      if (s.stage === 'available' || s.stage === 'downloading' || s.stage === 'ready')
+      if (s.latestVersion && (['available', 'downloading', 'ready'].includes(s.stage) || this.selfInstalling()))
         return 'SystemCleaner ' + s.latestVersion
       return s.currentVersion ? 'SystemCleaner ' + s.currentVersion : 'SystemCleaner'
     },

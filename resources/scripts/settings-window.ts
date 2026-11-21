@@ -166,6 +166,8 @@ function syncHistoryButtons(): void {
 }
 
 function firstPane(): string {
+  if (new URLSearchParams(location.search).get('pane') === 'software-update')
+    return 'software-update'
   try {
     const stored = localStorage.getItem(LAST_PANE_KEY)
     if (stored && document.querySelector(`[data-pane="${stored}"]`))
