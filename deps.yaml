@@ -1,4 +1,4 @@
 dependencies:
   craft-native.org: 0.0.499
   bun.sh: ^1.4.1
-  sqlite.org: ^3.47.2
+  sqlite.org: ^3.53.4
