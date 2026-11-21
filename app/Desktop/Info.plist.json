@@ -1,4 +1,5 @@
 {
+  "ITSAppUsesNonExemptEncryption": false,
   "LSApplicationCategoryType": "public.app-category.utilities",
   "LSMinimumSystemVersion": "15.0",
   "NSSystemAdministrationUsageDescription": "SystemCleaner needs access to your files to report what is using disk space and to remove what you choose to remove.",

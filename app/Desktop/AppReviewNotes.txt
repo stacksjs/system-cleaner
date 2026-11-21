@@ -1,5 +1,14 @@
 SystemCleaner finds and removes junk on this Mac: caches, logs, browser data, developer build output, large and duplicate files, and files left behind by apps that were removed. Nothing is uploaded; every scan runs on the device.
 
+CHANGE IN BUILD 3
+The bundled helper now links the upstream Unicode ICU 78.2 implementation statically. Neither executable in the app imports Apple's system ICU library or the ICU symbols identified in the previous review.
+
+WHY THE NETWORK SERVER ENTITLEMENT IS REQUIRED
+The installed app starts its bundled craft-backend helper. The helper opens an HTTP listener bound to 127.0.0.1 only, on a port chosen on this Mac. The Craft window connects to that listener to load the interface and make requests for local disk and cleanup data. The App Sandbox needs com.apple.security.network.server for the helper to accept the connection, and com.apple.security.network.client for the window to connect. No remote device can reach the listener. No user data is sent to a server.
+
+HOW TO VERIFY THE LOCAL SERVICE
+Launch SystemCleaner with internet access disconnected. Overview should open normally and display the home folder access prompt. After choosing the home folder, open Applications or Quick Clean to confirm that the same local helper is answering the window's requests. The app stops its helper when it quits.
+
 HOW TO TEST
 1. Open SystemCleaner. The Overview shows a banner asking for the home folder.
 2. Click "Choose Home Folder...". An Open panel opens at the home folder. Click Allow.
@@ -19,6 +28,3 @@ The App Sandbox rules several features out, so this edition leaves them out and 
 - Homebrew and Pantry updates: cannot run those tools. Not offered.
 - Emptying the Trash: not offered. Files the app moves to the Trash stay there until the user empties it.
 - Automatic update checks: the Mac App Store delivers updates; the app's own updater is off.
-
-TECHNICAL NOTES
-The window is Craft's native host (main executable). The app's own binary runs as a helper inside the same sandbox (com.apple.security.inherit) and serves the interface over a loopback connection on 127.0.0.1 only (com.apple.security.network.server / network.client). No other network access is made unless the user opens a link.
