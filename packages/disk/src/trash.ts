@@ -1,6 +1,8 @@
+import { execFile } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import process from 'node:process'
+import { promisify } from 'node:util'
 import { appleScriptEscape, exec, SANDBOXED } from '@system-cleaner/core'
 import { recycle } from './recycle-windows'
 import { trashWithFoundation } from './trash-native'
@@ -8,12 +10,15 @@ import { trashWithFoundation } from './trash-native'
 /**
  * Which recoverable-deletion mechanism this platform has.
  *
- * macOS has Finder's Trash, driven by AppleScript. Windows has the Recycle
+ * macOS has a native Trash command, with Finder for older versions. Windows has the Recycle
  * Bin, reachable only through the shell API that maintains its restore
  * records. Linux has neither here, so a delete there stays a refusal rather
  * than becoming a permanent `rm` nobody asked for.
  */
 const IS_WINDOWS = process.platform === 'win32'
+const SYSTEM_TRASH = '/usr/bin/trash'
+const hasSystemTrash = process.platform === 'darwin' && fs.existsSync(SYSTEM_TRASH)
+const runFile = promisify(execFile)
 
 export interface MoveToTrashOptions {
   /**
@@ -28,7 +33,7 @@ export interface MoveToTrashOptions {
 }
 
 /**
- * Move a path to Trash via Finder AppleScript (recoverable deletion).
+ * Move a path to Trash (recoverable deletion).
  * Path validation rejects empty, root, relative, null-byte, and traversal
  * paths.
  */
@@ -67,7 +72,18 @@ export async function moveToTrash(
   }
 }
 
-/** Finder's Trash for a whole batch, in one AppleScript. macOS only. */
+async function viaSystemTrash(paths: string[]): Promise<{ ok: boolean, error?: string }> {
+  try {
+    await runFile(SYSTEM_TRASH, paths.map(target => path.resolve(target)), { timeout: 30_000 })
+    return { ok: true }
+  }
+  catch (error) {
+    const failure = error as Error & { stderr?: string }
+    return { ok: false, error: failure.stderr?.trim() || failure.message }
+  }
+}
+
+/** Use the native Trash command where available, with Finder on older macOS. */
 async function viaFinderBatch(batch: string[]): Promise<{ ok: boolean, error?: string }> {
   // The sandbox refuses Apple Events to Finder. Foundation moves one item per
   // call, so a batch is a loop that stops at the first failure, which sends
@@ -79,6 +95,8 @@ async function viaFinderBatch(batch: string[]): Promise<{ ok: boolean, error?: s
     }
     return { ok: true }
   }
+  if (hasSystemTrash) return viaSystemTrash(batch)
+
   const list = batch
     .map(p => `POSIX file "${appleScriptEscape(path.resolve(p))}"`)
     .join(', ')
@@ -90,6 +108,7 @@ async function viaFinderBatch(batch: string[]): Promise<{ ok: boolean, error?: s
 /** Finder's Trash, via AppleScript. macOS only. */
 async function viaFinder(absPath: string): Promise<{ ok: boolean, error?: string }> {
   if (SANDBOXED) return trashWithFoundation(absPath)
+  if (hasSystemTrash) return viaSystemTrash([absPath])
   // AppleScript escape order matters: escape backslashes first, then double
   // quotes — otherwise an injected `\"` smuggles a quote through.
   const script = `tell application "Finder" to delete POSIX file "${appleScriptEscape(absPath)}"`
@@ -192,10 +211,15 @@ export async function moveManyToTrash(
     // whatever is no longer there succeeded.
     const remaining: string[] = []
     for (const p of batch) {
-      if (fs.existsSync(path.resolve(p)))
+      try {
+        fs.lstatSync(p)
         remaining.push(p)
-      else
-        succeeded.push(p)
+      }
+      catch (error) {
+        const code = (error as NodeJS.ErrnoException).code
+        if (code === 'ENOENT' || code === 'ENOTDIR') succeeded.push(p)
+        else remaining.push(p)
+      }
     }
 
     // Fall back to individual deletes so one bad path does not fail the batch.
