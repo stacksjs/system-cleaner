@@ -1,7 +1,8 @@
 SystemCleaner finds and removes junk on this Mac: caches, logs, browser data, developer build output, large and duplicate files, and files left behind by apps that were removed. Nothing is uploaded; every scan runs on the device.
 
-CHANGE IN BUILD 3
+CHANGE IN BUILD 4
 The bundled helper now links the upstream Unicode ICU 78.2 implementation statically. Neither executable in the app imports Apple's system ICU library or the ICU symbols identified in the previous review.
+Both executables support the app's declared macOS 15 minimum.
 
 WHY THE NETWORK SERVER ENTITLEMENT IS REQUIRED
 The installed app starts its bundled craft-backend helper. The helper opens an HTTP listener bound to 127.0.0.1 only, on a port chosen on this Mac. The Craft window connects to that listener to load the interface and make requests for local disk and cleanup data. The App Sandbox needs com.apple.security.network.server for the helper to accept the connection, and com.apple.security.network.client for the window to connect. No remote device can reach the listener. No user data is sent to a server.
