@@ -91,31 +91,22 @@ Add your own with `app/Skills/<name>/SKILL.md`, then re-run `buddy setup:ai`.
 
 ## The desktop app
 
-`bun run build:app` produces the signed `.dmg` in
-`storage/framework/desktop-dmg/`. It drives buddy rather than replacing it:
-`buddy build:views` renders the UI, `buddy build:desktop` compiles the launcher
-and bundles Craft, `buddy build:dmg` assembles and images the bundle. The script
-does only what the framework cannot know — render the UI as the local agent,
-stage the payload, and compile the two binaries the launcher spawns.
-
-Four conventions carry the rest, all read by buddy:
+`./buddy build` produces the app in `storage/framework/desktop-dist/` and the
+installer in `storage/framework/desktop-dmg/`. Declare shared build behavior
+in Stacks and project-specific settings in `config/desktop.ts`.
 
 | Path | What it does |
 |---|---|
+| `config/desktop.ts` | selects packaged views and assets, database migrations, installer layout, update feed and Store entitlements |
 | `app/Desktop/launcher.ts` | replaces the framework launcher, which opens a remote URL this app does not have |
 | `app/Desktop/server.ts` | the agent the launcher starts on loopback |
-| `app/Desktop/Resources/` | copied into `Contents/Resources` (generated; gitignored) |
 | `app/Desktop/Info.plist.json` | the `NS*UsageDescription` strings macOS shows in permission prompts |
 
-The macOS build installs `github.com/create-dmg/create-dmg` through Pantry,
-pinned in `resources/dmg/deps.yaml`. It authors the installer
-window, background, Applications drop target, compressed image, signature and
-notarization. Geometry lives in `DMG_WINDOW` in `scripts/dmg-window.ts` and
-artwork in `resources/dmg/installer-background.svg`. Regenerate the committed
-PNG with `bun scripts/render-dmg-background.ts` after editing the artwork.
-The build validates the layout and drop target from the finished image.
+Buddy installs `create-dmg` through Pantry and checks the finished installer
+layout and Applications drop target. Regenerate the committed PNG with
+`bun scripts/render-dmg-background.ts` after editing the SVG artwork.
 
-Requires Stacks >= 0.72.100. See `docs/guide/desktop-app.md`.
+See `docs/guide/desktop-app.md` and `docs/guide/mac-app-store.md`.
 
 The bundle serves prerendered HTML, so **nothing machine-specific may come from
 a `<script server>` block** on an app view. Anything a server script computes is
@@ -129,4 +120,4 @@ travel on `/api/dashboard-stats` and are bound client-side.
 - Test: `bun run test` — not `./buddy test`, which globs `tests/` only and
   silently skips the ten suites under `packages/*/test/`
 - Touching an app view or the API? Rebuild and launch the bundle:
-  `bun run build:app && open storage/framework/desktop-dist/SystemCleaner.app`
+  `./buddy build && open storage/framework/desktop-dist/SystemCleaner.app`

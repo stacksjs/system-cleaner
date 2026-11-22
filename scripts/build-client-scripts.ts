@@ -16,8 +16,8 @@
  * router records which scripts have run, and would need `type="module"` on
  * every tag.
  *
- * `public/` output is generated and gitignored. `bun run dev` and
- * `bun run build:app` both run this first; it takes well under a second.
+ * `public/` output is generated and gitignored. The website dev and build
+ * scripts use this entry point. Buddy bundles the same inputs for desktop.
  */
 import { readdirSync } from 'node:fs'
 import path from 'node:path'

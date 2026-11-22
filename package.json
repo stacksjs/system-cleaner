@@ -12,9 +12,9 @@
     "build": "bun ./scripts/build-client-scripts.ts && ./buddy build views",
     "build:scripts": "bun ./scripts/build-client-scripts.ts",
     "build:binaries": "bun ./scripts/build-binaries.ts",
-    "build:app": "bun ./scripts/build-desktop-app.ts",
-    "build:app-store": "bun ./scripts/build-desktop-app.ts --app-store",
-    "build:app-store:check": "bun ./scripts/build-desktop-app.ts --sandbox-check",
+    "build:app": "./buddy build",
+    "build:app-store": "./buddy desktop:apple:package",
+    "build:app-store:check": "./buddy desktop:apple:package --sandbox-check",
     "build:app:windows": "bun ./scripts/build-desktop-windows.ts",
     "release": "./buddy release --skip-github-release",
     "release:patch": "./buddy release --bump patch --no-interaction --skip-github-release",
@@ -44,7 +44,7 @@
     "@ts-charts/format": "^0.2.7",
     "@ts-charts/scale": "^0.2.7",
     "@ts-charts/shape": "^0.2.7",
-    "stacks": "0.75.628"
+    "stacks": "0.75.652"
   },
   "devDependencies": {
     "@fontsource-variable/geist": "^5.3.0",

@@ -3,11 +3,8 @@
 /**
  * Assemble the Windows desktop bundle.
  *
- * A separate script rather than a branch in `build-desktop-app.ts`, because
- * that one delegates the two steps that matter to `buddy build:desktop` and
- * `buddy build:dmg` — which produce a `.app` and a disk image. Neither has a
- * Windows equivalent to reuse, and the parts that *are* shared (the client
- * scripts, the rendered views, the migrations) are three `run()` calls.
+ * Windows stages the local launcher, the prerendered views and schema, and
+ * the Craft runtime with its WebView2 loader.
  *
  * What comes out is a directory, zipped:
  *

@@ -1,9 +1,8 @@
 name: Publish Mac App Store
 
-# The Store edition is built by this repository's own script, not the shared
-# Stacks workflow: that one packages the framework launcher, which opens a
-# remote URL, while this app runs its agent on loopback under Craft's App Store
-# host (see docs/guide/mac-app-store.md).
+# Buddy packages the local launcher under Craft's App Store host. Configure
+# DESKTOP_STORE_BUN_URL and DESKTOP_STORE_BUN_SHA256 with a pinned arm64 Bun
+# executable built with upstream ICU (see docs/guide/mac-app-store.md).
 #
 # Tag pushes validate the signed package against App Store Connect without
 # uploading it, so a signing or entitlement regression surfaces on the release
@@ -71,6 +70,19 @@ jobs:
       - name: Install Dependencies
         run: bun install
 
+      - name: Install the Store Bun runtime
+        env:
+          RUNTIME_URL: ${{ vars.DESKTOP_STORE_BUN_URL }}
+          RUNTIME_SHA256: ${{ vars.DESKTOP_STORE_BUN_SHA256 }}
+        run: |
+          test -n "$RUNTIME_URL"
+          test -n "$RUNTIME_SHA256"
+          runtime="$RUNNER_TEMP/bun-store"
+          curl --fail --location --proto '=https' --output "$runtime" "$RUNTIME_URL"
+          printf '%s  %s\n' "$RUNTIME_SHA256" "$runtime" | shasum -a 256 --check
+          chmod +x "$runtime"
+          echo "DESKTOP_BUN_EXECUTABLE=$runtime" >> "$GITHUB_ENV"
+
       # app-store:package and app-store:deliver ship after ts-pantry 0.11.210.
       - name: Install the ts-pantry CLI
         run: |
@@ -81,19 +93,24 @@ jobs:
           echo "TS_PANTRY_CLI=$RUNNER_TEMP/ts-pantry/node_modules/ts-pantry/dist/bin/cli.js" >> "$GITHUB_ENV"
 
       - name: Build and package the Store edition
-        run: bun run build:app-store
+        run: ./buddy desktop:apple:package
         env:
-          APP_STORE_BUILD_NUMBER: ${{ inputs.build-number || github.run_number }}
-          APPLE_STORE_SIGNING_IDENTITY: ${{ steps.pantry.outputs.apple-signing-identity }}
-          APPLE_STORE_INSTALLER_IDENTITY: ${{ steps.pantry.outputs.apple-signing-installer-identity }}
-          APPLE_STORE_PROVISIONING_PROFILE: ${{ steps.pantry.outputs.apple-signing-provisioning-profile }}
+          APPLE_BUILD_NUMBER: ${{ inputs.build-number || github.run_number }}
+          APPLE_APP_SIGNING_IDENTITY: ${{ steps.pantry.outputs.apple-signing-identity }}
+          APPLE_INSTALLER_SIGNING_IDENTITY: ${{ steps.pantry.outputs.apple-signing-installer-identity }}
+          APPLE_PROVISIONING_PROFILE: ${{ steps.pantry.outputs.apple-signing-provisioning-profile }}
 
       - name: ${{ inputs.upload && 'Upload to App Store Connect' || 'Validate against App Store Connect' }}
         run: |
-          pkg=$(ls storage/framework/app-store/*.pkg | head -1)
+          pkg=$(ls storage/framework/desktop-dist/apple/*.pkg | head -1)
           test -s "$pkg"
-          bun "$TS_PANTRY_CLI" app-store:deliver "$pkg" ${{ inputs.upload && '' || '--validate-only' }}
+          if [ "$UPLOAD" = true ]; then
+            bun "$TS_PANTRY_CLI" app-store:deliver "$pkg"
+          else
+            bun "$TS_PANTRY_CLI" app-store:deliver "$pkg" --validate-only
+          fi
         env:
+          UPLOAD: ${{ inputs.upload }}
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
@@ -102,6 +119,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mac-app-store-pkg
-          path: storage/framework/app-store/*.pkg
+          path: storage/framework/desktop-dist/apple/*.pkg
           if-no-files-found: error
           retention-days: 7

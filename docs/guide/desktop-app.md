@@ -10,7 +10,7 @@ network: the bundle carries its own HTTP server, and the window points at
 `127.0.0.1`.
 
 ```bash
-bun run build:app
+./buddy build
 ```
 
 That writes `storage/framework/desktop-dmg/SystemCleaner-<version>.dmg`.
@@ -57,12 +57,11 @@ preferences through the persistent website data store.
 
 | Step | Owner |
 |---|---|
-| Render the local-agent UI | `buddy build:views`, with `SYSTEM_CLEANER_AGENT=1` |
-| Stage application pages, assets and migrations | `scripts/build-desktop-app.ts` |
+| Render the local-agent UI and stage application pages, assets and migrations | Buddy uses `launcher.views` and `launcher.sqliteMigrations` in `config/desktop.ts` |
 | Compile the launcher and bundle Craft | `buddy build:desktop` |
 | Assemble and sign the application | `buddy build:dmg` |
-| Author, compress, sign and notarize the installer | Pantry's `create-dmg` |
-| Verify the finished image and generate `update.json` | `scripts/build-desktop-app.ts` |
+| Author and compress the installer | Pantry's `create-dmg` |
+| Sign and verify the installer, notarize and generate `update.json` | Buddy |
 
 Stacks reads `app/Desktop/launcher.ts`, `app/Desktop/Resources/`,
 `app/Desktop/Info.plist.json` and `app/Desktop/Entitlements.plist` directly.
@@ -70,14 +69,14 @@ It owns executable placement and inside-out signing. A failed packaging command
 fails the build; the app does not recover arbitrary staging directories or
 repair a failed signature.
 
-`stageDesktopWeb` keeps application HTML, runtime chunks, styles, fonts and
+Buddy keeps application HTML, runtime chunks, styles, fonts and
 referenced assets. Marketing pages and showcase screenshots stay on the website.
 Production browser scripts and the compiled launcher are minified.
 
 ## The drag-and-drop installer
 
-`resources/dmg/deps.yaml` pins `github.com/create-dmg/create-dmg`. The macOS
-build installs it through Pantry with `--no-save`, keeping platform build tools
+Buddy pins `github.com/create-dmg/create-dmg` and installs it through Pantry
+with `--no-save`, keeping platform build tools
 out of the root runtime dependencies used on Linux and Windows.
 `pantry which --resolve` locates its provider executable, so its bundled support
 files resolve correctly through either symlinks or activation scripts. It builds a 660×460 Finder window with the app
@@ -85,7 +84,7 @@ on the left, an Applications drop target on the right, and instruction artwork.
 It also sets the volume icon, hides the app extension and uses HFS+ with LZMA
 (`ULMO`) compression. The signed app is supplied by Stacks unchanged.
 
-Geometry lives in `DMG_WINDOW` in `scripts/dmg-window.ts`. Edit the artwork in
+Geometry lives in `launcher.dmg` in `config/desktop.ts`. Edit the artwork in
 `resources/dmg/installer-background.svg`, then regenerate its committed PNG:
 
 ```bash
@@ -97,27 +96,24 @@ icon geometry, and a symlink to `/Applications`. Signature, image integrity,
 notarization ticket and Gatekeeper checks must pass. A cosmetic failure stops
 the release; there is no position-only installer fallback.
 
-The build emits `size-report.json` with payload and image sizes and requires
-exactly one Bun executable. Set `DMG_BENCHMARK=1` to compare maximum zlib and
-LZFSE compression against the shipped LZMA image. On the same signed payload,
-LZMA measured 33.16 MiB, LZFSE 44.95 MiB, and maximum zlib 46.77 MiB. Alternative
-images are temporary and never published.
+The build emits `size-report.json` with web, executable and image sizes. The
+launcher, agent and scanner share one Bun executable.
 
 The exact `.app` from the finished image is also copied to
 `storage/framework/desktop-dist/SystemCleaner.app` for local launch and QA.
 
 ## Signing and notarizing
 
-Unsigned bundles run on the machine that built them and nowhere else —
-Gatekeeper refuses them. For distribution:
+Local builds use ad hoc signing by default. Deliberate distribution uses a
+Developer ID identity and notarization.
 
 ```bash
 DESKTOP_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
-NOTARY_PROFILE=systemcleaner \
-bun run build:app
+DESKTOP_NOTARY_PROFILE=systemcleaner \
+./buddy build
 ```
 
-`NOTARY_PROFILE` names a keychain profile you create once:
+`DESKTOP_NOTARY_PROFILE` names a keychain profile you create once:
 
 ```bash
 xcrun notarytool store-credentials systemcleaner \
@@ -126,10 +122,9 @@ xcrun notarytool store-credentials systemcleaner \
 
 With the identity set, Stacks signs the executable leaves and then seals the
 bundle, using `app/Desktop/Entitlements.plist`. Use the identity's SHA-1
-fingerprint if multiple certificates share its name. Pantry's `create-dmg`
-signs the final installer, submits it to Apple and staples its accepted ticket.
-The build then validates the ticket and asks Gatekeeper to assess the shipped
-image and application.
+fingerprint if multiple certificates share its name. Buddy signs the finished
+installer, submits it to Apple, staples the accepted ticket and checks it with
+Gatekeeper.
 
 **Developer ID rather than the Mac App Store, deliberately.** The App Store
 requires `com.apple.security.app-sandbox`, and a sandboxed process cannot read
@@ -269,7 +264,7 @@ check, download, install — because each one costs something different: a check
 is free, a download is 40 MB of the user's bandwidth, and an install quits the
 app.
 
-`build:app` writes `update.json` beside the DMG, and the Pantry release step attaches
+`./buddy build` writes `update.json` beside the DMG, and the release workflow attaches
 both. The manifest is generated **after** notarization: stapling the ticket
 rewrites the DMG, so a manifest built earlier carries a hash no download can
 match.
@@ -295,9 +290,8 @@ Only then is the quarantine flag cleared and the bundle swapped, and the swap
 is two renames inside the install directory rather than a delete and a copy, so
 an interrupted update never leaves the user without an app.
 
-An unsigned local build still produces a manifest, and `build:app` says so: an
-installed copy will refuse that update, which is the correct outcome and a
-confusing one to debug without the warning.
+An ad hoc local build produces a manifest for testing. Installed copies require
+a notarized update signed by the original developer team.
 
 ## Checking appearance
 

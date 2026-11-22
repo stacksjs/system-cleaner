@@ -53,10 +53,10 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
 
       - name: Build, sign, and notarize
-        run: bun run build:app
+        run: ./buddy build
         env:
           DESKTOP_SIGNING_IDENTITY: ${{ vars.DESKTOP_SIGNING_IDENTITY_NAME }}
-          NOTARY_PROFILE: systemcleaner
+          DESKTOP_NOTARY_PROFILE: systemcleaner
 
       - name: Require the notarized installer and manifest
         env:

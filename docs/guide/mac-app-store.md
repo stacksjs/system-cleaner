@@ -24,40 +24,29 @@ SystemCleaner ships two artifacts from one tag:
 | CLI binary attached to the GitHub release | `Releaser` | ubuntu |
 | Signed `.pkg` delivered to App Store Connect | `Publish Mac App Store` | macOS |
 
-Both fire on `push: tags: v*`. The App Store job is skipped entirely while
-`APPLE_BUNDLE_ID` is unset, so the CLI release is never blocked by a
-half-configured Store setup.
+Both run for version tags. The Store job requires the repository variable
+`APPLE_STORE_ENABLED` and validates the package by default.
 
 ## What runs where
 
-`buddy` builds and signs; the pantry Action owns the keychain and the delivery.
-Neither reimplements the other:
+`buddy` builds and signs. Pantry prepares the keychain and delivers packages.
 
 1. **`pantry-pm/pantry/packages/action`** with `apple-signing` creates an
    ephemeral keychain, imports the application and installer identities, writes
    the provisioning profile, and deletes the keychain in its post step — which
    runs even if the job is cancelled.
-2. **`buddy desktop:apple:doctor`** fails the run early if anything is missing,
-   naming each item.
-3. **`buddy desktop:apple:publish --package-only`** builds the Craft-backed app,
+2. **`buddy desktop:apple:package`** builds the Craft-backed app,
    applies the App Sandbox entitlements, signs the helper before the parent, and
    produces the installer `.pkg`.
-4. **The same Action** with `release` and `release-app-store` attaches the
-   package to the GitHub release and validates or uploads it to App Store
-   Connect.
-
-The signing identities default to whichever ones step 1 imported. Set
-`APPLE_APP_SIGNING_IDENTITY` only when the keychain holds more than one
-candidate.
+3. **`ts-pantry app-store:deliver`** validates or uploads the package to
+   App Store Connect.
 
 ## Validate before you upload
 
-A tag push runs with `validate-only: true`: the package is built, signed, and
-checked against App Store Connect, but nothing is delivered. A signing or
-entitlement regression surfaces on the release that caused it, at no cost.
+A tag push builds and signs the package and checks it against App Store Connect.
 
-To actually upload, run **Publish Mac App Store** from the Actions tab with
-`validate-only` unchecked, after the artifact has passed local launch and UI QA.
+To upload, run **Publish Mac App Store** with `upload` enabled and the next build
+number after checking the app locally.
 
 A Store build number is immutable. Retry a failed upload with the same signed
 artifact; only rebuild with a new number when the binary itself changes.
@@ -66,24 +55,26 @@ artifact; only rebuild with a new number when the binary itself changes.
 
 | Variable | Example |
 |---|---|
-| `APPLE_APP_NAME` | `SystemCleaner` |
-| `APPLE_BUNDLE_ID` | `app.systemcleaner.desktop` |
-| `APPLE_TEAM_ID` | 10-character team ID |
-| `DESKTOP_URL` | HTTPS URL the packaged app opens |
-| `APPLE_APP_SIGNING_IDENTITY` | optional, see above |
-| `APPLE_INSTALLER_SIGNING_IDENTITY` | optional, see above |
+| `APPLE_STORE_ENABLED` | `true` after configuring signing and runtime inputs |
+| `DESKTOP_STORE_BUN_URL` | HTTPS URL for the pinned arm64 Bun executable |
+| `DESKTOP_STORE_BUN_SHA256` | SHA-256 of that executable |
+
+The Store build requires Bun linked to upstream ICU. Follow the
+[Stacks runtime build guide](https://github.com/stacksjs/stacks/blob/main/docs/packages/desktop.md#bun-executables-for-the-mac-app-store)
+and use the same executable for CI and local qualification. Buddy loads the
+remaining app and entitlement settings from `config/desktop.ts`.
 
 ## Repository secrets
 
 | Secret | |
 |---|---|
-| `APPLE_APP_CERTIFICATE_BASE64` | Mac App Distribution `.p12`, base64 |
-| `APPLE_INSTALLER_CERTIFICATE_BASE64` | Mac Installer Distribution `.p12`, base64 |
-| `APPLE_CERTIFICATE_PASSWORD` | password both `.p12` files were exported with |
-| `APPLE_PROVISIONING_PROFILE_BASE64` | Mac App Store profile, base64 |
-| `APP_STORE_CONNECT_API_KEY` | contents of the `AuthKey_*.p8` |
+| `APPLE_STORE_APP_CERTIFICATE_BASE64` | Mac App Distribution `.p12`, base64 |
+| `APPLE_STORE_INSTALLER_CERTIFICATE_BASE64` | Mac Installer Distribution `.p12`, base64 |
+| `APPLE_STORE_CERTIFICATE_PASSWORD` | password for both `.p12` files |
+| `APPLE_STORE_PROVISIONING_PROFILE_BASE64` | Mac App Store profile, base64 |
+| `APP_STORE_CONNECT_PRIVATE_KEY` | contents of the `AuthKey_*.p8` |
 | `APP_STORE_CONNECT_API_KEY_ID` | |
-| `APP_STORE_CONNECT_API_ISSUER_ID` | |
+| `APP_STORE_CONNECT_ISSUER_ID` | |
 
 `buddy desktop:apple:csr` generates the private keys and certificate signing
 requests to upload to the Apple Developer portal, and
@@ -114,22 +105,21 @@ ts-pantry app-store:provision --bundle-id org.stacksjs.system-cleaner --name Sys
   --api-key-id <id> --api-issuer-id <issuer> --api-key-path <AuthKey.p8> --apply
 
 # Launch the edition locally under the real sandbox (ad hoc signed)
-bun run build:app-store:check
-open storage/framework/app-store/SystemCleaner.app
+./buddy desktop:apple:package --sandbox-check
+open storage/framework/desktop-dist/apple/SystemCleaner.app
 
 # Sign for the Store and package it
-APPLE_STORE_SIGNING_IDENTITY="Apple Distribution: …" \
-APPLE_STORE_INSTALLER_IDENTITY="3rd Party Mac Developer Installer: …" \
-APP_STORE_BUILD_NUMBER=1 bun run build:app-store
+DESKTOP_BUN_EXECUTABLE=/path/to/bun-store \
+APPLE_PROVISIONING_PROFILE=.pantry/apple/mac-app-store.provisionprofile \
+  ./buddy desktop:apple:package --build-number 4
 
 # Validate, then upload to App Store Connect (TestFlight)
-ts-pantry app-store:deliver storage/framework/app-store/SystemCleaner-<version>-<build>.pkg --validate-only …
-ts-pantry app-store:deliver storage/framework/app-store/SystemCleaner-<version>-<build>.pkg …
+ts-pantry app-store:deliver storage/framework/desktop-dist/apple/SystemCleaner-<version>-<build>.pkg --validate-only …
+ts-pantry app-store:deliver storage/framework/desktop-dist/apple/SystemCleaner-<version>-<build>.pkg …
 ```
 
-`APP_STORE_BUILD_NUMBER` must grow with every upload; the marketing version is
-`package.json`'s. Set `TS_PANTRY_CLI` to a pantry checkout's
-`packages/ts-pantry/bin/cli.ts` to use unreleased pantry commands.
+`--build-number` must grow with every upload. Set the Store marketing version
+in `config/desktop.ts`.
 
 ## Checking locally
 
@@ -173,15 +163,6 @@ every sandboxed process, and `packages/core/src/sandbox.ts` reads it.
 Move to Trash uses `-[NSFileManager trashItemAtURL:]` through `bun:ffi` in this
 edition (`packages/disk/src/trash-native.ts`), because the sandbox refuses the
 Apple Events the direct build sends Finder.
-
-Craft's folder-access API is new in Craft (branch
-`feat/app-store-folder-access`). Until a release carries it, point the build at
-a local App Store runtime:
-
-```bash
-CRAFT_APP_STORE_RUNTIME=~/Code/Tools/craft-worktrees/app-store-folder-access/packages/zig/zig-out/bin/craft \
-  bun run build:app-store:check
-```
 
 ## App Review notes
 

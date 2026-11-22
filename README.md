@@ -96,7 +96,7 @@ bun run dev
 Build the signed `.dmg`:
 
 ```bash
-bun run build:app
+./buddy build
 ```
 
 Before opening a pull request:
@@ -122,7 +122,7 @@ Before opening a pull request:
 
 ### How the desktop app is put together
 
-`bun run build:app` produces the signed `.dmg`. The bundle carries a prerendered
+`./buddy build` produces the `.app` and `.dmg`. The bundle carries a prerendered
 UI, the Craft webview runtime, and three binaries this project compiles:
 
 - **`SystemCleaner`** — the launcher, which starts the agent and opens the
