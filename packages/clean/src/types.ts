@@ -60,6 +60,12 @@ export interface CleanOptions {
   verbose?: boolean
   categories?: CleanCategory[]
   skipTargets?: string[]
+  /**
+   * Let `cleanAll` include `caution` targets. Off by default, for the same
+   * reason the app's Select All leaves them out: a bulk clean should never be
+   * how someone loses session history or downloaded models.
+   */
+  includeCaution?: boolean
   onProgress?: (targetId: string, status: string) => void
 }
 
