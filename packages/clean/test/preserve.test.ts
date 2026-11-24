@@ -104,7 +104,7 @@ describe('cleaning the session history folder', () => {
 describe('preservedFor', () => {
   it('names only folders that exist and that the clean could reach', () => {
     const kept = preservedFor(PROJECTS, RULES).map(p => path.relative(fs.realpathSync(PROJECTS), p)).sort()
-    expect(kept).toEqual(['-Users-a-app/memory', '-Users-c-empty/memory'])
+    expect(kept).toEqual([path.join('-Users-a-app', 'memory'), path.join('-Users-c-empty', 'memory')])
     expect(preservedFor(path.join(ROOT, 'elsewhere'), RULES)).toEqual([])
   })
 
