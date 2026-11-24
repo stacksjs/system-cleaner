@@ -275,7 +275,7 @@ const MACOS_TARGETS: CleanTarget[] = [
   t('claude-code-cache', 'Claude Code Cache', `${HOME}/.claude/cache`, 'developer', 'Claude Code internal cache', true),
   t('claude-code-paste-cache', 'Claude Code Paste Cache', `${HOME}/.claude/paste-cache`, 'developer', 'Images and text pasted into Claude Code', true),
   t('claude-code-downloads', 'Claude Code Downloads', `${HOME}/.claude/downloads`, 'developer', 'Files Claude Code downloaded during sessions', true),
-  c('claude-code-projects', 'Claude Code Session History', `${HOME}/.claude/projects`, 'developer', 'Full transcripts of every Claude Code session. Cleaning ends --resume and --continue for past work.', true),
+  c('claude-code-projects', 'Claude Code Session History', `${HOME}/.claude/projects`, 'developer', 'Full transcripts of every Claude Code session. Cleaning ends --resume and --continue for past work. Each project\'s memory folder is kept.', true),
   // Codex
   t('codex-cache', 'Codex Cache', `${HOME}/Library/Caches/com.openai.codex`, 'developer', 'Codex CLI cache', true),
   t('codex-runtimes', 'Codex Runtimes', `${HOME}/.cache/codex-runtimes`, 'developer', 'Downloaded Codex runtime images, re-fetched on demand', true),

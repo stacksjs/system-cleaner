@@ -42,14 +42,20 @@ export function registerCleanCommand(app: CLI): void {
       log.info(`Total reclaimable: ${formatBytes(totalBytes)}`)
       log.info('')
 
-      let selectedTargets = scanResults.map(r => r.target)
+      // --all takes every safe target and none of the caution ones (session
+      // history, downloaded models, VM boxes). Those have to be picked by name
+      // in the interactive list, the same as the app's Select All Safe.
+      let selectedTargets = scanResults.map(r => r.target).filter(t => t.risk !== 'caution')
+      const leftOut = scanResults.filter(r => r.target.risk === 'caution')
+      if (options.all && leftOut.length > 0)
+        log.info(`Left out (not rebuilt, pick them without --all): ${leftOut.map(r => r.target.name).join(', ')}`)
 
       if (!options.all) {
         const selected = await multiselect({
           message: 'Select items to clean:',
           options: scanResults.map(r => ({
             value: r.target.id,
-            label: `${r.target.icon} ${r.target.name}`,
+            label: `${r.target.icon} ${r.target.name}${r.target.risk === 'caution' ? ' (not rebuilt)' : ''}`,
             hint: `${r.sizeFormatted} — ${r.target.description}`,
           })),
           required: true,
@@ -71,8 +77,9 @@ export function registerCleanCommand(app: CLI): void {
         .reduce((sum, r) => sum + r.sizeBytes, 0)
 
       if (!options.all) {
+        const caution = selectedTargets.filter(t => t.risk === 'caution').map(t => t.name)
         const ok = (await confirm({
-          message: `Clean ${selectedTargets.length} items (${formatBytes(selectedBytes)})?`,
+          message: `Clean ${selectedTargets.length} items (${formatBytes(selectedBytes)})?${caution.length > 0 ? ` ${caution.join(', ')} ${caution.length === 1 ? 'holds' : 'hold'} content nothing rebuilds.` : ''}`,
         })) as unknown as boolean
         if (!ok) {
           outro('Cancelled')

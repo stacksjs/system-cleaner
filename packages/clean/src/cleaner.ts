@@ -3,6 +3,8 @@ import * as path from 'node:path'
 import { formatBytes, getDirSize, isCleanable, isPathSafe, freeSpaceOf } from '@system-cleaner/core'
 import type { CleanOptions, CleanResult, CleanTarget } from './types'
 import { CLEAN_TARGETS } from './categories'
+import type { PreserveRule } from './preserve'
+import { PRESERVE_RULES, preservedFor, removeContents } from './preserve'
 import { scanExistingTargets } from './scanner'
 
 /**
@@ -51,27 +53,17 @@ export async function cleanTarget(target: CleanTarget, options: CleanOptions = {
 
   options.onProgress?.(target.id, 'cleaning')
 
-  if (target.contentsOnly) {
+  // Folders nothing rebuilds that sit inside this target (Claude Code memory
+  // inside its session history). A target that would remove them is cleaned
+  // around them instead, whether it removes its contents or itself.
+  const keep = preservedFor(target.path)
+
+  if (target.contentsOnly || keep.length > 0) {
     // Clean contents only — keep the directory itself
     try {
-      const entries = fs.readdirSync(target.path)
       // Pre-compile skip patterns once (not per-entry)
       const skipRegexes = target.skipPatterns?.map(p => new RegExp(p)) ?? []
-
-      for (const entry of entries) {
-        if (skipRegexes.some(r => r.test(entry))) {
-          result.skipped.push(entry)
-          continue
-        }
-
-        const entryPath = path.join(target.path, entry)
-        try {
-          fs.rmSync(entryPath, { recursive: true, force: true })
-        }
-        catch (err) {
-          result.errors.push(`${entry}: ${err instanceof Error ? err.message : String(err)}`)
-        }
-      }
+      removeContents(target.path, keep, { errors: result.errors, kept: result.skipped }, skipRegexes)
     }
     catch (err) {
       result.errors.push(err instanceof Error ? err.message : String(err))
@@ -164,6 +156,11 @@ export async function cleanAll(options: CleanOptions = {}): Promise<{
   if (options.skipTargets && options.skipTargets.length > 0)
     targets = targets.filter(t => !options.skipTargets!.includes(t.id))
 
+  // A bulk clean leaves real content alone unless asked, the same rule the
+  // app's Select All follows. It used to clean every caution target too.
+  if (!options.includeCaution)
+    targets = targets.filter(t => t.risk !== 'caution')
+
   // Separate sudo targets (can't run without elevation)
   const sudoTargets = targets.filter(t => t.requiresSudo)
   targets = targets.filter(t => !t.requiresSudo)
@@ -212,17 +209,19 @@ export async function emptyTrash(): Promise<CleanResult> {
 /**
  * Clean directory contents (used by API routes)
  */
-export async function cleanDirectory(dirPath: string): Promise<{
+export async function cleanDirectory(dirPath: string, rules: PreserveRule[] = PRESERVE_RULES): Promise<{
   freedBytes: number
   measured: boolean
   reclaimedBytes: number | null
   heldOpen: boolean
   errors: string[]
+  /** Folders left in place because a preserve rule covers them. */
+  kept: string[]
 }> {
   const resolvedPath = path.resolve(dirPath)
   const check = isCleanable(resolvedPath)
   if (!check.safe) {
-    return { freedBytes: 0, measured: true, reclaimedBytes: null, heldOpen: false, errors: [check.reason || 'Path is not safe'] }
+    return { freedBytes: 0, measured: true, reclaimedBytes: null, heldOpen: false, errors: [check.reason || 'Path is not safe'], kept: [] }
   }
 
   // Bounded: `getDirSize` shells out to `du`, whose own timeout cannot kill a
@@ -239,15 +238,11 @@ export async function cleanDirectory(dirPath: string): Promise<{
   // see freeSpaceOf for why a directory walk cannot tell.
   const freeBefore = freeSpaceOf(resolvedPath)
 
+  // This is the path the Quick Clean screen takes, with a raw path and no
+  // target, so the preserve rules have to be applied here as well.
+  const kept: string[] = []
   try {
-    for (const entry of fs.readdirSync(resolvedPath)) {
-      try {
-        fs.rmSync(path.join(resolvedPath, entry), { recursive: true, force: true })
-      }
-      catch (err) {
-        errors.push(`${entry}: ${err instanceof Error ? err.message : String(err)}`)
-      }
-    }
+    removeContents(resolvedPath, preservedFor(resolvedPath, rules), { errors, kept })
   }
   catch (err) {
     errors.push(err instanceof Error ? err.message : String(err))
@@ -278,6 +273,7 @@ export async function cleanDirectory(dirPath: string): Promise<{
     // hundreds of megabytes while Disk Free sits still.
     heldOpen: isHeldOpen(removed, reclaimed),
     errors,
+    kept,
   }
 }
 
