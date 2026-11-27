@@ -140,15 +140,16 @@
 
   async remove(mode) {
     if (this.scanning || this.deleting || this.selected.length === 0) return;
-    var count = this.selected.length;
+    var paths = this.selected.slice();
+    var count = paths.length;
     var size = this.fmtBytes(this.selectedBytes());
     var permanent = mode === 'permanent';
 
     if (!await window.nativeConfirm({
       title: permanent
-        ? 'Permanently delete ' + count + ' copy(ies)?'
-        : 'Move ' + count + ' copy(ies) to the Trash?',
-      message: 'Every group keeps one copy. ' + size + (permanent ? ' is freed immediately and cannot be recovered.' : ' is freed, and you can put them back from Finder.'),
+        ? 'Permanently delete ' + count + (count === 1 ? ' copy?' : ' copies?')
+        : 'Move ' + count + (count === 1 ? ' copy' : ' copies') + ' to the Trash?',
+      message: 'Every group keeps one copy. ' + size + (permanent ? ' is freed immediately and cannot be recovered.' : ' moves to the Trash. You can put the items back from Finder.'),
       confirmLabel: permanent ? 'Delete' : 'Move to Trash',
       destructive: permanent,
       recoverable: !permanent,
@@ -156,7 +157,12 @@
 
     var self = this;
     this.deleting = true;
-    this.post('/api/bulk-delete', { paths: this.selected, mode: mode, source: 'duplicates' }).then(function(r) {
+    trackRemoval({
+      title: permanent ? 'Deleting duplicate files…' : 'Moving duplicate files to the Trash…',
+      finished: permanent ? 'Duplicate files deleted' : 'Duplicate files moved to the Trash',
+      target: 'Duplicate Files',
+      trash: !permanent,
+    }, () => self.post('/api/bulk-delete', { paths: paths, mode: mode, source: 'duplicates' })).then(function(r) {
       self.deleting = false;
       var gone = {};
       (r.succeeded || []).forEach(function(p) { gone[p] = true; });
@@ -173,16 +179,7 @@
       self.wastedBytes = Math.max(0, self.wastedBytes - (r.freedBytes || 0));
       self.wastedFormatted = self.fmtBytes(self.wastedBytes);
 
-      if ((r.succeeded || []).length > 0)
-        self.toast('Removed ' + r.succeeded.length + ' copy(ies) - freed ' + r.freedFormatted, 'success');
-      if ((r.skipped || []).length > 0)
-        self.toast(r.skipped.length + ' skipped: ' + r.skipped[0].reason, 'info');
-      if ((r.failed || []).length > 0)
-        self.toast(r.failed.length + ' failed: ' + r.failed[0].error, 'error');
-    }).catch(function(err) {
-      self.deleting = false;
-      self.toast('Delete failed: ' + (err && err.message ? err.message : 'network'), 'error');
-    });
+    }).catch(function() { self.deleting = false; });
   },
 
   reveal(p) { revealPath(p); },

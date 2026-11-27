@@ -159,7 +159,7 @@
     for (var key in fields) {
       if (!Object.prototype.hasOwnProperty.call(fields, key)) continue;
       var v = fields[key];
-      if (key === 'topItems' || key === 'scanInfo' || key === 'hovered' || key === 'suggestions' || key === 'cleanupIssues') {
+      if (key === 'topItems' || key === 'scanInfo' || key === 'hovered' || key === 'suggestions') {
         window['__diskPatch_' + key] = v;
         parts.push(key + ' = window.__diskPatch_' + key);
       } else if (typeof v === 'string') {
@@ -730,11 +730,13 @@
       });
       if (!ok) return;
       attempted = true;
-      const result = await diskPost('delete-path', { path });
+      await window.trackRemoval({
+        title: 'Deleting “' + name + '”…',
+        finished: '“' + name + '” deleted',
+        target: name,
+      }, () => diskPost('delete-path', { path }));
       updateAfterRemoval([path]);
-      patchDiskScope({ liveMessage: result.historyError || 'Deleted “' + name + '”.' });
-    } catch (error) {
-      window.nativeAlert('Could not delete “' + name + '”', error.message);
+    } catch (_) {
     } finally {
       cleanupBusy = false;
       patchDiskScope({ cleanupBusy });
@@ -816,10 +818,6 @@
     cleanupBusy = true;
     patchDiskScope({ cleanupBusy });
     let attempted = false;
-    let removed = 0;
-    let removedBytes = 0;
-    let historyError = '';
-    const issues = [];
     const shown = readDiskState('suggestions') || [];
     const selected = new Set(paths);
     const size = shown.reduce((total, item) => total + (selected.has(item.path) ? item.sizeBytes || 0 : 0), 0);
@@ -832,35 +830,46 @@
       });
       if (!confirmed) return;
       attempted = true;
-      patchDiskScope({ cleanupIssues: [], cleanupMessage: 'Checking 0 of ' + paths.length + ' worktrees…' });
-      for (let offset = 0; offset < paths.length; offset += 8) {
-        const batch = paths.slice(offset, offset + 8);
-        const result = await diskPost('disk-remove-worktrees', { paths: batch, days: Number(days) });
-        const succeeded = result.outcomes.filter(item => item.removed).map(item => item.path);
-        removed += succeeded.length;
-        removedBytes += result.removedBytes || 0;
-        historyError ||= result.historyError || '';
-        for (const item of result.outcomes)
-          if (!item.removed) issues.push({ path: item.path, detail: item.skipped || item.failed || 'Could not remove worktree' });
-        updateAfterRemoval(succeeded);
-        if (succeeded.length) {
-          const gone = new Set(succeeded);
-          const suggestions = readDiskState('suggestions');
-          if (suggestions) {
-            patchDiskScope({ suggestions: suggestions.filter(item => !gone.has(item.path)) });
-            diskExec('applySuggestionFilters()');
+      await window.trackRemoval({
+        title: 'Checking and removing worktrees…',
+        finished: 'Worktree cleanup complete',
+        target: 'Worktree Cleanup',
+        total: paths.length,
+      }, async advance => {
+        const removed = [];
+        const skipped = [];
+        const failed = [];
+        let historyError = '';
+        let error = '';
+        for (let offset = 0; offset < paths.length; offset += 8) {
+          const batch = paths.slice(offset, offset + 8);
+          let result;
+          try { result = await diskPost('disk-remove-worktrees', { paths: batch, days: Number(days) }); }
+          catch (problem) { error = problem.message; break; }
+
+          const succeeded = result.outcomes.filter(item => item.removed).map(item => item.path);
+          removed.push(...succeeded);
+          historyError ||= result.historyError || '';
+          for (const item of result.outcomes) {
+            if (item.failed) failed.push({ path: item.path, error: item.failed });
+            else if (!item.removed) skipped.push({ path: item.path, reason: item.skipped || 'Worktree was kept.' });
           }
+
+          updateAfterRemoval(succeeded);
+          if (succeeded.length) {
+            const gone = new Set(succeeded);
+            const suggestions = readDiskState('suggestions');
+            if (suggestions) {
+              patchDiskScope({ suggestions: suggestions.filter(item => !gone.has(item.path)) });
+              diskExec('applySuggestionFilters()');
+              diskExec('selectedSuggestions = selectedSuggestions.filter(path => !' + JSON.stringify(succeeded) + '.includes(path))');
+            }
+          }
+          advance(offset + batch.length);
         }
-        patchDiskScope({ cleanupMessage: 'Checked ' + Math.min(offset + batch.length, paths.length) + ' of ' + paths.length + ' · ' + removed + ' removed' });
-      }
-      patchDiskScope({
-        cleanupMessage: removed + ' removed · ' + issues.length + ' kept'
-          + (removedBytes ? ' · ' + fmtBytes(removedBytes) + ' measured' : '') + (historyError ? '. ' + historyError : ''),
-        cleanupIssues: issues,
+        return { succeeded: removed, skipped, failed, error, historyError };
       });
-      if (mountedPanel?.isConnected) diskExec('selectedSuggestions = []');
-    } catch (error) {
-      patchDiskScope({ cleanupMessage: removed + ' removed before cleanup stopped. ' + error.message, cleanupIssues: issues });
+    } catch (_) {
     } finally {
       cleanupBusy = false;
       patchDiskScope({ cleanupBusy });

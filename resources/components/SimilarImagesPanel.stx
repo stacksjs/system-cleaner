@@ -40,7 +40,7 @@
         Choose Folder&hellip;
       </button>
       <button class='btn btn-danger btn-sm' x-show='selected.length > 0' x-cloak @click='deletePicked()' :disabled='busy'
-        x-text="busy ? 'Moving…' : 'Move ' + selected.length + ' to Trash'"></button>
+        x-text="'Move ' + selected.length + ' to Trash'"></button>
       <button class='btn btn-sm' data-rescan @click='scan()' :disabled='scanning'
         x-text="scanning ? 'Scanning…' : (scanned ? 'Rescan' : 'Scan')">Scan</button>
   <button class='btn btn-sm' type='button' data-cancel-scan x-show='scanning' x-cloak

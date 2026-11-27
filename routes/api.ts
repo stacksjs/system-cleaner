@@ -873,6 +873,9 @@ export default async function (router: Router) {
       historyError,
       success: result.success,
       freedBytes: result.freedBytes,
+      heldOpen: result.heldOpen,
+      errors: result.errors,
+      skipped: result.skipped,
     });
   });
 

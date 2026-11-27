@@ -149,7 +149,8 @@
 
   async deleteSnaps() {
     if (this.snapBusy || this.snapSelected.length === 0) return;
-    var count = this.snapSelected.length;
+    var dates = this.snapSelected.slice();
+    var count = dates.length;
     if (!await window.nativeConfirm({
       title: 'Delete ' + count + ' snapshot(s)?',
       message: 'The space they hold is returned to the disk. You lose the ability to restore files from those points in time, and macOS may ask for your password.',
@@ -159,17 +160,14 @@
 
     var self = this;
     this.snapBusy = true;
-    this.post('/api/delete-snapshots', { dates: this.snapSelected }).then(function(r) {
+    trackRemoval({
+      title: 'Deleting Time Machine snapshots…',
+      finished: 'Snapshots deleted',
+      target: 'Time Machine Snapshots',
+    }, () => self.post('/api/delete-snapshots', { dates: dates })).then(function(r) {
       self.snapBusy = false;
-      var done = (r.succeeded || []).length;
-      if (done > 0) self.toast('Deleted ' + done + ' snapshot(s)', 'success');
-      (r.failed || []).slice(0, 2).forEach(function(entry) { self.toast(entry.error, 'error'); });
-      if (done === 0 && (r.failed || []).length === 0) self.toast(r.error || 'Nothing was deleted', 'info');
       self.refreshSnapshots();
-    }).catch(function(err) {
-      self.snapBusy = false;
-      self.toast('Delete failed: ' + (err && err.message ? err.message : 'network'), 'error');
-    });
+    }).catch(function() { self.snapBusy = false; });
   },
 
   categories() {
@@ -230,11 +228,12 @@
 
     var self = this;
     this.junkBusy = true;
-    this.post('/api/clean-ds-store').then(function(r) {
-      self.junkBusy = false;
-      self.toast('Removed ' + r.removed + ' .DS_Store file(s)', 'success');
-      self.refreshJunk();
-    }).catch(function() { self.junkBusy = false; self.toast('Could not remove them', 'error'); });
+    trackRemoval({
+      title: 'Removing Finder view files…',
+      finished: 'Finder view files removed',
+      target: 'Finder View Files',
+    }, () => self.post('/api/clean-ds-store')).then(function() { self.refreshJunk(); })
+      .catch(function() {}).finally(function() { self.junkBusy = false; });
   },
 
   async cleanIncomplete() {
@@ -248,11 +247,12 @@
 
     var self = this;
     this.junkBusy = true;
-    this.post('/api/clean-incomplete-downloads').then(function(r) {
-      self.junkBusy = false;
-      self.toast('Removed ' + r.removed + ' file(s) - freed ' + self.fmtBytes(r.freedBytes), 'success');
-      self.refreshJunk();
-    }).catch(function() { self.junkBusy = false; self.toast('Could not remove them', 'error'); });
+    trackRemoval({
+      title: 'Deleting unfinished downloads…',
+      finished: 'Unfinished downloads removed',
+      target: 'Unfinished Downloads',
+    }, () => self.post('/api/clean-incomplete-downloads')).then(function() { self.refreshJunk(); })
+      .catch(function() {}).finally(function() { self.junkBusy = false; });
   },
 
   async pickShredTargets() {
@@ -267,7 +267,8 @@
 
   async shred() {
     if (this.shredding || this.shredTargets.length === 0) return;
-    var count = this.shredTargets.length;
+    var paths = this.shredTargets.slice();
+    var count = paths.length;
     if (!await window.nativeConfirm({
       title: 'Erase ' + count + ' item(s) beyond recovery?',
       message: 'Each file is overwritten with random data before it is deleted. There is no Trash step and no undo.',
@@ -277,19 +278,17 @@
 
     var self = this;
     this.shredding = true;
-    this.post('/api/shred-paths', { paths: this.shredTargets }).then(function(r) {
+    trackRemoval({
+      title: 'Securely erasing files…',
+      finished: 'Files securely erased',
+      target: 'Secure Erase',
+      verb: 'erased',
+    }, () => self.post('/api/shred-paths', { paths: paths })).then(function(r) {
       self.shredding = false;
       var gone = {};
       (r.shredded || []).forEach(function(p) { gone[p] = true; });
       self.shredTargets = self.shredTargets.filter(function(p) { return !gone[p]; });
-      if ((r.shredded || []).length > 0)
-        self.toast('Erased ' + r.shredded.length + ' item(s)', 'success');
-      (r.skipped || []).slice(0, 2).forEach(function(entry) { self.toast(entry.reason, 'info'); });
-      (r.failed || []).slice(0, 2).forEach(function(entry) { self.toast(entry.error, 'error'); });
-    }).catch(function(err) {
-      self.shredding = false;
-      self.toast('Erase failed: ' + (err && err.message ? err.message : 'network'), 'error');
-    });
+    }).catch(function() { self.shredding = false; });
   },
 
   shortPath(p) {

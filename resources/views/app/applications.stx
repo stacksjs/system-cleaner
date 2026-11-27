@@ -233,7 +233,8 @@
 
   async removeOrphans(mode) {
     if (this.orphanBusy || this.orphanSelected.length === 0) return;
-    const count = this.orphanSelected.length;
+    const paths = this.orphanSelected.slice();
+    const count = paths.length;
     const size = this.fmtBytes(this.orphanSelectedBytes());
     const permanent = mode === 'permanent';
 
@@ -241,7 +242,7 @@
       title: permanent
         ? 'Permanently delete ' + count + ' leftover item(s)?'
         : 'Move ' + count + ' leftover item(s) to the Trash?',
-      message: 'These belong to software that is no longer installed. ' + size + (permanent ? ' is freed immediately and cannot be recovered.' : ' is freed, and you can put them back from Finder.'),
+      message: 'These belong to software that is no longer installed. ' + size + (permanent ? ' is freed immediately and cannot be recovered.' : ' moves to the Trash. You can put the items back from Finder.'),
       confirmLabel: permanent ? 'Delete' : 'Move to Trash',
       destructive: permanent,
       recoverable: !permanent,
@@ -249,20 +250,16 @@
 
     const self = this;
     this.orphanBusy = true;
-    this.post('/api/clean-orphans', { paths: this.orphanSelected, mode: mode }).then(function(r) {
+    trackRemoval({
+      title: permanent ? 'Deleting leftover files…' : 'Moving leftover files to the Trash…',
+      finished: permanent ? 'Leftover files deleted' : 'Leftover files moved to the Trash',
+      target: 'Leftover Files',
+      trash: !permanent,
+    }, () => self.post('/api/clean-orphans', { paths: paths, mode: mode })).then(function(r) {
       self.orphanBusy = false;
-      if ((r.succeeded || []).length > 0)
-        self.toast('Removed ' + r.succeeded.length + ' item(s) - freed ' + r.freedFormatted, 'success');
-      if ((r.skipped || []).length > 0)
-        self.toast(r.skipped.length + ' skipped: ' + r.skipped[0].reason, 'info');
-      if ((r.failed || []).length > 0)
-        self.toast(r.failed.length + ' failed: ' + r.failed[0].error, 'error');
       self.orphanSelected = [];
       self.loadOrphans();
-    }).catch(function(err) {
-      self.orphanBusy = false;
-      self.toast('Remove failed: ' + (err && err.message ? err.message : 'network'), 'error');
-    });
+    }).catch(function() { self.orphanBusy = false; });
   },
 
   post(endpoint, data) {
@@ -362,7 +359,9 @@
     const permanent = mode === 'permanent';
     const name = this.scan.app.name;
     const size = this.fmtBytes(this.chosenBytes());
-    const takesApp = this.isChosen(this.scan.app.path);
+    const appPath = this.scan.app.path;
+    const paths = this.chosen.slice();
+    const takesApp = this.isChosen(appPath);
 
     if (!await nativeConfirm({
       title: permanent
@@ -378,35 +377,29 @@
 
     const self = this;
     this.removing = true;
-    this.post('/api/app-uninstall', { path: this.scan.app.path, paths: this.chosen, mode: mode })
+    trackRemoval({
+      title: takesApp ? 'Uninstalling ' + name + '…' : 'Removing files from ' + name + '…',
+      finished: takesApp ? name + ' uninstalled' : 'Files from ' + name + ' removed',
+      target: name,
+      trash: !permanent,
+    }, () => self.post('/api/app-uninstall', { path: appPath, paths: paths, mode: mode }))
       .then(function(r) {
         self.removing = false;
-        if (r.message) self.toast(r.message, 'success');
-        if (r.error && !r.launched) self.toast(r.error, 'error');
-        if ((r.succeeded || []).length > 0)
-          self.toast((permanent ? 'Deleted ' : 'Moved to Trash: ') + r.succeeded.length + ' item(s) from ' + name, 'success');
-        if ((r.skipped || []).length > 0)
-          self.toast(r.skipped.length + ' skipped: ' + r.skipped[0].reason, 'info');
-        if ((r.failed || []).length > 0)
-          self.toast(r.failed.length + ' failed: ' + r.failed[0].error, 'error');
-
         const gone = {};
         (r.succeeded || []).forEach(function(p) { gone[p] = true; });
         if (self.orphansScanned) self.loadOrphans();
-        if (gone[self.scan.app.path]) {
-          self.apps = self.apps.filter(function(app) { return app.path !== self.scan.app.path; });
-          self.close();
+        if (gone[appPath]) {
+          self.apps = self.apps.filter(function(app) { return app.path !== appPath; });
+          if (self.scan?.app.path === appPath) self.close();
           return;
         }
+        if (self.scan?.app.path !== appPath) return;
         self.scan = Object.assign({}, self.scan, {
           remnants: self.scan.remnants.filter(function(row) { return !gone[row.path]; }),
         });
         self.chosen = self.chosen.filter(function(p) { return !gone[p]; });
       })
-      .catch(function(err) {
-        self.removing = false;
-        self.toast('Uninstall failed: ' + (err && err.message ? err.message : 'network'), 'error');
-      });
+      .catch(function() { self.removing = false; });
   },
 
   reveal(p) { revealPath(p); },

@@ -32,7 +32,7 @@
   - Deleting moves to the Trash by default. These are not caches, and the
     Trash is the undo this screen can offer.
 -->
-<div x-data="{
+<div data-orphans-page x-data="{
   items: [],
   itemCount: 0,
   totalFormatted: '0 B',
@@ -168,7 +168,7 @@
 // markup. The window assignments at the bottom are what make them callable.
 
 function _scope() {
-  return document.querySelector('[data-stx-xdata]') || document.querySelector('[x-data]');
+  return document.querySelector('[data-orphans-page]');
 }
 
 function _exec(stmt) {
@@ -240,7 +240,7 @@ async function doCleanSelected() {
   try {
     ok = await window.nativeConfirm({
       title: 'Move ' + paths.length + (paths.length === 1 ? ' item' : ' items') + ' to the Trash?',
-      message: 'Frees about ' + _fmtBytes(bytes) + '. '
+      message: 'Moves about ' + _fmtBytes(bytes) + ' to the Trash. '
         + (userData > 0
           ? userData + (userData === 1 ? ' of these is support data' : ' of these are support data') + ' rather than a cache, and may hold documents only the uninstalled app could read. '
           : 'Each one is a cache or log an app would rebuild. ')
@@ -258,25 +258,17 @@ async function doCleanSelected() {
 
   paths.forEach(function(p) { _exec('markCleaning(' + JSON.stringify(p) + ')'); });
 
-  _api('/api/clean-orphans', { paths: paths, mode: 'trash' }).then(function(r) {
+  trackRemoval({
+    title: 'Moving app leftovers to the Trash…',
+    finished: 'App leftovers moved to the Trash',
+    target: 'App Leftovers',
+    trash: true,
+  }, () => _api('/api/clean-orphans', { paths: paths, mode: 'trash' })).then(function() {
     paths.forEach(function(p) { _exec('clearCleaning(' + JSON.stringify(p) + ')'); });
-    if (!r) {
-      _exec("toast('Clean failed', 'error')");
-      return;
-    }
-    const moved = (r.succeeded || []).length;
-    const failed = (r.failed || []).length;
-    const skipped = (r.skipped || []).length;
-    let msg = moved > 0
-      ? 'Moved ' + moved + (moved === 1 ? ' item' : ' items') + ' to the Trash - freed ' + _fmtBytes(r.freedBytes || 0)
-      : 'Nothing could be removed';
-    if (skipped > 0) msg += ' - ' + skipped + ' protected';
-    if (failed > 0) msg += ' - ' + failed + ' failed';
-    _exec('toast(' + JSON.stringify(msg) + ', ' + (moved > 0 ? (failed > 0 ? "'info'" : "'success'") : "'error'") + '); selected = []');
+    _exec('selected = []');
     scanOrphans();
   }).catch(function() {
     paths.forEach(function(p) { _exec('clearCleaning(' + JSON.stringify(p) + ')'); });
-    _exec("toast('Clean failed', 'error')");
   });
 }
 

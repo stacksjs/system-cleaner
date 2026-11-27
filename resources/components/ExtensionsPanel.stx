@@ -33,7 +33,7 @@
   <div class='ex-spacer'></div>
   <button class='btn btn-danger btn-icon' @click='remove(selected)' :disabled='removing || selected.length === 0'>
     <span class='i-f7-trash-fill' aria-hidden='true'></span>
-    <span x-text="removing ? 'Removing…' : 'Remove Selected'">Remove Selected</span>
+    <span>Remove Selected</span>
   </button>
 </div>
 

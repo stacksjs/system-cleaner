@@ -89,7 +89,7 @@
   <button class='btn btn-sm' @click='selected = []'>Clear</button>
   <button class='btn btn-danger btn-icon btn-sm' @click="remove('trash')" :disabled='deleting || scanning'>
     <span class='i-f7-trash-fill' aria-hidden='true'></span>
-    <span x-text="deleting ? 'Working…' : 'Move to Trash'">Move to Trash</span>
+    <span>Move to Trash</span>
   </button>
   <button class='btn btn-danger btn-sm' @click="remove('permanent')" :disabled='deleting || scanning'>
     Delete Permanently

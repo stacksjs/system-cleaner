@@ -97,6 +97,7 @@ storage/framework/discovered-packages.json
 /public/schedule-notice.js
 /public/native-dialog.js
 /public/platform-gate.js
+/public/removal-activity.js
 /public/settings-panel.js
 /public/settings-window.js
 /public/tray.js

@@ -43,8 +43,6 @@
   suggestionsLoading: false,
   suggestionsError: '',
   cleanupBusy: false,
-  cleanupMessage: '',
-  cleanupIssues: [],
   history: null,
   historyError: '',
   historyLoading: false,
@@ -219,15 +217,6 @@
       <a href='/app/cleanup' class='btn btn-sm' x-show="suggestionCategory === 'caches' || suggestionCategory === 'logs'">Open Quick Clean</a>
     </div>
 
-    <div class='disk-cleanup-note' role='status' x-show='cleanupMessage' x-text='cleanupMessage'></div>
-    <details class='disk-cleanup-note' x-show='cleanupIssues.length' x-cloak>
-      <summary>Why worktrees were kept</summary>
-      <ul class='disk-cleanup-issues'>
-        <template x-for='issue in cleanupIssues' :key='issue.path'>
-          <li><strong x-text='issue.detail'></strong><div x-text='issue.path'></div></li>
-        </template>
-      </ul>
-    </details>
     <p class='disk-cleanup-note' role='status' x-show='suggestionsLoading && !suggestionsReady'>Looking for cleanup candidates…</p>
     <p class='disk-cleanup-error' role='alert' x-show='suggestionsError' x-text='suggestionsError'></p>
     <p class='disk-cleanup-note' x-show='suggestionsReady && !suggestionMatches.length && !suggestionsLoading'>

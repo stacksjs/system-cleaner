@@ -130,9 +130,10 @@
 
   async deletePicked() {
     if (this.busy || this.selected.length === 0) return;
-    var n = this.selected.length;
+    var paths = this.selected.slice();
+    var n = paths.length;
     if (!await window.nativeConfirm({
-      title: 'Move ' + n + ' image(s) to the Trash?',
+      title: 'Move ' + n + (n === 1 ? ' image' : ' images') + ' to the Trash?',
       message: 'These are copies this scan judged similar to one it is keeping. They go to the Trash, so you can look before emptying it.',
       confirmLabel: 'Move to Trash',
       destructive: true,
@@ -141,7 +142,12 @@
 
     var self = this;
     this.busy = true;
-    this.post('/api/delete-similar', { paths: this.selected }).then(function(r) {
+    trackRemoval({
+      title: 'Moving similar images to the Trash…',
+      finished: 'Similar images moved to the Trash',
+      target: 'Similar Images',
+      trash: true,
+    }, () => self.post('/api/delete-similar', { paths: paths })).then(function(r) {
       self.busy = false;
       var gone = {};
       (r.succeeded || []).forEach(function(p) { gone[p] = true; });
@@ -150,15 +156,8 @@
           return Object.assign({}, g, { files: g.files.filter(function(f) { return !gone[f.path]; }) });
         }).filter(function(g) { return g.files.length > 1; });
         self.selected = self.selected.filter(function(p) { return !gone[p]; });
-        self.toast('Moved ' + r.succeeded.length + ' image(s) to the Trash - freed ' + (r.freedFormatted || ''), 'success');
       }
-      (r.skipped || []).slice(0, 2).forEach(function(s) { self.toast(s.reason, 'info'); });
-      (r.failed || []).slice(0, 2).forEach(function(f) { self.toast(f.error, 'error'); });
-      if (!r.success && !(r.failed || []).length && !(r.succeeded || []).length) self.toast(r.error || 'Nothing was moved', 'error');
-    }).catch(function(err) {
-      self.busy = false;
-      self.toast('Delete failed: ' + (err && err.message ? err.message : 'network'), 'error');
-    });
+    }).catch(function() { self.busy = false; });
   },
 
   toast(msg, type) {

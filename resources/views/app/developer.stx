@@ -28,14 +28,14 @@
     and virtualenvs — directories that look regenerable and are the ones most
     likely to hold something nothing rebuilds. Same rule as the clean targets.
 -->
-<div x-data="{
+<div data-developer-page x-data="{
   artifacts: [],
   artifactCount: 0,
   totalFormatted: '0 B',
   safeFormatted: '0 B',
   selected: [],
   cleaning: {},
-  cleanProgress: null,
+  cleaningBatch: false,
   loading: true,
   toasts: [],
   toastId: 0,
@@ -97,25 +97,13 @@
       <button class='btn' @click='toggleAllSafe()'>
         <span x-text="allSafeSelected() ? 'Deselect All' : 'Select All Safe'">Select All Safe</span>
       </button>
-      <button class='btn btn-danger' x-cloak x-show='selected.length > 0 && !cleanProgress' onclick='doCleanSelected()'>
+      <button class='btn btn-danger' x-cloak x-show='selected.length > 0' :disabled='cleaningBatch || Object.keys(cleaning).length > 0' onclick='doCleanSelected()'>
         Clean Selected (<span x-text='selected.length'>0</span>) &middot; <span x-text='selectedFormatted()'>0 B</span>
-      </button>
-      <button class='btn btn-danger' x-cloak x-show='!!cleanProgress' disabled>
-        <span class='cleaning-dot' aria-hidden='true'></span>
-        Cleaning <span x-text='cleanProgress ? cleanProgress.done : 0'>0</span>
-        of <span x-text='cleanProgress ? cleanProgress.total : 0'>0</span>&hellip;
       </button>
       <button class='btn btn-icon btn-sm' style='margin-left: auto;' onclick='scanArtifacts(true)'>
         <span class='i-f7-arrow-clockwise' aria-hidden='true'></span>
         Rescan
       </button>
-    </div>
-
-    <div class='clean-progress' x-cloak x-show='!!cleanProgress' aria-live='polite'>
-      <div class='progress'>
-        <div class='clean-progress-fill progress-fill'
-          :style="'width: ' + (cleanProgress && cleanProgress.total ? Math.round(cleanProgress.done / cleanProgress.total * 100) : 0) + '%'"></div>
-      </div>
     </div>
 
     <div class='tbl-wrap'>
@@ -152,11 +140,10 @@
               <td x-text='a.project'></td>
               <td x-text='a.sizeFormatted'></td>
               <td>
-                <button class='btn btn-sm' :disabled="cleaning[a.path] || a.risk === 'blocked'"
+                <button class='btn btn-sm' :disabled="cleaningBatch || cleaning[a.path] || a.risk === 'blocked'"
                   :title="a.risk === 'blocked' ? 'Git tracks files in here, so this is not build output' : ''"
                   onclick="doCleanOne(this.closest('tr').getAttribute('data-path'), this.closest('tr').getAttribute('data-label'), this.closest('tr').getAttribute('data-risk'))">
-                  <span x-show='!cleaning[a.path]'>Clean</span>
-                  <span x-show='cleaning[a.path]'>...</span>
+                  Clean
                 </button>
               </td>
             </tr>
@@ -175,7 +162,7 @@
 // callable; see the note there.
 
 function _scope() {
-  return document.querySelector('[data-stx-xdata]') || document.querySelector('[x-data]');
+  return document.querySelector('[data-developer-page]');
 }
 
 function _exec(stmt) {
@@ -230,7 +217,8 @@ function scanArtifacts(refresh) {
 // build regenerates it" for every row, including the `caution` ones the
 // pattern table singles out precisely because that promise may be false.
 async function doCleanOne(p, label, risk) {
-  if (!p) return;
+  const state = _scope()?.__stx_state;
+  if (!p || !state || state.cleaningBatch || state.cleaning[p]) return;
   if (!await window.nativeConfirm({
     title: 'Delete ' + (label || 'this directory') + '?',
     message: risk === 'caution'
@@ -239,21 +227,15 @@ async function doCleanOne(p, label, risk) {
     confirmLabel: 'Delete',
     destructive: true,
   })) return;
+  if (state.cleaningBatch || state.cleaning[p]) return;
   _exec('markCleaning(' + JSON.stringify(p) + ')');
-  _api('/api/clean-dir', { path: p }).then(function(r) {
-    _exec('clearCleaning(' + JSON.stringify(p) + ')');
-    if (r && r.success) {
-      const freed = r.measured === false ? '' : ' - freed ' + _fmtBytes(r.freedBytes || 0);
-      _exec('toast(' + JSON.stringify('Cleaned' + freed) + ", 'success')");
-      scanArtifacts(true);
-    }
-    else {
-      _exec('toast(' + JSON.stringify('Clean failed: ' + ((r && r.error) || 'Unknown')) + ", 'error')");
-    }
-  }).catch(function() {
-    _exec('clearCleaning(' + JSON.stringify(p) + ')');
-    _exec("toast('Clean failed', 'error')");
-  });
+  trackRemoval({
+    title: 'Cleaning ' + (label || 'project directory') + '…',
+    finished: 'Project directory cleaned',
+    target: label || 'Project Directory',
+  }, () => _api('/api/clean-dir', { path: p })).then(function(r) {
+    if (r.success || r.freedBytes || r.measured === false) scanArtifacts(true);
+  }).catch(function() {}).finally(function() { _exec('clearCleaning(' + JSON.stringify(p) + ')'); });
 }
 
 async function doCleanSelected() {
@@ -284,36 +266,37 @@ async function doCleanSelected() {
     _exec("toast('Could not open the confirmation dialog, so nothing was cleaned.', 'error')");
     return;
   }
-  if (!ok) return;
+  if (!ok || state.cleaningBatch || Object.keys(state.cleaning).length) return;
 
-  let done = 0, failed = 0, freed = 0;
-  _exec('cleanProgress = { done: 0, total: ' + paths.length + ' }');
-
-  function settle(p) {
-    _exec('clearCleaning(' + JSON.stringify(p) + ')');
-    done++;
-    _exec('cleanProgress = { done: ' + done + ', total: ' + paths.length + ' }');
-    if (done < paths.length) return;
-    const cleaned = paths.length - failed;
-    let msg = cleaned > 0
-      ? 'Cleaned ' + cleaned + (cleaned === 1 ? ' directory' : ' directories') + ' - freed ' + _fmtBytes(freed)
-      : 'Nothing could be cleaned';
-    if (failed > 0) msg += ' - ' + failed + ' failed';
-    _exec('toast(' + JSON.stringify(msg) + ', ' + (cleaned > 0 ? (failed > 0 ? "'info'" : "'success'") : "'error'") + '); selected = []; cleanProgress = null');
+  _exec('cleaningBatch = true');
+  const completed = [];
+  trackRemoval({
+    title: 'Cleaning project directories…',
+    finished: 'Project directories cleaned',
+    target: 'Developer Cleanup',
+    verb: 'cleaned',
+    total: paths.length,
+  }, async function(advance) {
+    let done = 0;
+    let freedBytes = 0;
+    let heldOpen = false;
+    const failed = [];
+    await Promise.all(paths.map(async function(p) {
+      try {
+        const result = await _api('/api/clean-dir', { path: p });
+        freedBytes += result.freedBytes || 0;
+        heldOpen = heldOpen || result.heldOpen;
+        if (result.success || result.freedBytes || result.measured === false) completed.push(p);
+        if (!result.success) failed.push({ path: p, error: (result.errors || []).join('; ') || result.error || 'Could not clean this directory.' });
+      }
+      catch (error) { failed.push({ path: p, error: error.message }); }
+      advance(++done);
+    }));
+    return { succeeded: completed, failed, freedBytes, heldOpen };
+  }).then(function() {
+    _exec('selected = selected.filter(p => !' + JSON.stringify(completed) + '.includes(p))');
     scanArtifacts(true);
-  }
-
-  paths.forEach(function(p) {
-    _exec('markCleaning(' + JSON.stringify(p) + ')');
-    _api('/api/clean-dir', { path: p }).then(function(r) {
-      if (r && r.success) freed += r.freedBytes || 0;
-      else failed++;
-      settle(p);
-    }).catch(function() {
-      failed++;
-      settle(p);
-    });
-  });
+  }).catch(function() {}).finally(function() { _exec('cleaningBatch = false'); });
 }
 
 // The SPA router wraps this block, so a plain `function` declaration is not

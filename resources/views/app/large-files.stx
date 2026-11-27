@@ -158,7 +158,8 @@
 
   async remove(mode) {
     if (this.scanning || this.deleting || this.selected.length === 0) return;
-    var count = this.selected.length;
+    var paths = this.selected.slice();
+    var count = paths.length;
     var size = this.fmtBytes(this.selectedBytes());
     var permanent = mode === 'permanent';
     if (!await window.nativeConfirm({
@@ -167,7 +168,7 @@
         : 'Move ' + count + ' item' + (count === 1 ? '' : 's') + ' to the Trash?',
       message: permanent
         ? size + ' is freed immediately and cannot be recovered.'
-        : size + ' is freed, and you can put them back from Finder.',
+        : size + ' moves to the Trash. You can put the items back from Finder.',
       confirmLabel: permanent ? 'Delete' : 'Move to Trash',
       destructive: permanent,
       recoverable: !permanent,
@@ -175,7 +176,12 @@
 
     var self = this;
     this.deleting = true;
-    this.post('/api/bulk-delete', { paths: this.selected, mode: mode, source: 'large-files' })
+    trackRemoval({
+      title: permanent ? 'Deleting large files…' : 'Moving large files to the Trash…',
+      finished: permanent ? 'Large files deleted' : 'Large files moved to the Trash',
+      target: 'Large Files',
+      trash: !permanent,
+    }, () => self.post('/api/bulk-delete', { paths: paths, mode: mode, source: 'large-files' }))
       .then(function(r) {
         self.deleting = false;
         var gone = {};
@@ -185,19 +191,9 @@
         self.matched = Math.max(0, self.matched - (r.succeeded || []).length);
         self.totalBytes = Math.max(0, self.totalBytes - (r.freedBytes || 0));
 
-        if ((r.succeeded || []).length > 0)
-          self.toast('Removed ' + r.succeeded.length + ' item(s) · freed ' + r.freedFormatted, 'success');
-        if ((r.skipped || []).length > 0)
-          self.toast(r.skipped.length + ' item(s) skipped: ' + r.skipped[0].reason, 'info');
-        if ((r.failed || []).length > 0)
-          self.toast(r.failed.length + ' item(s) failed: ' + r.failed[0].error, 'error');
-
         self.refreshHistory();
       })
-      .catch(function(err) {
-        self.deleting = false;
-        self.toast('Delete failed: ' + (err && err.message ? err.message : 'network'), 'error');
-      });
+      .catch(function() { self.deleting = false; });
   },
 
   toggleProtect(file) {

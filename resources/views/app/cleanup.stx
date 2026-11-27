@@ -7,10 +7,11 @@ function esc(str) { return escapeHtml(str || '') }
 @section('nav', 'cleanup')
 @section('body')
 
-<div x-data="{
+<div data-cleanup-page x-data="{
   selected: [],
   cleaning: {},
-  cleanProgress: null,
+  cleaningBatch: false,
+  emptyingTrash: false,
   toasts: [],
   toastId: 0,
   cleanCategories: [],
@@ -107,19 +108,8 @@ function _api(endpoint, data) {
     });
 }
 
-// Standard error tail for any _api(...) chain. Without this, network/server
-// failures used to leave in-flight flags like `cleaning[id] = true` set
-// permanently and the UI button stayed frozen with no message.
-function _apiCatch(label, opts) {
-  return function(err) {
-    if (opts && opts.clearCleaning) _exec("clearCleaning(" + JSON.stringify(opts.clearCleaning) + ")");
-    var msg = (err && err.message) ? err.message : 'Network error';
-    _exec("toast(" + JSON.stringify(label + ': ' + msg) + ", 'error')");
-  };
-}
-
 function _scope() {
-  var el = document.querySelector('[data-stx-scope]');
+  var el = document.querySelector('[data-cleanup-page]');
   return el && el.__stx_state ? el : null;
 }
 
@@ -137,6 +127,8 @@ function _fmtBytes(b) {
 }
 
 async function doCleanDir(p, name, id, risk) {
+  var scope = _scope();
+  if (!scope || scope.__stx_state.cleaningBatch || scope.__stx_state.cleaning[id]) return;
   if (!await window.nativeConfirm({
     title: 'Clean ' + name + '?',
     // A cache and a folder of session transcripts warrant different sentences.
@@ -147,83 +139,46 @@ async function doCleanDir(p, name, id, risk) {
     confirmLabel: 'Clean',
     destructive: true,
   })) return;
+  if (scope.__stx_state.cleaningBatch || scope.__stx_state.cleaning[id]) return;
   _exec("markCleaning(" + JSON.stringify(id) + ")");
-  _api('/api/clean-dir', { path: p }).then(function(r) {
-    _exec("clearCleaning(" + JSON.stringify(id) + ")");
-
-    // Refresh whenever bytes actually went, not only after a flawless sweep.
-    //
-    // /clean-dir reports success only when its error list is empty, so one
-    // file held open by a running app turns a clean that freed gigabytes into
-    // success:false. Gating the refresh on that flag left the row sitting at
-    // its pre-delete size under a "Clean failed" toast - the original
-    // "nothing happened" symptom, on the path where it is most likely rather
-    // than least: ~/Library/Caches always has a few files locked by whatever
-    // happens to be running.
+  trackRemoval({
+    title: 'Cleaning ' + name + '…',
+    finished: name + ' cleaned',
+    target: name,
+  }, () => _api('/api/clean-dir', { path: p })).then(function(r) {
     var freed = r.freedBytes || 0;
     var removed = r.success || freed > 0 || r.measured === false;
-    var failedCount = (r.errors || []).length;
-
     if (removed) {
       try { localStorage.removeItem(CACHE_KEY); } catch (e) {}
-      // Re-scan so the row's size cell reflects the cleaned-up state
-      // instead of holding stale numbers until the user manually rescans.
       scanCleanupSizes(true);
-      // And re-read free space. It was fetched once when the screen loaded
-      // and never again, so the card sat on its page-load figure however much
-      // was removed - the other half of the "freed 20 GB, Disk Free did not
-      // move" report, alongside the held-open case the toast explains.
       _exec('refreshDiskInfo()');
     }
-
-    // An unmeasured clean really did happen; only its size is unknown.
-    // Saying "freed 0 B" would read as a failure.
-    var freedNote = r.measured === false ? '' : ' - freed ' + _fmtBytes(freed);
-
-    if (r.heldOpen) {
-      // The delete worked and the disk did not move. On Unix, unlinking a
-      // file a process still holds open frees nothing until that process
-      // closes it - a log a running service writes to is the ordinary case.
-      // Saying "freed 470 MB" here and watching Disk Free sit still is how
-      // this app earned "its either misreading the size or cleaning here does
-      // nothing, just fake stuff".
-      _exec("toast(" + JSON.stringify('Cleaned ' + name + ' - ' + _fmtBytes(freed) + ' will free up once the apps using those files are closed') + ", 'info')");
-    }
-    else if (r.success)
-      _exec("toast('Cleaned " + name.replace(/'/g, "\\'") + freedNote + "', 'success')");
-    else if (removed)
-      _exec("toast(" + JSON.stringify('Cleaned ' + name + freedNote + ' - ' + failedCount + ' item' + (failedCount === 1 ? '' : 's') + ' in use, left in place') + ", 'info')");
-    else
-      _exec("toast('Clean failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");
-  }).catch(_apiCatch('Clean failed', { clearCleaning: id }));
+  }).catch(function() {}).finally(function() {
+    _exec('clearCleaning(' + JSON.stringify(id) + ')');
+  });
 }
 
 async function doEmptyTrash() {
+  if (_scope()?.__stx_state.emptyingTrash) return;
   if (!await window.nativeConfirm({
     title: 'Empty the Trash?',
     message: 'Everything in it is deleted permanently. This is the one action here that cannot be recovered from.',
     confirmLabel: 'Empty Trash',
     destructive: true,
   })) return;
-  _api('/api/empty-trash', {}).then(function(r) {
-    // Same reasoning as doCleanDir: an item the Finder still has open makes
-    // this report failure after emptying everything else, and the Trash row
-    // must not keep its old figure on that path.
+  if (_scope()?.__stx_state.emptyingTrash) return;
+  _exec('emptyingTrash = true');
+  trackRemoval({
+    title: 'Emptying the Trash…',
+    finished: 'Trash emptied',
+    target: 'Trash',
+  }, () => _api('/api/empty-trash', {})).then(function(r) {
     if (r.success || (r.freedBytes || 0) > 0) {
-      // Same two steps doCleanDir takes, and for the same reason. The server
-      // forgets its measured sizes, but the client keeps its own five-minute
-      // copy in localStorage; without dropping that and rescanning, the next
-      // render redraws the Trash row at its pre-empty size and Space
-      // Recoverable never moves. The toast says 12 GB freed, the table
-      // disagrees, and the server-side fix is invisible from here.
       try { localStorage.removeItem(CACHE_KEY); } catch (e) {}
-      _exec("toast(" + JSON.stringify('Trash emptied - freed ' + _fmtBytes(r.freedBytes || 0)) + ", "
-        + (r.success ? "'success')" : "'info')"));
       scanCleanupSizes(true);
       _exec('refreshDiskInfo()');
     }
-    else _exec("toast('Failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");
-  }).catch(_apiCatch('Empty Trash failed'));
+  }).catch(function() {}).finally(function() { _exec('emptyingTrash = false'); });
 }
 
 async function doCleanSelected() {
@@ -277,65 +232,46 @@ async function doCleanSelected() {
     _exec("toast('Could not open the confirmation dialog, so nothing was cleaned.', 'error')");
     return;
   }
-  if (!confirmed) return;
+  if (!confirmed || Object.keys(state.cleaning).length || state.cleaningBatch) return;
 
-  var failed = 0, done = 0, heldOpen = 0;
-  // Keyed by path rather than summed as we go. 97 of the cleanable categories
-  // sit inside another one - ~/Library/Caches/Google/Chrome and about thirty
-  // more live under User Caches - so adding every response counts those bytes
-  // once per level and claims more than the disk gave back. The headline total
-  // has carried _sumWithoutOverlap for this reason since it was written; this
-  // toast never did.
+  _exec('cleaningBatch = true');
+  var done = 0;
   var freedByPath = {};
-  // A new object each tick: stx tracks assignment, not a field written on the
-  // old one, so `cleanProgress.done++` would move the number and leave the bar
-  // where it was.
-  _exec("cleanProgress = { done: 0, total: " + targets.length + " }");
-
-  function settle(id) {
-    _exec("clearCleaning(" + JSON.stringify(id) + ")");
-    done++;
-    _exec("cleanProgress = { done: " + done + ", total: " + targets.length + " }");
+  var completed = [];
+  var failures = [];
+  var heldOpen = false;
+  trackRemoval({
+    title: 'Cleaning selected categories…',
+    finished: 'Selected categories cleaned',
+    target: 'Quick Clean',
+    verb: 'cleaned',
+    total: targets.length,
+  }, async function(advance) {
+    await Promise.all(targets.map(async function(t) {
+      try {
+        var result = await _api('/api/clean-dir', { path: t.path });
+        freedByPath[t.path] = result.freedBytes || 0;
+        heldOpen = heldOpen || result.heldOpen;
+        if (result.success || freedByPath[t.path] || result.measured === false) completed.push(t.id);
+        if (!result.success) failures.push({ path: t.path, error: (result.errors || []).join('; ') || result.error || 'Could not clean this category.' });
+      }
+      catch (error) { failures.push({ path: t.path, error: error.message }); }
+      advance(++done);
+    }));
+    return {
+      succeeded: completed,
+      failed: failures,
+      skipped: unknown.map(function(id) { return { reason: id + ' is no longer listed.' }; }),
+      freedBytes: _sumWithoutOverlap(Object.keys(freedByPath), freedByPath),
+      heldOpen: heldOpen,
+    };
+  }).then(function() {
     if (done < targets.length) return;
     try { localStorage.removeItem(CACHE_KEY); } catch (e) {}
-    var freed = _sumWithoutOverlap(Object.keys(freedByPath), freedByPath);
-    var cleaned = targets.length - failed;
-    var msg = cleaned > 0
-      ? 'Cleaned ' + cleaned + (cleaned === 1 ? ' category' : ' categories') + ' - freed ' + _fmtBytes(freed)
-      : 'Nothing could be cleaned';
-    if (failed > 0) msg += ' - ' + failed + ' failed';
-    // Carried through from the server. Without it a batch clean still claims
-    // bytes that are waiting on a process to let go of them.
-    if (heldOpen > 0) msg += ' - some of it frees up once the apps using those files close';
-    if (unknown.length > 0) msg += ' - ' + unknown.length + ' no longer listed';
-    _exec("toast('" + msg.replace(/'/g, "\\'") + "', '" + (cleaned > 0 ? (failed > 0 ? 'info' : 'success') : 'error') + "'); selected = []; cleanProgress = null");
+    _exec('selected = selected.filter(id => !' + JSON.stringify(completed) + '.includes(id))');
     scanCleanupSizes(true);
     _exec('refreshDiskInfo()');
-  }
-
-  targets.forEach(function(t) {
-    // Two rules at once, and doCleanDir broke both for a release. The
-    // statement is evaluated in the x-data scope, so a name only this closure
-    // has — `t`, `id`, `_fmtBytes`, a fetch result — is not in scope and the
-    // whole statement throws, caught and turned into a console.warn nobody
-    // sees. And `cleaning[x] = true` writes a field on the object the signal
-    // already holds, which stx does not track. So pass the id as an argument
-    // to a method that assigns a new object.
-    _exec("markCleaning(" + JSON.stringify(t.id) + ")");
-    _api('/api/clean-dir', { path: t.path }).then(function(r) {
-      // Count the bytes a partial clean freed. success is false whenever any
-      // entry could not be removed, so crediting only flawless cleans made a
-      // run that freed gigabytes report them as zero and call itself failed.
-      var got = (r && r.freedBytes) || 0;
-      freedByPath[t.path] = got;
-      if (r && r.heldOpen) heldOpen++;
-      if (!r || (!r.success && got === 0 && r.measured !== false)) failed++;
-      settle(t.id);
-    }).catch(function() {
-      failed++;
-      settle(t.id);
-    });
-  });
+  }).catch(function() {}).finally(function() { _exec('cleaningBatch = false'); });
 }
 
 var CACHE_KEY = 'systemcleaner:dir-sizes';

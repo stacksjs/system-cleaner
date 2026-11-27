@@ -143,22 +143,18 @@
 
     var self = this;
     this.removing = true;
-    this.post('/api/remove-extensions', { ids: ids }).then(function(r) {
+    trackRemoval({
+      title: 'Removing browser extensions…',
+      finished: 'Browser extensions removed',
+      target: 'Browser Extensions',
+    }, () => self.post('/api/remove-extensions', { ids: ids })).then(function(r) {
       self.removing = false;
-      if ((r.removed || []).length > 0) {
-        self.toast('Removed ' + r.removed.length + ' extension(s) - freed ' + r.freedFormatted, 'success');
-        var returning = (r.removed || []).filter(function(e) { return e.mayReturn; });
-        if (returning.length > 0)
-          self.toast(returning.length + ' may return if this browser syncs - remove them in the browser to stop that', 'info');
-      }
-      (r.skipped || []).slice(0, 2).forEach(function(entry) { self.toast(entry.reason, 'info'); });
-      (r.failed || []).slice(0, 2).forEach(function(entry) { self.toast(entry.error, 'error'); });
+      var returning = (r.removed || []).filter(function(e) { return e.mayReturn; });
+      if (returning.length > 0)
+        self.toast(returning.length + ' may return if browser sync is on.', 'info');
       self.selected = [];
       self.refresh();
-    }).catch(function(err) {
-      self.removing = false;
-      self.toast('Remove failed: ' + (err && err.message ? err.message : 'network'), 'error');
-    });
+    }).catch(function() { self.removing = false; });
   },
 
   openBrowser(browser) {

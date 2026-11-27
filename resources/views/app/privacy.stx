@@ -117,6 +117,7 @@
 
   async clean() {
     if (this.cleaning || this.selected.length === 0) return;
+    var ids = this.selected.slice();
     var sensitive = this.selectedSensitive().map(function(item) { return item.browser + ' ' + item.label.toLowerCase(); });
     if (!await window.nativeConfirm({
       title: 'Clear ' + this.selected.length + ' item(s)?',
@@ -129,20 +130,16 @@
 
     var self = this;
     this.cleaning = true;
-    this.post('/api/privacy-clean', { ids: this.selected }).then(function(r) {
+    trackRemoval({
+      title: 'Clearing browsing data…',
+      finished: 'Browsing data cleared',
+      target: 'Browsing Data',
+      verb: 'cleared',
+    }, () => self.post('/api/privacy-clean', { ids: ids })).then(function(r) {
       self.cleaning = false;
-      if ((r.cleaned || []).length > 0)
-        self.toast('Cleared ' + r.cleaned.length + ' item(s) - freed ' + r.freedFormatted, 'success');
-      if (r.keptCookies > 0)
-        self.toast('Kept ' + r.keptCookies + ' cookie(s) for your keep-list', 'info');
-      (r.skipped || []).slice(0, 2).forEach(function(entry) { self.toast(entry.reason, 'info'); });
-      (r.errors || []).slice(0, 2).forEach(function(entry) { self.toast(entry.error, 'error'); });
       self.selected = [];
       self.refresh();
-    }).catch(function(err) {
-      self.cleaning = false;
-      self.toast('Clear failed: ' + (err && err.message ? err.message : 'network'), 'error');
-    });
+    }).catch(function() { self.cleaning = false; });
   },
 
   addDomain() {

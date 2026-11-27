@@ -109,7 +109,7 @@
     </div>
     <button class='btn btn-danger btn-icon' @click="remove('trash')" :disabled='removing || chosen.length === 0'>
       <span class='i-f7-trash-fill' aria-hidden='true'></span>
-      <span x-text="removing ? 'Working…' : 'Move to Trash'">Move to Trash</span>
+      <span >Move to Trash</span>
     </button>
     <button class='btn btn-danger' @click="remove('permanent')" :disabled='removing || chosen.length === 0'>
       Delete Permanently
@@ -285,7 +285,7 @@
     </div>
     <button class='btn btn-danger btn-icon btn-sm' @click="removeOrphans('trash')" :disabled='orphanBusy'>
       <span class='i-f7-trash-fill' aria-hidden='true'></span>
-      <span x-text="orphanBusy ? 'Working…' : 'Move to Trash'">Move to Trash</span>
+      <span >Move to Trash</span>
     </button>
     <button class='btn btn-danger btn-sm' @click="removeOrphans('permanent')" :disabled='orphanBusy'>
       Delete Permanently

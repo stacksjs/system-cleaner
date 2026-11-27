@@ -20,6 +20,8 @@ const localAgent = isLocalAgent()
     colorMode: { key: 'colorMode', attribute: 'color-mode', default: 'system' },
   })
   <link rel="stylesheet" href="/app-theme.css">
+  <link rel="stylesheet" href="/removal-activity.css">
+  <script src="/removal-activity.js" data-stx-persist></script>
   <link rel="stylesheet" href="/self-update.css">
   <script src="/self-update-xdata.js"></script>
   <link rel="stylesheet" href="/vpn.css">
@@ -1310,6 +1312,7 @@ const localAgent = isLocalAgent()
         <main class='main' data-stx-content>
           @yield('body')
         </main>
+        <RemovalActivity />
       </div>
     @else
       <main class='main' data-stx-content>

@@ -1,0 +1,34 @@
+<section class='removal-activity' x-data='removalActivityPanel()' x-destroy='stop()'
+         x-cloak aria-label='Removal activity'>
+  <span class='sr-only' role='status' aria-atomic='true' x-text='announcement'></span>
+  <template x-for='entry in entries' :key='entry.id'>
+    <article class='flex gap-3 items-start removal-entry' :data-state='entry.state'>
+      <div class='grid place-items-center shrink-0 removal-icon' aria-hidden='true'>
+        <span :class="entry.state === 'running' ? 'i-f7-trash' : entry.state === 'complete' ? 'i-f7-checkmark-alt' : 'i-f7-exclamationmark-triangle'"></span>
+      </div>
+      <div class='flex-1 min-w-0 removal-body'>
+        <div>
+          <h2 x-text='headline(entry)'></h2>
+          <p x-text='description(entry)'></p>
+        </div>
+        <div class='removal-progress' x-show="entry.state === 'running'">
+          <progress :aria-label='entry.title' x-show='entry.total' :max='entry.total || 1' :value='entry.done'></progress>
+          <progress :aria-label='entry.title' x-show='!entry.total'></progress>
+          <span x-show='entry.total' x-text="entry.done + ' of ' + entry.total + ' checked'"></span>
+        </div>
+        <details x-show='entry.issues.length'>
+          <summary>View details</summary>
+          <ul>
+            <template x-for='issue in entry.issues' :key='issue'>
+              <li x-text='issue'></li>
+            </template>
+          </ul>
+        </details>
+      </div>
+      <button class='shrink-0 removal-dismiss toolbar-button' x-show="entry.state !== 'running'"
+              type='button' @click='dismiss(entry.id)' aria-label='Dismiss removal result' title='Dismiss'>
+        <span class='i-f7-xmark' aria-hidden='true'></span>
+      </button>
+    </article>
+  </template>
+</section>

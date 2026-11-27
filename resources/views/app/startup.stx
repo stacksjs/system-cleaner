@@ -19,7 +19,7 @@ function esc(str) { return escapeHtml(str || '') }
   count rendered as 0 while the rows themselves showed the right state.
 -->
 
-<div x-data="{
+<div data-startup-page x-data="{
   selected: [],
   startupFilter: 'all',
   startupItems: [],
@@ -103,7 +103,7 @@ function _api(endpoint, data) {
 }
 
 function _exec(stmt) {
-  var el = document.querySelector('[data-stx-scope]');
+  var el = document.querySelector('[data-startup-page]');
   if (el && el.__stx_execute) el.__stx_execute(stmt);
 }
 
@@ -139,14 +139,13 @@ async function doRemove(fp, name, itemId) {
     confirmLabel: 'Delete',
     destructive: true,
   })) return;
-  _api('/api/remove-startup', { filepath: fp }).then(function(r) {
-    if (r.success) {
-      _exec("removedItems = [...removedItems, " + JSON.stringify(itemId) + "]");
-      _exec("toast('" + name.replace(/'/g, "\\'") + " removed', 'success')");
-    } else {
-      _exec("toast('Failed: " + (r.error || 'Unknown').replace(/'/g, "\\'") + "', 'error')");
-    }
-  }).catch(_toastErr('Remove failed'));
+  trackRemoval({
+    title: 'Deleting startup item…',
+    finished: 'Startup item deleted',
+    target: name,
+  }, () => _api('/api/remove-startup', { filepath: fp })).then(function(r) {
+    if (r.success) _exec("removedItems = [...removedItems, " + JSON.stringify(itemId) + "]");
+  }).catch(function() {});
 }
 
 /**
@@ -170,24 +169,17 @@ async function doRemoveDead(paths, ids, names) {
     destructive: true,
   })) return;
 
-  _api('/api/remove-dead-startup', { filepaths: paths }).then(function(r) {
-    const gone = (r.succeeded || []).length;
-    const failed = (r.failed || []).length;
-
-    if (gone > 0) {
-      // Match the ids back from the paths the server confirmed, so a partly
-      // authorized batch greys out exactly the rows that went.
-      const removed = ids.filter(function(id, idx) { return (r.succeeded || []).indexOf(paths[idx]) !== -1; });
+  trackRemoval({
+    title: 'Removing unused startup items…',
+    finished: 'Unused startup items removed',
+    target: 'Startup Items',
+  }, () => _api('/api/remove-dead-startup', { filepaths: paths })).then(function(r) {
+    const removed = ids.filter(function(id, idx) { return (r.succeeded || []).indexOf(paths[idx]) !== -1; });
+    if (removed.length) {
       _exec('removedItems = [...removedItems, ...' + JSON.stringify(removed) + ']');
-      _exec('selected = []');
+      _exec('selected = selected.filter(id => !' + JSON.stringify(removed) + '.includes(id))');
     }
-
-    let msg = gone > 0
-      ? 'Removed ' + gone + (gone === 1 ? ' dead item' : ' dead items')
-      : 'Nothing was removed';
-    if (failed > 0) msg += ' - ' + failed + ' failed (' + ((r.failed || [])[0] || {}).error + ')';
-    _exec('toast(' + JSON.stringify(msg) + ', ' + (gone > 0 ? (failed > 0 ? "'info'" : "'success'") : "'error'") + ')');
-  }).catch(_toastErr('Remove failed'));
+  }).catch(function() {});
 }
 
 window.doToggle = doToggle;
