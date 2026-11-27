@@ -18,8 +18,9 @@
  * These are attached to `window` because their callers are `@click` handlers in
  * stx views and the two x-data scripts, none of which are modules.
  */
-import { clipboard, notifications, showMessageBox, showOpenDialog } from '@stacksjs/desktop/browser'
+import { clipboard, nativeWindow, notifications, showMessageBox, showOpenDialog } from '@stacksjs/desktop/browser'
 
+import { postCleanupNotice, TRAY_CHANNEL } from '../lib/cleanup-notifications'
 import { needsConfirmation, shouldNotifyAway } from '../lib/interruptions'
 import { readPref } from '../lib/preferences'
 
@@ -334,19 +335,23 @@ async function notifyIfAway(options: AwayNotice): Promise<void> {
   }
 }
 
-let cleanupAuthorization: Promise<boolean> | undefined
-
 /** Completion feedback belongs to Notification Center, even in the foreground. */
 async function notifyCleanup(title: string, body: string): Promise<void> {
   if (!readPref('notifyOnCleanup')) return
-  try {
-    cleanupAuthorization ??= notifications.requestPermission().finally(() => {
-      cleanupAuthorization = undefined
-    })
-    if (await cleanupAuthorization && readPref('notifyOnCleanup'))
-      await notifications.show({ title, body })
+  if (nativeWindow.available && typeof BroadcastChannel === 'function') {
+    const platform = await fetch('/api/platform', { method: 'POST', cache: 'no-store' })
+      .then(response => response.json() as Promise<{ nativeTray?: boolean }>)
+      .catch(() => null)
+    // Craft sends async permission replies to the primary webview. In the
+    // direct macOS app that is the tray, even while the dashboard has focus.
+    if (platform?.nativeTray) {
+      const tray = new BroadcastChannel(TRAY_CHANNEL)
+      tray.postMessage({ action: 'cleanup-notice', title, body })
+      tray.close()
+      return
+    }
   }
-  catch { /* The system controls notification permissions. */ }
+  await postCleanupNotice(title, body)
 }
 
 async function revealPath(path: string): Promise<void> {

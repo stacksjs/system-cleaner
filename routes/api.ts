@@ -794,6 +794,7 @@ export default async function (router: Router) {
     return Response.json({
       success: true,
       platform: PLATFORM,
+      nativeTray: PLATFORM === 'macos' && !SANDBOXED && process.env.SYSTEM_CLEANER_DESKTOP_SESSION === '1',
       capabilities,
       // The App Store edition: which build this is, whether the person has
       // granted their home folder yet, and why each missing feature is

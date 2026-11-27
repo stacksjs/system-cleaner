@@ -2,6 +2,7 @@
 import { app, nativeWindow } from '@stacksjs/desktop/browser'
 import { openDashboard, openSettings } from '../lib/app-windows'
 import { watchAppearance } from '../lib/appearance'
+import { postCleanupNotice, TRAY_CHANNEL } from '../lib/cleanup-notifications'
 
 // The published SystemTray wrapper does not expose setTitle, and sends object
 // payloads where this Craft API takes strings/arrays. Use its documented tray API.
@@ -60,9 +61,11 @@ async function install(): Promise<void> {
   await tray.setTitle('')
   await tray.setTooltip('SystemCleaner: live system stats')
   const item = (title: string, action: string): TrayMenuItem => ({ title, label: title, action })
-  const channel = new BroadcastChannel('systemcleaner-tray')
+  const channel = new BroadcastChannel(TRAY_CHANNEL)
   channel.addEventListener('message', event => {
     if (event.data?.action === 'show') host.window?.show?.()
+    if (event.data?.action === 'cleanup-notice' && typeof event.data.title === 'string' && typeof event.data.body === 'string')
+      void postCleanupNotice(event.data.title, event.data.body)
   })
   await tray.setMenu([
     item('Open SystemCleaner', 'open-app'), item('Settings…', 'settings'),
