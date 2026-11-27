@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test'
+import { runInNewContext } from 'node:vm'
 import { needsConfirmation, scheduledRunAction, shouldNotifyAway } from '../resources/lib/interruptions'
 
 describe('Confirm before deleting', () => {
@@ -31,6 +32,42 @@ describe('When a long scan finishes', () => {
     expect(shouldNotifyAway({ enabled: true, elapsedMs: 4_000, focused: false })).toBe(false)
     expect(shouldNotifyAway({ enabled: true, elapsedMs: 45_000, focused: true })).toBe(false)
     expect(shouldNotifyAway({ enabled: true, elapsedMs: 4_000, minMs: 2_000, focused: false })).toBe(true)
+  })
+})
+
+describe('When a cleanup finishes', () => {
+  it.each([true, false])('routes native notices with tray mode %s', async (nativeTray) => {
+    const relayed: unknown[] = []
+    const displayed: unknown[] = []
+    let permissionRequests = 0
+    const browser = {
+      craft: {
+        window: {},
+        notifications: {
+          requestPermission: async () => { permissionRequests++; return true },
+          show: async (notice: unknown) => { displayed.push(notice) },
+        },
+      },
+      notifyCleanup: async (_title: string, _body: string) => {},
+    }
+
+    runInNewContext(await Bun.file('public/native-dialog.js').text(), {
+      window: browser,
+      crypto,
+      fetch: async () => Response.json({ nativeTray }),
+      BroadcastChannel: class {
+        constructor(readonly name: string) {}
+        postMessage(message: unknown) { relayed.push({ channel: this.name, message }) }
+        close() {}
+      },
+    })
+
+    await browser.notifyCleanup('Cleanup finished', 'One file moved')
+
+    const notice = { title: 'Cleanup finished', body: 'One file moved' }
+    expect(relayed).toEqual(nativeTray ? [{ channel: 'systemcleaner-tray', message: { action: 'cleanup-notice', ...notice } }] : [])
+    expect(permissionRequests).toBe(nativeTray ? 0 : 1)
+    expect(displayed).toEqual(nativeTray ? [] : [expect.objectContaining({ ...notice, id: expect.any(String) })])
   })
 })
 

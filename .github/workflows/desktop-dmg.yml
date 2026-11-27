@@ -58,6 +58,13 @@ jobs:
           DESKTOP_SIGNING_IDENTITY: ${{ vars.DESKTOP_SIGNING_IDENTITY_NAME }}
           DESKTOP_NOTARY_PROFILE: systemcleaner
 
+      - name: Verify the notification sender matches the app bundle
+        run: |
+          app=storage/framework/desktop-dist/SystemCleaner.app
+          bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")
+          runtime_id=$(codesign -dv "$app/Contents/MacOS/craft-runtime" 2>&1 | sed -n 's/^Identifier=//p')
+          test -n "$bundle_id" && test "$runtime_id" = "$bundle_id"
+
       - name: Require the notarized installer and manifest
         env:
           RELEASE_TAG: ${{ github.ref_name }}

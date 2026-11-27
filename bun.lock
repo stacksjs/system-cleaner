@@ -70,6 +70,9 @@
       },
     },
   },
+  "patchedDependencies": {
+    "@stacksjs/actions@0.75.652": "patches/@stacksjs%2Factions@0.75.652.patch",
+  },
   "overrides": {
     "@stacksjs/desktop": "0.2.917",
     "@stacksjs/stx": "0.2.917",
