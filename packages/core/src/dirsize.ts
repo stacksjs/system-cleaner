@@ -1,6 +1,7 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import process from 'node:process'
+import { SANDBOXED } from './sandbox'
 
 /**
  * Directory sizes without `du`.
@@ -330,9 +331,9 @@ export async function sizeOfTreeAsync(root: string, options: MeasureOptions = {}
 }
 
 /**
- * True when this platform has to use the portable walker.
+ * Whether the environment needs the in-process walker.
  *
- * A capability, not a preference: `du` is faster and stays the default
- * wherever it exists.
+ * Windows does not have `du`. In the Store edition, the in-process walker
+ * can read the folders the user granted to the sandboxed backend.
  */
-export const NEEDS_PORTABLE_SIZER: boolean = process.platform === 'win32'
+export const NEEDS_PORTABLE_SIZER: boolean = process.platform === 'win32' || SANDBOXED

@@ -81,15 +81,10 @@ export async function getPrimaryDiskInfo(): Promise<DiskInfo | null> {
 }
 
 /**
- * Get the size of a directory using `du`, or a portable walk where there is no
- * `du` to run.
+ * Get the size of a directory using `du` or a portable walk.
  *
- * Windows has no `du`. The spawn failed ENOENT, `exec` reported not-ok, and
- * this returned 0 — which the screens above it render as an empty chart and a
- * clean machine. A size of zero and "I could not measure" have to be
- * different answers, so on Windows the walk in `dirsize.ts` does the job
- * instead. `du` stays the default wherever it exists, because it is several
- * times faster.
+ * Windows does not have `du`. In the Store edition, walk granted folders
+ * from the agent that holds access to them. Other builds use `du` for speed.
  */
 export async function getDirSize(dirPath: string): Promise<number> {
   // The async form on purpose. `du` ran in another process, so a 15-second
