@@ -45,6 +45,8 @@
 </div>
 <div class='main-content'>
 
+<SelfUpdateCard />
+
 <div x-show='loading' style='text-align: center; padding: var(--space-10) var(--space-4); color: var(--tertiary); font-size: 13px;'>
   Checking for updates...
 </div>
@@ -78,68 +80,6 @@
     <div class='card-label'>Desktop apps</div>
     <div class='card-value' :style="desktopOutdated.length > 0 ? 'color: var(--orange)' : 'color: var(--green)'">{{ desktopOutdated.length }}</div>
     <div class='card-detail'>{{ desktopApps.length + ' app' + (desktopApps.length !== 1 ? 's' : '') + ' scanned' }}</div>
-  </div>
-</div>
-
-<!--
-  SystemCleaner's own update, above everything else on the page.
-
-  It sits apart from the tables below because it is a different kind of thing:
-  those describe work the user can do to their machine, this one quits and
-  replaces the app they are looking at. The three buttons are three separate
-  consents — checking is free, downloading spends bandwidth, installing ends
-  the session — and collapsing them into one "Update" button removes the two
-  places a person would reasonably want to stop.
--->
-<div class='tbl-wrap' x-show="self.stage !== 'unsupported'" x-cloak>
-  <div class='tbl-bar'>
-    <div>
-      <span class='tbl-title'>SystemCleaner</span>
-      <span class='tbl-count'>{{ 'v' + self.currentVersion }}</span>
-    </div>
-    <div style='display: flex; gap: var(--space-tight); align-items: center;'>
-      <button class='btn btn-sm'
-              @click='checkSelfUpdate()'
-              :disabled="self.stage === 'checking' || self.stage === 'downloading' || selfInstalling()">
-        Check for Updates
-      </button>
-      <button class='btn btn-primary btn-sm'
-              x-show="self.stage === 'available'"
-              @click='downloadSelfUpdate()'>
-        Download
-      </button>
-      <button class='btn btn-primary btn-sm'
-              x-show="self.stage === 'ready'"
-              @click='installSelfUpdate()'>
-        Install and Restart
-      </button>
-    </div>
-  </div>
-  <div style='padding: var(--space-3) var(--space-4); display: flex; flex-direction: column; gap: var(--space-2);'>
-    <div style='font-size: 12px;'
-         :style="self.stage === 'error' ? 'color: var(--red)' : ''">{{ selfStatusLine() }}</div>
-
-    <progress class='w-full' x-show='selfInstalling()' x-cloak aria-label='Update installation progress'></progress>
-
-    <!-- A determinate bar, because the manifest carries the byte count. -->
-    <div x-show="self.stage === 'downloading'" style='display: flex; flex-direction: column; gap: var(--space-1);'>
-      <div style='height: 4px; border-radius: 2px; background: var(--track); overflow: hidden;'>
-        <div style='height: 100%; background: var(--accent); transition: width 200ms linear;'
-             :style="'width: ' + self.percent + '%'"></div>
-      </div>
-      <div class='mono' style='font-size: 10px; color: var(--tertiary);'>{{ selfProgressLabel() }}</div>
-    </div>
-
-    <!--
-      Naming the team the update has to be signed by is the whole trust story
-      in one line: not "verified", which the user has to take on faith, but the
-      specific fact being checked.
-    -->
-    <div x-show='self.teamId' style='font-size: 11px; color: var(--tertiary);'>
-      {{ 'Updates are installed only if notarized by Apple and signed by team ' + self.teamId + '.' }}
-    </div>
-
-    <div x-show='self.releaseNotes' style='font-size: 11px; color: var(--secondary); white-space: pre-wrap;'>{{ self.releaseNotes }}</div>
   </div>
 </div>
 

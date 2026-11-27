@@ -14,25 +14,6 @@ window.updatesXData = function () {
     macosVersion: null,
     macosRelease: null,
 
-    // SystemCleaner updating itself. Separate from everything above, which is
-    // about the rest of the machine: this is the one update that quits the app.
-    self: {
-      stage: 'idle',
-      currentVersion: '',
-      latestVersion: null,
-      releaseNotes: null,
-      percent: 0,
-      bytesDownloaded: 0,
-      bytesTotal: 0,
-      speed: 0,
-      error: null,
-      unsupportedReason: null,
-      teamId: null,
-    },
-    selfPollTimer: null,
-    selfActionBusy: false,
-    selfStatusBusy: false,
-
     // On a beta the marketing version never moves — 27.0 upgrades to 27.0 —
     // so the build is the only thing that says which beta is installed and
     // which one is on offer.
@@ -60,136 +41,6 @@ window.updatesXData = function () {
 
     init() {
       this.loadUpdates(false, false)
-      this.loadSelfStatus()
-    },
-
-    // ── SystemCleaner's own update ──────────────────────────────────
-
-    selfPost(endpoint) {
-      var self = this
-      return fetch('/api/self-update/' + endpoint, {
-        method: 'POST',
-        cache: 'no-store',
-        headers: { 'Content-Type': 'application/json' },
-        body: '{}',
-      })
-        .then(async function (response) {
-          var result = await response.json()
-          if (!response.ok || result.success === false) throw new Error(result.error || 'Update request failed')
-          return result
-        })
-        .then(function (r) {
-          // Assigned wholesale rather than field by field: STX tracks
-          // assignment to `self`, not writes into the object it points at.
-          self.self = Object.assign({}, self.self, r)
-          self.syncSelfPolling()
-          return r
-        }).catch(function (error) {
-          if (endpoint === 'status' && self.self.stage === 'restarting') return self.self
-          self.self = Object.assign({}, self.self, { stage: 'error', error: error.message || 'Could not contact the updater' })
-          self.syncSelfPolling()
-          return self.self
-        })
-    },
-
-    loadSelfStatus() {
-      var self = this
-      return this.selfPost('status').catch(function () {
-        self.self = Object.assign({}, self.self, { stage: 'error', error: 'Could not read update status' })
-      })
-    },
-
-    // A download reports progress through the status endpoint, so the screen
-    // polls only while there is something moving. Polling an idle app forever
-    // is how a settings screen ends up costing a request a second.
-    syncSelfPolling() {
-      var busy = this.self.stage === 'downloading' || this.selfInstalling()
-      if (busy && !this.selfPollTimer) {
-        var self = this
-        this.selfPollTimer = setInterval(async function () {
-          if (self.selfStatusBusy) return
-          self.selfStatusBusy = true
-          try { await self.selfPost('status') }
-          finally { self.selfStatusBusy = false }
-        }, 500)
-      } else if (!busy && this.selfPollTimer) {
-        clearInterval(this.selfPollTimer)
-        this.selfPollTimer = null
-      }
-    },
-
-    checkSelfUpdate() {
-      var self = this
-      this.self = Object.assign({}, this.self, { stage: 'checking', error: null })
-      this.selfPost('check').then(function (r) {
-        if (r.stage === 'up-to-date') self.toast('SystemCleaner is up to date', 'success')
-        else if (r.stage === 'available') self.toast('Version ' + r.latestVersion + ' is available', 'info')
-        else if (r.stage === 'error') self.toast('Update check failed: ' + (r.error || 'Unknown'), 'error')
-      })
-    },
-
-    downloadSelfUpdate() {
-      this.selfPost('download')
-    },
-
-    async installSelfUpdate() {
-      if (this.selfActionBusy || this.self.stage !== 'ready') return
-      this.selfActionBusy = true
-      try {
-        if (!await window.nativeConfirm({
-          title: 'Install SystemCleaner ' + this.self.latestVersion + '?',
-          message: 'SystemCleaner will quit and reopen on the new version.',
-          confirmLabel: 'Install and Restart',
-        })) return
-        this.self = Object.assign({}, this.self, { stage: 'installing', error: null })
-        await this.selfPost('install')
-      } catch (error) {
-        this.self = Object.assign({}, this.self, { stage: 'error', error: error.message || 'Could not start the update' })
-      } finally {
-        this.selfActionBusy = false
-      }
-    },
-
-    selfInstalling() {
-      return this.self.stage === 'installing' || this.self.stage === 'restarting'
-    },
-
-    selfStatusLine() {
-      var s = this.self
-      if (s.stage === 'unsupported') return s.unsupportedReason || 'Updates are unavailable for this copy'
-      if (s.stage === 'checking') return 'Checking for updates...'
-      if (s.stage === 'up-to-date') return 'SystemCleaner ' + s.currentVersion + ' is the latest version'
-      if (s.stage === 'available') return 'Version ' + s.latestVersion + ' is available'
-      if (s.stage === 'downloading') return 'Downloading ' + s.latestVersion + ' - ' + s.percent + '%'
-      if (s.stage === 'ready') return 'Version ' + s.latestVersion + ' is ready to install'
-      if (s.stage === 'installing') return 'Preparing and installing the update…'
-      if (s.stage === 'restarting') return 'Update installed. SystemCleaner is reopening…'
-      if (s.stage === 'error') return s.error || 'Something went wrong'
-      return 'SystemCleaner ' + s.currentVersion
-    },
-
-    // The name and version, as a heading. `selfStatusLine` is the sentence
-    // under it and repeats the version, which reads fine in the Updates
-    // screen's table bar and badly in a card that already has a title — so the
-    // two are separate, and the Settings window's Software Update pane uses
-    // both.
-    selfHeadline() {
-      var s = this.self
-      if (s.latestVersion && (['available', 'downloading', 'ready'].includes(s.stage) || this.selfInstalling()))
-        return 'SystemCleaner ' + s.latestVersion
-      return s.currentVersion ? 'SystemCleaner ' + s.currentVersion : 'SystemCleaner'
-    },
-
-    // The line under that heading, when there is one to add.
-    //
-    // `selfStatusLine` is written for the Updates screen's table bar, where the
-    // app's name is not already on screen — so at rest it answers with the name
-    // and version, which under a heading that is the name and version reads as
-    // a stutter. Saying nothing is better than saying it twice; every other
-    // stage has something of its own to report.
-    selfDetailLine() {
-      var line = this.selfStatusLine()
-      return line === this.selfHeadline() ? '' : line
     },
 
     // When the machine was last scanned for everything that is not this app.
@@ -199,14 +50,6 @@ window.updatesXData = function () {
       if (!this.updateScannedAt) return 'Not yet'
       var when = new Date(this.updateScannedAt)
       return Number.isNaN(when.getTime()) ? 'Not yet' : when.toLocaleString()
-    },
-
-    selfProgressLabel() {
-      var s = this.self
-      if (s.stage !== 'downloading' || !s.bytesTotal) return ''
-      var mb = function (n) { return (n / 1e6).toFixed(1) }
-      var rate = s.speed > 0 ? ' - ' + mb(s.speed) + ' MB/s' : ''
-      return mb(s.bytesDownloaded) + ' of ' + mb(s.bytesTotal) + ' MB' + rate
     },
 
     systemOutdatedCount() {

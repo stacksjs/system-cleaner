@@ -1,0 +1,37 @@
+<section class='self-update-card' x-data='selfUpdateXData()' x-destroy='stop()' aria-label='SystemCleaner Software Update'>
+  <header class='flex gap-3 items-start self-update-summary'>
+    <div class='self-update-icon' aria-hidden='true'><span class='i-f7-arrow-down-circle-fill'></span></div>
+    <div class='min-w-0'>
+      <h2 x-text='selfHeadline()'>SystemCleaner</h2>
+      <p class='self-update-message' role='status' aria-live='polite' x-text='selfDetailLine()'></p>
+      <p class='self-update-installed' x-show='self.currentVersion' x-cloak x-text="'Installed version ' + self.currentVersion"></p>
+    </div>
+  </header>
+
+  <p class='self-update-error' role='alert' x-show="self.stage === 'error'" x-cloak x-text='self.error'></p>
+
+  <div class='self-update-progress' x-show="self.stage === 'checking' || self.stage === 'downloading' || selfInstalling()" x-cloak>
+    <progress x-show="self.stage === 'downloading' && self.bytesTotal" max='100' :value='self.percent' aria-label='Update download progress'></progress>
+    <progress x-show="self.stage !== 'downloading' || !self.bytesTotal" :aria-label="selfInstalling() ? 'Installing update' : selfDetailLine()"></progress>
+    <div class='self-update-reading' x-show="self.stage === 'downloading'" x-text='selfProgressLabel()'></div>
+  </div>
+
+  <details class='self-update-notes' x-show='self.releaseNotes' x-cloak>
+    <summary>Release notes</summary>
+    <p x-text='self.releaseNotes'></p>
+  </details>
+
+  <footer class='flex gap-3 items-center justify-end self-update-actions'
+    x-show="self.stage === 'up-to-date' || self.stage === 'error' || self.stage === 'available' || self.stage === 'ready' || (self.stage === 'idle' && self.currentVersion) || selfInstalling()" x-cloak>
+    <span class='self-update-checked' x-show="self.stage === 'up-to-date'" x-text='selfCheckedLabel()'></span>
+    <button class='self-update-button' type='button'
+      x-show="self.stage === 'idle' || self.stage === 'up-to-date' || self.stage === 'error'"
+      :disabled='selfActionBusy' @click='checkSelfUpdate()'
+      x-text="self.stage === 'error' ? 'Check Again' : 'Check for Updates'">Check for Updates</button>
+    <button class='self-update-button self-update-primary' type='button' x-show="self.stage === 'available'"
+      :disabled='selfActionBusy' @click='downloadSelfUpdate()'>Download Update</button>
+    <button class='self-update-button self-update-primary' type='button' data-install-update
+      x-show="self.stage === 'ready' || selfInstalling()" :disabled='selfActionBusy || selfInstalling()' @click='installSelfUpdate()'
+      x-text="self.stage === 'restarting' ? 'Reopening…' : selfInstalling() ? 'Installing…' : 'Restart to Install'">Restart to Install</button>
+  </footer>
+</section>

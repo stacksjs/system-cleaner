@@ -69,6 +69,18 @@ describe('agent static files', () => {
     fs.rmSync(webRoot, { recursive: true, force: true })
   })
 
+  it('accepts update actions only as JSON from the loopback origin', async () => {
+    const origin = `http://127.0.0.1:${agent.port}`
+    for (const action of ['download', 'install']) {
+      const url = `${origin}/api/self-update/${action}`
+      expect((await fetch(url, { method: 'POST', body: '{}' })).status).toBe(403)
+      const headers = { 'Content-Type': 'application/json', 'Origin': 'https://other.example' }
+      expect((await fetch(url, { method: 'POST', headers, body: '{}' })).status).toBe(403)
+      const allowed = await fetch(url, { method: 'POST', headers: { ...headers, Origin: origin }, body: '{}' })
+      expect(allowed.status).toBe(200)
+    }
+  })
+
   it('answers every missing file with a 404, not only the first', async () => {
     const base = `http://127.0.0.1:${agent.port}`
     const statuses: number[] = []

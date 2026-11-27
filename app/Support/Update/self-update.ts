@@ -359,10 +359,10 @@ export async function checkForUpdate(): Promise<UpdateStatus> {
     return { ...status, stage: 'unsupported', unsupportedReason: reason }
 
   if (['checking', 'downloading', 'ready', 'installing', 'restarting'].includes(status.stage)) return status
-  await ensureTeamId()
   status = { ...status, stage: 'checking', error: null }
 
   try {
+    await ensureTeamId()
     const instance = await getUpdater()
     const info: UpdateManifest | null = await instance.checkForUpdates()
 
@@ -386,6 +386,7 @@ export async function checkForUpdate(): Promise<UpdateStatus> {
     // already-verified one gets picked back up.
     const ready = await reconcileDownloads(instance, info)
 
+    const bytesTotal = info?.platforms?.darwin?.size ?? 0
     status = {
       ...status,
       stage: info ? (ready ? 'ready' : 'available') : 'up-to-date',
@@ -393,6 +394,9 @@ export async function checkForUpdate(): Promise<UpdateStatus> {
       latestVersion: info?.version ?? null,
       releaseNotes: info?.releaseNotes ?? null,
       percent: ready ? 100 : 0,
+      bytesTotal,
+      bytesDownloaded: ready ? bytesTotal : 0,
+      speed: 0,
       error: null,
       checkedAt: new Date().toISOString(),
     }
@@ -424,8 +428,7 @@ export async function downloadUpdate(): Promise<UpdateStatus> {
 
   status = { ...status, stage: 'downloading', percent: 0, bytesDownloaded: 0, error: null }
 
-  const instance = await getUpdater()
-  void instance.downloadUpdate().catch((error) => {
+  void getUpdater().then(instance => instance.downloadUpdate()).catch((error) => {
     status = { ...status, stage: 'error', error: describe(error) }
   })
 

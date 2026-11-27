@@ -263,84 +263,40 @@
   </p>
 </section>
 
-<!--
-  Software Update.
-
-  The same shape System Settings gives it, and the same data the Updates screen
-  in the main window already reads: `updatesXData()` is that screen's state,
-  loaded here unchanged. What differs is the arrangement — the app's own update
-  is the card at the top, and everything else on the Mac is a row under "Also
-  Available", which is where a person looks for it.
--->
 <section class='set-pane' data-pane='software-update' data-pane-title='Software Update'>
+  <SelfUpdateCard />
+
   <script src='/updates-xdata.js'></script>
   <div x-data='updatesXData()'>
-    <div class='set-card set-update-card'>
-      <div class='set-update-summary'>
-        <span class='set-tile set-update-icon' data-tone='blue' aria-hidden='true'>
-          <span class='i-f7-arrow-down-circle-fill'></span>
-        </span>
-        <div class='set-card-row-text'>
-          <h2 class='set-update-title' x-text='selfHeadline()'>SystemCleaner</h2>
-          <span class='set-update-status' role='status' aria-live='polite'
-            x-show="self.stage !== 'error'" x-text='selfDetailLine()'></span>
-        </div>
-      </div>
-      <div class='set-update-error' role='alert' x-show="self.stage === 'error'" x-cloak x-text='self.error'></div>
-      <div class='set-update-download' x-show="self.stage === 'downloading'" x-cloak>
-        <progress class='set-update-progress' max='100' :value='self.percent' aria-label='Update download progress'></progress>
-        <span class='set-card-hint' x-text='selfProgressLabel()'></span>
-      </div>
-      <div class='mt-4' x-show='selfInstalling()' x-cloak>
-        <progress class='set-update-progress' aria-label='Update installation progress'></progress>
-      </div>
-      <div class='set-update-actions'>
-        <button class='set-btn' type='button' @click='checkSelfUpdate()'
-          x-show="self.stage !== 'ready' && self.stage !== 'downloading' && !selfInstalling()"
-          :disabled="self.stage === 'checking' || selfActionBusy"
-          x-text="self.stage === 'checking' ? 'Checking…' : self.stage === 'error' ? 'Try Again' : 'Check for Updates'">Check for Updates</button>
-        <button class='set-btn set-btn-primary' type='button' x-show="self.stage === 'available'" x-cloak
-          @click='downloadSelfUpdate()'>Download Now</button>
-        <button class='set-btn set-btn-primary' type='button' data-install-update
-          x-show="self.stage === 'ready' || selfInstalling()" x-cloak
-          :disabled="selfActionBusy || selfInstalling()" @click='installSelfUpdate()'
-          x-text="self.stage === 'restarting' ? 'Reopening…' : selfInstalling() ? 'Installing…' : 'Restart to Install'">Restart to Install</button>
-      </div>
-      <details class='set-update-notes' x-show='self.releaseNotes' x-cloak>
-        <summary>More Info…</summary>
-        <p class='set-card-hint' style='white-space: pre-wrap;' x-text='self.releaseNotes'></p>
-      </details>
-    </div>
-
     <div class='set-section-title'>Also Available</div>
     <div class='set-card'>
       <div class='set-card-row'>
         <span class='set-card-row-text'>
           <span class='set-card-label'>macOS</span>
-          <span class='set-card-hint' x-text="systemOutdatedCount() > 0 ? systemOutdatedCount() + ' update available' : 'Up to date'"></span>
+          <span class='set-card-hint' x-text="loading ? 'Checking…' : systemOutdatedCount() > 0 ? systemOutdatedCount() + ' update available' : 'Up to date'"></span>
         </span>
         <button class='set-btn' type='button' data-action='openSoftwareUpdate'>Open</button>
       </div>
       <div class='set-card-row'>
         <span class='set-card-row-text'>
           <span class='set-card-label'>Homebrew</span>
-          <span class='set-card-hint' x-text="brewTotal() + ' outdated'"></span>
+          <span class='set-card-hint' x-text="loading ? 'Checking…' : brewTotal() + ' outdated'"></span>
         </span>
-        <span class='set-card-value' x-text="brewFormulae.length + ' formulae · ' + brewCasks.length + ' casks'"></span>
+        <span class='set-card-value' x-show='!loading' x-text="brewFormulae.length + ' formulae · ' + brewCasks.length + ' casks'"></span>
       </div>
       <div class='set-card-row'>
         <span class='set-card-row-text'>
           <span class='set-card-label'>Pantry</span>
-          <span class='set-card-hint' x-text="pantryOutdated.length + ' outdated'"></span>
+          <span class='set-card-hint' x-text="loading ? 'Checking…' : pantryOutdated.length + ' outdated'"></span>
         </span>
-        <span class='set-card-value' x-text="pantryTrackedCount + ' tracked'"></span>
+        <span class='set-card-value' x-show='!loading' x-text="pantryTrackedCount + ' tracked'"></span>
       </div>
       <div class='set-card-row'>
         <span class='set-card-row-text'>
           <span class='set-card-label'>Applications</span>
-          <span class='set-card-hint' x-text="desktopOutdated.length + ' outdated'"></span>
+          <span class='set-card-hint' x-text="loading ? 'Checking…' : desktopOutdated.length + ' outdated'"></span>
         </span>
-        <span class='set-card-value' x-text="desktopApps.length + ' scanned'"></span>
+        <span class='set-card-value' x-show='!loading' x-text="desktopApps.length + ' scanned'"></span>
       </div>
     </div>
 

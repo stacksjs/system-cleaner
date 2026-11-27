@@ -1,0 +1,58 @@
+.self-update-card {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--ink);
+  min-width: 0;
+}
+.main-content > .self-update-card { margin-bottom: var(--space-4); }
+.self-update-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  flex: none;
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  color: var(--accent);
+}
+.self-update-icon span { width: 24px; height: 24px; }
+.self-update-summary h2 {
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -.025em;
+  margin: 0;
+}
+.self-update-message, .self-update-installed, .self-update-checked, .self-update-reading {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--secondary);
+}
+.self-update-message { margin: 3px 0 0; }
+.self-update-message:empty { display: none; }
+.self-update-installed { margin: 5px 0 0; }
+.self-update-progress { margin-top: 14px; }
+.self-update-progress progress { width: 100%; height: 8px; accent-color: var(--accent); }
+.self-update-reading { margin-top: 4px; font-variant-numeric: tabular-nums; }
+.self-update-notes, .self-update-error { margin: 13px 0 0; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.self-update-notes summary { cursor: pointer; font-weight: 550; }
+.self-update-notes p { margin: 8px 0 0; white-space: pre-wrap; color: var(--secondary); }
+.self-update-error { border-radius: 8px; padding: 9px 11px; background: color-mix(in srgb, var(--red) 9%, var(--surface)); color: var(--red); }
+.self-update-actions { flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.self-update-checked { margin-right: auto; }
+.self-update-button {
+  padding: 5px 12px;
+  min-height: 30px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.self-update-primary { background: var(--accent-fill); color: white; border-color: transparent; }
+.self-update-button:hover:not(:disabled) { filter: brightness(1.07); }
+.self-update-button:disabled { opacity: .6; cursor: default; }

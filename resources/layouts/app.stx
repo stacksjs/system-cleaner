@@ -20,6 +20,8 @@ const localAgent = isLocalAgent()
     colorMode: { key: 'colorMode', attribute: 'color-mode', default: 'system' },
   })
   <link rel="stylesheet" href="/app-theme.css">
+  <link rel="stylesheet" href="/self-update.css">
+  <script src="/self-update-xdata.js"></script>
   <link rel="stylesheet" href="/vpn.css">
   <script src="/vpn-panel.js"></script>
   <style>

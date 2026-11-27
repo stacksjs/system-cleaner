@@ -132,6 +132,15 @@ const badJson = () => Response.json({ success: false, error: 'Invalid JSON body'
 const badRequest = (msg: string, status = 400) =>
   Response.json({ success: false, error: msg }, { status });
 
+/** Desktop actions that change the host are sent as JSON from the loopback UI. */
+function isLoopbackJsonRequest(req: Request): boolean {
+  const url = new URL(req.url);
+  const origin = req.headers.get('origin');
+  const contentType = req.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
+  return ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) &&
+    (!origin || origin === url.origin) && contentType === 'application/json';
+}
+
 /**
  * A scan of the home folder, asked before the App Store edition has it. The
  * agent would walk its own container and answer 0 B, which reads as a clean
@@ -2239,11 +2248,13 @@ export default async function (router: Router) {
     return Response.json({ success: true, ...(await checkForUpdate()) });
   });
 
-  await router.post('/self-update/download', async () => {
+  await router.post('/self-update/download', async (req: Request) => {
+    if (!isLoopbackJsonRequest(req)) return badRequest('Invalid update request.', 403);
     return Response.json({ success: true, ...(await downloadUpdate()) });
   });
 
-  await router.post('/self-update/install', async () => {
+  await router.post('/self-update/install', async (req: Request) => {
+    if (!isLoopbackJsonRequest(req)) return badRequest('Invalid update request.', 403);
     return Response.json({ success: true, ...(await installUpdate()) });
   });
 
@@ -2856,12 +2867,8 @@ export default async function (router: Router) {
   // The loopback agent has no cross-origin VPN clients. Web forms must not
   // be able to trigger the macOS authorization dialog.
   function checkVpnRequest(req: Request): Response | null {
-    const url = new URL(req.url);
-    const origin = req.headers.get('origin');
-    const contentType = req.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
-    if (!['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) ||
-      (origin && origin !== url.origin) || contentType !== 'application/json')
-      return Response.json({ success: false, error: 'Invalid VPN request.' }, { status: 403 });
+    if (!isLoopbackJsonRequest(req))
+      return badRequest('Invalid VPN request.', 403);
     return refuseInSandbox('vpn');
   }
 
