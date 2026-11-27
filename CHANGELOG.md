@@ -1,5 +1,57 @@
 # Changelog
 
+[Compare changes](https://github.com/stacksjs/system-cleaner/compare/v1.0.1...v1.0.2)
+
+## ✨ Features
+
+- add activity history and improve disk usage cleanup ([10f1813](https://github.com/stacksjs/system-cleaner/commit/10f1813)) _(by Chris)_
+- **vpn**: rebuild the Localtunnels connection flow ([cb07c40](https://github.com/stacksjs/system-cleaner/commit/cb07c40)) _(by Chris)_
+
+## 🐛 Bug Fixes
+
+- **cleanup**: show consistent removal progress and results ([a97226b](https://github.com/stacksjs/system-cleaner/commit/a97226b)) _(by Chris)_
+- **updates**: unify the in-app software update flow ([4c09adc](https://github.com/stacksjs/system-cleaner/commit/4c09adc)) _(by Chris)_
+- **vpn**: upgrade to Localtunnels 0.3.2 ([7760ac8](https://github.com/stacksjs/system-cleaner/commit/7760ac8)) _(by Chris)_
+- **vpn**: handle macOS tunnel startup and shutdown ([93f0155](https://github.com/stacksjs/system-cleaner/commit/93f0155)) _(by Chris)_
+- **clean**: keep Claude Code memory when cleaning session history ([abf4ef2](https://github.com/stacksjs/system-cleaner/commit/abf4ef2)) _(by glennmichael123)_
+- **store**: record SystemCleaner build 4 review details ([ff1175e](https://github.com/stacksjs/system-cleaner/commit/ff1175e)) _(by Chris Breuer)_
+- **store**: document SystemCleaner binary and sandbox changes ([08109f4](https://github.com/stacksjs/system-cleaner/commit/08109f4)) _(by Chris Breuer)_
+- use the native macOS Trash command for bulk cleanup ([84c5485](https://github.com/stacksjs/system-cleaner/commit/84c5485)) _(by Chris Breuer)_
+- streamline applications, uninstall, and update restart ([674013a](https://github.com/stacksjs/system-cleaner/commit/674013a)) _(by Chris Breuer)_
+- **router**: a glanced link no longer freezes the window it is clicked on ([750ee4f](https://github.com/stacksjs/system-cleaner/commit/750ee4f)) _(by glennmichael123)_
+- **e2e**: fail with the page it died on, not twenty silent minutes ([bf529f4](https://github.com/stacksjs/system-cleaner/commit/bf529f4)) _(by glennmichael123)_
+- **sandbox**: match the container suffix the way it is spelled ([0d05f04](https://github.com/stacksjs/system-cleaner/commit/0d05f04)) _(by glennmichael123)_
+- **test**: let the update download tests travel to Windows ([94a8227](https://github.com/stacksjs/system-cleaner/commit/94a8227)) _(by glennmichael123)_
+
+## ♻️ Code Refactoring
+
+- **desktop**: build SystemCleaner with Buddy ([00367c0](https://github.com/stacksjs/system-cleaner/commit/00367c0)) _(by Chris Breuer)_
+
+## ✅ Tests
+
+- **clean**: compare preserved paths with the platform separator ([5ab2bff](https://github.com/stacksjs/system-cleaner/commit/5ab2bff)) _(by glennmichael123)_
+
+## 💚 Continuous Integration
+
+- name the Pantry publish token PANTRY_TOKEN ([419bd21](https://github.com/stacksjs/system-cleaner/commit/419bd21)) _(by Chris)_
+
+## 🔧 Chores
+
+- **css**: rename config/crosswind.ts to config/css.ts ([b6cae4b](https://github.com/stacksjs/system-cleaner/commit/b6cae4b)) _(by glennmichael123)_
+- **deps**: pin the router packages so no unfixed copy is left on disk ([6932a6c](https://github.com/stacksjs/system-cleaner/commit/6932a6c)) _(by glennmichael123)_
+- **deps**: take the released router fix and drop the local patch ([3ff49b1](https://github.com/stacksjs/system-cleaner/commit/3ff49b1)) _(by glennmichael123)_
+
+## 🎉 Miscellaneous
+
+- Merge pull request #36 from stacksjs/fix/keep-claude-memory ([68c2e1c](https://github.com/stacksjs/system-cleaner/commit/68c2e1c)) _(by Glenn Michael Torregosa)_ ([#36](https://github.com/stacksjs/system-cleaner/issues/36))
+
+## Contributors
+
+- _Chris_
+- _Chris Breuer_
+- _Glenn Michael Torregosa_
+- _glennmichael123_
+
 [Compare changes](https://github.com/stacksjs/system-cleaner/compare/v1.0.0...v1.0.1)
 
 ## ✨ Features
