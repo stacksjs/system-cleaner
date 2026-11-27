@@ -129,11 +129,11 @@
     </div>
     <div class='set-card-row'>
       <span class='set-card-row-text'>
-        <span class='set-card-label'>Keep a cleanup history</span>
-        <span class='set-card-hint'>What each clean freed, for Recent cleanups and Reclaimed all time. Off, new cleans are not written down.</span>
+        <span class='set-card-label'>Keep activity history</span>
+        <span class='set-card-hint'>Save app sessions, screen visits, actions, and cleanup totals on this device.</span>
       </span>
       <button class='set-switch' type='button' role='switch' aria-checked='false'
-              aria-label='Keep a cleanup history' data-switch='recordHistory'>
+              aria-label='Keep activity history' data-switch='recordHistory'>
         <span class='set-knob' aria-hidden='true'></span>
       </button>
     </div>

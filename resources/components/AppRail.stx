@@ -25,7 +25,7 @@ export const rows = SECTIONS.map(section => ({
   href: section.href,
   icon: section.icon,
   // Every path that lights this row, space-separated for the client sync.
-  routes: [section.href, ...(section.id === 'overview' ? [] : section.tools.map(tool => tool.href))].join(' '),
+  routes: [section.href, ...section.tools.filter(tool => section.id !== 'overview' || tool.id === 'activity').map(tool => tool.href)].join(' '),
   scans: section.tools.flatMap(tool => tool.scans || []).join(' '),
 }))
 
@@ -140,6 +140,10 @@ useIntervalFn(syncScanning, 2000, { immediate: true })
         <span class="side-disk-free" data-metric="disk-free" data-metric-template="{value} free">&hellip;</span>
       </span>
       <span class="side-disk-bar"><span data-metric="disk-pct" data-metric-style="--pct"></span></span>
+    </a>
+    <a class="side-row side-utility" href="/app/activity" data-stx-link>
+      <span class="side-utility-icon" aria-hidden="true"><span class="i-f7-clock-fill"></span></span>
+      <span class="side-label">Activity</span>
     </a>
     <button class="side-row side-utility" type="button" data-open-settings>
       <span class="side-utility-icon" aria-hidden="true"><span class="i-f7-gear-alt-fill"></span></span>

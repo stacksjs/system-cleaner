@@ -73,6 +73,13 @@ export const SECTIONS: Section[] = [
     primary: { label: 'Start Quick Clean', short: 'Clean', href: '/app/cleanup' },
     tools: [
       {
+        id: 'activity',
+        label: 'Activity',
+        href: '/app/activity',
+        icon: 'i-f7-clock-fill',
+        description: 'App sessions, actions and cleanup totals over time.',
+      },
+      {
         id: 'monitor',
         label: 'System Monitor',
         href: '/app/monitor',
@@ -323,8 +330,7 @@ export function sectionFor(navId: string): { section: Section, tool?: Tool } | u
   }
   // Overview lists System Monitor as a shortcut, but Performance owns it.
   for (const section of SECTIONS) {
-    if (section.id === 'overview') continue
-    const tool = section.tools.find(candidate => candidate.id === navId)
+    const tool = section.tools.find(candidate => candidate.id === navId && (section.id !== 'overview' || candidate.id === 'activity'))
     if (tool) return { section, tool }
   }
   return undefined
@@ -337,8 +343,8 @@ export function sectionForPath(pathname: string): { section: Section, tool?: Too
     if (section.href === path) return { section }
   }
   for (const section of SECTIONS) {
-    if (section.id === 'overview') continue
-    const tool = section.tools.find(candidate => path === candidate.href || path.startsWith(`${candidate.href}/`))
+    const tool = section.tools.find(candidate => (section.id !== 'overview' || candidate.id === 'activity')
+      && (path === candidate.href || path.startsWith(`${candidate.href}/`)))
     if (tool) return { section, tool }
   }
   return undefined

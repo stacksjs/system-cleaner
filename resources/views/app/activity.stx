@@ -1,0 +1,241 @@
+@extends('layouts/app')
+@section('nav', 'activity')
+@section('body')
+
+<div class='activity-page main-content' x-data="{
+  history: null,
+  year: new Date().getFullYear(),
+  kind: 'all',
+  page: 1,
+  loading: false,
+  error: '',
+  request: 0,
+  init() { this.load(); },
+  async load() {
+    const request = ++this.request;
+    this.loading = true;
+    this.error = '';
+    try {
+      const response = await fetch('/api/activity-history', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ year: this.year, kind: this.kind, page: this.page }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'Could not read activity.');
+      if (request === this.request) this.history = data;
+    } catch (error) {
+      if (request === this.request) this.error = error.message;
+    } finally {
+      if (request === this.request) this.loading = false;
+    }
+  },
+  changeYear(value) {
+    this.year = Number(value);
+    this.page = 1;
+    this.load();
+  },
+  changeKind(value) {
+    this.kind = value;
+    this.page = 1;
+    this.load();
+  },
+  changePage(page) {
+    this.page = page;
+    this.load();
+  },
+  count(value) { return Number(value || 0).toLocaleString(); },
+  bytes(value) { return diskFormatBytes(Number(value || 0)); },
+  date(value) {
+    return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(value);
+  },
+  status(event) {
+    if (event.kind === 'session') {
+      if (event.status === 'completed') return 'Exited';
+      return event.status === 'interrupted' ? 'Interrupted' : 'Open';
+    }
+    if (event.kind === 'visit') return event.source === 'window' ? 'Window opened' : 'Screen viewed';
+    return { completed: 'Completed', partial: 'Partially completed', blocked: 'Skipped or blocked', failed: 'Failed',
+      cancelled: 'Cancelled', interrupted: 'Interrupted', running: 'Running' }[event.status] || event.status;
+  },
+  origin(event) {
+    if (event.source === 'scheduled') return 'Scheduled';
+    if (event.source === 'automatic') return 'Automatic';
+    return '';
+  },
+  elapsed(event) {
+    if (!event.finishedAt || event.kind === 'visit') return '';
+    if (event.kind === 'session') return 'Exited at ' + this.date(event.finishedAt);
+    const seconds = Math.round((event.finishedAt - event.startedAt) / 1000);
+    if (seconds < 1) return '';
+    return seconds >= 60 ? Math.floor(seconds / 60) + 'm ' + seconds % 60 + 's' : seconds + 's';
+  },
+}">
+  <header class='flex flex-wrap gap-3 items-start justify-between activity-heading'>
+    <div>
+      <h1>Activity</h1>
+      <p>App sessions, actions, and cleanup history saved on this device.</p>
+    </div>
+    <button type='button' class='btn btn-sm' :disabled='loading' @click='load()'>Refresh</button>
+  </header>
+
+  <p class='activity-note' role='status' x-show='loading && !history'>Loading activity…</p>
+  <p class='activity-error' role='alert' x-show='error' x-text='error'></p>
+  <p class='activity-note' x-show='history && !history.recording' x-cloak>Recording is paused in Settings. Your saved history is shown below.</p>
+
+  <template x-if='history'>
+    <div class='flex flex-col gap-5'>
+      <section aria-label='Lifetime activity' class='activity-lifetime'>
+        <h2>Lifetime</h2>
+        <div class='activity-stats'>
+          <div class='activity-stat'><span>App launches</span><strong x-text='count(history.lifetime.launches)'></strong></div>
+          <div class='activity-stat'><span>App exits</span><strong x-text='count(history.lifetime.exits)'></strong></div>
+          <div class='activity-stat'><span>Actions triggered</span><strong x-text='count(history.lifetime.actions)'></strong></div>
+          <div class='activity-stat'>
+            <span>Permanently removed</span><strong x-text='bytes(history.lifetime.cleanup.permanentBytes)'></strong>
+            <small x-text="count(history.lifetime.cleanup.permanentItems) + (history.lifetime.cleanup.permanentItems === 1 ? ' recorded removal' : ' recorded removals')"></small>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby='activity-year-heading'>
+        <div class='flex flex-wrap gap-3 items-center justify-between activity-section-head'>
+          <h2 id='activity-year-heading'>Yearly review</h2>
+          <label>Year
+            <select :value='year' :disabled='loading' @change='changeYear($event.target.value)'>
+              <template x-for='option in history.years' :key='option'>
+                <option :value='option' x-text='option'></option>
+              </template>
+            </select>
+          </label>
+        </div>
+        <div class='activity-period activity-stats'>
+          <div class='activity-stat'>
+            <span>App launches</span><strong x-text='count(history.period.launches)'></strong>
+            <small x-text="count(history.period.exits) + ' exited · ' + count(history.period.interrupted) + ' interrupted'"></small>
+          </div>
+          <div class='activity-stat'>
+            <span>Window opens</span><strong x-text='count(history.period.windows)'></strong>
+            <small x-text="count(history.period.visits) + (history.period.visits === 1 ? ' screen view' : ' screen views')"></small>
+          </div>
+          <div class='activity-stat'>
+            <span>Actions triggered</span><strong x-text='count(history.period.actions)'></strong>
+            <small x-text="count(history.period.completed) + ' completed · ' + count(history.period.issues) + ' other outcomes'"></small>
+          </div>
+          <div class='activity-stat'>
+            <span>Automatic and scheduled actions</span><strong x-text='count(history.period.automated)'></strong>
+          </div>
+          <div class='activity-stat'>
+            <span>Permanently removed</span><strong x-text='bytes(history.period.cleanup?.permanentBytes)'></strong>
+            <small x-text="count(history.period.cleanup?.worktrees) + (history.period.cleanup?.worktrees === 1 ? ' AI worktree removed' : ' AI worktrees removed')"></small>
+          </div>
+          <div class='activity-stat'><span>Moved to Trash</span><strong x-text='bytes(history.period.cleanup?.trashedBytes)'></strong></div>
+        </div>
+
+        <div class='activity-breakdown' x-show='history.period.categories.length || history.period.topScreens.length'>
+          <section class='activity-list' x-show='history.period.categories.length' aria-label='Actions by category'>
+            <h3>Actions by category</h3>
+            <template x-for='category in history.period.categories' :key='category.label'>
+              <div class='activity-count-row'>
+                <span x-text='category.label'></span>
+                <progress :value='category.count' :max='history.period.actions' :aria-label='category.label'></progress>
+                <strong x-text='count(category.count)'></strong>
+              </div>
+            </template>
+          </section>
+          <section class='activity-list' x-show='history.period.topActions.length' aria-label='Most used actions'>
+            <h3>Most used actions</h3>
+            <template x-for='action in history.period.topActions' :key='action.label'>
+              <div class='activity-count-row activity-simple-count'><span x-text='action.label'></span><strong x-text='count(action.count)'></strong></div>
+            </template>
+          </section>
+          <section class='activity-list' x-show='history.period.topScreens.length' aria-label='Most viewed screens'>
+            <h3>Most viewed screens</h3>
+            <template x-for='screen in history.period.topScreens' :key='screen.label'>
+              <div class='activity-count-row activity-simple-count'><span x-text='screen.label'></span><strong x-text='count(screen.count)'></strong></div>
+            </template>
+          </section>
+        </div>
+      </section>
+
+      <section aria-labelledby='activity-recent-heading'>
+        <div class='flex flex-wrap gap-3 items-center justify-between activity-section-head'>
+          <h2 id='activity-recent-heading'>Activity log</h2>
+          <label>Show
+            <select :value='kind' :disabled='loading' @change='changeKind($event.target.value)'>
+              <option value='all'>All activity</option>
+              <option value='session'>App sessions</option>
+              <option value='action'>Actions</option>
+              <option value='visit'>Screen visits</option>
+            </select>
+          </label>
+        </div>
+        <p class='activity-note' x-show='!history.timeline.length'>No recorded events match this view.</p>
+        <ul class='activity-list activity-log' x-show='history.timeline.length'>
+          <template x-for='event in history.timeline' :key='event.id'>
+            <li class='activity-log-row'>
+              <span aria-hidden='true' :class="event.kind === 'session' ? 'i-f7-rectangle-on-rectangle' : (event.kind === 'visit' ? 'i-f7-eye' : 'i-f7-bolt-fill')"></span>
+              <div>
+                <strong x-text='event.label'></strong>
+                <small x-show='origin(event)' x-text='origin(event)'></small>
+              </div>
+              <div class='activity-outcome'>
+                <div x-text='status(event)'></div>
+                <small x-text='elapsed(event)' x-show='elapsed(event)'></small>
+              </div>
+              <time :datetime='new Date(event.startedAt).toISOString()' x-text='date(event.startedAt)'></time>
+            </li>
+          </template>
+        </ul>
+        <nav class='flex gap-2 items-center justify-end activity-pagination' aria-label='Activity log pages' x-show='history.page > 1 || history.hasNext'>
+          <button type='button' class='btn btn-sm' :disabled='loading || history.page === 1' @click='changePage(history.page - 1)'>Previous</button>
+          <span x-text="'Page ' + history.page"></span>
+          <button type='button' class='btn btn-sm' :disabled='loading || !history.hasNext' @click='changePage(history.page + 1)'>Next</button>
+        </nav>
+      </section>
+    </div>
+  </template>
+</div>
+
+<style>
+.activity-page { max-width: 1320px; margin: 0 auto; padding-top: var(--space-4); color: var(--ink); }
+.activity-heading { margin-bottom: var(--space-5); }
+.activity-heading h1 { margin: 0; font-size: 25px; font-weight: 680; }
+.activity-heading p, .activity-note { margin: 5px 0; color: var(--secondary); font-size: 12px; }
+.activity-error { color: var(--red); }
+.activity-page h2 { margin: 0; font-size: 15px; font-weight: 640; }
+.activity-page h3 { margin: 0 0 8px; font-size: 13px; font-weight: 620; }
+.activity-lifetime h2 { margin-bottom: 10px; }
+.activity-stats, .activity-breakdown { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); }
+.activity-period { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.activity-stat, .activity-list { padding: 12px 14px; border: .5px solid var(--line); border-radius: 8px; background: var(--surface); }
+.activity-stat { display: grid; align-content: start; gap: 5px; }
+.activity-lifetime .activity-stat { border-top: 2px solid var(--accent); }
+.activity-stat span, .activity-stat small, .activity-log small, .activity-log time, .activity-pagination { color: var(--secondary); font-size: 11px; }
+.activity-stat strong { font-size: 23px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.activity-section-head { margin-bottom: 10px; }
+.activity-section-head label { font-size: 11px; color: var(--secondary); }
+.activity-section-head select { min-height: 27px; padding: 3px 6px; border: .5px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.activity-breakdown { margin-top: 10px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.activity-count-row { display: grid; align-items: center; grid-template-columns: minmax(0, 1fr) minmax(30px, 30%) auto; gap: 7px; padding: 5px 0; font-size: 12px; }
+.activity-simple-count { grid-template-columns: minmax(0, 1fr) auto; }
+.activity-count-row progress { appearance: none; width: 100%; height: 6px; overflow: hidden; border: 0; border-radius: 4px; }
+.activity-count-row progress::-webkit-progress-bar { background: var(--track); }
+.activity-count-row progress::-webkit-progress-value { background: var(--accent); }
+.activity-log { padding: 0; margin: 0; list-style: none; }
+.activity-log-row { display: grid; grid-template-columns: 17px minmax(0, 1fr) minmax(88px, auto) auto; gap: 10px; align-items: center; min-height: 46px; padding: 8px 12px; font-size: 12px; }
+.activity-log-row + .activity-log-row { border-top: .5px solid var(--line-soft); }
+.activity-log-row > span { color: var(--accent); }
+.activity-log small { display: block; }
+.activity-log time { text-align: right; font-variant-numeric: tabular-nums; }
+.activity-pagination { margin-top: 10px; }
+@media (min-width: 1450px) { .activity-period { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+@media (max-width: 720px) {
+  .activity-period { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .activity-log-row { grid-template-columns: 17px minmax(0, 1fr) auto; }
+  .activity-log time { grid-column: 2 / -1; text-align: left; }
+}
+</style>
+
+@endsection

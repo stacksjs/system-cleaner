@@ -449,5 +449,6 @@ const localAgent = isLocalAgent()
 <script src="/platform-gate.js"></script>
 <script src="/native-dialog.js"></script>
 <script src="/settings-window.js"></script>
+<script src="/activity-visits.js"></script>
 </body>
 </html>

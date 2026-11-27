@@ -39,6 +39,11 @@ import {
   invalidateDiskInfoCache,
 } from './data-service';
 import type { ScanSession } from '../app/Workers/scan-jobs';
+import type { DiskEntry } from '@system-cleaner/core';
+import { diskChanges } from '../app/Support/Cleanup/disk-changes';
+import { diskSuggestions } from '../app/Support/Cleanup/disk-suggestions';
+import { DAY_MS, overlapsProtectedPath, removeAIWorktree, WORKTREE_BATCH } from '../app/Support/Cleanup/disk-worktrees';
+import { activityReport, recordScreenVisit } from '../app/Support/Activity/history';
 import { measurementStream } from '../app/Support/measurement-stream';
 import { lastScanResult, runDiskScan, runDuplicateScan, runLargeFileScan, runSimilarScan, scanJobs, scanProgress } from '../app/Workers/scan-pool';
 import { findAppBundle, findAppBundleForCask, getSystemInfoSync, ICON_SIZES, listApplicationEntries, readAppVersion, renderAppIcon } from '@system-cleaner/core';
@@ -110,7 +115,7 @@ import {
   installUpdate,
   updateStatus,
 } from '../app/Support/Update/self-update';
-import { historyEnabled, recordCleanupRun, setHistoryEnabled } from '../app/Support/Cleanup/history';
+import { cleanupStats, historyEnabled, recordCleanupRun, recordRemoval, setHistoryEnabled } from '../app/Support/Cleanup/history';
 import KeptCookie from '../app/Models/KeptCookie';
 
 /**
@@ -235,6 +240,7 @@ async function refuseIfTracked(target: string): Promise<Response | null> {
 function invalidateSizeCaches(): void {
   dirSizesCache.clear();
   sizeCacheGeneration++;
+  diskChanges.mark();
   // Every total derived from what is on disk goes with it: the overview's
   // junk figure, Maintenance's junk scan, and the dashboard's free space and
   // startup count. Each route that deletes calls this, so none has to
@@ -382,7 +388,7 @@ export default async function (router: Router) {
       );
     }
 
-    const body = await readJsonBody<{ path?: string, maxDepth?: number }>(req);
+    const body = await readJsonBody<{ path?: string, maxDepth?: number, backgroundRefresh?: boolean }>(req);
     if (body === null) return badJson();
 
     // A relative path resolves against HOME, not the process CWD — which for
@@ -424,7 +430,7 @@ export default async function (router: Router) {
       const result = await runDiskScan(
         { home: scanRoot, maxDepth, timeoutMs: WORKER_TIMEOUT_MS },
         HARD_TIMEOUT_MS,
-        { path: body.path || '', maxDepth },
+        { path: body.path || '', maxDepth, diskRevision: diskChanges.revision, backgroundRefresh: body.backgroundRefresh === true },
       );
       return Response.json(result);
     }
@@ -509,6 +515,47 @@ export default async function (router: Router) {
     }, { headers: { 'Cache-Control': 'private, no-store' } });
   });
 
+  await router.post('/disk-changes', async (req: Request) => {
+    const body = await readJsonBody<{ since?: number }>(req);
+    if (!body) return badJson();
+    const since = Number.isSafeInteger(body.since) && body.since! >= 0 ? body.since! : 0;
+    return Response.json({ success: true, ...diskChanges.read(since) }, { headers: { 'Cache-Control': 'private, no-store' } });
+  });
+
+  await router.post('/disk-suggestions', async () => {
+    const tree = lastScanResult('tree')?.result.tree as DiskEntry | undefined;
+    return Response.json({ success: true, suggestions: diskSuggestions(tree, await protectedPathSet()) },
+      { headers: { 'Cache-Control': 'private, no-store' } });
+  });
+
+  await router.post('/disk-remove-worktrees', async (req: Request) => {
+    const body = await readJsonBody<{ paths?: unknown, days?: number }>(req);
+    if (!body) return badJson();
+    const targets = sanitizeStringArray(body.paths, WORKTREE_BATCH);
+    const days = body.days ?? 0;
+    if (!targets || !Number.isSafeInteger(days) || days < 0 || days > 3650)
+      return badRequest('Provide worktree paths and an age between 0 and 3650 days');
+    const cutoff = Date.now() - days * DAY_MS;
+    const protectedPaths = await protectedPathSet();
+    const outcomes = await Promise.all([...new Set(targets)].map(async (target) => {
+      const result = await removeAIWorktree(target, cutoff, protectedPaths);
+      if (result.removed) diskChanges.mark(target);
+      return { path: target, ...result };
+    }));
+    const removed = outcomes.filter(item => item.removed);
+    const failedCount = outcomes.filter(item => item.failed).length;
+    if (removed.length || failedCount) invalidateSizeCaches();
+    const removedBytes = removed.reduce((total, item) => total + (item.removedBytes ?? 0), 0);
+    const historyError = removed.length ? await recordRemoval({
+      source: 'ai-worktrees',
+      mode: 'permanent',
+      itemCount: removed.length,
+      failedCount,
+      freedBytes: removedBytes,
+    }) : undefined;
+    return Response.json({ success: true, outcomes, removedBytes, historyError });
+  });
+
   await router.post('/delete-path', async (req: Request) => {
     const body = await readJsonBody<{ path: string }>(req);
     if (body === null) return badJson();
@@ -519,6 +566,7 @@ export default async function (router: Router) {
     if (!check.safe) return badRequest(check.reason || 'Unsafe path', 403);
 
     const resolved = path.resolve(target);
+    if (overlapsProtectedPath(resolved, await protectedPathSet())) return badRequest('This path contains or belongs to a protected item', 403);
     let size = 0;
     try {
       const st = fs.lstatSync(resolved);
@@ -535,14 +583,22 @@ export default async function (router: Router) {
     // error path can have freed gigabytes. Leaving the size cached there keeps
     // the directory at its old figure for five minutes.
     try {
-      fs.rmSync(resolved, { recursive: true, force: true });
+      fs.rmSync(resolved, { recursive: true });
     }
     catch (err: any) {
       invalidateSizeCaches();
       return badRequest(err.message || 'Delete failed', 500);
     }
+    diskChanges.mark(resolved);
     invalidateSizeCaches();
-    return Response.json({ success: true, freedBytes: size });
+    const historyError = await recordRemoval({
+      source: 'disk',
+      mode: 'permanent',
+      itemCount: 1,
+      failedCount: 0,
+      freedBytes: size,
+    });
+    return Response.json({ success: true, freedBytes: size, historyError });
   });
 
   await router.post('/reveal-in-finder', async (req: Request) => {
@@ -593,7 +649,15 @@ export default async function (router: Router) {
 
     const result = await cleanDirectory(target);
     invalidateSizeCaches();
+    const historyError = result.freedBytes > 0 ? await recordRemoval({
+      source: 'quick-clean',
+      mode: 'permanent',
+      itemCount: 1,
+      failedCount: result.errors.length,
+      freedBytes: result.freedBytes,
+    }) : undefined;
     return Response.json({
+      historyError,
       success: result.errors.length === 0,
       freedBytes: result.freedBytes,
       // False when the directory could not be sized in time. The clean still
@@ -789,7 +853,15 @@ export default async function (router: Router) {
     if (limited) return limited;
     const result = await emptyTrash();
     invalidateSizeCaches();
+    const historyError = result.freedBytes > 0 ? await recordRemoval({
+      source: 'trash',
+      mode: 'permanent',
+      itemCount: 1,
+      failedCount: result.errors.length,
+      freedBytes: result.freedBytes,
+    }) : undefined;
     return Response.json({
+      historyError,
       success: result.success,
       freedBytes: result.freedBytes,
     });
@@ -950,6 +1022,32 @@ export default async function (router: Router) {
     if (typeof body.path !== 'string' || !body.path) return badRequest('No path provided');
 
     return Response.json({ success: true, ...await unprotectPath(body.path) });
+  });
+
+  await router.post('/activity-history', async (req: Request) => {
+    const body = await readJsonBody<{ year?: unknown, kind?: unknown, page?: unknown }>(req);
+    if (!body) return badJson();
+    const currentYear = new Date().getFullYear();
+    const year = body.year ?? currentYear;
+    const page = body.page ?? 1;
+    const kind = body.kind ?? 'all';
+    if (typeof year !== 'number' || !Number.isSafeInteger(year) || year < 1970 || year > currentYear + 1
+      || typeof page !== 'number' || !Number.isSafeInteger(page) || page < 1 || page > 10_000
+      || (kind !== 'all' && kind !== 'session' && kind !== 'action' && kind !== 'visit'))
+      return badRequest('Invalid activity filters');
+    return Response.json({ success: true, ...await activityReport(year, kind, page) },
+      { headers: { 'Cache-Control': 'private, no-store' } });
+  });
+
+  await router.post('/activity-visit', async (req: Request) => {
+    const body = await readJsonBody<{ route?: unknown, initial?: unknown }>(req);
+    if (!body || typeof body.route !== 'string' || body.route.length > 80) return badRequest('Unknown app screen');
+    if (!await recordScreenVisit(body.route, body.initial === true)) return badRequest('Unknown app screen');
+    return Response.json({ success: true });
+  });
+
+  await router.post('/cleanup-stats', async () => {
+    return Response.json({ success: true, ...await cleanupStats() }, { headers: { 'Cache-Control': 'private, no-store' } });
   });
 
   await router.post('/cleanup-history', async () => {
@@ -1408,7 +1506,8 @@ export default async function (router: Router) {
     return Response.json({ success: true, ...page });
   });
 
-  await router.post('/system-disk-info', async () => {
+  await router.post('/system-disk-info', async (req: Request) => {
+    if (new URL(req.url).searchParams.get('refresh') === '1') invalidateDiskInfoCache();
     const info = getSystemDiskInfoCached();
     return Response.json({ success: true, ...info });
   });
@@ -1638,10 +1737,18 @@ export default async function (router: Router) {
     }
 
     invalidateSizeCaches();
+    const historyError = freedBytes > 0 ? await recordRemoval({
+      source: 'quick-clean',
+      mode: 'permanent',
+      itemCount: Math.max(1, cleaned.length),
+      failedCount: skipped.length,
+      freedBytes,
+    }) : undefined;
 
     return Response.json({
       success: true,
       freedBytes,
+      historyError,
       cleaned: cleaned.length,
       skipped: skipped.length,
     });
@@ -2664,13 +2771,13 @@ export default async function (router: Router) {
     // unlinked by now, so the invalidation cannot sit behind a failable write.
     invalidateSizeCaches();
 
-    if (outcome.shredded.length > 0) {
+    if (outcome.shredded.length > 0 || outcome.bytesOverwritten > 0) {
       await recordCleanupRun({
         source: 'shred',
         mode: 'permanent',
-        itemCount: outcome.shredded.length,
+        itemCount: Math.max(1, outcome.shredded.length),
         failedCount: outcome.failed.length,
-        freedBytes: outcome.bytesOverwritten,
+        freedBytes: outcome.bytesOverwritten / passes,
       });
     }
 

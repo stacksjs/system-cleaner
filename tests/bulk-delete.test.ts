@@ -186,6 +186,28 @@ describe('cleanupHistory', () => {
     expect(after.runs[0].source).toBe('large-files')
   })
 
+  it('reports lifetime and local calendar-year totals without counting moved-to-Trash bytes as permanent', async () => {
+    const before = await history.cleanupStats()
+    await history.recordCleanupRun({ source: 'ai-worktrees', mode: 'permanent', itemCount: 2, failedCount: 1, freedBytes: 4 * MB })
+    await history.recordCleanupRun({ source: 'disk', mode: 'trash', itemCount: 1, failedCount: 0, freedBytes: 6 * MB })
+    const now = new Date()
+    const priorYear = now.getFullYear() - 1
+    const db = new Database(dbPath)
+    db.run(
+      'INSERT INTO cleanup_runs (source, mode, item_count, freed_bytes, created_at) VALUES (?, ?, ?, ?, ?)',
+      ['disk', 'permanent', 1, 2 * MB, new Date(priorYear, 11, 31, 12).toISOString()],
+    )
+    db.close()
+
+    const after = await history.cleanupStats()
+    const current = after.years.find(period => period.year === now.getFullYear())
+    expect(after.lifetime.permanentBytes).toBe(before.lifetime.permanentBytes + 6 * MB)
+    expect(after.lifetime.trashedBytes).toBe(before.lifetime.trashedBytes + 6 * MB)
+    expect(after.lifetime.worktrees).toBe(before.lifetime.worktrees + 2)
+    expect(current?.sources.find(source => source.source === 'ai-worktrees')?.permanentBytes).toBe(4 * MB)
+    expect(after.years.find(period => period.year === priorYear)?.permanentBytes).toBe(2 * MB)
+  })
+
   it('records nothing when every path was refused', async () => {
     const before = await bulk.cleanupHistory()
     await bulk.bulkDelete(['/etc/hosts'], 'permanent', 'large-files')
@@ -245,3 +267,78 @@ describe('Keep a cleanup history', () => {
   })
 })
 
+
+describe('Activity history', () => {
+  it('records lifecycle, screen visits, action outcomes, and restores history across reports', async () => {
+    const activity = await import('../app/Support/Activity/history')
+    const year = new Date().getFullYear()
+    const before = await activity.activityReport(year, 'all', 1)
+    const sessionId = await activity.startDesktopActivity()
+    expect(sessionId).toBeGreaterThan(0)
+    expect(await activity.recordScreenVisit('/app/activity', true)).toBe(true)
+    expect(await activity.recordScreenVisit('/personal/file.txt', false)).toBe(false)
+
+    const operation = activity.trackActivity('disk-remove-worktrees', () => Response.json({
+      success: true, outcomes: [{ removed: true }, { skipped: 'Locked' }],
+    }))
+    await operation(new Request('http://localhost/api/disk-remove-worktrees', {
+      method: 'POST', body: JSON.stringify({ paths: ['/personal/file.txt'] }),
+    }))
+    const blocked = activity.trackActivity('delete-path', () => Response.json({ success: false }, { status: 403 }))
+    await blocked(new Request('http://localhost/api/delete-path', { method: 'POST' }))
+    await activity.closeDesktopActivity(sessionId)
+
+    const after = await activity.activityReport(year, 'all', 1)
+    expect(after.lifetime.launches).toBe(before.lifetime.launches + 1)
+    expect(after.lifetime.exits).toBe(before.lifetime.exits + 1)
+    expect(after.period.actions).toBe(before.period.actions + 2)
+    expect(after.period.windows).toBe(before.period.windows + 1)
+    expect(after.timeline.slice(0, 4).map(event => event.status)).toEqual(['blocked', 'partial', 'completed', 'completed'])
+    expect(JSON.stringify(after)).not.toContain('/personal/file.txt')
+    expect((await activity.activityReport(year, 'session', 1)).timeline.every(event => event.kind === 'session')).toBe(true)
+  })
+
+  it('counts an exit in the year it happened when a session spans New Year', async () => {
+    const activity = await import('../app/Support/Activity/history')
+    const year = new Date().getFullYear()
+    const before = await activity.activityReport(year, 'session', 1)
+    const db = new Database(dbPath)
+    const started = new Date(year - 1, 11, 31, 23, 58).getTime()
+    const exited = new Date(year, 0, 1, 0, 2).getTime()
+    db.run(
+      "INSERT INTO activity_events (kind,action,source,status,started_at,finished_at,owner_pid) VALUES ('session','app','desktop','completed',?,?,0)",
+      [started, exited],
+    )
+    db.close()
+    const after = await activity.activityReport(year, 'session', 1)
+    expect(after.period.launches).toBe(before.period.launches)
+    expect(after.period.exits).toBe(before.period.exits + 1)
+    expect(after.timeline.some(event => event.startedAt === started && event.finishedAt === exited)).toBe(true)
+  })
+
+  it('recovers abandoned events and honors the recording preference', async () => {
+    const activity = await import('../app/Support/Activity/history')
+    const db = new Database(dbPath)
+    db.run("INSERT INTO activity_events (kind,action,source,status,started_at,owner_pid) VALUES ('session','app','desktop','running',?,2147483647)", [Date.now()])
+    db.close()
+    await activity.recoverInterruptedActivity()
+    const year = new Date().getFullYear()
+    const before = await activity.activityReport(year, 'all', 1)
+    expect(before.timeline[0].status).toBe('interrupted')
+    expect(before.timeline[0].finishedAt).toBeNull()
+
+    await history.setHistoryEnabled(false)
+    try {
+      expect(await activity.startDesktopActivity()).toBeUndefined()
+      await activity.recordScreenVisit('/app', true)
+      const operation = activity.trackActivity('delete-path', () => Response.json({ success: true }))
+      expect((await operation(new Request('http://localhost/api/delete-path', { method: 'POST' }))).ok).toBe(true)
+      const after = await activity.activityReport(year, 'all', 1)
+      expect(after.recording).toBe(false)
+      expect(after.lifetime).toEqual(before.lifetime)
+    }
+    finally {
+      await history.setHistoryEnabled(true)
+    }
+  })
+})

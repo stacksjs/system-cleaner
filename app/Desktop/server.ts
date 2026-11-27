@@ -22,6 +22,7 @@ import * as path from 'node:path'
 import process from 'node:process'
 import registerApiRoutes from '../../routes/api'
 import { cancelAllScans } from '../Workers/scan-pool'
+import { closeDesktopActivity, finishActivity, recoverInterruptedActivity, startDesktopActivity, startScheduledActivity, trackActivity } from '../Support/Activity/history'
 
 type RouteHandler = (req: Request) => Response | Promise<Response>
 
@@ -29,7 +30,7 @@ const routes = new Map<string, RouteHandler>()
 
 function record(method: string, routePath: string, handler: RouteHandler): void {
   const normalized = routePath.startsWith('/') ? routePath : `/${routePath}`
-  routes.set(`${method} /api${normalized}`, handler)
+  routes.set(`${method} /api${normalized}`, method === 'POST' ? trackActivity(normalized.slice(1), handler) : handler)
 }
 
 /**
@@ -222,7 +223,7 @@ export async function startAgentServer(options: AgentServerOptions) {
     // take the number since the last launch. Falling back to a fresh port
     // costs the page its stored preferences and is still far better than
     // refusing to start.
-    if (wanted !== 0 && String(err).includes('EADDRINUSE'))
+    if (wanted !== 0 && (err as NodeJS.ErrnoException)?.code === 'EADDRINUSE')
       return listen(0)
     throw err
   }
@@ -253,14 +254,17 @@ export async function runAgent(): Promise<void> {
   // is no window to serve and nothing to serve it to.
   if (process.argv.includes('--run-schedule')) {
     const { runScheduledClean } = await import('../Support/Cleanup/schedule')
+    const activityId = await startScheduledActivity()
     try {
       const outcome = await runScheduledClean()
+      await finishActivity(activityId, outcome.errors.length ? (outcome.freedBytes > 0 ? 'partial' : 'failed') : 'completed')
       // stdout is the launch agent's log file, which is the only place anyone
       // will look to find out whether last night's clean ran.
       Bun.write(Bun.stdout, `${outcome.ranAt} cleaned ${outcome.targets} item(s), freed ${outcome.freedFormatted}${outcome.errors.length > 0 ? `, ${outcome.errors.length} error(s): ${outcome.errors.slice(0, 3).join('; ')}` : ''}\n`)
       process.exit(0)
     }
     catch (err) {
+      await finishActivity(activityId, 'failed')
       Bun.write(Bun.stdout, `${new Date().toISOString()} scheduled clean failed: ${err instanceof Error ? err.message : String(err)}\n`)
       process.exit(1)
     }
@@ -282,6 +286,8 @@ export async function runAgent(): Promise<void> {
     port: Number(process.env.SYSTEM_CLEANER_PORT ?? 0),
   })
 
+  await recoverInterruptedActivity()
+  const activityId = process.env.SYSTEM_CLEANER_DESKTOP_SESSION === '1' ? await startDesktopActivity() : undefined
   let stopping = false
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
     process.on(signal, () => {
@@ -289,7 +295,10 @@ export async function runAgent(): Promise<void> {
       stopping = true
       // Release the remembered address before the replacement launcher starts.
       void server.stop(true)
-      void cancelAllScans().finally(() => process.exit(0))
+      void cancelAllScans().finally(async () => {
+        await closeDesktopActivity(activityId)
+        process.exit(0)
+      })
     })
   }
 

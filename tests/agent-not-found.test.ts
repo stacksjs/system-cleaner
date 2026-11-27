@@ -12,9 +12,9 @@ import process from 'node:process'
  * redirect `DB_DATABASE_PATH` get to it; on a fresh CI runner that database
  * has no tables, and every cleanup test failed with "no such table".
  */
-interface Agent { port: number, stop: () => void }
+interface Agent { port: number, stop: () => Promise<void> }
 
-async function startAgent(webRoot: string): Promise<Agent> {
+async function startAgent(webRoot: string, port = 0): Promise<Agent> {
   const data = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-data-'))
   const child = Bun.spawn(['bun', path.join(import.meta.dir, '../app/Desktop/server.ts')], {
     cwd: path.join(import.meta.dir, '..'),
@@ -24,7 +24,7 @@ async function startAgent(webRoot: string): Promise<Agent> {
       ...process.env,
       SYSTEM_CLEANER_AGENT: '1',
       SYSTEM_CLEANER_WEB_ROOT: webRoot,
-      SYSTEM_CLEANER_PORT: '0',
+      SYSTEM_CLEANER_PORT: String(port),
       DB_CONNECTION: 'sqlite',
       DB_DATABASE_PATH: path.join(data, 'agent.sqlite'),
     },
@@ -37,8 +37,9 @@ async function startAgent(webRoot: string): Promise<Agent> {
     if (match) {
       return {
         port: Number(match[1]),
-        stop: () => {
+        stop: async () => {
           child.kill()
+          await child.exited
           fs.rmSync(data, { recursive: true, force: true })
         },
       }
@@ -63,8 +64,8 @@ describe('agent static files', () => {
     agent = await startAgent(webRoot)
   }, 30_000)
 
-  afterAll(() => {
-    agent.stop()
+  afterAll(async () => {
+    await agent.stop()
     fs.rmSync(webRoot, { recursive: true, force: true })
   })
 
@@ -81,6 +82,17 @@ describe('agent static files', () => {
     const response = await fetch(`http://127.0.0.1:${agent.port}/`)
     expect(response.status).toBe(200)
     expect(await response.text()).toContain('<title>ok</title>')
+  })
+
+  it('starts on a free port when the remembered port is already in use', async () => {
+    const second = await startAgent(webRoot, agent.port)
+    try {
+      expect(second.port).not.toBe(agent.port)
+      expect((await fetch(`http://127.0.0.1:${second.port}/__health`)).ok).toBe(true)
+    }
+    finally {
+      await second.stop()
+    }
   })
 
   // Craft's App Store host opens `/?session=<token>`; the window belongs in the app.

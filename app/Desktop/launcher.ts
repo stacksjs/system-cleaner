@@ -186,6 +186,7 @@ const agent = Bun.spawn([process.execPath, 'agent'], {
     // agent. This build is a production build *and* the local agent, which is
     // exactly the case the flag exists to express.
     SYSTEM_CLEANER_AGENT: '1',
+    SYSTEM_CLEANER_DESKTOP_SESSION: '1',
     SYSTEM_CLEANER_WEB_ROOT: webRoot,
     SYSTEM_CLEANER_MIGRATIONS: migrationsDir,
     SYSTEM_CLEANER_PORT: String(readRememberedPort(portFile)),

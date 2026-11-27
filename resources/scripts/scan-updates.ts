@@ -38,6 +38,7 @@ async function streamMeasurements(endpoint: string, data: Record<string, unknown
 }
 
 const scanSessions = new ScanSessions(undefined, (session) => {
+  if (session.parameters.backgroundRefresh) return
   const names = { tree: 'Disk Usage', 'large-files': 'Large Files', duplicates: 'Duplicates', similar: 'Similar Images' }
   void window.notifyIfAway({ title: `${names[session.kind]} scan finished`, body: 'Your results are ready.',
     elapsedMs: (session.finishedAt ?? Date.now()) - (session.startedAt ?? Date.now()) })

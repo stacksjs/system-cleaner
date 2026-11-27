@@ -51,6 +51,10 @@ export class ScanJobs<Request> {
     return result
   }
 
+  status(kind: ScanKind): ScanStatus | undefined {
+    return this.jobs.get(kind)?.session.status
+  }
+
   sessions(): ScanSession[] {
     return [...this.jobs.values()].map(job => structuredClone(job.session))
   }

@@ -26,20 +26,78 @@
   volumeUsed: '-',
   volumeFree: '-',
   volumePct: 0,
+  diskView: 'storage',
+  backgroundRefresh: false,
+  liveMessage: '',
+  suggestions: [],
+  suggestionMatches: [],
+  selectedSuggestions: [],
+  suggestionCategory: 'worktrees',
+  suggestionTool: 'all',
+  suggestionSearch: '',
+  minimumAge: '2',
+  minimumSize: '0',
+  suggestionSort: 'oldest',
+  visibleSuggestions: 40,
+  suggestionsReady: false,
+  suggestionsLoading: false,
+  suggestionsError: '',
+  cleanupBusy: false,
+  cleanupMessage: '',
+  cleanupIssues: [],
+  history: null,
+  historyError: '',
+  historyLoading: false,
+  historyYear: new Date().getFullYear(),
+  selectedYear() {
+    return this.history?.years.find(item => item.year === this.historyYear);
+  },
+  countLabel(value) {
+    return Number(value || 0).toLocaleString();
+  },
   init() {
-    var self = this;
-    fetch('/api/system-disk-info', { method: 'POST' })
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        if (!d.success) return;
-        self.volumeTotal = d.fDiskTotal;
-        self.volumeUsed = d.fDiskUsed;
-        self.volumeFree = d.fDiskFree;
-        self.volumePct = d.diskPct;
-        if (!self.hasResults && self.scanState === 'idle') self.rootName = self.defaultName = d.homeName || '';
-      })
-      .catch(function() {});
-    queueMicrotask(function() { typeof diskPanelMount === 'function' && diskPanelMount(); });
+    queueMicrotask(() => diskPanelMount());
+  },
+  viewDisk(view) {
+    this.diskView = view;
+    if (view === 'cleanup') diskLoadSuggestions();
+    if (view === 'history') diskLoadHistory();
+  },
+  applySuggestionFilters() {
+    this.suggestionMatches = diskFilterSuggestions(this.suggestions, this.suggestionCategory, this.suggestionSearch, this.suggestionTool, this.minimumAge, this.minimumSize, this.suggestionSort);
+    const available = new Set(this.suggestionMatches.filter(item => item.category === 'worktrees' && !item.blocked).map(item => item.path));
+    this.selectedSuggestions = this.selectedSuggestions.filter(path => available.has(path));
+  },
+  changeSuggestionFilter(key, value) {
+    this[key] = value;
+    if (key === 'suggestionCategory') {
+      this.suggestionTool = 'all';
+      this.minimumAge = value === 'worktrees' ? '2' : '0';
+      this.suggestionSort = value === 'worktrees' ? 'oldest' : 'largest';
+    }
+    this.visibleSuggestions = 40;
+    this.selectedSuggestions = [];
+    this.applySuggestionFilters();
+  },
+  toggleSuggestion(path) {
+    this.selectedSuggestions = this.selectedSuggestions.includes(path)
+      ? this.selectedSuggestions.filter(item => item !== path)
+      : this.selectedSuggestions.concat([path]);
+  },
+  selectableSuggestions() {
+    return this.suggestionMatches.filter(item => item.category === 'worktrees' && !item.blocked);
+  },
+  selectMatchingSuggestions() {
+    const paths = this.selectableSuggestions().map(item => item.path);
+    this.selectedSuggestions = this.selectedSuggestions.length === paths.length ? [] : paths;
+  },
+  selectedSummary() {
+    const selected = new Set(this.selectedSuggestions);
+    const bytes = this.suggestionMatches.reduce((total, item) => total + (selected.has(item.path) ? item.sizeBytes || 0 : 0), 0);
+    return selected.size + ' selected' + (bytes ? ' · ' + diskFormatBytes(bytes) + ' measured' : '');
+  },
+  modifiedLabel(item) {
+    return item.modifiedAt ? new Date(item.modifiedAt).toLocaleDateString() : 'Unknown';
   },
   topItems: [],
   hovered: null,
@@ -56,24 +114,219 @@
   centerSize() { return this.hovered ? this.hovered.formattedSize : this.defaultSize; },
   centerName() { return this.hovered ? this.hovered.name : this.defaultName; },
   metaText() {
-    if (this.scanState === 'scanning') return this.scanProgress || 'Scanning disk…';
+    if (this.scanState === 'scanning' && !this.backgroundRefresh) return this.scanProgress || 'Scanning disk…';
     if (this.scanState === 'cancelled') return 'Scan cancelled · ' + this.scanProgress;
     if (this.scanState === 'error') return this.scanError || 'Scan failed';
     if (this.scanInfo) return Number(this.scanInfo.folderCount || 0).toLocaleString() + ' folders · took ' + this.scanInfo.scanTime + (this.scanInfo.truncated ? ' · partial' : '') + (this.scanInfo.cached ? ' · from the last scan' : '');
     return 'Scan your home folder to see what fills it.';
   },
   unmeasuredNote() {
-    var n = this.scanInfo ? (this.scanInfo.unmeasured || 0) : 0;
+    const n = this.scanInfo ? (this.scanInfo.unmeasured || 0) : 0;
     if (this.scanState === 'cancelled') return 'Scan cancelled. The chart keeps everything measured before cancellation.';
     if (!n) return 'This scan ran out of time before it finished. Everything shown here was measured exactly.';
     return 'This scan ran out of time with ' + n + (n === 1 ? ' folder' : ' folders') + ' still unmeasured, so the total is lower than the real one. Everything shown here was measured exactly.';
   },
   unreadableNote() {
-    var n = this.scanInfo ? (this.scanInfo.unreadable || 0) : 0;
+    const n = this.scanInfo ? (this.scanInfo.unreadable || 0) : 0;
     return 'macOS kept SystemCleaner out of ' + n.toLocaleString() + (n === 1 ? ' folder' : ' folders') + ', so what is inside is not counted. Full Disk Access lets it read them.';
   },
 }">
 
+  <header class='flex flex-wrap gap-3 items-center justify-between disk-workspace-header'>
+    <nav class='flex gap-1' aria-label='Disk Usage views'>
+      <button type='button' class='btn btn-sm' :class="diskView === 'storage' ? 'btn-accent' : ''"
+        :aria-pressed="diskView === 'storage'" @click="viewDisk('storage')">Storage map</button>
+      <button type='button' class='btn btn-sm' :class="diskView === 'cleanup' ? 'btn-accent' : ''"
+        :aria-pressed="diskView === 'cleanup'" @click="viewDisk('cleanup')">Cleanup suggestions</button>
+      <button type='button' class='btn btn-sm' :class="diskView === 'history' ? 'btn-accent' : ''"
+        :aria-pressed="diskView === 'history'" @click="viewDisk('history')">Cleanup history</button>
+    </nav>
+    <div class='disk-workspace-status' role='status' x-show="liveMessage || (scanState === 'scanning' && backgroundRefresh)" x-cloak
+      x-text="scanState === 'scanning' && backgroundRefresh ? 'Refreshing disk usage…' : liveMessage"></div>
+  </header>
+
+  <section class='flex flex-col gap-4 disk-cleanup' aria-labelledby='disk-cleanup-title' x-show="diskView === 'cleanup'" x-cloak>
+    <div class='flex flex-wrap gap-4 items-start justify-between'>
+      <div>
+        <h2 id='disk-cleanup-title'>Cleanup suggestions</h2>
+        <p>Review AI worktrees, rebuildable caches, and logs on this computer.</p>
+      </div>
+      <button type='button' class='btn btn-sm' @click='diskLoadSuggestions()' :disabled='suggestionsLoading || cleanupBusy'>
+        <span class='i-f7-arrow-2-circlepath' aria-hidden='true'></span> Refresh suggestions
+      </button>
+    </div>
+
+    <div class='flex flex-wrap gap-3 items-end disk-cleanup-filters'>
+      <label class='disk-filter-search'>Search
+        <input type='search' placeholder='Name, project, or path' :value='suggestionSearch' :disabled='cleanupBusy'
+          @input="changeSuggestionFilter('suggestionSearch', $event.target.value)">
+      </label>
+      <label>Category
+        <select :value='suggestionCategory' :disabled='cleanupBusy' @change="changeSuggestionFilter('suggestionCategory', $event.target.value)">
+          <option value='worktrees'>AI worktrees</option>
+          <option value='caches'>Rebuildable caches</option>
+          <option value='logs'>Logs</option>
+          <option value='all'>All suggestions</option>
+        </select>
+      </label>
+      <label x-show="suggestionCategory === 'worktrees'">Tool
+        <select :value='suggestionTool' :disabled='cleanupBusy' @change="changeSuggestionFilter('suggestionTool', $event.target.value)">
+          <option value='all'>All tools</option>
+          <option value='Codex'>Codex</option>
+          <option value='Claude Code'>Claude Code</option>
+          <option value='Cursor'>Cursor</option>
+        </select>
+      </label>
+      <label x-show="suggestionCategory === 'worktrees'">Minimum age in days
+        <input type='number' min='0' max='3650' step='1' inputmode='numeric' :value='minimumAge' :disabled='cleanupBusy'
+          @change="changeSuggestionFilter('minimumAge', String(Math.min(3650, Math.max(0, Math.floor(Number($event.target.value) || 0)))))">
+      </label>
+      <label>Measured size
+        <select :value='minimumSize' :disabled='cleanupBusy' @change="changeSuggestionFilter('minimumSize', $event.target.value)">
+          <option value='0'>Any size</option>
+          <option value='10'>10 MB or more</option>
+          <option value='100'>100 MB or more</option>
+          <option value='1000'>1 GB or more</option>
+        </select>
+      </label>
+      <label>Sort by
+        <select :value='suggestionSort' :disabled='cleanupBusy' @change="changeSuggestionFilter('suggestionSort', $event.target.value)">
+          <option value='oldest'>Oldest activity</option>
+          <option value='newest'>Newest activity</option>
+          <option value='largest'>Largest measured</option>
+        </select>
+      </label>
+    </div>
+
+    <div class='disk-cleanup-note' x-show="suggestionCategory === 'worktrees'">
+      Worktree dates reflect folder and Git activity. Cleanup checks nested file dates against your age filter before removal.
+    </div>
+    <div class='disk-cleanup-note' x-show="suggestionCategory !== 'worktrees' && !scanInfo">
+      Scan the storage map to measure caches and logs.
+      <button type='button' class='btn btn-sm' @click="viewDisk('storage')">Open storage map</button>
+    </div>
+    <div class='flex flex-wrap gap-3 items-center justify-between disk-cleanup-toolbar'>
+      <div class='flex flex-wrap gap-3 items-center'>
+        <strong x-text="suggestionMatches.length + (suggestionMatches.length === 1 ? ' match' : ' matches')"></strong>
+        <button type='button' class='btn btn-sm' x-show='selectableSuggestions().length' :disabled='cleanupBusy'
+          @click='selectMatchingSuggestions()'
+          x-text="selectedSuggestions.length === selectableSuggestions().length ? 'Clear selection' : 'Select all ' + selectableSuggestions().length + ' available'"></button>
+        <span class='disk-cleanup-note' x-show='selectedSuggestions.length' x-text='selectedSummary()'></span>
+      </div>
+      <button type='button' class='btn btn-danger btn-sm' x-show='selectedSuggestions.length'
+        :disabled="cleanupBusy || (scanState === 'scanning' && !backgroundRefresh)"
+        @click='diskRemoveWorktrees(selectedSuggestions.slice(), minimumAge)'>Remove selected worktrees…</button>
+      <a href='/app/cleanup' class='btn btn-sm' x-show="suggestionCategory === 'caches' || suggestionCategory === 'logs'">Open Quick Clean</a>
+    </div>
+
+    <div class='disk-cleanup-note' role='status' x-show='cleanupMessage' x-text='cleanupMessage'></div>
+    <details class='disk-cleanup-note' x-show='cleanupIssues.length' x-cloak>
+      <summary>Why worktrees were kept</summary>
+      <ul class='disk-cleanup-issues'>
+        <template x-for='issue in cleanupIssues' :key='issue.path'>
+          <li><strong x-text='issue.detail'></strong><div x-text='issue.path'></div></li>
+        </template>
+      </ul>
+    </details>
+    <p class='disk-cleanup-note' role='status' x-show='suggestionsLoading && !suggestionsReady'>Looking for cleanup candidates…</p>
+    <p class='disk-cleanup-error' role='alert' x-show='suggestionsError' x-text='suggestionsError'></p>
+    <p class='disk-cleanup-note' x-show='suggestionsReady && !suggestionMatches.length && !suggestionsLoading'>
+      No suggestions match these filters.
+    </p>
+    <div class='disk-cleanup-list'>
+      <template x-for='item in suggestionMatches.slice(0, visibleSuggestions)' :key='item.path'>
+        <div class='disk-cleanup-row'>
+          <div class='disk-cleanup-pick'>
+            <input type='checkbox' x-show="item.category === 'worktrees' && !item.blocked"
+              :aria-label="'Select ' + (item.project || item.name) + ' at ' + item.path" :checked='selectedSuggestions.includes(item.path)'
+              :disabled='cleanupBusy' @change='toggleSuggestion(item.path)'>
+            <span class='i-f7-folder-fill' aria-hidden='true' x-show="item.category !== 'worktrees' || item.blocked"></span>
+          </div>
+          <div class='min-w-0'>
+            <div class='disk-cleanup-name' x-text="item.project || item.name"></div>
+            <div class='disk-cleanup-path' :title='item.path' x-text='item.path'></div>
+            <div class='disk-cleanup-note' x-text='item.blocked || item.detail'></div>
+          </div>
+          <div class='disk-cleanup-measure'>
+            <div x-text="item.sizeBytes === null ? 'Unmeasured' : diskFormatBytes(item.sizeBytes)"></div>
+            <time class='disk-cleanup-note' :datetime="item.modifiedAt ? new Date(item.modifiedAt).toISOString() : null"
+              :title="item.category === 'worktrees' ? 'Last folder or Git activity' : 'Folder modification date'" x-text='modifiedLabel(item)'></time>
+          </div>
+          <button type='button' class='btn btn-sm disk-reveal' @click='diskRevealInFinder(item.path)'
+            :aria-label="'Reveal ' + (item.project || item.name) + ' in file manager'">Reveal</button>
+        </div>
+      </template>
+    </div>
+    <button type='button' class='btn btn-sm disk-show-more' x-show='visibleSuggestions < suggestionMatches.length'
+      @click='visibleSuggestions = visibleSuggestions + 40'>Show more</button>
+  </section>
+
+  <section class='flex flex-col gap-4 disk-cleanup' aria-labelledby='disk-history-title' x-show="diskView === 'history'" x-cloak>
+    <div class='flex flex-wrap gap-4 items-start justify-between'>
+      <div>
+        <h2 id='disk-history-title'>Cleanup history</h2>
+        <p>Totals from cleanups recorded by SystemCleaner.</p>
+      </div>
+      <div class='flex gap-2'>
+        <a href='/app/activity' data-stx-link class='btn btn-sm'>All activity</a>
+        <button type='button' class='btn btn-sm' @click='diskLoadHistory()' :disabled='historyLoading'>Refresh history</button>
+      </div>
+    </div>
+    <p class='disk-cleanup-note' role='status' x-show='historyLoading && !history'>Loading cleanup history…</p>
+    <p class='disk-cleanup-error' role='alert' x-show='historyError' x-text='historyError'></p>
+    <p class='disk-cleanup-note' x-show='history && !history.recording'>History recording is paused in Settings. Saved totals are shown below.</p>
+    <template x-if='history'>
+      <div class='flex flex-col gap-4'>
+        <div class='disk-history-totals'>
+          <div class='disk-history-card'>
+            <div class='disk-cleanup-note'>Lifetime permanently removed</div>
+            <strong x-text='diskFormatBytes(history.lifetime.permanentBytes)'></strong>
+            <div class='disk-cleanup-note' x-text="countLabel(history.lifetime.permanentItems) + ' items or cleanup targets'"></div>
+          </div>
+          <div class='disk-history-card'>
+            <div class='disk-cleanup-note'>Lifetime moved to Trash</div>
+            <strong x-text='diskFormatBytes(history.lifetime.trashedBytes)'></strong>
+            <div class='disk-cleanup-note' x-text="countLabel(history.lifetime.trashedItems) + (history.lifetime.trashedItems === 1 ? ' item' : ' items')"></div>
+          </div>
+          <div class='disk-history-card'>
+            <div class='disk-cleanup-note'>Lifetime AI worktrees removed</div>
+            <strong x-text='countLabel(history.lifetime.worktrees)'></strong>
+            <div class='disk-cleanup-note'>Included in permanent removals</div>
+          </div>
+        </div>
+        <p class='disk-cleanup-note'>Totals use item sizes. The storage map shows current free space.</p>
+        <div class='flex flex-wrap gap-3 items-center justify-between disk-history-header'>
+          <h3>Yearly breakdown</h3>
+          <label>Year
+            <select :value='historyYear' @change='historyYear = Number($event.target.value)'>
+              <template x-for='period in history.years' :key='period.year'>
+                <option :value='period.year' x-text='period.year'></option>
+              </template>
+            </select>
+          </label>
+        </div>
+        <template x-if='selectedYear()'>
+          <div class='flex flex-col gap-3'>
+            <p class='disk-cleanup-note' x-text="diskFormatBytes(selectedYear().permanentBytes) + ' permanently removed · ' + diskFormatBytes(selectedYear().trashedBytes) + ' moved to Trash · ' + countLabel(selectedYear().worktrees) + (selectedYear().worktrees === 1 ? ' AI worktree removed' : ' AI worktrees removed')"></p>
+            <p class='disk-cleanup-note' x-show='!selectedYear().sources.length'>No cleanups recorded for this year.</p>
+            <div class='disk-cleanup-list' x-show='selectedYear().sources.length'>
+              <template x-for='source in selectedYear().sources' :key='source.source'>
+                <div class='disk-history-source'>
+                  <strong x-text='diskHistorySource(source.source)'></strong>
+                  <div class='disk-cleanup-note'>
+                    <span x-show='source.permanentItems' x-text="diskFormatBytes(source.permanentBytes) + ' permanently removed'"></span>
+                    <span x-show='source.trashedItems' x-text="diskFormatBytes(source.trashedBytes) + ' moved to Trash'"></span>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+    </template>
+  </section>
+
+  <div class='disk-explorer' x-show="diskView === 'storage'">
   <!-- Disk sidebar -->
   <div class='disk-sidebar'>
     <div class='disk-sidebar-section'>
@@ -103,7 +356,7 @@
       <div class='disk-meta' x-text="metaText()">Scan your home folder to see what fills it.</div>
       <button class='mt-3 btn btn-sm' data-cancel-scan x-show="scanState === 'scanning'" x-cloak
         @click='cancelDiskScan()' :disabled='cancelling || !scanId' x-text="cancelling ? 'Cancelling…' : 'Cancel scan'">Cancel scan</button>
-      <button class='mt-3 btn btn-sm' x-show="scanState !== 'scanning' && hasResults" x-cloak @click='startDiskScan()'>Scan again</button>
+      <button class='mt-3 btn btn-sm' x-show="scanState !== 'scanning' && hasResults" x-cloak @click='startDiskScan()' :disabled='cleanupBusy'>Scan again</button>
     </div>
 
     <!-- A scan that ran out of time is a real answer, but only if it says so:
@@ -157,10 +410,10 @@
         </span>
       </template>
     </nav>
-    <div class='disk-live-status' aria-description='The chart shows folders measured so far.' x-show="scanState === 'scanning' && hasResults" x-cloak>
+    <div class='disk-live-status' x-show="scanState === 'scanning' && hasResults" x-cloak>
       <div class='flex gap-2 items-center min-w-0'>
         <span class='disk-live-indicator i-f7-arrow-2-circlepath' aria-hidden='true'></span>
-        <span class='disk-live-heading' role='status' x-text="cancelling ? 'Cancelling scan…' : (scanStatus === 'queued' ? 'Scan queued' : 'Scanning disk')">Scanning disk</span>
+        <span class='disk-live-heading' role='status' x-text="cancelling ? 'Cancelling scan…' : (scanStatus === 'queued' ? 'Scan queued' : (backgroundRefresh ? 'Refreshing disk' : 'Scanning disk'))">Scanning disk</span>
         <span class='disk-live-metrics' x-text='scanProgress'></span>
       </div>
       <div class='disk-live-path' x-text='scanProgressPath' :title='scanProgressFullPath'></div>
@@ -176,8 +429,11 @@
       </div>
       <div x-show="scanState === 'idle'">
         <div style='margin-bottom: var(--space-3);'>Analyze disk usage with an interactive sunburst chart</div>
-        <button class='btn' onclick='startDiskScan()' style='padding: var(--space-2) var(--space-5); font-size: 13px;'>Scan Disk</button>
-        <div style='margin-top: var(--space-2); font-size: 10px; color: var(--tertiary);'>Results are cached for 10 minutes</div>
+        <button class='btn' @click='startDiskScan()' :disabled='cleanupBusy' style='padding: var(--space-2) var(--space-5); font-size: 13px;'>Scan Disk</button>
+      </div>
+      <div x-show="scanState === 'done' && !hasResults" x-cloak>
+        <div>No measurable items in this folder.</div>
+        <button class='mt-3 btn' @click='startDiskScan()' :disabled='cleanupBusy'>Scan again</button>
       </div>
       <div x-show="scanState === 'scanning'">
         <div>Scanning disk&hellip;</div>
@@ -197,7 +453,7 @@
       <div x-show="scanState === 'error'" x-cloak>
         <div style='margin-bottom: var(--space-2); color: var(--red); font-weight: 600;'>Scan failed</div>
         <div style='margin-bottom: var(--space-3); max-width: 42ch; color: var(--secondary);' x-text='scanError'></div>
-        <button class='btn' onclick='startDiskScan()' style='padding: var(--space-2) var(--space-5); font-size: 13px;'>Try Again</button>
+        <button class='btn' @click='startDiskScan()' :disabled='cleanupBusy' style='padding: var(--space-2) var(--space-5); font-size: 13px;'>Try Again</button>
       </div>
     </div>
     <svg class='sunburst-svg' id='sunburst' viewBox='-320 -320 640 640' x-show="hasResults && scanState !== 'error'" x-cloak>
@@ -248,9 +504,9 @@
           </div>
           <!-- The one destructive action, set apart from the two that only
                look, and labelled with what it costs. It asks first. -->
-          <div class="info-danger" x-show="hovered.fullPath && !hovered.aggregate && hovered.isDir && hovered.depth >= 1">
+          <div class="info-danger" x-show="hovered.fullPath && !hovered.aggregate && hovered.depth >= 1">
             <button class="btn btn-danger btn-sm"
-                    :disabled="scanState === 'scanning'"
+                    :disabled="scanState === 'scanning' || cleanupBusy"
                     @click="diskDeletePath(hovered.fullPath, hovered.name, hovered.size)">{{ 'Delete ' + hovered.formattedSize + '…' }}</button>
           </div>
         </div>
@@ -258,9 +514,63 @@
     </div>
   </div>
 
+  </div>
 </div>
 
 <style>
+.disk-layout { container-type: inline-size; }
+.disk-workspace-header { flex: none; padding: 10px var(--space-4); border-bottom: .5px solid var(--line); }
+.disk-workspace-status { color: var(--secondary); font-size: 11px; }
+.disk-explorer { display: flex; flex: 1; min-height: 0; }
+.disk-cleanup { flex: 1; min-height: 0; overflow: auto; padding: var(--space-5); }
+.disk-cleanup h2 { margin: 0 0 4px; font-size: 18px; font-weight: 650; color: var(--ink); }
+.disk-cleanup p { margin: 0; color: var(--secondary); font-size: 12px; }
+.disk-cleanup-filters { padding: 12px; border: .5px solid var(--line); border-radius: 8px; background: var(--surface); }
+.disk-cleanup-filters label { display: grid; gap: 5px; font-size: 11px; font-weight: 550; color: var(--secondary); }
+.disk-cleanup-filters input, .disk-cleanup-filters select, .disk-history-header select {
+  min-height: 30px; min-width: 0; padding: 4px 7px; border: .5px solid var(--line); border-radius: 6px;
+  background: var(--app-bg); color: var(--ink); font: inherit; font-size: 12px;
+}
+.disk-filter-search { flex: 1 1 170px; }
+.disk-cleanup-filters input[type=number] { width: 100%; max-width: 120px; }
+.disk-cleanup input { accent-color: var(--accent); }
+.disk-cleanup-note { color: var(--secondary); font-size: 11px; line-height: 1.5; }
+.disk-cleanup-error { color: var(--red); }
+.disk-cleanup-toolbar { min-height: 30px; color: var(--ink); font-size: 12px; }
+.disk-cleanup-list { flex: none; border: .5px solid var(--line); border-radius: 8px; overflow: hidden; }
+.disk-cleanup-list:empty { display: none; }
+.disk-cleanup-row {
+  display: grid; grid-template-columns: 20px minmax(0, 1fr) minmax(74px, auto) auto;
+  align-items: center; gap: 12px; min-height: 60px; padding: 8px 12px; background: var(--surface);
+}
+.disk-cleanup-row + .disk-cleanup-row { border-top: .5px solid var(--line-soft); }
+.disk-cleanup-row:focus-within { background: var(--hover); }
+.disk-cleanup-pick { display: flex; justify-content: center; color: var(--tertiary); }
+.disk-cleanup-pick input { height: 15px; width: 15px; }
+.disk-cleanup-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-size: 13px; font-weight: 600; }
+.disk-cleanup-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--secondary); font-size: 11px; }
+.disk-cleanup-measure { text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
+.disk-cleanup-issues { max-height: 160px; overflow: auto; overflow-wrap: anywhere; padding-left: 20px; }
+.disk-show-more { align-self: center; }
+.disk-history-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 10px; }
+.disk-history-card { display: grid; gap: 5px; padding: 12px; border: .5px solid var(--line); border-radius: 8px; background: var(--surface); }
+.disk-history-card strong { font-size: 22px; line-height: 1.2; color: var(--ink); font-variant-numeric: tabular-nums; }
+.disk-history-header h3 { margin: 0; color: var(--ink); font-size: 14px; font-weight: 600; }
+.disk-history-header label { color: var(--secondary); font-size: 11px; }
+.disk-history-source { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 12px; background: var(--surface); color: var(--ink); font-size: 12px; }
+.disk-history-source + .disk-history-source { border-top: .5px solid var(--line-soft); }
+.disk-history-source span { display: block; text-align: right; }
+@container (max-width: 750px) {
+  .disk-explorer .disk-sidebar, .disk-explorer .disk-inspector { width: 185px; min-width: 185px; }
+  .disk-explorer .folder-bar-track { display: none; }
+}
+@container (max-width: 580px) {
+  .disk-explorer { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: minmax(300px, 1fr) auto; overflow: auto; }
+  .disk-explorer .disk-chart { grid-area: 1 / 1 / 2 / 3; }
+  .disk-explorer .disk-sidebar, .disk-explorer .disk-inspector { min-width: 0; width: auto; max-height: 350px; border-top: .5px solid var(--line); }
+  .disk-cleanup { padding: var(--space-3); }
+  .disk-cleanup-row { gap: 7px; padding-inline: 8px; }
+}
 @keyframes pulse { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
 .disk-empty-glyph { margin-bottom: var(--space-4); color: var(--tertiary); }
 .disk-empty-glyph span { display: inline-block; width: 30px; height: 30px; }

@@ -7,7 +7,7 @@
  * main window, the menu bar popover and Settings all share it), which is why
  * localStorage is enough for every switch whose effect happens in a window.
  *
- * "Keep a cleanup history" is not here: the history is written by the agent,
+ * "Keep activity history" is not here: the history is written by the agent,
  * the scheduled clean included, and neither can read localStorage. That one
  * lives in the database (`app/Models/AppPreference.ts`) and Settings reads and
  * writes it over `/api/app-preferences`.

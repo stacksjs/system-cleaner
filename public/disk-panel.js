@@ -44,7 +44,7 @@
     if(node.c && node._d < CFG.maxDepth)for(var j=0;j<node.c.length;j++)flatten(node.c[j],arr,ci);
   }
   function normalize(node) {
-    var result = { aggregate: !!node.aggregate, n: node.name || node.n, s: node.sizeBytes || node.s || 0, p: node.path || node.p || '', d: node.isDirectory !== undefined ? node.isDirectory : (node.d !== false) };
+    var result = { aggregate: !!node.aggregate, n: node.name || node.n, s: node.sizeBytes || node.s || 0, p: node.path || node.p || '', m: node.modifiedAt || null, d: node.isDirectory !== undefined ? node.isDirectory : (node.d !== false) };
     result.c = (node.children || node.c || []).map(normalize);
     return result;
   }
@@ -53,18 +53,38 @@
     for (var i = 0; i < node.c.length; i++) { var hit = findTreePath(node.c[i], path); if (hit) return hit; }
     return null;
   }
-  function pruneFromTree(node, targetPath) {
-    if (!node || !node.c) return 0;
-    for (var i = 0; i < node.c.length; i++) {
-      if (node.c[i].p === targetPath) {
-        var removed = node.c.splice(i, 1)[0];
-        node.s = Math.max(0, node.s - (removed.s || 0));
-        return removed.s || 0;
+  function pruneTree(node, targets) {
+    let removedBytes = 0;
+    node.c = node.c.filter(child => {
+      if (child.aggregate) return true;
+      if (targets.has(child.p)) {
+        removedBytes += child.s;
+        return false;
       }
-      var freed = pruneFromTree(node.c[i], targetPath);
-      if (freed) { node.s = Math.max(0, node.s - freed); return freed; }
+      removedBytes += pruneTree(child, targets);
+      return true;
+    });
+    if (removedBytes) {
+      node.s = Math.max(0, node.s - removedBytes);
+      node.c.sort((a, b) => b.s - a.s);
     }
-    return 0;
+    return removedBytes;
+  }
+
+  function redrawTree(root) {
+    if (!document.querySelector('.disk-layout')) return;
+    const focused = currentRoot && findTreePath(root, currentRoot.p);
+    viewStack = viewStack.map(node => findTreePath(root, node.p)).filter(Boolean);
+    const next = focused || viewStack.pop() || root;
+    patchDiskScope({ hasResults: root.s > 0 });
+    bindSvgEvents();
+    renderSegments(next);
+  }
+
+  function removePaths(paths) {
+    if (!paths.length || !tree) return;
+    pruneTree(tree, new Set(paths));
+    redrawTree(tree);
   }
 
   var segs = [];
@@ -101,6 +121,11 @@
     return el.__stx_scope || null;
   }
 
+  function readDiskState(name) {
+    const value = getDiskScope()?.[name];
+    return typeof value === 'function' ? value() : value;
+  }
+
   function flushDiskExecQueue() {
     var el = getDiskScopeEl();
     if (!el || !el.__stx_execute) return;
@@ -118,6 +143,7 @@
   }
 
   function patchDiskScope(fields) {
+    if (!getDiskScopeEl()) return false;
     if (Object.prototype.hasOwnProperty.call(fields, 'scanState')) window.__diskLiveScanning = fields.scanState === 'scanning';
     // Any state change that is not an error clears the last one, so a retry
     // does not run underneath a stale message.
@@ -133,7 +159,7 @@
     for (var key in fields) {
       if (!Object.prototype.hasOwnProperty.call(fields, key)) continue;
       var v = fields[key];
-      if (key === 'topItems' || key === 'scanInfo' || key === 'hovered') {
+      if (key === 'topItems' || key === 'scanInfo' || key === 'hovered' || key === 'suggestions' || key === 'cleanupIssues') {
         window['__diskPatch_' + key] = v;
         parts.push(key + ' = window.__diskPatch_' + key);
       } else if (typeof v === 'string') {
@@ -171,6 +197,10 @@
     var cb = document.getElementById('center-back');
     if (cb) cb.style.opacity = viewStack.length > 0 ? '0.6' : '0';
 
+    window.__diskHovered = window.__diskHovered
+      ? segs.find(segment => segment.fullPath === window.__diskHovered.fullPath && segment.aggregate === window.__diskHovered.aggregate) || null
+      : null;
+
     var top = segs.filter(function(s){ return s.depth === 1; })
                   .sort(function(a,b){ return b.size - a.size; })
                   .slice(0, 20);
@@ -201,7 +231,7 @@
       // place that exists.
       drilled: viewStack.length > 0,
       scanTotalLabel: label,
-      hovered: window.__diskHovered ? segs.find(function(segment) { return segment.fullPath === window.__diskHovered.fullPath && segment.aggregate === window.__diskHovered.aggregate; }) || null : null,
+      hovered: window.__diskHovered,
     });
   }
 
@@ -254,9 +284,8 @@
   }
 
   function applyScanResult(data, cached) {
-    var focusedPath = currentRoot && currentRoot.p;
-    tree = data.tree.n ? data.tree : normalize(data.tree);
-    viewStack = viewStack.map(function(node) { return findTreePath(tree, node.p); }).filter(Boolean);
+    tree = normalize(data.tree);
+    if (pendingRemovals.size) pruneTree(tree, new Set(pendingRemovals.keys()));
     window.__diskTree = tree;
     window.__diskScanInfo = {
       folderCount: data.folderCount,
@@ -274,20 +303,8 @@
       scanState: data.cancelled ? 'cancelled' : 'done',
       hasResults: tree.s > 0,
     });
-    bindSvgEvents();
-    renderSegments(findTreePath(tree, focusedPath) || tree);
+    redrawTree(tree);
     flushDiskExecQueue();
-
-    // A fresh scan that took a while and finished while the user was elsewhere.
-    // Cached results never notify: nothing happened, the screen just remembered.
-    if (!cached && window.notifyIfAway) {
-      var seconds = parseFloat(String(data.scanTime || '0')) || 0;
-      window.notifyIfAway({
-        elapsedMs: seconds * 1000,
-        title: 'Disk scan finished',
-        body: fmtBytes(tree.s) + ' across ' + data.folderCount + ' folders.',
-      });
-    }
   }
 
   function fmtCount(n) {
@@ -310,7 +327,7 @@
   // the poll so a caller that already holds a payload — the rejoin path fetched
   // one to decide whether a scan was running at all — can show it immediately
   // instead of discarding it and waiting for the next tick.
-  function applyProgress(d) {
+  function applyProgress(d, keepPrevious) {
     if (!d || !d.scanning || d.kind !== 'tree') return;
     var fields = {
       scanProgress: fmtCount(d.scanned) + ' items · ' + Math.round(d.elapsedMs / 1000) + 's',
@@ -326,68 +343,183 @@
     // measured exactly, so it is the answer so far rather than an estimate —
     // and watching it pass the number the old scanner used to stop at is the
     // clearest possible statement that the scan is still doing something.
-    if (d.measuredBytes > 0) fields.scanTotalLabel = fmtBytes(d.measuredBytes) + ' so far';
-    if (d.snapshot && d.snapshot.tree && d.snapshot.tree.sizeBytes > 0) {
-      var focusedPath = currentRoot && currentRoot.p;
+    if (!keepPrevious && d.measuredBytes > 0) fields.scanTotalLabel = fmtBytes(d.measuredBytes) + ' so far';
+    if (!keepPrevious && d.snapshot && d.snapshot.tree && d.snapshot.tree.sizeBytes > 0) {
       tree = normalize(d.snapshot.tree);
+      if (pendingRemovals.size) pruneTree(tree, new Set(pendingRemovals.keys()));
       window.__diskTree = tree;
-      viewStack = viewStack.map(function(node) { return findTreePath(tree, node.p); }).filter(Boolean);
-      fields.hasResults = true;
+      redrawTree(tree);
       fields.scanTotalLabel = fmtBytes(tree.s) + ' so far';
-      bindSvgEvents();
-      renderSegments(findTreePath(tree, focusedPath) || tree);
     }
     patchDiskScope(fields);
   }
 
-  var attachedScan = null;
-  var renderedScanId = null;
-  var renderedResult = null;
+  let attachedScan;
+  let mountedPanel;
+  let renderedScanId;
+  let renderedResult;
+  let renderedStatus;
+  let scanParameters = {};
+  let lastChange = 0;
+  let lastRefresh = 0;
+  let dismissedRevision = 0;
+  let polling = false;
+  let changeTimer;
+  let changesPending = false;
+  let cleanupBusy = false;
+  let historyRequest = 0;
+  let suggestionsRequest = 0;
+  let suggestionsPending = false;
+  let lastSuggestions = 0;
+  const pendingRemovals = new Map();
+  const REFRESH_INTERVAL = 30_000;
+  const CHANGE_POLL_INTERVAL = 2500;
+
+  async function diskPost(endpoint, body = {}) {
+    const response = await fetch('/api/' + endpoint, {
+      method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.success) throw new Error(result.error || 'Request failed (' + response.status + ')');
+    return result;
+  }
+
+  async function refreshVolume(force = false) {
+    const owner = mountedPanel;
+    try {
+      const info = await diskPost('system-disk-info' + (force ? '?refresh=1' : ''));
+      if (owner !== mountedPanel || !owner?.isConnected) return;
+      patchDiskScope({ volumeTotal: info.fDiskTotal, volumeUsed: info.fDiskUsed, volumeFree: info.fDiskFree, volumePct: info.diskPct });
+    } catch {}
+  }
+
   function renderSession(session) {
-    if (!document.querySelector('.disk-layout')) return;
-    var active = ['queued', 'running', 'cancelling'].indexOf(session.status) !== -1;
-    var result = session.result;
-    if (session.id !== renderedScanId) {
+    if (!mountedPanel?.isConnected) return;
+    const active = ['queued', 'running', 'cancelling'].includes(session.status);
+    const background = session.parameters.backgroundRefresh && !!tree;
+    const result = session.result;
+    const newSession = session.id !== renderedScanId;
+    const previousStatus = renderedStatus;
+    renderedStatus = session.status;
+    if (newSession) {
       renderedScanId = session.id;
       renderedResult = null;
-      viewStack = [];
-      currentRoot = null;
-      branchColors.clear();
-      patchDiskScope({ hasResults: false, topItems: [], scanInfo: null, scanTotalLabel: '0 B so far' });
+      if (!background) {
+        tree = null;
+        viewStack = [];
+        currentRoot = null;
+        window.__diskHovered = null;
+        branchColors.clear();
+        patchDiskScope({ hasResults: false, topItems: [], hovered: null, scanInfo: null, scanTotalLabel: '0 B so far' });
+      }
     }
-    var elapsed = Math.max(0, (session.finishedAt || Date.now()) - (session.startedAt || Date.now()));
-    patchDiskScope({ scanId: session.id, scanStatus: session.status, cancelling: session.status === 'cancelling',
-      scanState: active ? 'scanning' : session.status === 'cancelled' ? 'cancelled' : session.status === 'failed' ? 'error' : 'done',
-      scanError: result && result.error || '',
+    if (session.id) scanParameters = session.parameters;
+    const elapsed = Math.max(0, (session.finishedAt || Date.now()) - (session.startedAt || Date.now()));
+    patchDiskScope({
+      scanId: session.id, scanStatus: session.status, cancelling: session.status === 'cancelling',
+      scanState: active ? 'scanning' : session.status === 'cancelled' ? 'cancelled' : session.status === 'failed' && !background ? 'error' : 'done',
+      scanError: result?.error || '',
+      backgroundRefresh: !!background,
     });
     if (active) {
-      applyProgress(Object.assign({}, session.progress, { kind: 'tree', scanning: true, elapsedMs: elapsed }));
-      if (session.status === 'queued') patchDiskScope({ scanProgress: 'Queued — waiting for another scan' });
+      applyProgress({ ...session.progress, kind: 'tree', scanning: true, elapsedMs: elapsed }, background);
+      if (session.status === 'queued') patchDiskScope({ scanProgress: 'Queued behind another scan' });
       if (session.status === 'cancelling') patchDiskScope({ scanProgress: 'Cancelling…' });
     }
-    else if (result && result.tree) {
-      if (renderedResult !== result) { applyScanResult(result, true); renderedResult = result; }
+    else if (renderedResult !== session.id && result?.tree) {
+      renderedResult = session.id;
+      for (const [target, revision] of pendingRemovals)
+        if (revision <= session.parameters.diskRevision) pendingRemovals.delete(target);
+      if (!background || session.status === 'completed') {
+        applyScanResult(result, newSession);
+        void refreshVolume(true);
+        if (readDiskState('diskView') === 'cleanup') void loadSuggestions();
+      }
     }
-    if (!active) patchDiskScope({ scanProgress: fmtCount(session.progress.scanned) + ' items · ' + Math.round(elapsed / 1000) + 's',
-      scanProgressPath: shortenPath(session.progress.path) });
+    if (!active && (newSession || previousStatus !== session.status)) {
+      if (session.status === 'cancelled') {
+        dismissedRevision = lastChange;
+        changesPending = false;
+      }
+      if (background && session.status === 'failed')
+        patchDiskScope({ liveMessage: 'Automatic refresh failed. Use Scan again to retry.' });
+      if (session.status === 'completed')
+        patchDiskScope({ liveMessage: '' });
+      patchDiskScope({ scanProgress: fmtCount(session.progress.scanned) + ' items · ' + Math.round(elapsed / 1000) + 's',
+        scanProgressPath: shortenPath(session.progress.path) });
+    }
   }
-  function diskPanelMount() {
-    if (!document.querySelector('.disk-layout')) return;
-    flushDiskExecQueue();
-    bindSvgEvents();
-    if (attachedScan) attachedScan();
-    renderedResult = null;
-    attachedScan = window.scanSessions.subscribe('tree', renderSession);
 
+  async function pollChanges() {
+    if (!mountedPanel?.isConnected || document.hidden || polling) return;
+    const owner = mountedPanel;
+    polling = true;
+    try {
+      const data = await diskPost('disk-changes', { since: lastChange });
+      if (owner !== mountedPanel || !owner.isConnected) return;
+      if (data.revision !== lastChange) {
+        lastChange = data.revision;
+        if (data.removed.length) {
+          for (const target of data.removed) pendingRemovals.set(target, data.revision);
+          removePaths(data.removed);
+        }
+        void refreshVolume(true);
+        if (readDiskState('diskView') === 'cleanup' && !cleanupBusy) void loadSuggestions();
+        if (readDiskState('diskView') === 'history' && !cleanupBusy) void loadHistory();
+      }
+      const stale = lastChange > Math.max(dismissedRevision, scanParameters.diskRevision ?? lastChange) || changesPending;
+      if (!tree || !stale || cleanupBusy || window.__diskLiveScanning) return;
+      patchDiskScope({ liveMessage: 'Disk changes detected. Refreshing shortly…' });
+      if (Date.now() - lastRefresh >= REFRESH_INTERVAL) void scanDisk(true);
+    } catch {}
+    finally { polling = false; }
   }
-  window.addEventListener('stx:navigate', function() {
+
+  function detachPanel() {
     if (attachedScan) attachedScan();
     attachedScan = null;
+    mountedPanel = null;
+    clearInterval(changeTimer);
+  }
+
+  function diskPanelMount() {
+    const panel = document.querySelector('.disk-layout');
+    if (!panel || !panel.__stx_execute || mountedPanel === panel) return;
+    detachPanel();
+    mountedPanel = panel;
+    flushDiskExecQueue();
+    bindSvgEvents();
+    renderedResult = null;
+    attachedScan = window.scanSessions.subscribe('tree', renderSession);
+    patchDiskScope({ cleanupBusy });
+    void refreshVolume();
+    void pollChanges();
+    changeTimer = setInterval(() => {
+      void pollChanges();
+      if (!document.hidden && readDiskState('diskView') === 'cleanup' && !cleanupBusy && Date.now() - lastSuggestions >= REFRESH_INTERVAL)
+        void loadSuggestions();
+    }, CHANGE_POLL_INTERVAL);
+  }
+  window.addEventListener('stx:navigate', () => {
+    if (!mountedPanel?.isConnected) detachPanel();
   });
+  window.addEventListener('focus', pollChanges);
+  document.addEventListener('visibilitychange', pollChanges);
   window.diskPanelMount = diskPanelMount;
-  window.startDiskScan = function() {
-    window.scanSessions.start('tree', {}).catch(function(error) { window.nativeAlert('Could not start scan', error.message); });
-  };
+
+  async function scanDisk(backgroundRefresh) {
+    if (window.__diskLiveScanning || cleanupBusy) return;
+    const { path, maxDepth } = scanParameters;
+    changesPending = false;
+    lastRefresh = Date.now();
+    try {
+      await window.scanSessions.start('tree', { path, maxDepth, backgroundRefresh });
+    } catch (error) {
+      if (!backgroundRefresh) window.nativeAlert('Could not start scan', error.message);
+    }
+  }
+
+  window.startDiskScan = () => scanDisk(false);
   window.cancelDiskScan = function() {
     window.scanSessions.cancel('tree').catch(function(error) { window.nativeAlert('Could not cancel scan', error.message); });
   };
@@ -576,32 +708,169 @@
     window.revealPath(path);
   };
 
+  function updateAfterRemoval(paths) {
+    // A result already in flight can still contain what just disappeared.
+    for (const target of paths) pendingRemovals.set(target, lastChange + 1);
+    removePaths(paths);
+    changesPending = true;
+    void refreshVolume(true);
+  }
+
   window.diskDeletePath = async function(path, name, sizeBytes) {
-    if (window.__diskLiveScanning) return;
-    var sizeStr = fmtBytes(sizeBytes || 0);
-    var ok = await window.nativeConfirm({
-      title: 'Delete “' + name + '”?',
-      message: sizeStr + ' will be removed from ' + path + '. This cannot be undone.',
-      confirmLabel: 'Delete',
-      destructive: true,
-    });
-    if (!ok) return;
-    fetch('/api/delete-path', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: path }) })
-      .then(function(r) { return r.json(); })
-      .then(function(r) {
-        if (r.success) {
-          try { localStorage.removeItem(DISK_CACHE_KEY); } catch (_) {}
-          if (tree) pruneFromTree(tree, path);
-          renderSegments(currentRoot && currentRoot.p !== path ? currentRoot : tree);
-          patchDiskScope({ hovered: null });
-        } else {
-          window.nativeAlert('Could not delete “' + name + '”', r.error || 'The scanner gave no reason.');
-        }
-      })
-      .catch(function(err) {
-        window.nativeAlert('Could not delete “' + name + '”', err.message);
+    if (window.__diskLiveScanning || cleanupBusy) return;
+    cleanupBusy = true;
+    patchDiskScope({ cleanupBusy });
+    let attempted = false;
+    try {
+      const ok = await window.nativeConfirm({
+        title: 'Delete “' + name + '”?',
+        message: fmtBytes(sizeBytes || 0) + ' will be permanently removed from ' + path + '.',
+        confirmLabel: 'Delete permanently',
+        destructive: true,
       });
+      if (!ok) return;
+      attempted = true;
+      const result = await diskPost('delete-path', { path });
+      updateAfterRemoval([path]);
+      patchDiskScope({ liveMessage: result.historyError || 'Deleted “' + name + '”.' });
+    } catch (error) {
+      window.nativeAlert('Could not delete “' + name + '”', error.message);
+    } finally {
+      cleanupBusy = false;
+      patchDiskScope({ cleanupBusy });
+      if (attempted) void pollChanges();
+    }
   };
 
-  if (document.querySelector('.disk-layout')) diskPanelMount();
+  async function loadSuggestions(force = false) {
+    if (!mountedPanel?.isConnected || (suggestionsPending && !force)) return;
+    const owner = mountedPanel;
+    const request = ++suggestionsRequest;
+    suggestionsPending = true;
+    lastSuggestions = Date.now();
+    patchDiskScope({ suggestionsLoading: true, suggestionsError: '' });
+    try {
+      const result = await diskPost('disk-suggestions');
+      if (owner !== mountedPanel || request !== suggestionsRequest) return;
+      patchDiskScope({ suggestions: result.suggestions, suggestionsReady: true });
+      diskExec('applySuggestionFilters()');
+    } catch (error) {
+      if (owner === mountedPanel && request === suggestionsRequest) patchDiskScope({ suggestionsError: error.message });
+    } finally {
+      if (request === suggestionsRequest) {
+        suggestionsPending = false;
+        if (owner === mountedPanel) patchDiskScope({ suggestionsLoading: false });
+      }
+    }
+  }
+
+  async function loadHistory() {
+    const owner = mountedPanel;
+    if (!owner?.isConnected) return;
+    const request = ++historyRequest;
+    patchDiskScope({ historyError: '', historyLoading: true });
+    try {
+      const history = await diskPost('cleanup-stats');
+      if (owner === mountedPanel && request === historyRequest)
+        patchDiskScope({ history });
+    } catch (error) {
+      if (owner === mountedPanel && request === historyRequest)
+        patchDiskScope({ historyError: error.message });
+    } finally {
+      if (owner === mountedPanel && request === historyRequest) patchDiskScope({ historyLoading: false });
+    }
+  }
+
+  window.diskLoadHistory = loadHistory;
+  window.diskHistorySource = source => ({
+    'ai-worktrees': 'AI Worktrees',
+    'disk': 'Disk Usage',
+    'disk-tree': 'Disk Usage',
+    'cleanup': 'Quick Clean',
+    'schedule': 'Scheduled Cleanup',
+    'trash': 'Trash',
+  })[source] || source.replace(/(^|-)([a-z])/g, (match, prefix, letter) => (prefix ? ' ' : '') + letter.toUpperCase());
+
+  window.diskLoadSuggestions = () => loadSuggestions(true);
+  window.diskFormatBytes = fmtBytes;
+
+  window.diskFilterSuggestions = function(items, category, search, tool, age, minMB, order) {
+    const query = search.trim().toLowerCase();
+    const days = Number(age);
+    const minimum = Number(minMB) * 1e6;
+    const cutoff = Date.now() - days * 86_400_000;
+    const result = items.filter(item =>
+      (category === 'all' || category === item.category)
+      && (tool === 'all' || item.tool === tool)
+      && (!days || item.modifiedAt <= cutoff)
+      && (!minimum || item.sizeBytes >= minimum)
+      && (!query || [item.name, item.project, item.path, item.detail].some(value => value?.toLowerCase().includes(query))));
+    if (order === 'oldest') result.sort((a, b) => a.modifiedAt - b.modifiedAt);
+    else if (order === 'newest') result.sort((a, b) => b.modifiedAt - a.modifiedAt);
+    else result.sort((a, b) => (b.sizeBytes ?? -1) - (a.sizeBytes ?? -1) || a.modifiedAt - b.modifiedAt);
+    return result;
+  };
+
+  window.diskRemoveWorktrees = async function(paths, days) {
+    if (!paths.length || cleanupBusy || (window.__diskLiveScanning && !scanParameters.backgroundRefresh)) return;
+    cleanupBusy = true;
+    patchDiskScope({ cleanupBusy });
+    let attempted = false;
+    let removed = 0;
+    let removedBytes = 0;
+    let historyError = '';
+    const issues = [];
+    const shown = readDiskState('suggestions') || [];
+    const selected = new Set(paths);
+    const size = shown.reduce((total, item) => total + (selected.has(item.path) ? item.sizeBytes || 0 : 0), 0);
+    try {
+      const description = days ? ' Git rechecks for file changes in the last ' + days + (days === 1 ? ' day.' : ' days.') : '';
+      const confirmed = await window.nativeConfirm({
+        title: 'Remove ' + paths.length + (paths.length === 1 ? ' AI worktree?' : ' AI worktrees?'),
+        message: (size ? fmtBytes(size) + ' measured. ' : '') + 'Git permanently removes clean checkouts, including ignored files. Locked worktrees, local changes and detached commits without a branch or tag are kept.' + description,
+        confirmLabel: 'Remove permanently', destructive: true,
+      });
+      if (!confirmed) return;
+      attempted = true;
+      patchDiskScope({ cleanupIssues: [], cleanupMessage: 'Checking 0 of ' + paths.length + ' worktrees…' });
+      for (let offset = 0; offset < paths.length; offset += 8) {
+        const batch = paths.slice(offset, offset + 8);
+        const result = await diskPost('disk-remove-worktrees', { paths: batch, days: Number(days) });
+        const succeeded = result.outcomes.filter(item => item.removed).map(item => item.path);
+        removed += succeeded.length;
+        removedBytes += result.removedBytes || 0;
+        historyError ||= result.historyError || '';
+        for (const item of result.outcomes)
+          if (!item.removed) issues.push({ path: item.path, detail: item.skipped || item.failed || 'Could not remove worktree' });
+        updateAfterRemoval(succeeded);
+        if (succeeded.length) {
+          const gone = new Set(succeeded);
+          const suggestions = readDiskState('suggestions');
+          if (suggestions) {
+            patchDiskScope({ suggestions: suggestions.filter(item => !gone.has(item.path)) });
+            diskExec('applySuggestionFilters()');
+          }
+        }
+        patchDiskScope({ cleanupMessage: 'Checked ' + Math.min(offset + batch.length, paths.length) + ' of ' + paths.length + ' · ' + removed + ' removed' });
+      }
+      patchDiskScope({
+        cleanupMessage: removed + ' removed · ' + issues.length + ' kept'
+          + (removedBytes ? ' · ' + fmtBytes(removedBytes) + ' measured' : '') + (historyError ? '. ' + historyError : ''),
+        cleanupIssues: issues,
+      });
+      if (mountedPanel?.isConnected) diskExec('selectedSuggestions = []');
+    } catch (error) {
+      patchDiskScope({ cleanupMessage: removed + ' removed before cleanup stopped. ' + error.message, cleanupIssues: issues });
+    } finally {
+      cleanupBusy = false;
+      patchDiskScope({ cleanupBusy });
+      if (attempted) {
+        if (readDiskState('diskView') === 'cleanup') void loadSuggestions(true);
+        if (readDiskState('diskView') === 'history') void loadHistory();
+        void pollChanges();
+      }
+    }
+  };
+
+  diskPanelMount();
 })();

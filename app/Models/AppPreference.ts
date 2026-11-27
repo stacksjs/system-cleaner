@@ -24,7 +24,7 @@ export default defineModel({
   },
 
   attributes: {
-    /** Write each clean to `cleanup_runs`. Off, cleans happen and leave no row. */
+    /** Record app activity and measured cleanups in local history. */
     recordHistory: {
       order: 1,
       fillable: true,

@@ -371,6 +371,7 @@ const SOURCE_LABELS: Record<string, { label: string, icon: string }> = {
   'extensions': { label: 'Extensions', icon: 'i-f7-square-stack-3d-up-fill' },
   'privacy': { label: 'Privacy', icon: 'i-f7-eye-slash-fill' },
   'apps': { label: 'Installed Apps', icon: 'i-f7-xmark-square-fill' },
+  'ai-worktrees': { label: 'AI Worktrees', icon: 'i-f7-folder-fill' },
   'disk': { label: 'Disk Usage', icon: 'i-f7-chart-pie-fill' },
   'trash': { label: 'Trash', icon: 'i-f7-trash-fill' },
 }

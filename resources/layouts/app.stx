@@ -1039,7 +1039,7 @@ const localAgent = isLocalAgent()
     .ring-score { font-size: 20px; font-weight: 700; }
     .ring-label { font-size: 9px; }
 
-    .disk-layout { display: flex; height: 100%; min-height: 520px; gap: 0; }
+    .disk-layout { display: flex; flex-direction: column; height: 100%; min-height: 520px; }
     .disk-sidebar, .disk-inspector { display: flex; width: 240px; min-width: 240px; flex-direction: column; overflow: hidden; }
     .disk-sidebar { border-right: .5px solid var(--line); }
     .disk-inspector { border-left: .5px solid var(--line); }
@@ -1405,6 +1405,7 @@ useEventListener('mousedown', moveWindowFrom, { target: document })
 <script src="/auto-update.js"></script>
 <script src="/schedule-notice.js"></script>
 <script src="/hub-metrics.js"></script>
+<script src="/activity-visits.js"></script>
 <script src="/prefetch.js"></script>
 <!-- Wires the Settings panel above: Cmd+, from the menubar or the page, the
      profile chip in the top strip, and the controls inside it. -->
