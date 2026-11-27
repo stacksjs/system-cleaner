@@ -315,6 +315,16 @@ export const SECTIONS: Section[] = [
   },
 ]
 
+export const SETTINGS_PATH = '/app/settings'
+
+/** Command-number bindings follow the sidebar, including its utility rows. */
+export const SIDEBAR_SHORTCUTS = [
+  ...SECTIONS.map(({ label, href }) => ({ label, href })),
+  { label: 'Activity', href: '/app/activity' },
+  { label: 'Settings…', href: SETTINGS_PATH },
+  { label: 'Disk Usage', href: '/app/disk' },
+].map((screen, index) => ({ ...screen, key: String(index + 1) }))
+
 /**
  * The section a page belongs to, from the `nav` id its view declares.
  *

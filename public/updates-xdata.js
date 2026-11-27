@@ -1,4 +1,4 @@
-window.updatesXData = function () {
+window.updatesXData = function (lazy = false) {
   return {
     loading: true,
     fullScan: false,
@@ -40,7 +40,11 @@ window.updatesXData = function () {
     appFilter: 'all',
 
     init() {
-      this.loadUpdates(false, false)
+      if (!lazy || this.$el?.closest('[data-pane="software-update"]')?.hasAttribute('data-active')) {
+        this.loadUpdates(false, false)
+        return
+      }
+      document.addEventListener('systemcleaner:settings-software-update', () => this.loadUpdates(false, false), { once: true })
     },
 
     // When the machine was last scanned for everything that is not this app.

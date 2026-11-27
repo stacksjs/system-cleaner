@@ -1,56 +1,55 @@
-/**
- * Opening Settings, from the main window.
- *
- * Settings used to be a sheet drawn over the dashboard by this file. It is now
- * a window of its own — `/app/settings`, in `resources/views/app/settings.stx`
- * — because that is what Settings is on a Mac: its own window, opened by Cmd+,
- * and closed without disturbing what you were looking at. A sheet meant the app
- * could not be looked at while it was being configured, which is exactly when
- * you want to see what a setting changed.
- *
- * So what is left here is the opener, plus the half of the appearance work
- * that belongs to *this* window.
- *
- * Craft's bridge raises `craft:settings:open` when the application menu's
- * Settings item is picked, and `app-menu.ts` adds that item — so the menubar,
- * Cmd+, and the profile chip all arrive here as one event.
- */
+import { nativeWindow } from '@stacksjs/desktop/browser'
 import { openSettings } from '../lib/app-windows'
 import { watchAppearance } from '../lib/appearance'
+import { SETTINGS_PATH } from '../lib/sections'
+
+let warming: Promise<void> | undefined
+
+/** Fetch static Settings assets on the shared WebKit store while the dashboard is idle. */
+function warmSettings(): void {
+  if (warming || document.hidden || !nativeWindow.available) return
+  warming = (async () => {
+    const response = await fetch(SETTINGS_PATH)
+    if (!response.ok) return
+    const markup = new DOMParser().parseFromString(await response.text(), 'text/html')
+    const assets = new Set(
+      [...markup.querySelectorAll('link[rel="stylesheet"][href], script[src]')]
+        .map(node => node.getAttribute('href') || node.getAttribute('src') || '')
+        .filter(url => url.startsWith('/_stx/')),
+    )
+    await Promise.allSettled([...assets].map(async (url) => {
+      const response = await fetch(url)
+      if (response.ok) await response.arrayBuffer()
+    }))
+  })().catch(() => { warming = undefined })
+}
 
 function wire(): void {
-  // Delegated, because the chip that opens Settings lives in the top strip and
-  // this script runs before nothing in particular — a delegated listener
-  // cannot go stale across an SPA navigation.
   document.addEventListener('click', (event) => {
     const target = event.target
-    if (!(target instanceof Element))
-      return
-    if (target.closest('[data-open-settings]')) {
+    if (target instanceof Element && target.closest('[data-open-settings]')) {
       event.preventDefault()
-      openSettings()
+      void openSettings()
     }
   })
 
-  // Craft's Settings item, this app's menu item, and the profile chip all land
-  // here.
   window.addEventListener('craft:settings:open', () => { void openSettings() })
-
-  // Cmd+, from the page as well as from the menubar. Inside the window the
-  // keystroke reaches the web view whenever the menu item is not what handled
-  // it, and in a browser there is no menubar to carry it at all.
   document.addEventListener('keydown', (event) => {
-    if (event.key === ',' && event.metaKey && !event.shiftKey && !event.altKey) {
+    if (event.key === ',' && event.metaKey && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.defaultPrevented) {
       event.preventDefault()
-      openSettings()
+      if (!event.repeat) void openSettings()
     }
   })
 
   watchAppearance()
 
+  if (typeof window.requestIdleCallback === 'function')
+    window.requestIdleCallback(warmSettings, { timeout: 2500 })
+  else setTimeout(warmSettings, 750)
+  document.addEventListener('visibilitychange', warmSettings)
 }
 
 if (document.readyState === 'loading')
-  document.addEventListener('DOMContentLoaded', wire)
+  document.addEventListener('DOMContentLoaded', wire, { once: true })
 else
   wire()

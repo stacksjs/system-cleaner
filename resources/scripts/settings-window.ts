@@ -20,6 +20,7 @@ import { nativeAutoLaunch, nativeWindow } from '@stacksjs/desktop/browser'
 
 import { COLOR_MODES, currentColorMode, setColorMode, watchAppearance } from '../lib/appearance'
 import type { ColorMode } from '../lib/appearance'
+import { SETTINGS_CHANNEL } from '../lib/app-windows'
 import { PREF_DEFAULTS, PREFS_KEY, readPref } from '../lib/preferences'
 
 /** Which pane was open when Settings was last closed. */
@@ -116,10 +117,14 @@ function showPane(id: string): void {
   // The list rows only. The alert row above them points at the same pane, and
   // lighting both up shows one selection twice — the row in the list is where
   // that pane lives, and the alert is a shortcut to it.
-  for (const row of Array.from(document.querySelectorAll<HTMLElement>('.set-row[data-pane-link]')))
-    row.toggleAttribute('data-active', row.getAttribute('data-pane-link') === id)
+  for (const row of document.querySelectorAll<HTMLElement>('.set-row[data-pane-link]')) {
+    const selected = row.getAttribute('data-pane-link') === id
+    row.toggleAttribute('data-active', selected)
+    if (selected) row.setAttribute('aria-current', 'page')
+    else row.removeAttribute('aria-current')
+  }
 
-  const title = document.querySelector<HTMLElement>('[data-pane-title]')
+  const title = document.querySelector<HTMLElement>('.set-pane-title')
   if (title)
     title.textContent = shown.getAttribute('data-pane-title') || id
 
@@ -131,8 +136,13 @@ function showPane(id: string): void {
     localStorage.setItem(LAST_PANE_KEY, id)
   }
   catch {
-    // The window will open on General next time. Not worth saying anything.
+    // Fall back to General on the next cold open.
   }
+
+  // Show the pane before kicking off its data work.
+  requestAnimationFrame(() => {
+    if (shown.hasAttribute('data-active')) loadPane(id)
+  })
 }
 
 function goTo(id: string): void {
@@ -170,7 +180,7 @@ function firstPane(): string {
     return 'software-update'
   try {
     const stored = localStorage.getItem(LAST_PANE_KEY)
-    if (stored && document.querySelector(`[data-pane="${stored}"]`))
+    if (stored && panes().some(pane => pane.dataset.pane === stored))
       return stored
   }
   catch {
@@ -332,6 +342,7 @@ function loadCleaningCounts(): void {
  */
 interface SchedulePayload {
   success?: boolean
+  error?: string
   spec?: { enabled?: boolean, frequency?: string, hour?: number, minute?: number, weekday?: number, day?: number }
   targetIds?: string[]
   includePrivacy?: boolean
@@ -343,6 +354,13 @@ interface SchedulePayload {
 }
 
 let schedule: SchedulePayload = {}
+let scheduleBusy = false
+
+function syncScheduleControls(): void {
+  const controls = document.querySelectorAll<HTMLButtonElement | HTMLSelectElement>('[data-pane="schedule"] :is([data-switch], [data-select])')
+  for (const control of controls)
+    control.disabled = scheduleBusy || !schedule.success
+}
 
 function paintSchedule(): void {
   const spec = schedule.spec || {}
@@ -364,11 +382,18 @@ function paintSchedule(): void {
 }
 
 function loadSchedule(): void {
+  if (scheduleBusy) return
+  scheduleBusy = true
+  syncScheduleControls()
   void post<SchedulePayload>('/schedule').then((d) => {
-    if (!d?.success)
-      return
-    schedule = d
-    paintSchedule()
+    if (d?.success) {
+      schedule = d
+      paintSchedule()
+    }
+    else if (!schedule.success) setValue('scheduleDescription', 'Could not load schedule')
+  }).finally(() => {
+    scheduleBusy = false
+    syncScheduleControls()
   })
 }
 
@@ -381,6 +406,10 @@ function loadSchedule(): void {
  * that is not running.
  */
 function saveSchedule(patch: Partial<SchedulePayload>): void {
+  if (scheduleBusy || !schedule.success) return
+  scheduleBusy = true
+  syncScheduleControls()
+  setValue('scheduleSaveError', '')
   const next: SchedulePayload = {
     ...schedule,
     ...patch,
@@ -393,8 +422,14 @@ function saveSchedule(patch: Partial<SchedulePayload>): void {
     includePrivacy: next.includePrivacy === true,
     emptyTrash: next.emptyTrash === true,
   }).then((d) => {
-    schedule = d?.success ? d : next
+    // An installation failure can still return the schedule that was saved.
+    if (d?.spec) schedule = { ...d, success: true }
     paintSchedule()
+    if (!d?.success)
+      setValue('scheduleSaveError', d?.error || 'Could not save the schedule. Try again.')
+  }).finally(() => {
+    scheduleBusy = false
+    syncScheduleControls()
   })
 }
 
@@ -516,7 +551,18 @@ function paintAll(): void {
   for (const key of Object.keys(PREF_DEFAULTS))
     syncSwitch(key, readPref(key))
   syncSwitch('analytics', false)
-  void syncOpenAtLogin()
+}
+
+function loadPane(id: string): void {
+  if (id === 'general') void syncOpenAtLogin()
+  if (id === 'cleaning') {
+    loadAppPreferences()
+    loadCleaningCounts()
+  }
+  if (id === 'schedule') loadSchedule()
+  if (id === 'storage' || id === 'about') loadMachine()
+  if (id === 'about') loadVersion()
+  if (id === 'software-update') document.dispatchEvent(new Event('systemcleaner:settings-software-update'))
 }
 
 function handleAction(action: string): void {
@@ -681,17 +727,24 @@ function wire(): void {
   paintAll()
   goTo(firstPane())
 
-  loadAccount()
-  loadUpdateCount()
-  loadCleaningCounts()
-  loadSchedule()
-  loadAppPreferences()
-  loadMachine()
-  loadVersion()
+  if (typeof BroadcastChannel === 'function') {
+    const channel = new BroadcastChannel(SETTINGS_CHANNEL)
+    channel.addEventListener('message', (event) => {
+      if (event.data === 'software-update') goTo('software-update')
+    })
+  }
 
-  // The count is the one thing here that changes while the window is open —
-  // a download finishing, a check completing in the other window.
-  window.setInterval(loadUpdateCount, 60_000)
+  const loadSidebar = () => {
+    loadAccount()
+    loadUpdateCount()
+  }
+  if (typeof window.requestIdleCallback === 'function')
+    window.requestIdleCallback(loadSidebar, { timeout: 1200 })
+  else setTimeout(loadSidebar, 200)
+
+  window.setInterval(() => {
+    if (!document.hidden) loadUpdateCount()
+  }, 60_000)
 }
 
 if (document.readyState === 'loading')

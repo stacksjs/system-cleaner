@@ -734,7 +734,7 @@
         title: 'Deleting “' + name + '”…',
         finished: '“' + name + '” deleted',
         target: name,
-      }, () => diskPost('delete-path', { path }));
+      }, async () => ({ ...await diskPost('delete-path', { path }), succeeded: [path] }));
       updateAfterRemoval([path]);
     } catch (_) {
     } finally {
@@ -832,13 +832,14 @@
       attempted = true;
       await window.trackRemoval({
         title: 'Checking and removing worktrees…',
-        finished: 'Worktree cleanup complete',
+        finished: 'AI worktree cleanup finished',
         target: 'Worktree Cleanup',
         total: paths.length,
       }, async advance => {
         const removed = [];
         const skipped = [];
         const failed = [];
+        let measuredBytes = 0;
         let historyError = '';
         let error = '';
         for (let offset = 0; offset < paths.length; offset += 8) {
@@ -849,6 +850,7 @@
 
           const succeeded = result.outcomes.filter(item => item.removed).map(item => item.path);
           removed.push(...succeeded);
+          measuredBytes += result.removedBytes || 0;
           historyError ||= result.historyError || '';
           for (const item of result.outcomes) {
             if (item.failed) failed.push({ path: item.path, error: item.failed });
@@ -867,7 +869,7 @@
           }
           advance(offset + batch.length);
         }
-        return { succeeded: removed, skipped, failed, error, historyError };
+        return { succeeded: removed, skipped, failed, error, historyError, measuredBytes };
       });
     } catch (_) {
     } finally {

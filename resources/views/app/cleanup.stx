@@ -12,6 +12,7 @@ function esc(str) { return escapeHtml(str || '') }
   cleaning: {},
   cleaningBatch: false,
   emptyingTrash: false,
+  scanPending: false,
   toasts: [],
   toastId: 0,
   cleanCategories: [],
@@ -413,6 +414,7 @@ function scanCleanupSizes(force) {
   else if (window._cleanupScanPromise) return;
 
   var gen = window._cleanupScanGen || 0;
+  _exec('scanPending = true');
 
   // Run scan detached so navigation doesn't kill it
   var pending = null;
@@ -438,6 +440,8 @@ function scanCleanupSizes(force) {
       totalEl.classList.remove('is-scanning');
     }
     _exec("toast('Scan failed: " + (err && err.message || 'network').replace(/'/g, "\\'") + "', 'error')");
+  }).finally(function() {
+    if (gen === (window._cleanupScanGen || 0) && !window._cleanupScanPromise) _exec('scanPending = false');
   });
   window._cleanupScanPromise = pending;
 }

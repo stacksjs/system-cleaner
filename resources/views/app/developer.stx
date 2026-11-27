@@ -100,8 +100,9 @@
       <button class='btn btn-danger' x-cloak x-show='selected.length > 0' :disabled='cleaningBatch || Object.keys(cleaning).length > 0' onclick='doCleanSelected()'>
         Clean Selected (<span x-text='selected.length'>0</span>) &middot; <span x-text='selectedFormatted()'>0 B</span>
       </button>
-      <button class='btn btn-icon btn-sm' style='margin-left: auto;' onclick='scanArtifacts(true)'>
-        <span class='i-f7-arrow-clockwise' aria-hidden='true'></span>
+      <button class='btn btn-icon btn-sm' data-rescan style='margin-left: auto;' onclick='scanArtifacts(true)'
+        :disabled='cleaningBatch || Object.keys(cleaning).length > 0'>
+        <span class='i-f7-arrow-2-circlepath rescan-icon' aria-hidden='true'></span>
         Rescan
       </button>
     </div>

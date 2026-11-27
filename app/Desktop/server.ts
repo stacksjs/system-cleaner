@@ -206,9 +206,11 @@ export async function startAgentServer(options: AgentServerOptions) {
       return new Response(Bun.file(file), {
         headers: {
           'Content-Type': MIME[path.extname(file).toLowerCase()] ?? 'application/octet-stream',
-          // The payload ships inside the bundle and changes only when the app
-          // is replaced, so revalidation buys nothing and costs a round trip.
-          'Cache-Control': 'no-cache',
+          // STX names its generated CSS and scripts by content hash. The
+          // warmed assets can be reused across windows and bundle updates.
+          'Cache-Control': /^\/_stx\/[\w-]+\.[a-f0-9]{8}\.(?:js|css)$/.test(url.pathname)
+            ? 'private, max-age=31536000, immutable'
+            : 'no-cache',
         },
       })
     },

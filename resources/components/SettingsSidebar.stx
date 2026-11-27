@@ -99,6 +99,7 @@ export const groups = [
             type='button'
             data-pane-link='{{ item.id }}'
             data-search-terms='{{ item.label }}'
+            @if(item.id === 'general')data-active aria-current="page"@endif
           >
             <span class='set-tile' data-tone='{{ item.tone }}' aria-hidden='true'>
               <span class='{{ item.icon }}'></span>

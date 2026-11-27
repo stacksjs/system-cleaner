@@ -41,8 +41,10 @@
       </button>
       <button class='btn btn-danger btn-sm' x-show='selected.length > 0' x-cloak @click='deletePicked()' :disabled='busy'
         x-text="'Move ' + selected.length + ' to Trash'"></button>
-      <button class='btn btn-sm' data-rescan @click='scan()' :disabled='scanning'
-        x-text="scanning ? 'Scanning…' : (scanned ? 'Rescan' : 'Scan')">Scan</button>
+      <button class='btn btn-icon btn-sm' data-rescan @click='scan()' :disabled='scanning' :aria-busy='scanning'>
+        <span class='i-f7-arrow-2-circlepath rescan-icon' aria-hidden='true'></span>
+        <span x-text="scanning ? 'Scanning…' : (scanned ? 'Rescan' : 'Scan')">Scan</span>
+      </button>
   <button class='btn btn-sm' type='button' data-cancel-scan x-show='scanning' x-cloak
     @click='cancelScan()' :disabled='cancelling || !scanId' x-text="cancelling ? 'Cancelling…' : 'Cancel Scan'">Cancel Scan</button>
     </div>

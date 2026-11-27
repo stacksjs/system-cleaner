@@ -23,6 +23,7 @@ export const PREF_DEFAULTS: Record<string, boolean> = {
   autoCheckUpdates: true,
   confirmDeletes: true,
   notifyOnFinish: true,
+  notifyOnCleanup: true,
   notifyOnSchedule: true,
   notifyOnUpdate: true,
 }

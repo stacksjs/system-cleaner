@@ -8,7 +8,10 @@
       </div>
       <div class='flex-1 min-w-0 removal-body'>
         <div>
-          <h2 x-text='headline(entry)'></h2>
+          <h2 class='removal-heading'>
+            <span class='removal-pulse' x-show="entry.state === 'running'" aria-hidden='true'></span>
+            <span x-text='headline(entry)'></span>
+          </h2>
           <p x-text='description(entry)'></p>
         </div>
         <div class='removal-progress' x-show="entry.state === 'running'">

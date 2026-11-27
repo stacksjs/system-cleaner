@@ -334,6 +334,21 @@ async function notifyIfAway(options: AwayNotice): Promise<void> {
   }
 }
 
+let cleanupAuthorization: Promise<boolean> | undefined
+
+/** Completion feedback belongs to Notification Center, even in the foreground. */
+async function notifyCleanup(title: string, body: string): Promise<void> {
+  if (!readPref('notifyOnCleanup')) return
+  try {
+    cleanupAuthorization ??= notifications.requestPermission().finally(() => {
+      cleanupAuthorization = undefined
+    })
+    if (await cleanupAuthorization && readPref('notifyOnCleanup'))
+      await notifications.show({ title, body })
+  }
+  catch { /* The system controls notification permissions. */ }
+}
+
 async function revealPath(path: string): Promise<void> {
   try {
     const response = await fetch('/api/reveal-in-finder', {
@@ -356,6 +371,7 @@ declare global {
     nativeChooseFolder: typeof nativeChooseFolder
     nativeChooseItems: typeof nativeChooseItems
     notifyIfAway: typeof notifyIfAway
+    notifyCleanup: typeof notifyCleanup
   }
 }
 
@@ -366,3 +382,4 @@ window.nativeCopy = nativeCopy
 window.nativeChooseFolder = nativeChooseFolder
 window.nativeChooseItems = nativeChooseItems
 window.notifyIfAway = notifyIfAway
+window.notifyCleanup = notifyCleanup

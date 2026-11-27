@@ -22,6 +22,7 @@ interface RemovalResult {
   error?: string
   freedBytes?: number
   freedFormatted?: string
+  measuredBytes?: number
   measured?: boolean
   heldOpen?: boolean
   keptCookies?: number
@@ -77,12 +78,14 @@ function summarize(result: RemovalResult, entry: RemovalEntry) {
   if (entry.trash && madeChanges) detail.push('Space is reclaimed when you empty the Trash.')
   else if (result.heldOpen) detail.push('Space will be reclaimed when apps close the files.')
   else if (result.freedBytes && result.measured !== false) detail.push((result.freedFormatted || formatSize(result.freedBytes)) + ' freed')
+  else if (result.measuredBytes) detail.push(formatSize(result.measuredBytes) + ' measured')
 
   return {
     state: isIncomplete ? (madeChanges || result.historyError || (skipped.length > 0 && !failed.length && !result.error) ? 'partial' : 'failed') : 'complete',
     detail: detail.join(' · ') || result.error || entry.target,
     issues: [...new Set([result.error, result.historyError, ...failed.map(issueText), ...skipped.map(issueText)].filter((issue): issue is string => Boolean(issue)))],
-  } satisfies Pick<RemovalEntry, 'state' | 'detail' | 'issues'>
+    madeChanges,
+  } satisfies Pick<RemovalEntry, 'state' | 'detail' | 'issues'> & { madeChanges: boolean }
 }
 
 async function trackRemoval<T extends RemovalResult>(options: RemovalOptions, run: (advance: (done: number) => void) => Promise<T>): Promise<T> {
@@ -90,7 +93,13 @@ async function trackRemoval<T extends RemovalResult>(options: RemovalOptions, ru
   publish(entry)
   try {
     const result = await run(done => publish({ ...entry, done }))
-    publish({ ...entry, ...summarize(result, entry) })
+    const { madeChanges, ...summary } = summarize(result, entry)
+    publish({ ...entry, ...summary })
+    if (madeChanges) {
+      const title = summary.state === 'complete' ? entry.finished : 'Cleanup finished with issues'
+      const detail = summary.state === 'complete' ? summary.detail : `${entry.target} · ${summary.detail}`
+      void window.notifyCleanup(title, detail)
+    }
     return result
   }
   catch (error) {

@@ -42,9 +42,10 @@
       <span class='i-f7-trash-fill' aria-hidden='true'></span>
       Empty Trash
     </button>
-    <button class='btn btn-icon btn-sm' data-rescan style='margin-left: auto;' onclick='scanCleanupSizes(true)'>
-      <span class='i-f7-arrow-clockwise' aria-hidden='true'></span>
-      Rescan
+    <button class='btn btn-icon btn-sm' data-rescan style='margin-left: auto;' onclick='scanCleanupSizes(true)'
+      :aria-busy='scanPending' :disabled='scanPending || cleaningBatch || emptyingTrash || Object.keys(cleaning).length > 0'>
+      <span class='i-f7-arrow-2-circlepath rescan-icon' aria-hidden='true'></span>
+      <span x-text="scanPending ? 'Scanning…' : 'Rescan'">Rescan</span>
     </button>
   </div>
 

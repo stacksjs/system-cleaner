@@ -127,7 +127,7 @@ const localAgent = isLocalAgent()
        leaves it pale blue, which reads as a disabled control rather than an
        inactive window — Finder's icons go grey at full strength. So the rail
        drops to the neutral it would have had if it had never been tinted. */
-    :root[data-craft-window-active='false'] .rail-item[data-active] {
+    :root[data-craft-window-active='false'] :is(.rail-item, .side-utility, .side-disk)[data-active] {
       background: var(--side-hover);
     }
     /* Paused when the window is in the background: an idle window should
@@ -390,13 +390,11 @@ const localAgent = isLocalAgent()
     .app-body:has(.topnav[data-tone]:not([data-tone=''])) {
       --side-ink: #fff; --side-dim: rgb(255 255 255 / .62); --side-line: rgb(255 255 255 / .12);
       --side-hover: rgb(255 255 255 / .1); --side-active: rgb(255 255 255 / .2);
-      background:
-        /* Fine grain over the colour: large dark gradients band visibly on a
-           Mac display, and noise at this strength dithers them. */
-        url('/images/grain.svg'),
-        radial-gradient(70% 60% at 82% -8%, color-mix(in srgb, var(--tone-glow) 50%, transparent), transparent 62%),
-        radial-gradient(60% 55% at -6% 108%, color-mix(in srgb, var(--tone-glow) 26%, transparent), transparent 70%),
-        linear-gradient(155deg, var(--tone-bg1), var(--tone-bg2) 55%, var(--tone-bg3));
+      background-color: var(--tone-bg2);
+      background-image:
+        radial-gradient(ellipse 70% 65% at 82% -8%, color-mix(in srgb, var(--tone-glow) 38%, transparent), transparent),
+        radial-gradient(ellipse 62% 57% at -6% 108%, color-mix(in srgb, var(--tone-glow) 24%, transparent), transparent),
+        linear-gradient(155deg in oklab, var(--tone-bg1), var(--tone-bg2) 56%, var(--tone-bg3));
       color: #fff;
     }
 
@@ -451,20 +449,35 @@ const localAgent = isLocalAgent()
     .side-update-dot { width: 8px; height: 8px; margin-left: auto; flex: none; border-radius: 50%; background: #ff9f0a; box-shadow: 0 0 0 2px color-mix(in srgb, #ff9f0a 30%, transparent); }
     .side-update-dot[hidden] { display: none; }
 
-    .rail-foot { display: flex; flex-direction: column; gap: 3px; padding-top: var(--space-3); border-top: 1px solid var(--side-line); }
+    .rail-foot, .rail-utilities { display: flex; flex-direction: column; gap: 3px; }
+    .rail-disk { margin-top: var(--space-1); padding-top: var(--space-2); border-top: 1px solid var(--side-line); }
+    .side-shortcut {
+      position: absolute; inset-inline-end: 9px; top: 50%; translate: 0 -50%;
+      min-width: 29px; padding: 2px 4px; border: 1px solid var(--side-line); border-radius: 5px;
+      background: var(--side-hover); color: var(--side-ink); pointer-events: none;
+      font-family: inherit; font-size: 11px; font-weight: 600; line-height: 1.2; text-align: center;
+      opacity: 0; visibility: hidden; transition: opacity 100ms ease;
+    }
+    .rail[data-shortcuts-visible] .side-shortcut { opacity: 1; visibility: visible; }
+    .rail[data-shortcuts-visible] :is(.side-badge, .side-update-dot, .side-disk-free),
+    .rail[data-shortcuts-visible] .rail-item[data-scanning]::after { visibility: hidden; }
+    .rail[data-shortcuts-visible] .side-label { padding-inline-end: 30px; }
+    .side-disk .side-shortcut { top: 16px; }
+    @media (prefers-reduced-motion: reduce) { .side-shortcut { transition: none; } }
     .side-disk {
-      display: block; margin-bottom: var(--space-1); padding: 10px 10px 11px;
+      position: relative; display: block; margin-bottom: var(--space-1); padding: 10px 10px 11px;
       border-radius: 12px; background: var(--side-hover); color: var(--side-ink);
       text-decoration: none; cursor: default;
     }
-    .side-disk:hover { background: var(--side-active); }
+    .side-disk:hover, .side-disk[data-active] { background: var(--side-active); }
     .side-disk-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); font-size: 11.5px; }
     .side-disk-name { font-weight: 600; }
     .side-disk-free { color: var(--side-dim); font-variant-numeric: tabular-nums; }
     .side-disk-bar { display: block; height: 5px; margin-top: var(--space-2); overflow: hidden; border-radius: 3px; background: var(--side-line); }
     .side-disk-bar > span { display: block; width: var(--pct, 0%); height: 100%; border-radius: 3px; background: var(--side-ink); transition: width .9s cubic-bezier(.2, .8, .2, 1); }
     .side-utility { min-height: 34px; color: var(--side-dim); }
-    .side-utility:hover { color: var(--side-ink); }
+    .side-utility:hover, .side-utility[data-active] { color: var(--side-ink); }
+    .side-utility[data-active] { background: var(--side-active); font-weight: 600; }
     .side-utility-icon { display: grid; width: 28px; flex: none; place-items: center; }
     .side-utility-icon > span { width: 15px; height: 15px; }
     .side-local {
@@ -520,8 +533,13 @@ const localAgent = isLocalAgent()
        inside, drawn entirely in CSS so it follows the tone. */
     .hub-orb { position: relative; display: grid; width: 260px; height: 260px; place-items: center; }
     .hub-orb-glow {
-      position: absolute; inset: 12%; border-radius: 50%;
-      background: var(--tone-glow); filter: blur(52px); opacity: .42;
+      position: absolute; inset: -38%; pointer-events: none;
+      /* Fade to zero inside the layer so WebKit has no blur edge to clip. */
+      background: radial-gradient(closest-side,
+        color-mix(in srgb, var(--tone-glow) 37%, transparent) 18%,
+        color-mix(in srgb, var(--tone-glow) 14%, transparent) 56%,
+        color-mix(in srgb, var(--tone-glow) 4%, transparent) 73%,
+        transparent 90%);
     }
     .hub-orb-body, .hub-module-orb {
       position: relative; display: grid; place-items: center; border-radius: 50%;
@@ -955,6 +973,11 @@ const localAgent = isLocalAgent()
     .btn-sm { padding: 3px 9px; font-size: 11px; }
     .btn-icon { display: inline-flex; align-items: center; gap: var(--space-1); }
     .btn-icon > span[class*='i-f7-'] { width: 12px; height: 12px; }
+    .btn-icon > span.rescan-icon { display: block; flex: none; width: 14px; height: 14px; }
+    [aria-busy='true'] > .rescan-icon { animation: disk-live-spin 1.2s linear infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      [aria-busy='true'] > .rescan-icon { animation: none; }
+    }
     .toast-glyph { width: 14px; height: 14px; flex-shrink: 0; }
     .view-link { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--accent); font-size: 13px; }
     .view-link > span { width: 13px; height: 13px; }
@@ -1030,7 +1053,7 @@ const localAgent = isLocalAgent()
     .panel { display: none; }
     .panel.active { display: block; }
 
-    .toast-area { position: fixed; top: 24px; right: 24px; z-index: 100; display: flex; flex-direction: column; gap: var(--space-tight); }
+    .toast-area { position: fixed; inset: auto 20px 20px auto; z-index: 100; display: flex; flex-direction: column; gap: var(--space-tight); max-width: min(380px, calc(100vw - 40px)); pointer-events: none; }
     .toast { display: flex; align-items: center; gap: var(--space-tight); padding: var(--space-3) var(--space-4); border: .5px solid var(--line); border-radius: 9px; background: color-mix(in srgb, var(--surface) 90%, transparent); box-shadow: var(--shadow); backdrop-filter: blur(20px); font-size: 12px; font-weight: 500; animation: toastIn .25s ease, toastOut .25s ease 2.5s forwards; }
     @keyframes toastIn { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
     @keyframes toastOut { to { opacity: 0; transform: translateX(30px); } }

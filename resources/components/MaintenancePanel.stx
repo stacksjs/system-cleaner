@@ -38,7 +38,7 @@
       <span class='tbl-title'>Housekeeping</span>
       <span class='tbl-count'>small sweeps, run on demand</span>
     </div>
-    <button class='btn btn-sm' data-rescan @click='refreshJunk()' :disabled='junkLoading'>Rescan</button>
+    <button class='btn btn-icon btn-sm' data-rescan @click='refreshJunk()' :disabled='junkLoading'><span class='i-f7-arrow-2-circlepath rescan-icon' aria-hidden='true'></span>Rescan</button>
   </div>
   <table>
     <tbody>
@@ -90,7 +90,7 @@
         x-text="snapSelected.length === deletableSnaps().length ? 'Select None' : 'Select All'">Select All</button>
       <button class='btn btn-danger btn-sm' x-show='snapSelected.length > 0' x-cloak @click='deleteSnaps()' :disabled='snapBusy'
         x-text="'Delete ' + snapSelected.length"></button>
-      <button class='btn btn-sm' data-rescan @click='refreshSnapshots()' :disabled='snapLoading'>Rescan</button>
+      <button class='btn btn-icon btn-sm' data-rescan @click='refreshSnapshots()' :disabled='snapLoading'><span class='i-f7-arrow-2-circlepath rescan-icon' aria-hidden='true'></span>Rescan</button>
     </div>
   </div>
 

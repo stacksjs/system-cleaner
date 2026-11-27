@@ -14,12 +14,19 @@
 // id, which lights the section holding it. SPA navigations only swap
 // `[data-stx-content]` and leave this mounted, so the client block below
 // re-syncs the selection from the URL on every route change.
-const { SECTIONS, sectionFor } = require('~/resources/lib/sections')
+const { SECTIONS, SIDEBAR_SHORTCUTS, SETTINGS_PATH, sectionFor } = require('~/resources/lib/sections')
 
 const current = sectionFor($props.active || '')
 export const activeSection = current ? current.section.id : ''
+export const activeTool = current?.tool?.id || ''
+
+const shortcut = href => SIDEBAR_SHORTCUTS.find(screen => screen.href === href)?.key
+export const settingsShortcut = shortcut(SETTINGS_PATH)
+export const activityShortcut = shortcut('/app/activity')
+export const diskShortcut = shortcut('/app/disk')
 
 export const rows = SECTIONS.map(section => ({
+  shortcut: shortcut(section.href),
   id: section.id,
   label: section.label,
   href: section.href,
@@ -56,12 +63,20 @@ function syncActive(): void {
   }
 
   for (const item of items) {
-    const selected = item === best
-    item.toggleAttribute('data-active', selected)
-    if (selected)
+    item.toggleAttribute('data-active', item === best)
+    if (item.pathname === path)
       item.setAttribute('aria-current', 'page')
     else
       item.removeAttribute('aria-current')
+  }
+
+  for (const link of Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-rail-direct]'))) {
+    const current = link.pathname === path
+    link.toggleAttribute('data-active', current)
+    if (current)
+      link.setAttribute('aria-current', 'page')
+    else
+      link.removeAttribute('aria-current')
   }
 }
 
@@ -118,14 +133,16 @@ useIntervalFn(syncScanning, 2000, { immediate: true })
             data-rail-routes="{{ row.routes }}"
             data-rail-scans="{{ row.scans }}"
             href="{{ row.href }}"
+            aria-keyshortcuts="Meta+{{ row.shortcut }}"
             data-stx-link
-            @if(activeSection === row.id)data-active aria-current="page"@endif
+            @if(activeSection === row.id)data-active @if(!activeTool)aria-current="page"@endif @endif
           >
             <span class="side-tile" aria-hidden="true"><span class="{{ row.icon }}"></span></span>
             <span class="side-label">{{ row.label }}</span>
             @if(row.id === 'apps')
               <span class="side-badge" data-updates-badge hidden></span>
             @endif
+            <kbd class="side-shortcut" aria-hidden="true">⌘{{ row.shortcut }}</kbd>
           </a>
         @endforeach
       </div>
@@ -133,23 +150,31 @@ useIntervalFn(syncScanning, 2000, { immediate: true })
   </div>
 
   <div class="rail-foot">
-    <!-- The one figure worth carrying everywhere: how full the disk is. -->
-    <a class="side-disk" href="/app/disk" data-stx-link aria-label="Disk Usage">
-      <span class="side-disk-head">
-        <span class="side-disk-name">Startup disk</span>
-        <span class="side-disk-free" data-metric="disk-free" data-metric-template="{value} free">&hellip;</span>
-      </span>
-      <span class="side-disk-bar"><span data-metric="disk-pct" data-metric-style="--pct"></span></span>
-    </a>
-    <a class="side-row side-utility" href="/app/activity" data-stx-link>
-      <span class="side-utility-icon" aria-hidden="true"><span class="i-f7-clock-fill"></span></span>
-      <span class="side-label">Activity</span>
-    </a>
-    <button class="side-row side-utility" type="button" data-open-settings>
-      <span class="side-utility-icon" aria-hidden="true"><span class="i-f7-gear-alt-fill"></span></span>
-      <span class="side-label">Settings</span>
-      <span class="side-update-dot" data-self-update-dot hidden aria-label="Update available"></span>
-    </button>
+    <div class="rail-utilities">
+      <a class="side-row side-utility" href="/app/activity" data-stx-link data-rail-direct aria-keyshortcuts="Meta+{{ activityShortcut }}"
+        @if(activeTool === 'activity')data-active aria-current="page"@endif>
+        <span class="side-utility-icon" aria-hidden="true"><span class="i-f7-clock-fill"></span></span>
+        <span class="side-label">Activity</span>
+        <kbd class="side-shortcut" aria-hidden="true">⌘{{ activityShortcut }}</kbd>
+      </a>
+      <button class="side-row side-utility" type="button" data-open-settings aria-keyshortcuts="Meta+{{ settingsShortcut }} Meta+,">
+        <span class="side-utility-icon" aria-hidden="true"><span class="i-f7-gear-alt-fill"></span></span>
+        <span class="side-label">Settings</span>
+        <span class="side-update-dot" data-self-update-dot hidden aria-label="Update available"></span>
+        <kbd class="side-shortcut" aria-hidden="true">⌘{{ settingsShortcut }}</kbd>
+      </button>
+    </div>
+    <div class="rail-disk">
+      <a class="side-disk" href="/app/disk" data-stx-link data-rail-direct aria-label="Disk Usage" aria-keyshortcuts="Meta+{{ diskShortcut }}"
+        @if(activeTool === 'disk')data-active aria-current="page"@endif>
+        <span class="side-disk-head">
+          <span class="side-disk-name">Startup disk</span>
+          <span class="side-disk-free" data-metric="disk-free" data-metric-template="{value} free">&hellip;</span>
+        </span>
+        <span class="side-disk-bar"><span data-metric="disk-pct" data-metric-style="--pct"></span></span>
+        <kbd class="side-shortcut" aria-hidden="true">⌘{{ diskShortcut }}</kbd>
+      </a>
+    </div>
     <span class="side-local" title="Every scan and every clean runs on this Mac. Nothing is uploaded.">
       <span class="i-f7-lock-fill" aria-hidden="true"></span>
       <span>Everything stays on this Mac</span>

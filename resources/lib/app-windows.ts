@@ -1,7 +1,9 @@
 import { nativeWindow } from '@stacksjs/desktop/browser'
+import { SETTINGS_PATH } from './sections'
 
 /** The Settings window's identity. Craft keys existing windows on it. */
 const SETTINGS_WINDOW = 'settings'
+export const SETTINGS_CHANNEL = 'systemcleaner-settings'
 
 /**
  * Open Settings, or bring it forward.
@@ -18,7 +20,7 @@ const SETTINGS_WINDOW = 'settings'
  * there and needs no branch here.
  */
 export function openSettings(pane?: 'software-update'): Promise<{ name: string }> {
-  const url = new URL('/app/settings', window.location.origin)
+  const url = new URL(SETTINGS_PATH, window.location.origin)
   if (pane) url.searchParams.set('pane', pane)
   return nativeWindow.open({
     name: SETTINGS_WINDOW,
@@ -57,13 +59,22 @@ export function openSettings(pane?: 'software-update'): Promise<{ name: string }
     // write every preference somewhere only it can read, and lose them on
     // quit — which is exactly what it did.
     persistentStorage: true,
+  }).then((opened) => {
+    // For a retained window, Craft raises the existing page and ignores the
+    // URL. A new window reads the same pane from its query string.
+    if (pane && typeof BroadcastChannel === 'function') {
+      const channel = new BroadcastChannel(SETTINGS_CHANNEL)
+      channel.postMessage(pane)
+      channel.close()
+    }
+    return opened
   })
 }
 
 /** Keep one full app window, including its scans and navigation, behind the tray. */
-export function openDashboard(): Promise<{ name: string }> {
+export function openDashboard(href = '/app'): Promise<{ name: string }> {
   return nativeWindow.open({
-    name: 'dashboard', title: 'SystemCleaner', url: new URL('/app', location.origin).toString(),
+    name: 'dashboard', title: 'SystemCleaner', url: new URL(href, location.origin).toString(),
     width: 1400, height: 900, minWidth: 900, minHeight: 650,
     titlebarHidden: true, webWindowMaterial: true, chromeControls: false, persistentStorage: true,
   })

@@ -71,8 +71,8 @@
 
   <div class='dp-spacer'></div>
 
-  <button class='btn btn-icon' data-rescan @click='scan()' :disabled='scanning'>
-    <span class='i-f7-square-on-square' aria-hidden='true'></span>
+  <button class='btn btn-icon' data-rescan @click='scan()' :disabled='scanning' :aria-busy='scanning'>
+    <span class='i-f7-arrow-2-circlepath rescan-icon' aria-hidden='true'></span>
     <span x-text="scanning ? 'Scanning…' : (scanned ? 'Rescan' : 'Find Duplicates')">Find Duplicates</span>
   </button>
   <button class='btn' type='button' data-cancel-scan x-show='scanning' x-cloak

@@ -26,7 +26,7 @@
   <button class='btn btn-sm' @click='selectSafe()'>Select Safe</button>
   <button class='btn btn-sm' @click='selectAll()'>Select All</button>
   <button class='btn btn-sm' @click='clearSelection()' :disabled='selected.length === 0'>Clear Selection</button>
-  <button class='btn btn-sm' data-rescan @click='refresh()'>Rescan</button>
+  <button class='btn btn-icon btn-sm' data-rescan @click='refresh()'><span class='i-f7-arrow-2-circlepath rescan-icon' aria-hidden='true'></span>Rescan</button>
   <div class='pv-spacer'></div>
   <button class='btn btn-danger btn-icon' @click='clean()' :disabled='cleaning || selected.length === 0'>
     <span class='i-f7-eye-slash-fill' aria-hidden='true'></span>

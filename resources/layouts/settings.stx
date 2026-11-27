@@ -8,7 +8,7 @@
 // which meant the app could not be looked at while it was being configured.
 //
 // Craft opens it — `craft.window.open({ name: 'settings', … })` from
-// `resources/scripts/settings-panel.ts` — and the name is what makes a second
+// `resources/lib/app-windows.ts` — and the name is what makes a second
 // Cmd+, bring this window forward instead of stacking another one behind it.
 //
 // The shape is System Settings': a vibrant sidebar with a search field, the
@@ -313,6 +313,8 @@ const localAgent = isLocalAgent()
     .set-card-hint { font-size: 11px; line-height: 1.35; color: var(--secondary); }
     .set-card-value { flex: none; font-size: 13px; color: var(--secondary); font-variant-numeric: tabular-nums; }
     .set-card-note { margin: var(--space-2) var(--space-half) 0; font-size: 11px; line-height: 1.4; color: var(--tertiary); }
+    .set-schedule-error { color: var(--red); }
+    .set-schedule-error:empty { margin: 0; }
     .set-card-foot {
       margin: var(--space-4) auto 0; max-width: 460px;
       color: var(--tertiary); font-size: 11px; line-height: 1.45; text-align: center;
@@ -436,9 +438,9 @@ const localAgent = isLocalAgent()
   </div>
 @endif
 
-<script src="/platform-gate.js"></script>
-<script src="/native-dialog.js"></script>
-<script src="/settings-window.js"></script>
-<script src="/activity-visits.js"></script>
+<script src="/platform-gate.js" defer></script>
+<script src="/native-dialog.js" defer></script>
+<script src="/settings-window.js" defer></script>
+<script src="/activity-visits.js" defer></script>
 </body>
 </html>

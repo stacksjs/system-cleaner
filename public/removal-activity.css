@@ -30,7 +30,16 @@
 }
 .removal-icon span { display: block; width: 16px; height: 16px; }
 .removal-body { padding-block: 1px; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
-.removal-body h2 { font-size: 13px; font-weight: 650; }
+.removal-heading { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 650; }
+.removal-pulse {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--removal-color);
+  animation: removal-pulse 1s ease-in-out infinite;
+}
+@keyframes removal-pulse { 50% { opacity: .35; } }
 .removal-body p, .removal-body li, .removal-progress span { color: var(--secondary); }
 .removal-progress { display: flex; align-items: center; gap: 9px; margin-top: 5px; }
 .removal-progress progress {
@@ -60,5 +69,5 @@
 .removal-dismiss span { width: 12px; height: 12px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .removal-progress progress:indeterminate { animation: none; }
+  .removal-pulse, .removal-progress progress:indeterminate { animation: none; }
 }

@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'bun:test'
+import { runInNewContext } from 'node:vm'
+import { SECTIONS, SIDEBAR_SHORTCUTS } from '../resources/lib/sections'
 
 /**
  * The Settings window is three files that have to agree with each other, and
@@ -148,6 +150,40 @@ describe('the Settings window', () => {
     // Settings window behind the last.
     expect(opener).toContain('name: SETTINGS_WINDOW')
     expect(opener).toMatch(/const SETTINGS_WINDOW = '[a-z-]+'/)
+  })
+
+  it('displays General before scripts run and starts update discovery only on first visit', async () => {
+    const view = await read(VIEW)
+    expect(view).toMatch(/data-pane='general'[^>]*data-active/)
+    expect(view).toContain('updatesXData(true)')
+
+    const events = new EventTarget()
+    const calls: string[] = []
+    const globals = {
+      window: {},
+      document: {
+        addEventListener: events.addEventListener.bind(events),
+      },
+    }
+    runInNewContext(await read('public/updates-xdata.js'), globals)
+    const factory = (globals.window as { updatesXData: (lazy: boolean) => { init: () => void } }).updatesXData
+    const state = Object.assign(factory(true), {
+      loadUpdates: () => calls.push('updates'),
+    })
+    state.init()
+    expect(calls).toEqual([])
+    events.dispatchEvent(new Event('systemcleaner:settings-software-update'))
+    events.dispatchEvent(new Event('systemcleaner:settings-software-update'))
+    expect(calls).toEqual(['updates'])
+  })
+
+  it('assigns a command number to every sidebar link in visual order', async () => {
+    const sidebar = await read('resources/components/AppRail.stx')
+    expect(sidebar.indexOf('data-open-settings')).toBeLessThan(sidebar.indexOf('class="rail-disk"'))
+    expect(SIDEBAR_SHORTCUTS.map(({ href }) => href)).toEqual([
+      ...SECTIONS.map(({ href }) => href), '/app/activity', '/app/settings', '/app/disk',
+    ])
+    expect(SIDEBAR_SHORTCUTS.map(({ key }) => key)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9'])
   })
 
   it('never reintroduces the modal it replaced', async () => {

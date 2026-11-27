@@ -15,9 +15,9 @@
  * Both rules are in `docs/guide/desktop.md`; both cost a build here before they
  * were written down.
  */
-import { menu, standardMenus } from '@stacksjs/desktop/browser'
-import { openSettings as openSettingsWindow } from '../lib/app-windows'
-import { SECTIONS } from '../lib/sections'
+import { menu, standardMenus, windowEvents } from '@stacksjs/desktop/browser'
+import { openDashboard, openSettings } from '../lib/app-windows'
+import { SECTIONS, SETTINGS_PATH, SIDEBAR_SHORTCUTS } from '../lib/sections'
 
 type DashboardCommand = { action: 'navigate', href: string } | { action: 'rescan' | 'sidebar' }
 const isTray = location.pathname === '/app/tray'
@@ -35,30 +35,44 @@ dashboardChannel.addEventListener('message', event => {
   if (command.action === 'sidebar') toggleSidebar()
 })
 
-interface Screen {
-  label: string
-  href: string
-}
-
-/**
- * The six sections first, in sidebar order, so ⌘1..⌘6 are the sidebar; then
- * every tool, section by section. Read from the same table as the sidebar, so
- * the menu cannot list a screen the app no longer has.
- */
-const SCREENS: Screen[] = [
-  ...SECTIONS.map(section => ({ label: section.label, href: section.href })),
-  ...SECTIONS.filter(section => section.id !== 'overview')
-    .flatMap(section => section.tools.map(tool => ({ label: tool.label, href: tool.href }))),
+const SCREENS = [
+  ...SIDEBAR_SHORTCUTS,
+  ...SECTIONS.flatMap(section => section.tools.map(({ label, href }) => ({ label, href, key: '' }))),
 ].filter((screen, index, all) => all.findIndex(other => other.href === screen.href) === index)
 
-/**
- * Only the sections get a digit: they are what the sidebar shows, so ⌘1..⌘6
- * match what the eye sees, and a digit for a tool would change meaning every
- * time a tool was added.
- * The tools are in the menu without one, which is how AppKit itself handles
- * a Window menu longer than the digits.
- */
-const MAX_SHORTCUTS = SECTIONS.length
+function openScreen(href: string): void {
+  if (href === SETTINGS_PATH) {
+    void openSettings()
+    return
+  }
+  if (isTray) {
+    // The dashboard might be closed. Bring its retained window forward, or
+    // open it on the destination if this is the first use since launch.
+    void openDashboard(href).then(() => inDashboard({ action: 'navigate', href }))
+    return
+  }
+  go(href)
+}
+
+if (!isTray) {
+  const rail = document.querySelector('#app-sidebar')
+  const hint = (visible: boolean) => rail?.toggleAttribute('data-shortcuts-visible', visible)
+  const reset = () => { hint(false) }
+  const commandOnly = (event: KeyboardEvent) => event.metaKey && !event.altKey && !event.ctrlKey && !event.shiftKey
+  document.addEventListener('keydown', (event) => {
+    const command = commandOnly(event)
+    hint(command)
+    if (!command || event.defaultPrevented || event.isComposing) return
+    const screen = SIDEBAR_SHORTCUTS.find(({ key }) => key === event.key)
+    if (!screen) return
+    event.preventDefault()
+    if (!event.repeat) openScreen(screen.href)
+  }, true)
+  document.addEventListener('keyup', (event) => { hint(event.key !== 'Meta' && commandOnly(event)) }, true)
+  window.addEventListener('blur', reset)
+  windowEvents.onBlur(reset)
+  document.addEventListener('visibilitychange', () => { if (document.hidden) reset() })
+}
 
 /**
  * Go to a screen the way clicking the sidebar would.
@@ -68,7 +82,7 @@ const MAX_SHORTCUTS = SECTIONS.length
  * tools have no anchor in the sidebar any more, so clicking one is not an option.
  */
 function go(href: string): void {
-  if (inDashboard({ action: 'navigate', href })) return
+  if (location.pathname.replace(/\/$/, '') === href) return
   const router = (window as { stxRouter?: { navigate?: (url: string) => unknown } }).stxRouter
   if (typeof router?.navigate === 'function') {
     void router.navigate(href)
@@ -135,7 +149,7 @@ function withSettingsItem(menus: ReturnType<typeof standardMenus.leading>): type
   const settings = {
     label: 'Settings…',
     shortcut: 'cmd+,',
-    onClick: () => openSettings('menu'),
+    onClick: () => { void openSettings() },
   }
 
   // After About and its separator when there is one, which is where every Mac
@@ -144,28 +158,6 @@ function withSettingsItem(menus: ReturnType<typeof standardMenus.leading>): type
   const at = separator === -1 ? 0 : separator + 1
   appMenu.items.splice(at, 0, settings, { separator: true })
   return menus
-}
-
-/**
- * Open the settings panel.
- *
- * `craft.settings.open()` dispatches `craft:settings:open` on the window,
- * which is the same event Craft raises for its own Settings item — so the
- * panel listens in one place. Off-bridge, in a browser, the event is
- * dispatched directly and the panel works the same way.
- */
-function openSettings(source: string): void {
-  if (isTray) {
-    void openSettingsWindow()
-    return
-  }
-  const settings = (globalThis as { craft?: { settings?: { open?: (source: string) => void } } }).craft?.settings
-  if (settings?.open) {
-    settings.open(source)
-    return
-  }
-
-  window.dispatchEvent(new CustomEvent('craft:settings:open', { detail: { source } }))
 }
 
 function installMenu(hasTray: boolean): void {
@@ -184,10 +176,10 @@ function installMenu(hasTray: boolean): void {
           { separator: true },
           { label: 'Hide Sidebar', shortcut: 'cmd+alt+s', onClick: toggleSidebar },
           { separator: true },
-          ...SCREENS.map((screen, index) => ({
+          ...SCREENS.map(screen => ({
             label: screen.label,
-            ...(index < MAX_SHORTCUTS ? { shortcut: `cmd+${index + 1}` } : {}),
-            onClick: () => go(screen.href),
+            ...(screen.key ? { shortcut: `cmd+${screen.key}` } : {}),
+            onClick: () => openScreen(screen.href),
           })),
           { separator: true },
           { label: 'Enter Full Screen', role: 'fullscreen' as const },
@@ -202,9 +194,10 @@ function installMenu(hasTray: boolean): void {
 
 void fetch('/api/platform', { method: 'POST', cache: 'no-store' })
   .then(response => response.json())
-  .then((info: { platform?: string }) => {
+  .then((info: { platform?: string, sandbox?: { sandboxed?: boolean } }) => {
     // Native menu callbacks belong to the primary page. On macOS the tray
     // owns the app menu and routes dashboard commands to its retained window.
-    if (info.platform !== 'macos' || isTray) installMenu(info.platform === 'macos')
+    const hasTray = info.platform === 'macos' && !info.sandbox?.sandboxed
+    if (!hasTray || isTray) installMenu(hasTray)
   })
   .catch(() => installMenu(false))

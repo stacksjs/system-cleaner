@@ -57,7 +57,7 @@
       <button class='btn btn-sm' :class="filter === 'missing' ? 'btn-active' : ''" @click="setFilter('missing')"
         x-text="'App Is Gone (' + missing + ')'">Missing</button>
       <button class='btn btn-sm' :class="filter === 'third-party' ? 'btn-active' : ''" @click="setFilter('third-party')">Not Apple</button>
-      <button class='btn btn-sm' data-rescan @click='refresh()' :disabled='loading'>Rescan</button>
+      <button class='btn btn-icon btn-sm' data-rescan @click='refresh()' :disabled='loading'><span class='i-f7-arrow-2-circlepath rescan-icon' aria-hidden='true'></span>Rescan</button>
     </div>
   </div>
 

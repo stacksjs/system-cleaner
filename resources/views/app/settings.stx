@@ -16,7 +16,7 @@
   the window itself resolves against, and its own version.
 -->
 
-<section class='set-pane' data-pane='general' data-pane-title='General'>
+<section class='set-pane' data-pane='general' data-pane-title='General' data-active>
   <div class='set-card'>
     <div class='set-card-row'>
       <span class='set-card-row-text'>
@@ -85,6 +85,16 @@
       </span>
       <button class='set-switch' type='button' role='switch' aria-checked='false'
               aria-label='Notify when a long scan finishes' data-switch='notifyOnFinish'>
+        <span class='set-knob' aria-hidden='true'></span>
+      </button>
+    </div>
+    <div class='set-card-row'>
+      <span class='set-card-row-text'>
+        <span class='set-card-label'>When a cleanup finishes</span>
+        <span class='set-card-hint'>Show a system notification after a manual cleanup.</span>
+      </span>
+      <button class='set-switch' type='button' role='switch' aria-checked='false'
+              aria-label='Notify when a cleanup finishes' data-switch='notifyOnCleanup'>
         <span class='set-knob' aria-hidden='true'></span>
       </button>
     </div>
@@ -170,13 +180,13 @@
         <span class='set-card-hint'>Runs Quick Clean on its own, over the targets the Schedule screen picked.</span>
       </span>
       <button class='set-switch' type='button' role='switch' aria-checked='false'
-              aria-label='Scheduled cleaning' data-switch='scheduleEnabled'>
+              aria-label='Scheduled cleaning' data-switch='scheduleEnabled' disabled>
         <span class='set-knob' aria-hidden='true'></span>
       </button>
     </div>
     <div class='set-card-row'>
       <span class='set-card-row-text'><span class='set-card-label'>How often</span></span>
-      <select class='set-select' data-select='scheduleFrequency' aria-label='How often'>
+      <select class='set-select' data-select='scheduleFrequency' disabled aria-label='How often'>
         <option value='daily'>Daily</option>
         <option value='weekly'>Weekly</option>
         <option value='monthly'>Monthly</option>
@@ -188,7 +198,7 @@
         <span class='set-card-hint'>Caches and histories, minus anything on the keep-list.</span>
       </span>
       <button class='set-switch' type='button' role='switch' aria-checked='false'
-              aria-label='Include browser data' data-switch='scheduleIncludePrivacy'>
+              aria-label='Include browser data' data-switch='scheduleIncludePrivacy' disabled>
         <span class='set-knob' aria-hidden='true'></span>
       </button>
     </div>
@@ -198,7 +208,7 @@
         <span class='set-card-hint'>A scheduled clean moves what it can to the Trash; this is what finishes the job.</span>
       </span>
       <button class='set-switch' type='button' role='switch' aria-checked='false'
-              aria-label='Empty the Trash afterwards' data-switch='scheduleEmptyTrash'>
+              aria-label='Empty the Trash afterwards' data-switch='scheduleEmptyTrash' disabled>
         <span class='set-knob' aria-hidden='true'></span>
       </button>
     </div>
@@ -218,6 +228,7 @@
       <span class='set-card-value' data-value='scheduleLastRun'>Never</span>
     </div>
   </div>
+  <p class='set-card-note set-schedule-error' data-value='scheduleSaveError' role='alert'></p>
   <p class='set-card-note'>
     The time of day, and which folders it cleans, are set on the Schedule
     screen in the main window.
@@ -267,7 +278,7 @@
   <SelfUpdateCard />
 
   <script src='/updates-xdata.js'></script>
-  <div x-data='updatesXData()'>
+  <div x-data='updatesXData(true)'>
     <div class='set-section-title'>Also Available</div>
     <div class='set-card'>
       <div class='set-card-row'>

@@ -345,7 +345,9 @@
       <div class='disk-meta' x-text="metaText()">Scan your home folder to see what fills it.</div>
       <button class='mt-3 btn btn-sm' data-cancel-scan x-show="scanState === 'scanning'" x-cloak
         @click='cancelDiskScan()' :disabled='cancelling || !scanId' x-text="cancelling ? 'Cancelling…' : 'Cancel scan'">Cancel scan</button>
-      <button class='mt-3 btn btn-sm' x-show="scanState !== 'scanning' && hasResults" x-cloak @click='startDiskScan()' :disabled='cleanupBusy'>Scan again</button>
+      <button class='mt-3 btn btn-icon btn-sm' data-rescan x-show="scanState !== 'scanning' && hasResults" x-cloak @click='startDiskScan()' :disabled='cleanupBusy'>
+        <span class='i-f7-arrow-2-circlepath rescan-icon' aria-hidden='true'></span>Scan again
+      </button>
     </div>
 
     <!-- A scan that ran out of time is a real answer, but only if it says so:

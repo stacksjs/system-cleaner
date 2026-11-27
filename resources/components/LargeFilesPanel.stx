@@ -85,8 +85,8 @@
     <input class='lf-input' type='search' placeholder='Filter by name or path' x-model='filter' />
   </label>
 
-  <button class='btn btn-icon' data-rescan @click='scan()' :disabled='scanning'>
-    <span class='i-f7-search' aria-hidden='true'></span>
+  <button class='btn btn-icon' data-rescan @click='scan()' :disabled='scanning' :aria-busy='scanning'>
+    <span class='i-f7-arrow-2-circlepath rescan-icon' aria-hidden='true'></span>
     <span x-text="scanning ? 'Scanning…' : (scanned ? 'Rescan' : 'Find Large Files')">Find Large Files</span>
   </button>
   <button class='btn' type='button' data-cancel-scan x-show='scanning' x-cloak
