@@ -93,6 +93,7 @@ describe('vpn/control', () => {
       expect(command).toContain("(trap '' HUP; exec /usr/bin/env -i")
       expect(command).toContain('< /dev/null > "$log" 2>&1 &')
       expect(command).toContain('pid=$!')
+      expect(command).toContain("'--listen' '0'")
       expect(command).toContain('Interface: *utun')
       expect(command).not.toContain('--full-tunnel')
     })

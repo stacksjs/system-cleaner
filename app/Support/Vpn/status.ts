@@ -32,10 +32,11 @@ export interface VpnCore {
   cliPath: string | null
   /** Version it reported. */
   version: string | null
+  /** Whether the CLI predates the VPN reconnect and routing fixes. */
+  updateRequired?: boolean
   /**
-   * Whether `vpn:selftest` passed: the native `libltvpn` loaded and a
-   * handshake, an encrypted roundtrip and replay rejection all worked. Null
-   * when there was no CLI to ask.
+   * True when the CLI is supported and its native VPN self-test passes.
+   * Null when no CLI is available.
    */
   healthy: boolean | null
   /** Why the core is unavailable, when it is. */
@@ -139,6 +140,7 @@ function findCli(): string | null {
   const candidates = explicit ? [path.resolve(explicit)] : [
     installedVpnCli(),
     ...directories.flatMap(dir => names.map(name => path.join(dir, name))),
+    installedVpnCli('v0.3.1'),
   ]
   for (const candidate of new Set(candidates)) {
     try {
@@ -215,17 +217,26 @@ async function probeCore(): Promise<VpnCore> {
     // `vpn:selftest` needs no root: it runs entirely in-process.
     exec(`${shellEscape(cliPath)} vpn:selftest`, { ...at, timeout: 20_000 }),
   ])
-  const healthy = selftest.ok && /VPN core is healthy/i.test(selftest.stdout)
+  const versionLabel = version.ok ? version.stdout.split('\n')[0].trim() || null : null
+  const match = versionLabel?.match(/\b(\d+)\.(\d+)\.(\d+)\b/)
+  const updateRequired = !process.env.LOCALTUNNELS_BIN && Boolean(
+    cliPath === installedVpnCli('v0.3.1') ||
+    (match && Number(match[1]) === 0 && (Number(match[2]) < 3 || (Number(match[2]) === 3 && Number(match[3]) < 2))),
+  )
+  const healthy = !updateRequired && selftest.ok && /VPN core is healthy/i.test(selftest.stdout)
 
   return {
     available: true,
     cliPath,
-    version: version.ok ? version.stdout.split('\n')[0].trim() || null : null,
+    version: versionLabel,
+    updateRequired,
     healthy,
-    detail: healthy
-      ? null
-      : (selftest.stderr || selftest.stdout || '').split('\n').filter(Boolean).slice(-1)[0]
-        || 'vpn:selftest did not report a healthy core.',
+    detail: updateRequired
+      ? 'Update Localtunnels for faster reconnects and reliable exit-node routing.'
+      : healthy
+        ? null
+        : (selftest.stderr || selftest.stdout || '').split('\n').filter(Boolean).slice(-1)[0]
+          || 'vpn:selftest did not report a healthy core.',
   }
 }
 

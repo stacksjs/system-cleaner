@@ -123,7 +123,7 @@ function restoreNetwork(cli?: string | null): string {
 }
 
 export function buildConnectCommand(cli: string, request: ConnectRequest): string {
-  const args = ['vpn:up', '--coordinator', request.coordinatorUrl]
+  const args = ['vpn:up', '--coordinator', request.coordinatorUrl, '--listen', '0']
   if (request.useExit)
     args.push('--use-exit', request.useExit, '--full-tunnel')
 

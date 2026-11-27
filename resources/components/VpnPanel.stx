@@ -34,11 +34,11 @@
       </div>
 
       <div class='vpn-setup' x-show='available() && !reading?.core.healthy && !reading?.connection'>
-        <h3>Set up Localtunnels</h3>
+        <h3 x-text="reading?.core.updateRequired ? 'Update the VPN core' : 'Set up Localtunnels'">Set up Localtunnels</h3>
         <p>SystemCleaner downloads the Localtunnels CLI and its VPN library from the official release, then runs a self-test.</p>
         <button type='button' class='vpn-button vpn-button--primary' @click="act('install')" :disabled='operation()'>
           <span class='i-f7-arrow-down-circle' aria-hidden='true'></span>
-          <span x-text="operation() === 'install' ? 'Installing…' : reading?.core.available ? 'Repair Localtunnels' : 'Install Localtunnels'"></span>
+          <span x-text='setupLabel()'></span>
         </button>
       </div>
 

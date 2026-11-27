@@ -4,18 +4,18 @@ import * as path from 'node:path'
 import process from 'node:process'
 import { isMacOS } from '@system-cleaner/core'
 
-const RELEASE = 'v0.3.1'
+const RELEASE = 'v0.3.2'
 const ASSETS = {
-  arm64: '0d50f4a85649e2aec1c1636c6a501d3edbecbed778ad4bbb27152a11d4854c0d',
-  x64: 'b0f3398d0487ca580623b031fa4b6c08647b8b7e66b20b05297ae19bb0d06911',
+  arm64: 'f481429cf7cb8ff7304e34cef789798a5c1f232ad407b4e29944b39e3b22b222',
+  x64: '968db7cb15359b7ec5db267fce454e912eb9f8d20c3a2cc0fd738a3d389caff1',
 }
 
 function installRoot(): string {
   return path.join(os.homedir(), 'Library', 'Application Support', 'SystemCleaner', 'Localtunnels')
 }
 
-export function installedVpnCli(): string {
-  return path.join(installRoot(), RELEASE, 'localtunnels')
+export function installedVpnCli(release = RELEASE): string {
+  return path.join(installRoot(), release, 'localtunnels')
 }
 
 export async function installVpnCore(): Promise<void> {

@@ -110,6 +110,7 @@ function vpnXData() {
       if (this.reading.connected) return 'Connected'
       if (this.reading.connection) return 'Tunnel not ready'
       if (this.reading.needsRestore) return 'Network restore needed'
+      if (this.reading.core.updateRequired) return 'Update required'
       return this.reading.core.healthy ? 'Disconnected' : 'Setup required'
     },
 
@@ -124,6 +125,7 @@ function vpnXData() {
         return this.reading.connection?.mode === 'exit' ? 'Internet traffic and DNS use your network’s exit node.' : 'Private network traffic uses the tunnel.'
       if (this.reading.connection) return 'The VPN process is running, but the tunnel interface is unavailable.'
       if (this.reading.needsRestore) return 'Restore the network settings from the previous exit-node session.'
+      if (this.reading.core.updateRequired) return 'Update the VPN core for faster reconnects and reliable exit-node routing.'
       if (!this.reading.core.healthy) return 'Install the VPN core to join your private network.'
       return 'Connect to your network’s Localtunnels coordinator.'
     },
@@ -136,7 +138,14 @@ function vpnXData() {
     coreSummary() {
       if (!this.reading) return 'Checking…'
       if (!this.reading.core.available) return 'Not installed'
+      if (this.reading.core.updateRequired) return 'Update available'
       return this.reading.core.healthy ? this.reading.core.version || 'Ready' : 'Self-test failed'
+    },
+
+    setupLabel() {
+      if (this.operation() === 'install') return 'Installing…'
+      if (this.reading?.core.updateRequired) return 'Update Localtunnels'
+      return this.reading?.core.available ? 'Repair Localtunnels' : 'Install Localtunnels'
     },
 
     async act(action: Operation) {
