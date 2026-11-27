@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it, mock, spyOn } from 'bun:test'
 import * as path from 'node:path'
 import process from 'node:process'
 import { capabilities, PLATFORM } from '@system-cleaner/core'
@@ -52,6 +52,41 @@ describe('the browser gate fails closed', () => {
 })
 
 describe('runningBrowsers', () => {
+  it('fails closed at its deadline when the subprocess keeps running', async () => {
+    const stdout = new TransformStream<Uint8Array>()
+    const writer = stdout.writable.getWriter()
+    const exit = Promise.withResolvers<number>()
+    const kill = mock(() => {})
+    const spawn = spyOn(Bun, 'spawn').mockReturnValue({
+      stdout: stdout.readable,
+      stderr: new Blob().stream(),
+      exited: exit.promise,
+      kill,
+    } as unknown as ReturnType<typeof Bun.spawn>)
+
+    function releaseChild(): void {
+      void writer.close().catch(() => {})
+      exit.resolve(0)
+    }
+
+    let watchdogFired = false
+    const watchdog = setTimeout(() => {
+      watchdogFired = true
+      releaseChild()
+    }, 7000)
+
+    try {
+      expect(await runningBrowsers()).toEqual([BROWSER_PROBE_FAILED])
+      expect(watchdogFired).toBe(false)
+      expect(kill).toHaveBeenCalledWith('SIGKILL')
+    }
+    finally {
+      clearTimeout(watchdog)
+      if (!watchdogFired) releaseChild()
+      spawn.mockRestore()
+    }
+  }, 15_000)
+
   it('answers without a shell, on whichever platform this is', async () => {
     const running = await runningBrowsers()
     expect(Array.isArray(running)).toBe(true)

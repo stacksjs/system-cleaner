@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, spyOn } from 'bun:test'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
@@ -98,6 +98,13 @@ describe('extensionSize', () => {
 })
 
 describe('removeExtensions', () => {
+  let spawn: ReturnType<typeof spyOn<typeof Bun, 'spawn'>>
+
+  beforeEach(() => {
+    spawn = spyOn(Bun, 'spawn').mockImplementation(() => { throw new Error('Unexpected process probe') })
+  })
+  afterEach(() => spawn.mockRestore())
+
   // Ids are resolved against a fresh scan, so a caller cannot name something
   // the scan never produced and have it deleted.
   it('skips an id no scan produced rather than acting on it', async () => {
@@ -107,6 +114,7 @@ describe('removeExtensions', () => {
     expect(outcome.failed).toEqual([])
     expect(outcome.skipped).toHaveLength(1)
     expect(outcome.skipped[0].reason).toContain('No longer installed')
+    expect(spawn).not.toHaveBeenCalled()
   })
 
   it('does nothing when given nothing', async () => {
@@ -114,6 +122,7 @@ describe('removeExtensions', () => {
     expect(outcome.removed).toEqual([])
     expect(outcome.skipped).toEqual([])
     expect(outcome.freedBytes).toBe(0)
+    expect(spawn).not.toHaveBeenCalled()
   })
 })
 

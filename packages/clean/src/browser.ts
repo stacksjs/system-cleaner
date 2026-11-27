@@ -1,6 +1,6 @@
 import * as path from 'node:path'
 import process from 'node:process'
-import { HOME, isWindows as IS_WINDOWS, pathExists, safeReadDir, safeReadFile } from '@system-cleaner/core'
+import { execFile, HOME, isWindows as IS_WINDOWS, pathExists, safeReadDir, safeReadFile } from '@system-cleaner/core'
 import type { BrowserProfile } from './types'
 
 /**
@@ -366,33 +366,23 @@ async function processNames(): Promise<Set<string> | null> {
     ? ['tasklist.exe', '/FO', 'CSV', '/NH']
     : ['ps', '-A', '-o', 'comm=']
 
-  try {
-    const proc = Bun.spawn(argv, { stdout: 'pipe', stderr: 'ignore' })
-    const timer = setTimeout(() => proc.kill(), 5000)
-    const stdout = await new Response(proc.stdout).text()
-    const code = await proc.exited
-    clearTimeout(timer)
-
-    if (code !== 0 || !stdout.trim())
-      return null
-
-    const names = new Set<string>()
-    for (const line of stdout.split('\n')) {
-      const trimmed = line.trim()
-      if (!trimmed) continue
-      // tasklist CSV quotes every field, and the image name is the first.
-      // `ps -o comm=` prints a path on macOS, so only the last segment is the
-      // executable name.
-      const value = IS_WINDOWS
-        ? trimmed.split('","')[0].replace(/^"/, '')
-        : trimmed.split('/').pop() || trimmed
-      names.add(value.toLowerCase())
-    }
-    return names
-  }
-  catch {
+  const { ok, stdout } = await execFile(argv, { timeout: 5000 })
+  if (!ok || !stdout)
     return null
+
+  const names = new Set<string>()
+  for (const line of stdout.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    // tasklist CSV quotes every field, and the image name is the first.
+    // `ps -o comm=` prints a path on macOS, so only the last segment is the
+    // executable name.
+    const value = IS_WINDOWS
+      ? trimmed.split('","')[0].replace(/^"/, '')
+      : trimmed.split('/').pop() || trimmed
+    names.add(value.toLowerCase())
   }
+  return names
 }
 
 /**
@@ -400,8 +390,8 @@ async function processNames(): Promise<Set<string> | null> {
  *
  * Shared by the privacy clean and the extension remover because both enforce
  * the same rule for the same reason, and a rule enforced twice is a rule that
- * drifts. Takes the running set rather than looking it up, so one `pgrep`
- * sweep covers a whole batch and the decision itself is testable without a
+ * drifts. Takes the running set rather than looking it up, so one process
+ * probe covers a whole batch and the decision itself is testable without a
  * browser open.
  */
 export function blockedByRunningBrowser(browser: string, running: Iterable<string>, action: 'clear' | 'remove'): string | null {

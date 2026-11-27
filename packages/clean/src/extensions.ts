@@ -150,10 +150,6 @@ export interface ExtensionRemovalOutcome {
  * the uninstaller and the orphan sweep use.
  */
 export async function removeExtensions(ids: string[]): Promise<ExtensionRemovalOutcome> {
-  const wanted = new Set(ids)
-  const installed = getAllExtensions().filter(extension => wanted.has(extension.id))
-  const busy = new Set(await runningBrowsers())
-
   const outcome: ExtensionRemovalOutcome = {
     removed: [],
     skipped: [],
@@ -161,22 +157,28 @@ export async function removeExtensions(ids: string[]): Promise<ExtensionRemovalO
     freedBytes: 0,
     freedFormatted: '0 B',
   }
+  if (ids.length === 0)
+    return outcome
 
+  const wanted = new Set(ids)
+  const installed = getAllExtensions().filter(extension => wanted.has(extension.id))
   const found = new Set(installed.map(extension => extension.id))
   for (const id of wanted) {
     if (!found.has(id))
       outcome.skipped.push({ id, reason: 'No longer installed. The list is out of date.' })
   }
 
+  let busy: Set<string> | undefined
   for (const extension of installed) {
-    const blocked = blockedByRunningBrowser(extension.browser, busy, 'remove')
-    if (blocked) {
-      outcome.skipped.push({ id: extension.id, reason: blocked })
+    if (!isExtensionPath(extension.browser, extension.path)) {
+      outcome.skipped.push({ id: extension.id, reason: 'Not inside a known browser extension folder' })
       continue
     }
 
-    if (!isExtensionPath(extension.browser, extension.path)) {
-      outcome.skipped.push({ id: extension.id, reason: 'Not inside a known browser extension folder' })
+    busy ??= new Set(await runningBrowsers())
+    const blocked = blockedByRunningBrowser(extension.browser, busy, 'remove')
+    if (blocked) {
+      outcome.skipped.push({ id: extension.id, reason: blocked })
       continue
     }
 

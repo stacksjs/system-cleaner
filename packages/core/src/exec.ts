@@ -42,12 +42,17 @@ const TIMED_OUT = Symbol('exec-timed-out')
  *
  * Timer is always cleared via try/finally to prevent leaks.
  */
-export async function exec(command: string, options: ExecOptions = {}): Promise<ExecResult> {
+export function exec(command: string, options: ExecOptions = {}): Promise<ExecResult> {
+  return execFile(['sh', '-c', command], options)
+}
+
+/** Run an executable directly and bound both output collection and exit. */
+export async function execFile(argv: string[], options: ExecOptions = {}): Promise<ExecResult> {
   const timeout = options.timeout ?? DEFAULT_TIMEOUT
   let timer: ReturnType<typeof setTimeout> | undefined
 
   try {
-    const proc = Bun.spawn(['sh', '-c', command], {
+    const proc = Bun.spawn(argv, {
       stdout: 'pipe',
       stderr: 'pipe',
       cwd: options.cwd,
@@ -64,8 +69,9 @@ export async function exec(command: string, options: ExecOptions = {}): Promise<
 
     const deadline = new Promise<typeof TIMED_OUT>((resolve) => {
       timer = setTimeout(() => {
-        proc.kill('SIGKILL')
         resolve(TIMED_OUT)
+        try { proc.kill('SIGKILL') }
+        catch { /* The child can exit before the signal reaches it. */ }
       }, timeout)
     })
 
