@@ -1,10 +1,13 @@
+/* eslint-disable ts/no-top-level-await */
 import { chmodSync } from 'node:fs'
 import { resolve } from 'node:path'
 import process from 'node:process'
+import { runAction } from '@stacksjs/actions/run-action'
+import { Action } from '@stacksjs/enums'
 
 const cwd = resolve(import.meta.dir, '..')
-const build = Bun.spawnSync(['./buddy', 'build:desktop'], { cwd, stdout: 'inherit', stderr: 'inherit' })
-if (build.exitCode !== 0) process.exit(build.exitCode)
+const build = await runAction(Action.BuildDesktop)
+if ('error' in build) throw build.error
 
 // Buddy copies the generated migrations from a private temporary directory.
 // Installer owns the installed bundle, so its migrations must be traversable by the app user.
