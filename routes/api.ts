@@ -1521,7 +1521,7 @@ export default async function (router: Router) {
 
   await router.post('/system-disk-info', async (req: Request) => {
     if (new URL(req.url).searchParams.get('refresh') === '1') invalidateDiskInfoCache();
-    const info = getSystemDiskInfoCached();
+    const info = await getSystemDiskInfoCached();
     return Response.json({ success: true, ...info });
   });
 

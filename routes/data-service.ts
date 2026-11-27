@@ -1,4 +1,4 @@
-import { execSync, getDirSizes, HOME, isPermissionGated, TtlCache } from '@system-cleaner/core'
+import { execSync, getDirSizes, HOME, isPermissionGated, SANDBOXED, TtlCache, usageOf } from '@system-cleaner/core'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { CLEAN_TARGETS, getAllExtensions } from '@system-cleaner/clean'
@@ -87,24 +87,25 @@ export async function getExtensionSizesCached(onUpdate?: (sizes: Record<string, 
   return { sizes, cached: false }
 }
 
-export function getSystemDiskInfoCached() {
+export async function getSystemDiskInfoCached() {
   const hit = diskInfoCache.get('disk')
   if (hit) return { ...hit, cached: true }
 
   let diskTotal = 0
   let diskFree = 0
-  let diskUsed = 0
-  let diskPct = 0
   let diskPurgeable = 0
 
-  try {
+  if (SANDBOXED) {
+    const usage = await usageOf(HOME)
+    diskTotal = usage?.totalBytes ?? 0
+    diskFree = usage?.freeBytes ?? 0
+  }
+  else {
     const dfOut = safeExec('df -k / 2>/dev/null')
     const parts = dfOut.split('\n')[1]?.split(/\s+/)
     if (parts) {
       diskTotal = Number.parseInt(parts[1], 10) * 1024
       diskFree = Number.parseInt(parts[3], 10) * 1024
-      diskUsed = diskTotal - diskFree
-      diskPct = diskTotal > 0 ? Math.round((diskUsed / diskTotal) * 100) : 0
     }
     const diskInfo = safeExec('diskutil info / 2>/dev/null')
     const purgeMatch = diskInfo.match(/Purgeable.*?(\d[\d.]*)\s*(GB|MB|TB)/i)
@@ -114,7 +115,9 @@ export function getSystemDiskInfoCached() {
       diskPurgeable = val * (unit === 'TB' ? 1e12 : unit === 'GB' ? 1e9 : 1e6)
     }
   }
-  catch {}
+
+  const diskUsed = diskTotal - diskFree
+  const diskPct = diskTotal > 0 ? Math.round((diskUsed / diskTotal) * 100) : 0
 
   const fmt = (bytes: number) => {
     if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(2)} GB`
