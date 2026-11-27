@@ -93,7 +93,7 @@ jobs:
           echo "TS_PANTRY_CLI=$RUNNER_TEMP/ts-pantry/node_modules/ts-pantry/dist/bin/cli.js" >> "$GITHUB_ENV"
 
       - name: Build and package the Store edition
-        run: ./buddy desktop:apple:package
+        run: bun run build:app-store
         env:
           APPLE_BUILD_NUMBER: ${{ inputs.build-number || github.run_number }}
           APPLE_APP_SIGNING_IDENTITY: ${{ steps.pantry.outputs.apple-signing-identity }}

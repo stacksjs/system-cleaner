@@ -26,7 +26,7 @@ import process from 'node:process'
 import { bundleLayout, dataDir as dataDirFor, runtimeSupports as probeRuntime, windowArgs } from './bundle'
 import { createProcessShutdown } from '../Support/Runtime/process-shutdown'
 import { readRememberedPort, rememberPort } from '../Support/Runtime/agent-port'
-import { homeIsGranted, realHomeFolder } from '../../packages/core/src/sandbox'
+import { homeIsGranted, isMacAppStoreBackend, realHomeFolder } from '../../packages/core/src/sandbox'
 
 /**
  * One executable, three jobs.
@@ -97,7 +97,7 @@ const { craftBinary, webRoot, migrationsDir } = bundleLayout(process.execPath, p
  * a window, speaks Craft's bundle protocol: one loopback URL with a session
  * token on stdout, then stdin held open until the window goes away.
  */
-const craftBackend = platform === 'darwin' && path.basename(process.execPath) === 'craft-backend'
+const craftBackend = isMacAppStoreBackend()
 
 /**
  * Application data lives beside the user's other application data, never next
@@ -144,7 +144,7 @@ fs.mkdirSync(dataDir, { recursive: true })
  * path above was computed from the container home and is passed explicitly.
  */
 const sandboxHome: Record<string, string> = {}
-if (craftBackend && process.env.APP_SANDBOX_CONTAINER_ID) {
+if (craftBackend) {
   const realHome = realHomeFolder()
   sandboxHome.SYSTEM_CLEANER_REAL_HOME = realHome
   // Claimed only once it is true: a bookmark that resolved in Craft but whose

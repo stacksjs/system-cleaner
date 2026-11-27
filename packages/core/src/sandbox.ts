@@ -2,12 +2,19 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import process from 'node:process'
 
+const STORE_BUNDLE_ID = 'org.stacksjs.system-cleaner'
+
+/** Craft launches both the Store launcher and its agent as craft-backend. */
+export function isMacAppStoreBackend(executable = process.execPath, platform = process.platform): boolean {
+  return platform === 'darwin' && path.posix.basename(executable) === 'craft-backend'
+}
+
 /**
  * The Mac App Store edition, and what the App Sandbox leaves it.
  *
- * macOS sets `APP_SANDBOX_CONTAINER_ID` in the environment of every sandboxed
- * process, and the agent inherits it from Craft's App Store runtime through
- * `craft-backend`. Nothing else sets it, so it is the one reliable signal.
+ * The Store bundle gives the launcher and agent a dedicated executable name.
+ * The native host can start it without APP_SANDBOX_CONTAINER_ID, even though
+ * macOS still enforces its sandbox and gives it a container home.
  *
  * A sandboxed process starts out seeing its own container as its home folder.
  * Every figure the app shows is about the real one, so until the person grants
@@ -18,7 +25,8 @@ import process from 'node:process'
  * launcher then points the agent's `HOME` at the real home folder and sets
  * `SYSTEM_CLEANER_HOME_GRANTED`.
  */
-export const SANDBOXED: boolean = process.platform === 'darwin' && Boolean(process.env.APP_SANDBOX_CONTAINER_ID)
+export const SANDBOXED: boolean = isMacAppStoreBackend()
+  || (process.platform === 'darwin' && Boolean(process.env.APP_SANDBOX_CONTAINER_ID))
 
 /** Which build this is, as the screens and the App Review notes name it. */
 export const EDITION: 'app-store' | 'direct' = SANDBOXED ? 'app-store' : 'direct'
@@ -35,18 +43,9 @@ export function realHomeFolder(env: NodeJS.ProcessEnv = process.env): string {
   if (env.SYSTEM_CLEANER_REAL_HOME)
     return env.SYSTEM_CLEANER_REAL_HOME
   const home = env.HOME || os.homedir()
-  const id = env.APP_SANDBOX_CONTAINER_ID
-  if (id) {
-    // `path.posix`, not `path.join`: this is a macOS container path being read
-    // as text, and it is spelled with forward slashes wherever this code runs.
-    // On macOS the two are the same function; on the Windows leg of CI
-    // `path.join` builds `\Library\Containers\...`, which can never match, so
-    // the container path came back as the home folder.
-    const suffix = path.posix.join('/Library/Containers', id, 'Data')
-    if (home.endsWith(suffix))
-      return home.slice(0, -suffix.length) || '/'
-  }
-  return home
+  const id = env.APP_SANDBOX_CONTAINER_ID || STORE_BUNDLE_ID
+  const suffix = path.posix.join('/Library/Containers', id, 'Data')
+  return home.endsWith(suffix) ? home.slice(0, -suffix.length) || '/' : home
 }
 
 /** The folders Craft holds open for this process, from its environment. */

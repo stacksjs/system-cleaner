@@ -35,9 +35,9 @@ Both run for version tags. The Store job requires the repository variable
    ephemeral keychain, imports the application and installer identities, writes
    the provisioning profile, and deletes the keychain in its post step — which
    runs even if the job is cancelled.
-2. **`buddy desktop:apple:package`** builds the Craft-backed app,
-   applies the App Sandbox entitlements, signs the helper before the parent, and
-   produces the installer `.pkg`.
+2. **`bun run build:app-store`** builds the Craft-backed app and prepares its
+   bundled migrations for an installed copy. Buddy applies the App Sandbox
+   entitlements, signs the helper before the parent, and produces the installer `.pkg`.
 3. **`ts-pantry app-store:deliver`** validates or uploads the package to
    App Store Connect.
 
@@ -105,13 +105,13 @@ ts-pantry app-store:provision --bundle-id org.stacksjs.system-cleaner --name Sys
   --api-key-id <id> --api-issuer-id <issuer> --api-key-path <AuthKey.p8> --apply
 
 # Launch the edition locally under the real sandbox (ad hoc signed)
-./buddy desktop:apple:package --sandbox-check
+bun run build:app-store:check
 open storage/framework/desktop-dist/apple/SystemCleaner.app
 
 # Sign for the Store and package it
 DESKTOP_BUN_EXECUTABLE=/path/to/bun-store \
 APPLE_PROVISIONING_PROFILE=.pantry/apple/mac-app-store.provisionprofile \
-  ./buddy desktop:apple:package --build-number 4
+  bun run build:app-store --build-number 4
 
 # Validate, then upload to App Store Connect (TestFlight)
 ts-pantry app-store:deliver storage/framework/desktop-dist/apple/SystemCleaner-<version>-<build>.pkg --validate-only …
@@ -138,8 +138,8 @@ Developer ID identity and `notarytool` instead — see
 
 ## Home folder access
 
-The edition is detected at runtime: macOS sets `APP_SANDBOX_CONTAINER_ID` in
-every sandboxed process, and `packages/core/src/sandbox.ts` reads it.
+The edition is detected from its bundled `craft-backend` executable.
+`packages/core/src/sandbox.ts` also recognizes the sandbox environment flag when macOS supplies it.
 
 1. The Overview carries a banner, and every screen that reads the home folder
    shows a panel instead of its content, until the folder is granted. Both

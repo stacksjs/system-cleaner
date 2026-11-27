@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { grantedFolders, homeIsGranted, realHomeFolder, SANDBOX_LIMITS } from '@system-cleaner/core'
+import { grantedFolders, homeIsGranted, isMacAppStoreBackend, realHomeFolder, SANDBOX_LIMITS } from '@system-cleaner/core'
 
 /**
  * The App Store edition starts with `HOME` pointing at its container. These
@@ -14,6 +14,18 @@ const container = {
 describe('the App Store edition home folder', () => {
   it('recovers the real home folder from the container path', () => {
     expect(realHomeFolder(container)).toBe('/Users/someone')
+  })
+
+  it('recognizes the Store backend and container without the sandbox environment flag', () => {
+    const folder = '/Applications/SystemCleaner.app/Contents/MacOS'
+    expect(isMacAppStoreBackend(folder + '/craft-backend', 'darwin')).toBe(true)
+    expect(isMacAppStoreBackend(folder + '/SystemCleaner', 'darwin')).toBe(false)
+    expect(isMacAppStoreBackend('/home/someone/craft-backend', 'linux')).toBe(false)
+
+    const containerHome = { HOME: '/Users/someone/Library/Containers/org.stacksjs.system-cleaner/Data' }
+    expect(realHomeFolder(containerHome)).toBe('/Users/someone')
+    expect(homeIsGranted({ ...containerHome, CRAFT_SECURITY_SCOPED_PATHS: '/Users/someone' })).toBe(true)
+    expect(homeIsGranted({ ...containerHome, CRAFT_SECURITY_SCOPED_PATHS: containerHome.HOME })).toBe(false)
   })
 
   it('leaves HOME alone outside the sandbox', () => {

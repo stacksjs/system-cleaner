@@ -16,6 +16,7 @@ import { spawn } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import process from 'node:process'
+import { SANDBOXED } from '@system-cleaner/core'
 import {
   bundlePathForExecutable,
   canReplaceBundle,
@@ -147,7 +148,7 @@ function unsupportedReason(): string | null {
     return 'Automatic updates are only implemented for macOS.'
   // The Mac App Store edition runs sandboxed, and the Store delivers its
   // updates; Apple does not allow a Store app to replace itself.
-  if (process.env.APP_SANDBOX_CONTAINER_ID)
+  if (SANDBOXED)
     return 'Installed from the App Store, which delivers its updates.'
   if (!bundlePath)
     return 'This copy is running from the source tree, not an installed app.'
