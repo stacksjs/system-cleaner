@@ -5,6 +5,7 @@ type Operation = 'connect' | 'disconnect' | 'install'
 type Reading = VpnStatus & {
   connection: ManagedConnection | null
   operation: Operation | null
+  needsRestore: boolean
   restriction: string | null
 }
 type Routing = 'mesh' | 'exit'
@@ -108,6 +109,7 @@ function vpnXData() {
       if (!this.available()) return 'VPN unavailable'
       if (this.reading.connected) return 'Connected'
       if (this.reading.connection) return 'Tunnel not ready'
+      if (this.reading.needsRestore) return 'Network restore needed'
       return this.reading.core.healthy ? 'Disconnected' : 'Setup required'
     },
 
@@ -121,6 +123,7 @@ function vpnXData() {
       if (this.reading.connected)
         return this.reading.connection?.mode === 'exit' ? 'Internet traffic and DNS use your network’s exit node.' : 'Private network traffic uses the tunnel.'
       if (this.reading.connection) return 'The VPN process is running, but the tunnel interface is unavailable.'
+      if (this.reading.needsRestore) return 'Restore the network settings from the previous exit-node session.'
       if (!this.reading.core.healthy) return 'Install the VPN core to join your private network.'
       return 'Connect to your network’s Localtunnels coordinator.'
     },

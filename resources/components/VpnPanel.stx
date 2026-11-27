@@ -7,7 +7,7 @@
     </div>
     <div class='vpn-hero-text'>
       <div class='flex gap-2 items-center vpn-provider'><span class='vpn-status-dot' aria-hidden='true'></span> Localtunnels VPN</div>
-      <h2 x-text='title()'>Checking status</h2>
+      <h2 aria-live='polite' x-text='title()'>Checking status</h2>
       <p x-text='summary()'></p>
       <div class='grid gap-2 vpn-session' x-show='reading?.connected' x-cloak>
         <span><span class='vpn-session-label'>Coordinator</span> <strong x-text='reading?.connection?.coordinatorUrl'></strong></span>
@@ -28,7 +28,7 @@
         <span class='i-f7-link vpn-section-icon' aria-hidden='true'></span>
         <div>
           <h2>Connection</h2>
-          <p x-show='available() && !reading?.connection && reading?.core.healthy'>Use the address and key from your network administrator.</p>
+          <p x-show='available() && !reading?.connection && !reading?.needsRestore && reading?.core.healthy'>Use the address and key from your network administrator.</p>
           <p x-show='reading?.connection'>This session is managed by SystemCleaner.</p>
         </div>
       </div>
@@ -42,7 +42,7 @@
         </button>
       </div>
 
-      <form class='grid gap-4 vpn-form' x-show='available() && reading?.core.healthy && !reading?.connection' @submit.prevent="act('connect')">
+      <form class='grid gap-4 vpn-form' x-show='available() && reading?.core.healthy && !reading?.connection && !reading?.needsRestore' @submit.prevent="act('connect')">
         <div class='vpn-field'>
           <label for='vpn-coordinator'>Coordinator address</label>
           <input id='vpn-coordinator' type='text' x-model='coordinator' placeholder='wss://vpn.example.com:51821'
@@ -85,6 +85,12 @@
         <button type='button' class='vpn-button vpn-button--danger' @click="act('disconnect')" :disabled='operation()'>
           <span class='i-f7-power' aria-hidden='true'></span>
           <span x-text="operation() === 'disconnect' ? 'Disconnecting…' : 'Disconnect'">Disconnect</span>
+        </button>
+      </div>
+      <div class='vpn-actions' x-show='reading?.needsRestore && reading?.core.available'>
+        <button type='button' class='vpn-button vpn-button--primary' @click="act('disconnect')" :disabled='operation()'>
+          <span class='i-f7-arrow-clockwise' aria-hidden='true'></span>
+          <span x-text="operation() === 'disconnect' ? 'Restoring…' : 'Restore network settings'">Restore network settings</span>
         </button>
       </div>
       <div class='vpn-alert' role='status' :data-error='failed' x-show='notice' x-cloak>

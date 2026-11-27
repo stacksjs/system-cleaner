@@ -82,6 +82,7 @@ const LOG = path.join(ROOT, 'tunnel.log')
 const READY = path.join(ROOT, 'ready')
 const PUBLIC = path.join(ROOT, 'publickey')
 const IDENTITY = path.join(ROOT, 'vpn')
+const RESTORE = path.join(IDENTITY, 'restore.json')
 const PS = 'LC_ALL=C /bin/ps -o uid=,lstart= -p'
 const FULL_TUNNEL_READY = 'full tunnel: default route and DNS via '
 const INTERFACE_LINE = /^\s*Interface:\s+(utun\d+) \(([\d.]+)\/\d+,/m
@@ -95,21 +96,36 @@ function sessionScript(): string[] {
     `state=${shellEscape(ROOT)}`,
     `session=${shellEscape(SESSION)}`,
     `check_session() { { IFS= read -r pid; IFS= read -r started; } 2>/dev/null < "$session" || return 1; case "$pid" in ""|*[!0-9]*) return 1;; esac; [ "$pid" -gt 1 ] && [ "$(${PS} "$pid" 2>/dev/null)" = "$started" ]; }`,
+    'same_session() { check_session && [ "$pid" = "$expected" ]; }',
+    'wait_for_exit() { attempt=0; while same_session && [ "$attempt" -lt "$1" ]; do /bin/sleep 0.25; attempt=$((attempt + 1)); done; }',
+    'stop_session() { if same_session; then /bin/kill -TERM "$pid"; wait_for_exit 32; fi; if same_session; then /bin/kill -KILL "$pid"; wait_for_exit 8; fi; if same_session; then echo "The VPN process could not be stopped." >&2; return 1; fi; }',
   ]
 }
 
-export function buildConnectCommand(cli: string, request: ConnectRequest): string {
-  const args = [cli, 'vpn:up', '--coordinator', request.coordinatorUrl]
-  if (request.useExit)
-    args.push('--use-exit', request.useExit, '--full-tunnel')
+function vpnCommand(cli: string, args: string[], authKey?: string): string {
   const env = [
     'PATH=/usr/bin:/bin:/usr/sbin:/sbin',
     `HOME=${ROOT}`,
     `LOCALTUNNELS_HOME=${ROOT}`,
-    `LOCALTUNNELS_AUTH_KEY=${request.authKey || ''}`,
   ]
+  if (authKey)
+    env.push(`LOCALTUNNELS_AUTH_KEY=${authKey}`)
   if (process.env.LTVPN_LIB)
     env.push(`LTVPN_LIB=${path.resolve(process.env.LTVPN_LIB)}`)
+  return `/usr/bin/env -i ${[...env, cli, ...args].map(shellEscape).join(' ')}`
+}
+
+function restoreNetwork(cli?: string | null): string {
+  const restore = cli
+    ? `cd "$state" && ${vpnCommand(cli, ['vpn:down'])} >> "${LOG}" 2>&1`
+    : 'false'
+  return `if [ -f ${shellEscape(RESTORE)} ]; then ${restore} || { echo "The previous VPN network settings could not be restored." >&2; exit 1; }; fi`
+}
+
+export function buildConnectCommand(cli: string, request: ConnectRequest): string {
+  const args = ['vpn:up', '--coordinator', request.coordinatorUrl]
+  if (request.useExit)
+    args.push('--use-exit', request.useExit, '--full-tunnel')
 
   const key = path.join(IDENTITY, 'privatekey')
   const userKey = path.join(vpnDir(), 'privatekey')
@@ -123,6 +139,7 @@ export function buildConnectCommand(cli: string, request: ConnectRequest): strin
     'trap \'/bin/rmdir "$state/starting"\' EXIT',
     'if check_session; then echo "A VPN session is already running." >&2; exit 1; fi',
     'cd "$state" || exit 1',
+    restoreNetwork(cli),
     `/bin/mkdir -p -m 711 ${shellEscape(IDENTITY)}`,
     // Import the existing key as the signed-in user, while keeping the root
     // client's network-restore files in its own directory.
@@ -132,23 +149,30 @@ export function buildConnectCommand(cli: string, request: ConnectRequest): strin
     `public=${shellEscape(PUBLIC)}`,
     '/bin/rm -f "$ready"',
     ': > "$log" && /bin/chmod 644 "$log" || exit 1',
-    `/usr/bin/nohup /usr/bin/env -i ${[...env, ...args].map(shellEscape).join(' ')} < /dev/null > "$log" 2>&1 & pid=$!`,
+    // macOS nohup tries to detach from a console that the authorization
+    // service does not have. Ignore SIGHUP and close its IO in the child.
+    `(trap '' HUP; exec ${vpnCommand(cli, args, request.authKey)}) < /dev/null > "$log" 2>&1 & pid=$!`,
+    'expected=$pid',
     `started=$(${PS} "$pid")`,
     `printf '%s\n' "$pid" "$started" ${shellEscape(request.coordinatorUrl)} ${request.useExit ? 'exit' : 'mesh'} > "$session.new" && /bin/chmod 644 "$session.new" && /bin/mv -f "$session.new" "$session" || { kill "$pid"; exit 1; }`,
     'attempt=0',
     `while check_session && [ "$attempt" -lt 48 ]; do if /usr/bin/grep -q '^ *Interface: *utun' "$log"${request.useExit ? ` && /usr/bin/grep -Fq ${shellEscape(FULL_TUNNEL_READY)} "$log"` : ''}; then /usr/bin/grep -m 1 '^ *Interface: *utun' "$log" > "$ready" && /bin/chmod 644 "$ready" || exit 1; /usr/bin/awk '/^ *Public key: +[A-Za-z0-9+\\/]+=$/ {print $NF; exit}' "$log" > "$public" && /bin/chmod 644 "$public"; exit 0; fi; /bin/sleep 0.5; attempt=$((attempt + 1)); done`,
-    'if check_session; then kill "$pid"; fi',
+    'stop_session || exit 1',
+    restoreNetwork(cli),
     'exit 1',
   ].join('; ')
 }
 
-export function buildDisconnectCommand(expectedPid: number): string {
+export function buildDisconnectCommand(expectedPid: number | null, cli?: string | null): string {
   return [
+    'umask 077',
     ...sessionScript(),
-    `if check_session && [ "$pid" = ${expectedPid} ]; then kill "$pid"; fi`,
-    'attempt=0',
-    'while check_session && [ "$attempt" -lt 40 ]; do /bin/sleep 0.25; attempt=$((attempt + 1)); done',
-    'if check_session; then echo "The VPN is still shutting down. Try again in a moment." >&2; exit 1; fi',
+    '/bin/mkdir "$state/starting" || exit 1',
+    'trap \'/bin/rmdir "$state/starting"\' EXIT',
+    `expected=${expectedPid ?? 0}`,
+    'if check_session && [ "$pid" != "$expected" ]; then echo "The VPN session changed. Refresh its status and try again." >&2; exit 1; fi',
+    'stop_session || exit 1',
+    restoreNetwork(cli),
   ].join('; ')
 }
 
@@ -163,10 +187,17 @@ async function authorize(command: string): Promise<ControlResult> {
     stdout: 'ignore',
     stderr: 'pipe',
   })
-  const timer = setTimeout(() => child.kill(), 150_000)
+  let timedOut = false
+  const timer = setTimeout(() => {
+    timedOut = true
+    child.kill()
+  }, 150_000)
   try {
     const stderr = await new Response(child.stderr).text()
-    return await child.exited === 0 ? { success: true } : formatOsaError(stderr)
+    const exitCode = await child.exited
+    if (timedOut)
+      return { success: false, error: 'VPN authorization timed out. Try again when you can respond to the macOS prompt.' }
+    return exitCode === 0 ? { success: true } : formatOsaError(stderr)
   }
   finally {
     clearTimeout(timer)
@@ -210,6 +241,16 @@ export async function readManagedConnection(tunnels?: TunnelInterface[]): Promis
   const [, device, address] = readRootFile(READY, 200).match(INTERFACE_LINE) || []
   const tunnel = address && device ? (tunnels ?? await readTunnels()).find(t => t.name === device && t.address === address) || null : null
   return { pid, coordinatorUrl, mode, tunnel }
+}
+
+export function hasPendingVpnRestore(): boolean {
+  try {
+    const file = fs.lstatSync(RESTORE)
+    return file.uid === 0 && file.isFile()
+  }
+  catch {
+    return false
+  }
 }
 
 export function readManagedIdentity(): VpnIdentity | null {
@@ -259,7 +300,7 @@ export async function connect(input: unknown): Promise<ControlResult> {
       return { success: true }
 
     const log = readRootFile(LOG, 64 * 1024)
-    const failure = log !== previousLog && log.split('\n').find(line => /vpn up failed:|full tunnel failed/i.test(line))
+    const failure = log !== previousLog && log.split('\n').find(line => /vpn up failed:|full tunnel failed|^.*(?:Permission denied|No such file or directory)$/i.test(line))
     if (failure) {
       const key = checked.request.authKey
       return { success: false, error: (key ? failure.replaceAll(key, '[redacted]') : failure).trim().slice(0, 240) }
@@ -277,10 +318,11 @@ export async function connect(input: unknown): Promise<ControlResult> {
 export async function disconnect(): Promise<ControlResult> {
   return runVpnOperation('disconnect', async () => {
     const session = await readManagedConnection()
-    if (!session)
+    if (!session && !hasPendingVpnRestore())
       return { success: true }
 
-    const result = await authorize(buildDisconnectCommand(session.pid))
+    const cli = session?.mode === 'exit' || hasPendingVpnRestore() ? (await readCore()).cliPath : null
+    const result = await authorize(buildDisconnectCommand(session?.pid ?? null, cli))
     if (!result.success)
       return result
     return await readManagedConnection()
@@ -292,6 +334,14 @@ export async function disconnect(): Promise<ControlResult> {
 export function formatOsaError(message: string): ControlResult {
   if (/user cancel[el]*d|-128\b/i.test(message))
     return { success: false, error: 'Cancelled' }
+  for (const detail of [
+    'The VPN process could not be stopped.',
+    'The VPN session changed. Refresh its status and try again.',
+    'The previous VPN network settings could not be restored.',
+  ]) {
+    if (message.includes(detail))
+      return { success: false, error: detail }
+  }
   if (/authorization/i.test(message))
     return { success: false, error: 'Authorization failed' }
   return { success: false, error: 'macOS could not complete the VPN operation.' }

@@ -82,7 +82,7 @@ import { getTopProcesses, sampleCpuUsage, summarizeProcesses } from '@system-cle
 import { recordSystemActivity } from '../app/Support/System/activity-chart';
 import { isLocalAgent } from '../app/Support/Runtime/local-agent';
 import { invalidateVpnCache, readVpnStatus } from '../app/Support/Vpn/status';
-import { connect as vpnConnect, disconnect as vpnDisconnect, readManagedConnection, readManagedIdentity, runVpnOperation, vpnOperation } from '../app/Support/Vpn/control';
+import { connect as vpnConnect, disconnect as vpnDisconnect, hasPendingVpnRestore, readManagedConnection, readManagedIdentity, runVpnOperation, vpnOperation } from '../app/Support/Vpn/control';
 import { installVpnCore } from '../app/Support/Vpn/install';
 import {
   bulkDelete,
@@ -2740,6 +2740,7 @@ export default async function (router: Router) {
       connected: Boolean(connection?.tunnel),
       managedPid: connection?.pid ?? null,
       connection,
+      needsRestore: !connection && hasPendingVpnRestore(),
       operation: vpnOperation(),
       restriction: sandboxLimit('vpn') || null,
     });

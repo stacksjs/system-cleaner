@@ -193,7 +193,8 @@
 .vpn-compact .vpn-content { grid-template-columns: minmax(0, 1fr); }
 .vpn-compact .vpn-hero { min-height: 142px; padding: 20px; }
 .vpn-compact .vpn-hero h2 { font-size: 26px; }
-.vpn-compact .vpn-hero-art { opacity: .4; }
+.vpn-compact .vpn-hero-art { opacity: .24; width: 42%; }
+.vpn-compact .vpn-hero[data-state='connected'] .vpn-hero-art { align-items: start; padding-top: 18px; }
 .vpn-compact .vpn-hero-orbits { width: 79px; height: 79px; }
 .vpn-compact .vpn-emblem { width: 32px; height: 32px; }
 .vpn-compact .vpn-diagnostics { display: none; }

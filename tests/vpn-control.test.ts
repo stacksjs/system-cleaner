@@ -90,7 +90,8 @@ describe('vpn/control', () => {
     it('quotes executable paths, detaches the tunnel, and waits for the interface', () => {
       const command = buildConnectCommand('/Applications/My App/localtunnels', { coordinatorUrl: OK })
       expect(command).toContain(`'/Applications/My App/localtunnels' 'vpn:up' '--coordinator' '${OK}'`)
-      expect(command).toContain('nohup')
+      expect(command).toContain("(trap '' HUP; exec /usr/bin/env -i")
+      expect(command).toContain('< /dev/null > "$log" 2>&1 &')
       expect(command).toContain('pid=$!')
       expect(command).toContain('Interface: *utun')
       expect(command).not.toContain('--full-tunnel')
@@ -108,12 +109,17 @@ describe('vpn/control', () => {
       const script = buildAuthorizationScript(command)
       const literal = script.slice('do shell script '.length, -' with administrator privileges'.length)
       expect(JSON.parse(literal)).toBe(command)
-      expect(Bun.spawnSync(['/bin/sh', '-n'], { stdin: Buffer.from(command) }).exitCode).toBe(0)
+      if (process.platform !== 'win32')
+        expect(Bun.spawnSync(['/bin/sh', '-n'], { stdin: Buffer.from(command) }).exitCode).toBe(0)
     })
 
     it('signals the requested process only after rechecking the root-owned session', () => {
-      const command = buildDisconnectCommand(4321)
-      expect(command).toContain('if check_session && [ "$pid" = 4321 ]; then kill "$pid"; fi')
+      const command = buildDisconnectCommand(4321, CLI)
+      expect(command).toContain('expected=4321')
+      expect(command).toContain('same_session() { check_session && [ "$pid" = "$expected" ]; }')
+      expect(command).toContain('if same_session; then /bin/kill -TERM "$pid"')
+      expect(command).toContain('if same_session; then /bin/kill -KILL "$pid"')
+      expect(command).toContain(`'${CLI}' 'vpn:down'`)
     })
   })
 
