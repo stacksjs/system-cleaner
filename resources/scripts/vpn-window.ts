@@ -1,17 +1,9 @@
-/**
- * The VPN window's native half.
- *
- * Everything this window *does* is in the page — the view owns its state and
- * its clock. What is left here is the two things a page cannot do for itself:
- * move a window that has no titlebar, and keep the window's native appearance
- * in step with the theme chosen in another window.
- *
- * Both are lifted from `settings-window.ts`, which is the other window in this
- * app with a hidden titlebar, rather than reinvented smaller.
- */
 import { nativeWindow } from '@stacksjs/desktop/browser'
 
 import { watchAppearance } from '../lib/appearance'
+import { registerVpnState } from '../lib/vpn'
+
+registerVpnState()
 
 /**
  * Moving a window that has no titlebar.
@@ -48,7 +40,6 @@ function wire(): void {
   })
 
   watchAppearance()
-
 }
 
 if (document.readyState === 'loading')

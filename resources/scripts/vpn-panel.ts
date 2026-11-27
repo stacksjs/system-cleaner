@@ -1,19 +1,7 @@
-/**
- * Opening the VPN window, from the main window.
- *
- * The VPN window is its own window rather than a panel in the dashboard,
- * because a consumer VPN is one small window with one button on it — the shape
- * ExpressVPN, Mullvad and Proton all share, and not the shape of a page inside
- * a file manager. The technical panel at `/app/vpn` stays where it is: it
- * answers what this Mac's VPN state *is*, which is a different question from
- * taking you to Germany.
- *
- * The opener is a file of its own for the same reason `settings-panel.ts` is:
- * `nativeWindow` is an import, and an stx client block has no module
- * resolution, so anything talking to the native bridge has to be bundled from
- * `resources/scripts` into `public/`.
- */
 import { nativeWindow } from '@stacksjs/desktop/browser'
+import { registerVpnState } from '../lib/vpn'
+
+registerVpnState()
 
 /** The window's identity. Craft keys "is it already open?" on it. */
 const VPN_WINDOW = 'vpn'
@@ -34,15 +22,10 @@ function openVpnWindow(): void {
     name: VPN_WINDOW,
     title: 'VPN',
     url: new URL('/app/vpn-window', window.location.origin).toString(),
-    // A consumer VPN window's proportions: narrow enough to leave in a corner
-    // of the screen, tall enough that the button sits in the middle with the
-    // location row under it rather than crowding it.
-    width: 380,
-    height: 620,
-    // Below this the location row's two lines start wrapping, and the button
-    // stops being centred in anything.
+    width: 420,
+    height: 680,
     minWidth: 340,
-    minHeight: 520,
+    minHeight: 490,
     titlebarHidden: true,
     // One material behind the whole view, which the page then washes in its
     // own colour — the same arrangement as the other two windows, and for the

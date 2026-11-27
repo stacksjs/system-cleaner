@@ -22,7 +22,8 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import process from 'node:process'
-import { exec, isMacOS, TtlCache } from '@system-cleaner/core'
+import { exec, isMacOS, shellEscape, TtlCache } from '@system-cleaner/core'
+import { installedVpnCli } from './install'
 
 /** The CLI, if one could be found and made to answer. */
 export interface VpnCore {
@@ -98,8 +99,7 @@ const coreCache = new TtlCache<VpnCore>(60_000)
 
 /** `~/.localtunnels/vpn`, honouring the same override the CLI reads. */
 export function vpnDir(): string {
-  const base = process.env.LOCALTUNNELS_HOME || path.join(os.homedir(), '.localtunnels')
-  return path.join(base, 'vpn')
+  return path.resolve(process.env.LOCALTUNNELS_HOME || path.join(os.homedir(), '.localtunnels'), 'vpn')
 }
 
 /**
@@ -122,24 +122,33 @@ export function readIdentity(): VpnIdentity | null {
 /**
  * Locate the localtunnels CLI.
  *
- * `LOCALTUNNELS_BIN` wins, so a checkout can be pointed at without installing
- * anything. Otherwise both names it ships under are looked up on PATH.
+ * Honor the developer override, then check the in-app installation and common
+ * CLI directories. Finder-launched apps do not inherit a shell's PATH.
  */
-async function findCli(): Promise<string | null> {
+function findCli(): string | null {
   const explicit = process.env.LOCALTUNNELS_BIN
-  if (explicit) {
+  const directories = [
+    ...(process.env.PATH || '').split(path.delimiter).filter(p => path.isAbsolute(p)),
+    path.join(os.homedir(), '.local', 'bin'),
+    path.join(os.homedir(), '.bun', 'bin'),
+    path.join(os.homedir(), '.local', 'share', 'pantry', 'global', 'bin'),
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+  ]
+  const names = ['localtunnels', 'localtunnel', 'lt']
+  const candidates = explicit ? [path.resolve(explicit)] : [
+    installedVpnCli(),
+    ...directories.flatMap(dir => names.map(name => path.join(dir, name))),
+  ]
+  for (const candidate of new Set(candidates)) {
     try {
-      fs.accessSync(explicit, fs.constants.X_OK)
-      return explicit
+      fs.accessSync(candidate, fs.constants.X_OK)
+      if (fs.statSync(candidate).isFile())
+        return candidate
     }
     catch {
-      return null
+      // Keep looking in the next install location.
     }
-  }
-  for (const name of ['localtunnels', 'lt']) {
-    const found = await exec(`command -v ${name}`, { timeout: 2000 })
-    if (found.ok && found.stdout)
-      return found.stdout.split('\n')[0].trim()
   }
   return null
 }
@@ -157,22 +166,39 @@ async function findCli(): Promise<string | null> {
  * minute. Measured against a selftest that took two seconds, a 100ms timer
  * ticked **zero** times during the call where it should have ticked twenty-five.
  */
+let coreProbe: Promise<VpnCore> | null = null
+
 export async function readCore(): Promise<VpnCore> {
   const cached = coreCache.get('core')
   if (cached)
     return cached
+  if (coreProbe)
+    return coreProbe
 
-  const cliPath = await findCli()
+  const probe = probeCore()
+  coreProbe = probe
+  try {
+    const core = await probe
+    if (coreProbe === probe)
+      coreCache.set('core', core)
+    return core
+  }
+  finally {
+    if (coreProbe === probe)
+      coreProbe = null
+  }
+}
+
+async function probeCore(): Promise<VpnCore> {
+  const cliPath = findCli()
   if (!cliPath) {
-    const core: VpnCore = {
+    return {
       available: false,
       cliPath: null,
       version: null,
       healthy: null,
-      detail: 'No localtunnels CLI on PATH. Install it, or set LOCALTUNNELS_BIN to a built binary.',
+      detail: 'Install the Localtunnels core to connect to a coordinator.',
     }
-    coreCache.set('core', core)
-    return core
   }
 
   // Probed from a neutral directory. The CLI is a compiled Bun binary, and Bun
@@ -185,13 +211,13 @@ export async function readCore(): Promise<VpnCore> {
   // serialising them doubled the wait for no reason now that waiting no longer
   // blocks anyone else.
   const [version, selftest] = await Promise.all([
-    exec(`${quote(cliPath)} --version`, { ...at, timeout: 5000 }),
+    exec(`${shellEscape(cliPath)} --version`, { ...at, timeout: 5000 }),
     // `vpn:selftest` needs no root: it runs entirely in-process.
-    exec(`${quote(cliPath)} vpn:selftest`, { ...at, timeout: 20_000 }),
+    exec(`${shellEscape(cliPath)} vpn:selftest`, { ...at, timeout: 20_000 }),
   ])
   const healthy = selftest.ok && /VPN core is healthy/i.test(selftest.stdout)
 
-  const core: VpnCore = {
+  return {
     available: true,
     cliPath,
     version: version.ok ? version.stdout.split('\n')[0].trim() || null : null,
@@ -201,8 +227,6 @@ export async function readCore(): Promise<VpnCore> {
       : (selftest.stderr || selftest.stdout || '').split('\n').filter(Boolean).slice(-1)[0]
         || 'vpn:selftest did not report a healthy core.',
   }
-  coreCache.set('core', core)
-  return core
 }
 
 /**
@@ -280,6 +304,7 @@ export async function readVpnStatus(): Promise<VpnStatus> {
 
 /** Drop the cached CLI probe, for an explicit refresh. */
 export function invalidateVpnCache(): void {
+  coreProbe = null
   coreCache.clear()
 }
 
@@ -293,9 +318,4 @@ function ipToInt(ip: string): number {
   if (o.length !== 4 || o.some(n => Number.isNaN(n) || n < 0 || n > 255))
     return -1
   return (((o[0] << 24) | (o[1] << 16) | (o[2] << 8) | o[3]) >>> 0)
-}
-
-/** Shell-quote a path so a space in it cannot split the command. */
-function quote(p: string): string {
-  return `'${p.replace(/'/g, `'\\''`)}'`
 }

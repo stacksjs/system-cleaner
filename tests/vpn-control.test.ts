@@ -2,9 +2,8 @@ import { describe, expect, it } from 'bun:test'
 import {
   buildConnectCommand,
   buildDisconnectCommand,
-  buildElevatedCommand,
+  buildAuthorizationScript,
   formatOsaError,
-  looksLikeTunnel,
   validateConnectRequest,
 } from '../app/Support/Vpn/control'
 
@@ -31,6 +30,8 @@ describe('vpn/control', () => {
         'ws://host/path',
         'ws://host?q=1',
         'ws://host#frag',
+        'ws://host:0',
+        'ws://host:65536',
         'ws://user:pass@host',
         'http://host',
         'host:51821',
@@ -85,90 +86,34 @@ describe('vpn/control', () => {
     })
   })
 
-  describe('buildConnectCommand', () => {
-    it('quotes every argument and backgrounds the tunnel', () => {
-      const cmd = buildConnectCommand(CLI, { coordinatorUrl: OK })
-      expect(cmd).toContain(`'${CLI}' 'vpn:up' '--coordinator' '${OK}'`)
-      expect(cmd).toStartWith('nohup ')
-      // Without backgrounding, `do shell script` waits forever on a tunnel.
-      expect(cmd).toContain('&')
-      expect(cmd).toContain('echo $!')
+  describe('VPN commands', () => {
+    it('quotes executable paths, detaches the tunnel, and waits for the interface', () => {
+      const command = buildConnectCommand('/Applications/My App/localtunnels', { coordinatorUrl: OK })
+      expect(command).toContain(`'/Applications/My App/localtunnels' 'vpn:up' '--coordinator' '${OK}'`)
+      expect(command).toContain('nohup')
+      expect(command).toContain('pid=$!')
+      expect(command).toContain('Interface: *utun')
+      expect(command).not.toContain('--full-tunnel')
     })
 
-    it('includes the optional flags only when given', () => {
-      const bare = buildConnectCommand(CLI, { coordinatorUrl: OK })
-      expect(bare).not.toContain('--auth-key')
-      expect(bare).not.toContain('--use-exit')
-
-      const full = buildConnectCommand(CLI, { coordinatorUrl: OK, authKey: 'k-1', useExit: 'auto' })
-      expect(full).toContain("'--auth-key' 'k-1'")
-      expect(full).toContain("'--use-exit' 'auto'")
+    it('waits for traffic routing when an exit node is requested', () => {
+      const command = buildConnectCommand(CLI, { coordinatorUrl: OK, authKey: 'k-1', useExit: 'auto' })
+      expect(command).toContain("'LOCALTUNNELS_AUTH_KEY=k-1'")
+      expect(command).toContain("'--use-exit' 'auto' '--full-tunnel'")
+      expect(command).toContain('full tunnel: default route and DNS via ')
     })
 
-    it('single-quotes a CLI path containing a space', () => {
-      const cmd = buildConnectCommand('/Applications/My App/localtunnels', { coordinatorUrl: OK })
-      expect(cmd).toContain("'/Applications/My App/localtunnels'")
-    })
-  })
-
-  describe('buildElevatedCommand', () => {
-    it('escapes the shell command for the AppleScript literal', () => {
-      // Shell quoting leaves single quotes everywhere; those are harmless
-      // inside "..." but the double quotes and backslashes are not.
-      const elevated = buildElevatedCommand(`echo "hi" \\ there`)
-      expect(elevated).toStartWith('osascript -e ')
-      expect(elevated).toContain('with administrator privileges')
-      expect(elevated).toContain('\\"hi\\"')
-      expect(elevated).toContain('\\\\')
+    it('round-trips the shell command through an AppleScript string', () => {
+      const command = buildConnectCommand("/Applications/Alice's Mac/localtunnels", { coordinatorUrl: OK })
+      const script = buildAuthorizationScript(command)
+      const literal = script.slice('do shell script '.length, -' with administrator privileges'.length)
+      expect(JSON.parse(literal)).toBe(command)
+      expect(Bun.spawnSync(['/bin/sh', '-n'], { stdin: Buffer.from(command) }).exitCode).toBe(0)
     })
 
-    it('leaves no unescaped double quote to close the literal early', () => {
-      const inner = buildConnectCommand(CLI, { coordinatorUrl: OK })
-      const elevated = buildElevatedCommand(inner)
-      // Everything between the outer single quotes is the AppleScript; the
-      // only unescaped double quotes should be the two delimiting the literal.
-      const script = elevated.slice(elevated.indexOf("'") + 1, elevated.lastIndexOf("'"))
-      const unescaped = [...script.matchAll(/(?<!\\)"/g)].length
-      expect(unescaped).toBe(2)
-    })
-  })
-
-  describe('buildDisconnectCommand', () => {
-    it('kills exactly the pid it was given', () => {
-      expect(buildDisconnectCommand(4321)).toBe('kill 4321')
-    })
-  })
-
-  describe('looksLikeTunnel', () => {
-    it('matches the resolved CLI path running vpn:up', () => {
-      expect(looksLikeTunnel(`${CLI} vpn:up --coordinator ws://x:1`, CLI)).toBe(true)
-    })
-
-    it('rejects a different binary even when it is running vpn:up', () => {
-      expect(looksLikeTunnel('/tmp/evil vpn:up --coordinator ws://x:1', CLI)).toBe(false)
-    })
-
-    it('falls back to the known names when the path is unknown', () => {
-      expect(looksLikeTunnel('/usr/local/bin/localtunnels vpn:up --coordinator ws://x:1')).toBe(true)
-      expect(looksLikeTunnel('/opt/homebrew/bin/lt vpn:up --coordinator ws://x:1')).toBe(true)
-    })
-
-    it('does not match an unrelated process that inherited the pid', () => {
-      // Why the pid file alone is not trusted: pids get reused, and a stale
-      // one would otherwise be killed.
-      for (const cmd of [
-        '/usr/sbin/cupsd -l',
-        '/usr/local/bin/localtunnels start --port 3000',
-        '',
-      ])
-        expect(looksLikeTunnel(cmd)).toBe(false)
-    })
-
-    it('is not fooled by vpn:up appearing as an argument to something else', () => {
-      // `lt` is a common enough word that the name fallback has to require
-      // vpn:up as its own token, not merely somewhere on the line.
-      expect(looksLikeTunnel('vim lt vpn:upgrade-notes')).toBe(false)
-      expect(looksLikeTunnel('/usr/bin/grep vpn:up /var/log/system.log')).toBe(false)
+    it('signals the requested process only after rechecking the root-owned session', () => {
+      const command = buildDisconnectCommand(4321)
+      expect(command).toContain('if check_session && [ "$pid" = 4321 ]; then kill "$pid"; fi')
     })
   })
 

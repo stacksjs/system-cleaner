@@ -82,7 +82,8 @@ import { getTopProcesses, sampleCpuUsage, summarizeProcesses } from '@system-cle
 import { recordSystemActivity } from '../app/Support/System/activity-chart';
 import { isLocalAgent } from '../app/Support/Runtime/local-agent';
 import { invalidateVpnCache, readVpnStatus } from '../app/Support/Vpn/status';
-import { connect as vpnConnect, connectionPid, disconnect as vpnDisconnect } from '../app/Support/Vpn/control';
+import { connect as vpnConnect, disconnect as vpnDisconnect, readManagedConnection, readManagedIdentity, runVpnOperation, vpnOperation } from '../app/Support/Vpn/control';
+import { installVpnCore } from '../app/Support/Vpn/install';
 import {
   bulkDelete,
   cleanupHistory,
@@ -2726,40 +2727,58 @@ export default async function (router: Router) {
 
   // ── VPN ──────────────────────────────────────────────────────
 
-  /**
-   * Read-only status of the localtunnels VPN on this machine.
-   *
-   * Observes only: it creates no interface, generates no key and asks for no
-   * password, so opening the panel changes nothing. `refresh` re-probes the
-   * CLI, whose answer is otherwise cached for a minute.
-   *
-   * Bringing a tunnel up needs root, which needs a privileged helper this app
-   * does not have yet — so there is deliberately no counterpart to this route.
-   */
   await router.post('/vpn-status', async (req: Request) => {
     const body = await readJsonBody<{ refresh?: unknown }>(req);
     if (body?.refresh === true)
       invalidateVpnCache();
-    // `managedPid` is the tunnel *this app* started, which is a different
-    // question from whether a tunnel exists: the interface list reports any
-    // tunnel on the machine, including one someone brought up in Terminal.
-    // Only a managed one can be disconnected from here.
-    // Both awaited together: the status probe and the managed-pid lookup are
-    // independent, and neither blocks the agent now that the probe is async.
-    const [status, managedPid] = await Promise.all([readVpnStatus(), connectionPid()]);
-    return Response.json({ success: true, ...status, managedPid });
+    const status = await readVpnStatus();
+    const connection = await readManagedConnection(status.tunnels);
+    return Response.json({
+      success: true,
+      ...status,
+      identity: readManagedIdentity() ?? status.identity,
+      connected: Boolean(connection?.tunnel),
+      managedPid: connection?.pid ?? null,
+      connection,
+      operation: vpnOperation(),
+      restriction: sandboxLimit('vpn') || null,
+    });
   });
 
-  /**
-   * Bring the VPN up.
-   *
-   * Prompts for authorization through macOS, so it blocks until the person
-   * answers the dialog — or declines, which comes back as `Cancelled` rather
-   * than as a failure. Request validation lives in the control module, beside
-   * the command construction it protects.
-   */
+  // The loopback agent has no cross-origin VPN clients. Web forms must not
+  // be able to trigger the macOS authorization dialog.
+  function checkVpnRequest(req: Request): Response | null {
+    const url = new URL(req.url);
+    const origin = req.headers.get('origin');
+    const contentType = req.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
+    if (!['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) ||
+      (origin && origin !== url.origin) || contentType !== 'application/json')
+      return Response.json({ success: false, error: 'Invalid VPN request.' }, { status: 403 });
+    return refuseInSandbox('vpn');
+  }
+
+  await router.post('/vpn-install', async (req: Request) => {
+    const limited = checkVpnRequest(req);
+    if (limited) return limited;
+    const result = await runVpnOperation('install', async () => {
+      if (await readManagedConnection())
+        return { success: false, error: 'Disconnect before installing the Localtunnels core.' };
+      try {
+        await installVpnCore();
+        return { success: true };
+      }
+      catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : 'Localtunnels setup failed.' };
+      }
+      finally {
+        invalidateVpnCache();
+      }
+    });
+    return Response.json(result, { status: result.success ? 200 : 400 });
+  });
+
   await router.post('/vpn-connect', async (req: Request) => {
-    const limited = refuseInSandbox('vpn');
+    const limited = checkVpnRequest(req);
     if (limited) return limited;
     const body = await readJsonBody<unknown>(req);
     if (body === null) return badJson();
@@ -2767,9 +2786,8 @@ export default async function (router: Router) {
     return Response.json(result, { status: result.success ? 200 : 400 });
   });
 
-  /** Take the VPN down. Also authorized, since the tunnel runs as root. */
-  await router.post('/vpn-disconnect', async () => {
-    const limited = refuseInSandbox('vpn');
+  await router.post('/vpn-disconnect', async (req: Request) => {
+    const limited = checkVpnRequest(req);
     if (limited) return limited;
     const result = await vpnDisconnect();
     return Response.json(result, { status: result.success ? 200 : 400 });

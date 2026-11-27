@@ -4,40 +4,16 @@
   <meta charset='UTF-8'>
   <meta name='viewport' content='width=device-width, initial-scale=1.0'>
   <title>VPN</title>
-  <!--
-    The VPN window's shell.
-
-    A third window, like Settings, and for the same reason: this is not a panel
-    inside the dashboard. A consumer VPN is one small window you keep in a
-    corner and press one button on — ExpressVPN, Mullvad and Proton are all
-    the same shape, and none of them is a page inside a file manager. The
-    technical panel at `/app/vpn` stays where it is; it answers "what is this
-    Mac's VPN state", which is a different question from "take me to Germany".
-
-    Craft opens it with `craft.window.open({ name: 'vpn', ... })` from
-    `resources/scripts/vpn-panel.ts`, and the name is what makes a second press
-    bring this window forward rather than stack another behind it.
-
-    The same appearance key as every other window, so the app is not light here
-    and dark there.
-  -->
   @appearanceBootstrap({
     storageKey: 'systemcleaner-appearance',
     appearance: { key: 'sidebarStyle', attribute: 'appearance', allowed: ['macos'], default: 'macos' },
     colorMode: { key: 'colorMode', attribute: 'color-mode', default: 'system' },
   })
   <link rel="stylesheet" href="/app-theme.css">
+  <link rel="stylesheet" href="/vpn.css">
+  <script src="/vpn-window.js"></script>
   <style>
-    :root {
-      --vpn-card: #ffffff;
-      --vpn-card-line: rgba(60, 60, 67, .1);
-      --vpn-wash: color-mix(in srgb, var(--app-bg) var(--material-opacity), transparent);
-    }
-    :root.dark {
-      --vpn-card: #242426;
-      --vpn-card-line: rgba(255, 255, 255, .07);
-      --vpn-wash: color-mix(in srgb, var(--app-bg) var(--material-opacity), transparent);
-    }
+    :root { --vpn-wash: color-mix(in srgb, var(--app-bg) var(--material-opacity), transparent); }
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
       height: 100%; overflow: hidden;
@@ -91,6 +67,5 @@
     </div>
   </div>
 
-  <script src="/vpn-window.js"></script>
-</body>
+  </body>
 </html>

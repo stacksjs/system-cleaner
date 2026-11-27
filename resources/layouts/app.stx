@@ -20,6 +20,8 @@ const localAgent = isLocalAgent()
     colorMode: { key: 'colorMode', attribute: 'color-mode', default: 'system' },
   })
   <link rel="stylesheet" href="/app-theme.css">
+  <link rel="stylesheet" href="/vpn.css">
+  <script src="/vpn-panel.js"></script>
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -1407,7 +1409,6 @@ useEventListener('mousedown', moveWindowFrom, { target: document })
 <!-- Wires the Settings panel above: Cmd+, from the menubar or the page, the
      profile chip in the top strip, and the controls inside it. -->
 <script src="/settings-panel.js"></script>
-<script src="/vpn-panel.js"></script>
 
 </body>
 </html>

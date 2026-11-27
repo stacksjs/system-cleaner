@@ -1,45 +1,9 @@
-/**
- * Bringing the VPN up and down, which needs root.
- *
- * Creating a network interface is privileged, so this follows the elevation
- * path the app already uses for system launch agents: one narrow command run
- * through `osascript ... with administrator privileges`, which puts macOS's
- * own authorization dialog in front of the user. No helper daemon is
- * installed, nothing runs as root between connections, and every connect is
- * individually authorized by the person at the keyboard.
- *
- * That is the same line `packages/uninstall` draws — elevate for a bounded,
- * legible operation, never for a broad one. Bulk deletion still refuses and
- * points at Terminal.
- *
- * ## Why the inputs are validated rather than escaped
- *
- * The command ends up inside two nested quotings: a shell string, itself
- * inside an AppleScript double-quoted literal. Escaping alone has to be
- * perfect twice. So every value is first checked against a strict pattern and
- * rejected outright if it does not match — a coordinator URL is a scheme, host
- * and optional port and nothing else, a key is base64 and nothing else — and
- * only then shell-quoted and AppleScript-escaped. An attacker-supplied value
- * has to survive all three to reach a shell.
- *
- * The CLI path is never taken from the caller. It comes from `readCore`,
- * which resolves it from PATH or `LOCALTUNNELS_BIN`.
- */
+import type { TunnelInterface, VpnIdentity } from './status'
 import * as fs from 'node:fs'
-import * as os from 'node:os'
 import * as path from 'node:path'
-import { appleScriptEscape, exec, shellEscape } from '@system-cleaner/core'
-import { readCore } from './status'
-
-/** Where the privileged command records the tunnel's process id. */
-export function pidFile(): string {
-  return path.join(os.homedir(), 'Library', 'Application Support', 'SystemCleaner', 'vpn.pid')
-}
-
-/** Where the tunnel's output goes, so a failed connect can say why. */
-export function logFile(): string {
-  return path.join(os.homedir(), 'Library', 'Application Support', 'SystemCleaner', 'vpn.log')
-}
+import process from 'node:process'
+import { exec, isMacOS, shellEscape } from '@system-cleaner/core'
+import { readCore, readTunnels, vpnDir } from './status'
 
 export interface ConnectRequest {
   /** Coordinator WebSocket URL. */
@@ -57,13 +21,13 @@ export interface ConnectRequest {
  * fragment or userinfo, because none of them mean anything to the coordinator
  * and each is somewhere for a payload to hide.
  */
-const COORDINATOR_URL = /^wss?:\/\/[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*(?::\d{1,5})?$/i
+const COORDINATOR_URL = /^wss?:\/\/(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*|\[[a-f0-9:.]+\])(?::([0-9]{1,5}))?$/i
 
 /** base64url, as `vpn:coordinator` mints auth keys. */
 const AUTH_KEY = /^[\w-]{1,128}$/
 
 /** A 32-byte key in standard base64, as every public key in this system is. */
-const PUBLIC_KEY = /^[\w+/]{42}[\w+/=]=$/
+const PUBLIC_KEY = /^[a-z0-9+/]{43}=$/i
 
 export type Validated = { ok: true, request: Required<Pick<ConnectRequest, 'coordinatorUrl'>> & ConnectRequest } | { ok: false, error: string }
 
@@ -73,8 +37,10 @@ export function validateConnectRequest(input: unknown): Validated {
     return { ok: false, error: 'Expected a connection request' }
   const r = input as Record<string, unknown>
 
-  if (typeof r.coordinatorUrl !== 'string' || !COORDINATOR_URL.test(r.coordinatorUrl))
-    return { ok: false, error: 'Coordinator must be a ws:// or wss:// host, with an optional port' }
+  const coordinatorUrl = typeof r.coordinatorUrl === 'string' ? r.coordinatorUrl.trim() : ''
+  const match = COORDINATOR_URL.exec(coordinatorUrl)
+  if (!match || coordinatorUrl.length > 270 || (match[1] && Number(match[1]) === 0) || !URL.canParse(coordinatorUrl))
+    return { ok: false, error: 'Enter a ws:// or wss:// coordinator address with a valid host and port.' }
 
   if (r.authKey !== undefined && r.authKey !== '') {
     if (typeof r.authKey !== 'string' || !AUTH_KEY.test(r.authKey))
@@ -91,43 +57,11 @@ export function validateConnectRequest(input: unknown): Validated {
   return {
     ok: true,
     request: {
-      coordinatorUrl: r.coordinatorUrl,
+      coordinatorUrl,
       ...(r.authKey ? { authKey: r.authKey as string } : {}),
       ...(r.useExit ? { useExit: r.useExit as string } : {}),
     },
   }
-}
-
-/**
- * The shell command that brings the tunnel up.
- *
- * Backgrounded, because `do shell script` waits for what it runs and a tunnel
- * does not exit. The pid is written where {@link disconnect} can find it and
- * the output where a failed connect can be read from.
- *
- * Pure, so the exact string reaching the shell is covered by tests.
- */
-export function buildConnectCommand(cli: string, req: ConnectRequest): string {
-  const args = ['vpn:up', '--coordinator', req.coordinatorUrl]
-  if (req.authKey)
-    args.push('--auth-key', req.authKey)
-  if (req.useExit)
-    args.push('--use-exit', req.useExit)
-
-  const quoted = [cli, ...args].map(shellEscape).join(' ')
-  const log = shellEscape(logFile())
-  const pid = shellEscape(pidFile())
-  return `nohup ${quoted} > ${log} 2>&1 & echo $! > ${pid}`
-}
-
-/** The shell command that takes it down again. */
-export function buildDisconnectCommand(pid: number): string {
-  return `kill ${pid}`
-}
-
-/** Wrap a shell command in the macOS authorization prompt. */
-export function buildElevatedCommand(shellCommand: string): string {
-  return `osascript -e 'do shell script "${appleScriptEscape(shellCommand)}" with administrator privileges'`
 }
 
 export interface ControlResult {
@@ -135,123 +69,230 @@ export interface ControlResult {
   error?: string
 }
 
-/** Bring the tunnel up, prompting for authorization. */
+export interface ManagedConnection {
+  pid: number
+  coordinatorUrl: string
+  mode: 'mesh' | 'exit'
+  tunnel: TunnelInterface | null
+}
+
+const ROOT = `/private/var/db/org.stacksjs.system-cleaner.vpn.${process.getuid?.()}`
+const SESSION = path.join(ROOT, 'session')
+const LOG = path.join(ROOT, 'tunnel.log')
+const READY = path.join(ROOT, 'ready')
+const PUBLIC = path.join(ROOT, 'publickey')
+const IDENTITY = path.join(ROOT, 'vpn')
+const PS = 'LC_ALL=C /bin/ps -o uid=,lstart= -p'
+const FULL_TUNNEL_READY = 'full tunnel: default route and DNS via '
+const INTERFACE_LINE = /^\s*Interface:\s+(utun\d+) \(([\d.]+)\/\d+,/m
+
+/**
+ * The elevated shell owns the process record and logs. The live process must
+ * still have the recorded UID and start time when the shell sends a signal.
+ */
+function sessionScript(): string[] {
+  return [
+    `state=${shellEscape(ROOT)}`,
+    `session=${shellEscape(SESSION)}`,
+    `check_session() { { IFS= read -r pid; IFS= read -r started; } 2>/dev/null < "$session" || return 1; case "$pid" in ""|*[!0-9]*) return 1;; esac; [ "$pid" -gt 1 ] && [ "$(${PS} "$pid" 2>/dev/null)" = "$started" ]; }`,
+  ]
+}
+
+export function buildConnectCommand(cli: string, request: ConnectRequest): string {
+  const args = [cli, 'vpn:up', '--coordinator', request.coordinatorUrl]
+  if (request.useExit)
+    args.push('--use-exit', request.useExit, '--full-tunnel')
+  const env = [
+    'PATH=/usr/bin:/bin:/usr/sbin:/sbin',
+    `HOME=${ROOT}`,
+    `LOCALTUNNELS_HOME=${ROOT}`,
+    `LOCALTUNNELS_AUTH_KEY=${request.authKey || ''}`,
+  ]
+  if (process.env.LTVPN_LIB)
+    env.push(`LTVPN_LIB=${path.resolve(process.env.LTVPN_LIB)}`)
+
+  const key = path.join(IDENTITY, 'privatekey')
+  const userKey = path.join(vpnDir(), 'privatekey')
+  const readAsUser = `/usr/bin/sudo -n -u ${shellEscape(`#${process.getuid?.()}`)} /bin/cat ${shellEscape(userKey)}`
+  return [
+    'umask 077',
+    ...sessionScript(),
+    '/bin/mkdir -p -m 755 "$state"',
+    '[ "$( /usr/bin/stat -f %u "$state" )" = 0 ] && [ ! -L "$state" ] || exit 1',
+    '/bin/mkdir "$state/starting" || exit 1',
+    'trap \'/bin/rmdir "$state/starting"\' EXIT',
+    'if check_session; then echo "A VPN session is already running." >&2; exit 1; fi',
+    'cd "$state" || exit 1',
+    `/bin/mkdir -p -m 711 ${shellEscape(IDENTITY)}`,
+    // Import the existing key as the signed-in user, while keeping the root
+    // client's network-restore files in its own directory.
+    `if [ ! -f ${shellEscape(key)} ] && key=$(${readAsUser} 2>/dev/null); then if printf '%s' "$key" | /usr/bin/grep -Eq '^[A-Za-z0-9+/]{43}=$'; then printf '%s\n' "$key" > ${shellEscape(key)}; fi; fi`,
+    `log=${shellEscape(LOG)}`,
+    `ready=${shellEscape(READY)}`,
+    `public=${shellEscape(PUBLIC)}`,
+    '/bin/rm -f "$ready"',
+    ': > "$log" && /bin/chmod 644 "$log" || exit 1',
+    `/usr/bin/nohup /usr/bin/env -i ${[...env, ...args].map(shellEscape).join(' ')} < /dev/null > "$log" 2>&1 & pid=$!`,
+    `started=$(${PS} "$pid")`,
+    `printf '%s\n' "$pid" "$started" ${shellEscape(request.coordinatorUrl)} ${request.useExit ? 'exit' : 'mesh'} > "$session.new" && /bin/chmod 644 "$session.new" && /bin/mv -f "$session.new" "$session" || { kill "$pid"; exit 1; }`,
+    'attempt=0',
+    `while check_session && [ "$attempt" -lt 48 ]; do if /usr/bin/grep -q '^ *Interface: *utun' "$log"${request.useExit ? ` && /usr/bin/grep -Fq ${shellEscape(FULL_TUNNEL_READY)} "$log"` : ''}; then /usr/bin/grep -m 1 '^ *Interface: *utun' "$log" > "$ready" && /bin/chmod 644 "$ready" || exit 1; /usr/bin/awk '/^ *Public key: +[A-Za-z0-9+\\/]+=$/ {print $NF; exit}' "$log" > "$public" && /bin/chmod 644 "$public"; exit 0; fi; /bin/sleep 0.5; attempt=$((attempt + 1)); done`,
+    'if check_session; then kill "$pid"; fi',
+    'exit 1',
+  ].join('; ')
+}
+
+export function buildDisconnectCommand(expectedPid: number): string {
+  return [
+    ...sessionScript(),
+    `if check_session && [ "$pid" = ${expectedPid} ]; then kill "$pid"; fi`,
+    'attempt=0',
+    'while check_session && [ "$attempt" -lt 40 ]; do /bin/sleep 0.25; attempt=$((attempt + 1)); done',
+    'if check_session; then echo "The VPN is still shutting down. Try again in a moment." >&2; exit 1; fi',
+  ].join('; ')
+}
+
+export function buildAuthorizationScript(command: string): string {
+  const escaped = command.replace(/[\\"]/g, character => `\\${character}`).replace(/\n/g, '\\n')
+  return `do shell script "${escaped}" with administrator privileges`
+}
+
+async function authorize(command: string): Promise<ControlResult> {
+  const child = Bun.spawn(['/usr/bin/osascript', '-'], {
+    stdin: new Blob([buildAuthorizationScript(command)]),
+    stdout: 'ignore',
+    stderr: 'pipe',
+  })
+  const timer = setTimeout(() => child.kill(), 150_000)
+  try {
+    const stderr = await new Response(child.stderr).text()
+    return await child.exited === 0 ? { success: true } : formatOsaError(stderr)
+  }
+  finally {
+    clearTimeout(timer)
+  }
+}
+
+function readRootFile(file: string, maxBytes: number): string {
+  try {
+    const directory = fs.lstatSync(ROOT)
+    if (directory.uid !== 0 || !directory.isDirectory())
+      return ''
+    const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW)
+    try {
+      const stat = fs.fstatSync(fd)
+      if (stat.uid !== 0 || !stat.isFile())
+        return ''
+      const contents = Buffer.alloc(Math.min(stat.size, maxBytes))
+      const bytes = fs.readSync(fd, contents, 0, contents.length, Math.max(0, stat.size - maxBytes))
+      return contents.toString('utf8', 0, bytes)
+    }
+    finally {
+      fs.closeSync(fd)
+    }
+  }
+  catch {
+    return ''
+  }
+}
+
+export async function readManagedConnection(tunnels?: TunnelInterface[]): Promise<ManagedConnection | null> {
+  const [pidText, started, coordinatorUrl, mode] = readRootFile(SESSION, 1024).trimEnd().split('\n')
+  const pid = Number(pidText)
+  if (!/^\d{1,10}$/.test(pidText) || pid <= 1)
+    return null
+  if (!started?.trimStart().startsWith('0 ') || (mode !== 'mesh' && mode !== 'exit'))
+    return null
+  const live = await exec(`${PS} ${pid}`, { timeout: 3000 })
+  if (!live.ok || live.stdout !== started.trim())
+    return null
+
+  const [, device, address] = readRootFile(READY, 200).match(INTERFACE_LINE) || []
+  const tunnel = address && device ? (tunnels ?? await readTunnels()).find(t => t.name === device && t.address === address) || null : null
+  return { pid, coordinatorUrl, mode, tunnel }
+}
+
+export function readManagedIdentity(): VpnIdentity | null {
+  const publicKey = readRootFile(PUBLIC, 100).trim()
+  return PUBLIC_KEY.test(publicKey) ? { publicKey, publicKeyPath: PUBLIC } : null
+}
+
+let operation: 'connect' | 'disconnect' | 'install' | null = null
+
+export function vpnOperation(): typeof operation {
+  return operation
+}
+
+export async function runVpnOperation(kind: NonNullable<typeof operation>, run: () => Promise<ControlResult>): Promise<ControlResult> {
+  if (!isMacOS)
+    return { success: false, error: 'VPN control is available on macOS.' }
+  if (operation)
+    return { success: false, error: 'Another VPN operation is already in progress.' }
+
+  operation = kind
+  try {
+    return await run()
+  }
+  finally {
+    operation = null
+  }
+}
+
 export async function connect(input: unknown): Promise<ControlResult> {
   const checked = validateConnectRequest(input)
   if (!checked.ok)
     return { success: false, error: checked.error }
 
-  const core = await readCore()
-  if (!core.available || !core.cliPath)
-    return { success: false, error: core.detail || 'No localtunnels CLI found' }
+  return runVpnOperation('connect', async () => {
+    if (await readManagedConnection())
+      return { success: false, error: 'Disconnect the current VPN session before connecting again.' }
 
-  const running = await connectionPid()
-  if (running !== null)
-    return { success: false, error: `A tunnel is already running (pid ${running})` }
+    const core = await readCore()
+    if (!core.healthy || !core.cliPath)
+      return { success: false, error: core.detail || 'The Localtunnels core is unavailable.' }
 
-  fs.mkdirSync(path.dirname(pidFile()), { recursive: true })
-  const command = buildElevatedCommand(buildConnectCommand(core.cliPath, checked.request))
+    const previousLog = readRootFile(LOG, 64 * 1024)
+    const result = await authorize(buildConnectCommand(core.cliPath, checked.request))
+    if (!result.success && result.error === 'Cancelled')
+      return result
+    if ((await readManagedConnection())?.tunnel)
+      return { success: true }
 
-  const result = await exec(command, { timeout: 120_000 })
-  if (!result.ok)
-    return formatOsaError(result.stderr || 'Could not start the tunnel')
+    const log = readRootFile(LOG, 64 * 1024)
+    const failure = log !== previousLog && log.split('\n').find(line => /vpn up failed:|full tunnel failed/i.test(line))
+    if (failure) {
+      const key = checked.request.authKey
+      return { success: false, error: (key ? failure.replaceAll(key, '[redacted]') : failure).trim().slice(0, 240) }
+    }
 
-  // The interface takes a moment; report what the log says if it died at once.
-  await new Promise(r => setTimeout(r, 1200))
-  const pid = await connectionPid()
-  if (pid === null)
-    return { success: false, error: lastLogLine() || 'The tunnel exited immediately' }
-
-  return { success: true }
+    const error = log !== previousLog
+      ? checked.request.useExit
+        ? 'The exit node did not become ready. Check that a trusted exit is online and reachable.'
+        : 'The VPN interface did not come up. Check the coordinator address and auth key.'
+      : result.error
+    return { success: false, error: error || 'The VPN interface did not come up.' }
+  })
 }
 
-/** Take the tunnel down, prompting for authorization. */
 export async function disconnect(): Promise<ControlResult> {
-  const pid = await connectionPid()
-  if (pid === null) {
-    clearPidFile()
-    return { success: true }
-  }
+  return runVpnOperation('disconnect', async () => {
+    const session = await readManagedConnection()
+    if (!session)
+      return { success: true }
 
-  const result = await exec(buildElevatedCommand(buildDisconnectCommand(pid)), { timeout: 60_000 })
-  if (!result.ok)
-    return formatOsaError(result.stderr || 'Could not stop the tunnel')
-
-  clearPidFile()
-  return { success: true }
+    const result = await authorize(buildDisconnectCommand(session.pid))
+    if (!result.success)
+      return result
+    return await readManagedConnection()
+      ? { success: false, error: 'The VPN is still shutting down. Try again in a moment.' }
+      : { success: true }
+  })
 }
 
-/**
- * The pid of the tunnel this app started, or null.
- *
- * A recorded pid is not trusted on its own: pids are reused, and killing a
- * stale one would kill whatever inherited the number. The process is confirmed
- * to still be the localtunnels CLI before it counts as running, which is also
- * what makes a crashed tunnel report as disconnected rather than as running.
- */
-export async function connectionPid(): Promise<number | null> {
-  let raw: string
-  try {
-    raw = fs.readFileSync(pidFile(), 'utf8').trim()
-  }
-  catch {
-    return null
-  }
-  if (!/^\d{1,10}$/.test(raw))
-    return null
-
-  const pid = Number(raw)
-  if (pid <= 1)
-    return null
-
-  const ps = await exec(`ps -o command= -p ${pid}`, { timeout: 5000 })
-  if (!ps.ok || !ps.stdout.trim())
-    return null
-  return looksLikeTunnel(ps.stdout, (await readCore()).cliPath) ? pid : null
-}
-
-/**
- * Whether a `ps` command line is the tunnel this app started.
- *
- * Matched against the resolved CLI path rather than its name. The CLI ships as
- * both `localtunnels` and `lt`, and `lt` is far too common a word to accept on
- * its own — `looksLikeTunnel('vim lt vpn:up')` has no business being true.
- * When the path is unknown the basename is accepted, but `vpn:up` is always
- * required, so no ordinary `localtunnels start` is ever mistaken for a tunnel.
- */
-export function looksLikeTunnel(commandLine: string, cliPath?: string | null): boolean {
-  if (!/(?:^|\s)vpn:up(?:\s|$)/.test(commandLine))
-    return false
-  if (cliPath)
-    return commandLine.includes(cliPath)
-  return /(?:^|[\s/])(?:localtunnels|lt)(?:\s|$)/.test(commandLine)
-}
-
-function clearPidFile(): void {
-  try {
-    fs.unlinkSync(pidFile())
-  }
-  catch {
-    // Already gone, or never written.
-  }
-}
-
-/** The last non-empty line of the tunnel log, for a failure message. */
-export function lastLogLine(): string | null {
-  try {
-    const lines = fs.readFileSync(logFile(), 'utf8').split('\n').map(l => l.trim()).filter(Boolean)
-    return lines.length > 0 ? lines[lines.length - 1].slice(0, 200) : null
-  }
-  catch {
-    return null
-  }
-}
-
-/** Turn an osascript failure into something worth showing someone. */
 export function formatOsaError(message: string): ControlResult {
-  if (message.includes('User canceled') || message.includes('-128'))
+  if (/user cancel[el]*d|-128\b/i.test(message))
     return { success: false, error: 'Cancelled' }
-  if (message.includes('authorization'))
+  if (/authorization/i.test(message))
     return { success: false, error: 'Authorization failed' }
-  return { success: false, error: message.slice(0, 160) || 'Operation failed' }
+  return { success: false, error: 'macOS could not complete the VPN operation.' }
 }
